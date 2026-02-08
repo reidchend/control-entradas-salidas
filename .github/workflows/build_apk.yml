@@ -30,26 +30,20 @@ jobs:
       - name: Install Flet CLI
         run: |
           python -m pip install --upgrade pip
-          pip install flet==0.23.2 serious-python # Instalamos serious-python explícitamente
-
-      # PASO CLAVE: Limpiar antes de build por si acaso
-      - name: Clean build
-        run: |
-          rm -rf build
-          rm -rf dist
+          pip install flet==0.23.2
 
       - name: Build APK
         run: |
-          # Usamos --verbose para ver exactamente dónde se detiene si falla
-          # Agregamos --no-android-archive para acelerar la parte de empaquetado
+          # Limpiamos cualquier rastro de builds previos que puedan causar bucles
+          rm -rf build
+          rm -rf dist
+          # Ejecutamos el build con verbose para monitorear
           flet build apk --verbose
         env:
-          # Esto ayuda a que Flutter no se detenga esperando interacción
-          CI: true 
+          CI: true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Lycoris-App
-          # Ruta ajustada: Flet suele dejarlo en build/apk o dist/apk
           path: build/apk/*.apk
