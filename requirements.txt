@@ -1,9 +1,6 @@
 flet==0.23.2
 python-dotenv
-# Usamos una versión de SQLAlchemy que suele ser más amigable con dispositivos móviles
-sqlalchemy>=2.0.0
-# pg8000 es genial porque es 100% Python (no necesita compilador)
+sqlalchemy==2.0.25
 pg8000
-# Pillow es el que suele fallar; si no usas procesamiento de imágenes complejo,
-# intenta quitarlo o dejarlo así para que Flet use la versión del sistema:
+pydantic-settings
 pillow
