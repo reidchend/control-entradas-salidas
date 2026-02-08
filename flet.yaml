@@ -1,0 +1,9 @@
+app:
+  name: "lycoris_control"
+  product: "Lycoris Control"
+  org: "com.reidchend.lycoris"
+
+android:
+  package_name: "com.reidchend.lycoris"
+  build_number: 1
+  build_version: "1.0.1"
