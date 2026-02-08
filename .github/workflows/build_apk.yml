@@ -27,23 +27,25 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
-      - name: Install System Dependencies
+      - name: Install System dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev python3-dev
+          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
 
-      - name: Install Python Dependencies
+      - name: Cache Python Build Standalone
+        id: cache-python
+        uses: actions/cache@v4
+        with:
+          path: ~/.serious_python
+          key: python-distributive-3.11
+
+      - name: Install Flet
         run: |
           python -m pip install --upgrade pip
           pip install flet==0.23.2
-          # Pre-instalamos las dependencias en una carpeta que Flet reconocerá
-          pip install -r requirements.txt --target ./__pypackages__
 
       - name: Build APK
         run: |
-          rm -rf build
-          rm -rf dist
-          # Usamos --no-package para que no intente correr pip de nuevo dentro del build
           flet build apk --verbose
         env:
           CI: true
