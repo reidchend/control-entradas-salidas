@@ -7,3 +7,21 @@ android:
   package_name: "com.reidchend.lycoris"
   build_number: 1
   build_version: "1.0.1"
+
+# ESTO ES LO QUE FALTA PARA QUE NO SE QUEDE PEGADO:
+package:
+  include:
+    - main.py
+    - assets/**
+    - app/**
+    - config/**
+    - .env.example # No incluyas el .env real por seguridad
+  exclude:
+    - venv/**
+    - .venv/**
+    - __pycache__/**
+    - build/**
+    - .git/**
+    - .github/**
+    - "*.pyc"
+    - test_db.py
