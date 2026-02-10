@@ -32,7 +32,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.22.0' # Esta es estable y compatible con Flet 0.22
           channel: 'stable'
 
       - name: Install System dependencies
@@ -53,14 +53,12 @@ jobs:
       - name: Install Flet
         run: |
           python -m pip install --upgrade pip
-          # Usamos una versión más reciente de Flet para evitar bugs de versiones viejas
-          pip install flet>=0.23.0 
+          pip install flet==0.22.0
 
       - name: Build APK
         run: |
-          # Agregamos --no-docker por si acaso y mantenemos el verbose
-          # Si se queda en "Packaging Python app", dale al menos 10-15 min
-          flet build apk --verbose
+          # 'yes' enviará una 'y' automática a la pregunta de Flutter
+          yes | flet build apk --verbose
         env:
           CI: true
 
