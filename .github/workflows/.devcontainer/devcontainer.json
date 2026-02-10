@@ -1,0 +1,19 @@
+{
+  "name": "Buildozer APK Builder",
+  "image": "mcr.microsoft.com/devcontainers/ubuntu:22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y openjdk-11-jdk-headless android-sdk python3-dev python3-pip cython3 && pip3 install buildozer",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}
