@@ -46,9 +46,12 @@ jobs:
 
       - name: Build APK
         run: |
+          # Forzamos a que no use caché corrupta y sea extremadamente detallado
           flet build apk --verbose
         env:
           CI: true
+          # Aumentar el límite de memoria para Node/Dart si fuera necesario
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
