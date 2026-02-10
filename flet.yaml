@@ -15,7 +15,8 @@ package:
     - assets/**
     - app/**
     - config/**
-    - .env.example # No incluyas el .env real por seguridad
+    - assets/**
+    - .env # No incluyas el .env real por seguridad
   exclude:
     - venv/**
     - .venv/**
