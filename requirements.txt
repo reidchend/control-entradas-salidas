@@ -1,6 +1,4 @@
 flet==0.22.0
 python-dotenv
 sqlalchemy==2.0.25
-pg8000
 pydantic-settings
-pillow
