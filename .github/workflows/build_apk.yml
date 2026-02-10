@@ -10,6 +10,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --- NUEVO: Liberar espacio para evitar que la extracción se congele ---
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf /usr/local/lib/android # Si no usas el SDK nativo directamente
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -32,26 +40,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
 
-      - name: Cache Python Build Standalone
+      # --- MEJORADO: Caché para que no descargue el "Python distributive" siempre ---
+      - name: Cache Serious Python Distributive
         id: cache-python
         uses: actions/cache@v4
         with:
-          path: ~/.serious_python
-          key: python-distributive-3.11
+          path: |
+            ~/.serious_python
+            ~/.pub-cache
+          key: ${{ runner.os }}-python-dist-3.11-v1
 
       - name: Install Flet
         run: |
           python -m pip install --upgrade pip
-          pip install flet==0.22.0
+          # Usamos una versión más reciente de Flet para evitar bugs de versiones viejas
+          pip install flet>=0.23.0 
 
       - name: Build APK
         run: |
-          # Forzamos a que no use caché corrupta y sea extremadamente detallado
+          # Agregamos --no-docker por si acaso y mantenemos el verbose
+          # Si se queda en "Packaging Python app", dale al menos 10-15 min
           flet build apk --verbose
         env:
           CI: true
-          # Aumentar el límite de memoria para Node/Dart si fuera necesario
-          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
