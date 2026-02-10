@@ -57,11 +57,11 @@ jobs:
 
       - name: Build APK
         run: |
-          # 'yes' enviará una 'y' automática a la pregunta de Flutter
-          yes | flet build apk --verbose
+          # Usamos --use-host-python para que NO intente descargar el archivo de indygreg
+          flet build apk --verbose --use-host-python
         env:
           CI: true
-
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
