@@ -1,4 +1,4 @@
-name: Build Android APK (Silent Licenses)
+name: Build Android APK (Version Sync Fix)
 on:
   push:
     branches: [ main ]
@@ -27,7 +27,8 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
+          # Instalamos exactamente la que Flet está pidiendo a gritos
+          flutter-version: '3.38.7'
           channel: 'stable'
 
       - name: Set up Python
@@ -40,34 +41,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install flet cookiecutter
 
-      - name: Prepare Requirements
-        run: |
-          # Solo lo estrictamente necesario para la App
-          echo "pg8000" > requirements.txt
-          echo "python-dotenv" >> requirements.txt
-          echo "pydantic-settings" >> requirements.txt
-          # No incluimos flet aquí, el build lo hace solo
-
-      - name: Accept Android Licenses (The Robust Way)
-        run: |
-          # Forzamos la ruta del SDK
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          
-          # Creamos un archivo de config vacío que a veces pide sdkmanager
-          mkdir -p ~/.android
-          touch ~/.android/repositories.cfg
-          
-          # Aceptamos todas las licencias (1-6) de forma silenciosa
-          # El '|| true' evita que el job falle si ya estaban aceptadas
-          yes | sdkmanager --licenses > /dev/null || true
-
       - name: Build APK
         run: |
-          # Nos aseguramos de que Flutter también esté en "modo CI"
-          flutter config --no-analytics
+          # 1. Aceptar licencias del SDK de Android
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           
-          # Build final sin argumentos extra que causen errores
-          flet build apk --project "LycorisControl" --verbose
+          # 2. Configurar Flutter para que no sea interactivo
+          flutter config --no-analytics
+          flutter doctor
+          
+          # 3. El Comando Maestro:
+          # Usamos 'expect' o simplemente 'yes' para responder a la pregunta de Flet
+          # --flutter-sdk-path: Le decimos exactamente dónde está para que no intente descargar otro
+          export FLUTTER_PATH=$(which flutter | sed 's/\/bin\/flutter//')
+          
+          yes | flet build apk \
+            --project "LycorisControl" \
+            --flutter-sdk-path "$FLUTTER_PATH" \
+            --verbose
         env:
           CI: true
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
