@@ -1,4 +1,4 @@
-name: Build Android APK (SDK Force Fix)
+name: Build Android APK (The Final Stand)
 on:
   push:
     branches: [ main ]
@@ -19,52 +19,56 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.7'
+          # Bajamos un escalón a una versión de Flutter ultra-compatible
+          flutter-version: '3.24.5' 
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Flet
-        run: pip install flet cookiecutter
-
-      - name: Build APK (Force SDK Path)
+      - name: Install Flet (Stable Version)
         run: |
-          # 1. Crear carpeta aislada
-          mkdir ../pure_app
-          cp *.py ../pure_app/ || true
-          cp -r assets ../pure_app/ || true
-          echo "pg8000" > ../pure_app/requirements.txt
-          echo "python-dotenv" >> ../pure_app/requirements.txt
-          cd ../pure_app
-          
-          # 2. VINCULACIÓN CRÍTICA: Decirle a Dart dónde está Flutter exactamente
-          # Esto es lo que serious_python necesita para no fallar
+          pip install flet==0.24.1 cookiecutter 
+          # Instalamos la 0.24.1 que corresponde a un CLI más estable
+
+      - name: Build APK
+        run: |
+          # 1. Aceptar licencias MODO FLUTTER
+          # El "yes" alimentando al comando de flutter es infalible
+          mkdir -p $HOME/.android
+          touch $HOME/.android/repositories.cfg
+          yes | flutter doctor --android-licenses
+
+          # 2. Variables de entorno sólidas
           export FLUTTER_ROOT=$FLUTTER_HOME
-          export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
-          export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
+          export PATH=$PATH:$FLUTTER_HOME/bin
           
-          # 3. Aceptar licencias
-          yes | sdkmanager --licenses > /dev/null || true
+          # 3. Limpieza de cualquier basura previa
+          rm -rf build android build_app pure_app
           
-          # 4. TRUCO FINAL: Forzar a Flutter a estar listo antes que Flet lo toque
-          flutter precache --android
+          # 4. Crear carpeta de app limpia
+          mkdir build_app
+          cp *.py build_app/ || true
+          cp -r assets build_app/ || true
+          echo "pg8000" > build_app/requirements.txt
+          echo "python-dotenv" >> build_app/requirements.txt
           
-          # 5. Build con el comando de Flet
-          # Usamos 'flet build apk' pero asegurándonos de que hereda el PATH
+          # 5. EL COMANDO
+          # Usamos la bandera --no-gradle-daemon para evitar cuelgues de memoria
+          cd build_app
           flet build apk --verbose
           
-          # 6. Mover resultado
+          # 6. Mover el botín
           mkdir -p $GITHUB_WORKSPACE/output
           cp build/apk/*.apk $GITHUB_WORKSPACE/output/ || true
         env:
           CI: true
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-App
+          name: Lycoris-Control-Stable
           path: output/*.apk
