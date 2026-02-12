@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK (Optimized)
 on:
   push:
     branches: [ main ]
@@ -6,22 +6,27 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Si el proceso tarda más de 30 min, se cancela automáticamente (evita bucles)
+    timeout-minutes: 30 
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # --- NUEVO: Liberar espacio para evitar que la extracción se congele ---
-      - name: Free disk space
+      - name: Free disk space (Maximized)
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf /usr/local/lib/android # Si no usas el SDK nativo directamente
+          sudo rm -rf /usr/local/lib/android
+          sudo docker image prune -a -f
+          df -h # Muestra el espacio disponible en los logs para monitoreo
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip' # Cache nativo para dependencias de python
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -32,7 +37,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0' # Esta es estable y compatible con Flet 0.22
+          flutter-version: '3.22.0'
           channel: 'stable'
 
       - name: Install System dependencies
@@ -40,7 +45,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
 
-      # --- MEJORADO: Caché para que no descargue el "Python distributive" siempre ---
       - name: Cache Serious Python Distributive
         id: cache-python
         uses: actions/cache@v4
@@ -50,20 +54,30 @@ jobs:
             ~/.pub-cache
           key: ${{ runner.os }}-python-dist-3.11-v1
 
-      - name: Install Flet
+      - name: Install Project Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flet==0.22.0
+          # Instala tus librerías adicionales si existe el archivo
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Build APK
+        # El flag --verbose es vital para ver errores detallados
         run: |
-          # Usamos --use-host-python para que NO intente descargar el archivo de indygreg
-          flet build apk 
+          flet build apk --verbose
         env:
           CI: true
 
-      - name: Upload APK
+      - name: Upload APK on Success
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-App
+          name: Lycoris-App-Release
           path: build/apk/*.apk
+
+      - name: Debug Info on Failure
+        if: failure()
+        run: |
+          echo "El build falló. Revisando logs de Flutter..."
+          # Aquí podrías añadir comandos para listar archivos y ver qué se generó
+          ls -R build/ || echo "No se encontró carpeta build"

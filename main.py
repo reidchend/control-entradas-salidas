@@ -2,10 +2,20 @@ import flet as ft
 import os
 import time
 import traceback
-from config.config import get_settings
-from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
 
-settings = get_settings()
+# Intentamos importar las configuraciones con seguridad
+try:
+    from config.config import get_settings
+    settings = get_settings()
+except Exception as e:
+    # Si falla la configuración, creamos un objeto dummy para que no rompa el resto
+    class DummySettings:
+        FLET_APP_NAME = "Error de Configuración"
+        FLET_APP_ICON = None
+    settings = DummySettings()
+    CONFIG_ERROR = str(e)
+else:
+    CONFIG_ERROR = None
 
 class ControlEntradasSalidasApp:
     def __init__(self):
@@ -15,7 +25,7 @@ class ControlEntradasSalidasApp:
         self.content_area = None
         self.current_view = None
         self.views = None
-        self.splash_container = None # Nueva forma de manejar el splash
+        self.splash_container = None
 
     def main(self, page: ft.Page):
         self.page = page
@@ -26,29 +36,39 @@ class ControlEntradasSalidasApp:
         self.page.padding = 0
         self.page.spacing = 0
 
-        # 1. NUEVA FORMA DE SPLASH (Usando overlay)
+        # 1. SPLASH SCREEN (Overlay)
         self.splash_container = ft.Container(
             content=ft.Column(
                 [
                     ft.Image(src="favicon.png", width=180, height=180, fit=ft.ImageFit.CONTAIN),
                     ft.Container(height=20),
                     ft.ProgressRing(width=40, color="#6750A4"),
-                    ft.Text("Cargando base de datos...", size=18, weight="bold", color="#6750A4")
+                    ft.Text("Iniciando sistema...", size=18, weight="bold", color="#6750A4"),
+                    # Area para mensajes de error (vacía al inicio)
+                    self.error_text := ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                scroll=ft.ScrollMode.ADAPTIVE # Por si el error es largo
             ),
             alignment=ft.alignment.center,
             bgcolor=ft.colors.WHITE,
             expand=True,
-            visible=True # Lo hacemos visible al inicio
+            visible=True
         )
         
         self.page.overlay.append(self.splash_container)
         self.page.update()
 
+        # Si hubo un error en las importaciones iniciales (Config)
+        if CONFIG_ERROR:
+            self._handle_critical_error(f"Error en Config/Dotenv: {CONFIG_ERROR}")
+            return
+
         try:
-            # 2. CARGA DE VISTAS
+            # 2. CARGA DE VISTAS (Punto crítico de librerías como SQLAlchemy)
+            from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
+            
             self.views = {
                 0: InventarioView(),
                 1: ValidacionView(),
@@ -62,19 +82,23 @@ class ControlEntradasSalidasApp:
             self._show_view(0)
             self._handle_resize()
 
-            time.sleep(1) # Tiempo para que el usuario vea el logo
+            time.sleep(1) # Feedback visual
 
         except Exception as e:
-            print("--- ERROR AL INICIAR LA APP ---")
-            traceback.print_exc()
-            self.splash_container.content.controls.append(
-                ft.Text(f"Error: {str(e)}", color=ft.colors.RED_700)
-            )
-            self.page.update()
+            error_detail = traceback.format_exc()
+            self._handle_critical_error(error_detail)
             return
 
-        # 3. QUITAR SPLASH CORRECTAMENTE
+        # 3. QUITAR SPLASH SI TODO OK
         self.splash_container.visible = False
+        self.page.update()
+
+    def _handle_critical_error(self, error_message):
+        print(f"--- ERROR CRÍTICO ---\n{error_message}")
+        # Detenemos el anillo de progreso y mostramos el error
+        self.splash_container.content.controls[2].visible = False # Oculta ProgressRing
+        self.splash_container.content.controls[3].value = "Error al iniciar aplicación"
+        self.error_text.value = error_message
         self.page.update()
 
     def _setup_theme(self):
@@ -86,7 +110,6 @@ class ControlEntradasSalidasApp:
     def _create_layout(self):
         self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.colors.WHITE)
 
-        # RAIL (Desktop)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
             extended=True,
@@ -101,7 +124,6 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # BARRA (Móvil) - Corregido a NavigationBarDestination
         self.navigation_bar = ft.NavigationBar(
             destinations=[
                 ft.NavigationBarDestination(icon=ft.icons.INVENTORY, label="Inventario"),
@@ -154,6 +176,5 @@ def _per_page_main(page: ft.Page):
 if __name__ == "__main__":
     ft.app(
         target=_per_page_main,
-        assets_dir=os.path.join(os.path.dirname(__file__), "assets"),
-        view=ft.AppView.WEB_BROWSER
+        assets_dir=os.path.join(os.path.dirname(__file__), "assets")
     )
