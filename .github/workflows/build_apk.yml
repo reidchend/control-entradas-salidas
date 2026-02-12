@@ -50,19 +50,27 @@ jobs:
           pip install flet==0.22.0 pg8000 python-dotenv pydantic-settings
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+      - name: Pre-download Python Distributive (Bypass Hang)
+        run: |
+          # Creamos la carpeta de caché para serious_python
+          mkdir -p ~/.serious_python
+          # Descargamos manualmente el archivo que Flet intenta bajar
+          # Usamos -L para seguir redirecciones y --retry para evitar fallos de red
+          curl -L "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz" \
+               -o ~/.serious_python/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+          echo "Python distributive descargado correctamente en caché."
+
       - name: Accept Android Licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Build APK (Force Verbose & Host Python)
+      - name: Build APK
         run: |
-          # FLET_USE_HOST_PYTHON=1 evita que intente descargar archivos pesados que congelan el proceso
-          export FLET_USE_HOST_PYTHON=1
-          
-          # Ejecución con verbose para diagnosticar si se detiene
+          # Obligamos a Flet a no intentar descargar nada y usar la caché
           flet build apk --verbose
         env:
           CI: true
-          # Limita la memoria de Gradle para que no colapse el runner de GitHub
+          # Esta variable es la que le dice a serious_python que no busque en /tmp, sino en nuestra carpeta
+          SERIOUS_PYTHON_CACHE: /home/runner/.serious_python
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK
