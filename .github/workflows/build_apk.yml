@@ -1,4 +1,4 @@
-name: Build Android APK (Deep Clean)
+name: Build Android APK (Isolation Strategy)
 on:
   push:
     branches: [ main ]
@@ -20,45 +20,44 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.38.7'
-          channel: 'stable'
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Flet CLI
-        run: |
-          pip install flet cookiecutter
+      - name: Install Flet
+        run: pip install flet cookiecutter
 
-      - name: Prepare Minimal Requirements
+      - name: Build APK (Isolated)
         run: |
-          # Quitamos pydantic-settings temporalmente para descartar incompatibilidad binaria
-          echo "pg8000" > requirements.txt
-          echo "python-dotenv" >> requirements.txt
-
-      - name: Build APK
-        run: |
-          # 1. Limpieza PROFUNDA de archivos locales que confunden a Flet
-          # Borramos cualquier rastro de builds previos o carpetas de Flutter
-          rm -rf build/
-          rm -rf .dart_tool/
-          rm -rf android/
-          rm -rf ios/
-          rm -rf web/
-          rm -f pubspec.yaml
-          rm -f pubspec.lock
+          # 1. Creamos una carpeta totalmente limpia fuera del repo
+          mkdir ../pure_app
           
-          # 2. Configuración de rutas
+          # 2. Copiamos SOLO tus archivos de Python (evitamos pubspec, build, etc.)
+          # Asumo que tu código principal está en la raíz. Si está en 'src', ajusta la ruta.
+          cp *.py ../pure_app/ || true
+          # Copiamos assets si tienes
+          cp -r assets ../pure_app/ || true
+          
+          # 3. Creamos un requirements.txt limpio ahí dentro
+          echo "pg8000" > ../pure_app/requirements.txt
+          echo "python-dotenv" >> ../pure_app/requirements.txt
+          
+          # 4. Entramos a la carpeta aislada
+          cd ../pure_app
+          
+          # 5. Configuramos entorno
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin
-          
-          # 3. Aceptar licencias
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
           
-          # 4. Build sin distracciones
-          # Forzamos que no use archivos previos con --verbose
+          # 6. Lanzamos el build desde esta carpeta virgen
           flet build apk --verbose
+          
+          # 7. Movemos el resultado de vuelta para que GitHub lo encuentre
+          mkdir -p $GITHUB_WORKSPACE/output
+          cp build/apk/*.apk $GITHUB_WORKSPACE/output/ || true
         env:
           CI: true
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
@@ -68,4 +67,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Lycoris-Control-App
-          path: build/apk/*.apk
+          path: output/*.apk
