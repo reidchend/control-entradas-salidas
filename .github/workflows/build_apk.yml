@@ -1,4 +1,4 @@
-name: Build Android APK (Anti-Freeze Edition)
+name: Build Android APK (Final Fix)
 on:
   push:
     branches: [ main ]
@@ -6,20 +6,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # Detiene el proceso si se queda pegado más de 30 min
+    timeout-minutes: 45 # Damos un poco más de margen por si acaso
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Free disk space (Prevent Hangs)
+      - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf /usr/local/lib/android
           sudo docker image prune -a -f
-          df -h
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,37 +43,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev python3-dev
 
-      - name: Install Python Dependencies
+      - name: Install Dependencies & Fix Builder
         run: |
           python -m pip install --upgrade pip
+          
+          # 1. Instalamos Flet 0.22.0 (Tu versión compatible)
           pip install flet==0.22.0 pg8000 python-dotenv pydantic-settings
+          
+          # 2. TRUCO MAESTRO: Actualizamos SOLO el motor de empaquetado
+          # Esto corrige el bug de descompresión lenta sin cambiar la versión de Flet
+          pip install --upgrade serious-python
+          
+          # 3. Instalamos requirements si existen
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Pre-inject Python Distributive to TMP
-        run: |
-          # 1. Definimos el nombre exacto que Flet busca
-          FILE_NAME="cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
-          URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/$FILE_NAME"
-          
-          # 2. Lo descargamos directamente en /tmp
-          echo "Descargando directamente en /tmp para saltar el paso de Flet..."
-          curl -L $URL -o /tmp/$FILE_NAME
-          
-          # 3. Verificamos que esté ahí
-          ls -lh /tmp/$FILE_NAME
+      - name: Accept Android Licenses
+        run: yes | sdkmanager --licenses || true
 
-      - name: Build APK (Emergency Mode)
+      - name: Build APK
         run: |
-          # Usamos un timeout interno para que no se quede pegado sin avisar
-          # Aumentamos la memoria de Dart/Flutter también
+          # Aumentamos la memoria para la máquina virtual de Dart
           export DART_VM_OPTIONS="--max-old-space-size=4096"
           
-          # Ejecutamos el build
+          # Ejecutamos el build. Ya no debería congelarse en "Extracting"
           flet build apk --verbose
         env:
           CI: true
-          # Intentamos forzar la ruta de nuevo por si acaso
-          SERIOUS_PYTHON_CACHE: /tmp
+          # Optimizaciones de Gradle
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK
@@ -83,9 +78,3 @@ jobs:
         with:
           name: Lycoris-Control-App
           path: build/apk/*.apk
-
-      - name: Debug Info on Failure
-        if: failure()
-        run: |
-          echo "El build falló. Listando estructura de archivos para diagnóstico:"
-          ls -R
