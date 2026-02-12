@@ -1,4 +1,4 @@
-name: Build Android APK (Optimized)
+name: Build Android APK (Anti-Freeze Edition)
 on:
   push:
     branches: [ main ]
@@ -6,27 +6,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Si el proceso tarda más de 30 min, se cancela automáticamente (evita bucles)
-    timeout-minutes: 30 
-    
+    timeout-minutes: 30 # Detiene el proceso si se queda pegado más de 30 min
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Free disk space (Maximized)
+      - name: Free disk space (Prevent Hangs)
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf /usr/local/lib/android
           sudo docker image prune -a -f
-          df -h # Muestra el espacio disponible en los logs para monitoreo
+          df -h
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # Cache nativo para dependencias de python
+          cache: 'pip'
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -43,41 +42,38 @@ jobs:
       - name: Install System dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
+          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev python3-dev
 
-      - name: Cache Serious Python Distributive
-        id: cache-python
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.serious_python
-            ~/.pub-cache
-          key: ${{ runner.os }}-python-dist-3.11-v1
-
-      - name: Install Project Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flet==0.22.0
-          # Instala tus librerías adicionales si existe el archivo
+          pip install flet==0.22.0 pg8000 python-dotenv pydantic-settings
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Build APK
-        # El flag --verbose es vital para ver errores detallados
+      - name: Accept Android Licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Build APK (Force Verbose & Host Python)
         run: |
+          # FLET_USE_HOST_PYTHON=1 evita que intente descargar archivos pesados que congelan el proceso
+          export FLET_USE_HOST_PYTHON=1
+          
+          # Ejecución con verbose para diagnosticar si se detiene
           flet build apk --verbose
         env:
           CI: true
+          # Limita la memoria de Gradle para que no colapse el runner de GitHub
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
-      - name: Upload APK on Success
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-App-Release
+          name: Lycoris-Control-App
           path: build/apk/*.apk
 
       - name: Debug Info on Failure
         if: failure()
         run: |
-          echo "El build falló. Revisando logs de Flutter..."
-          # Aquí podrías añadir comandos para listar archivos y ver qué se generó
-          ls -R build/ || echo "No se encontró carpeta build"
+          echo "El build falló. Listando estructura de archivos para diagnóstico:"
+          ls -R
