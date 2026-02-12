@@ -1,4 +1,4 @@
-name: Build Android APK (Corrected SDK)
+name: Build Android APK (Permission Fix)
 on:
   push:
     branches: [ main ]
@@ -12,12 +12,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Free disk space
+      - name: Free disk space (Safe Clean)
         run: |
+          # Borramos herramientas que NO usaremos para ganar espacio
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf /usr/local/lib/android
+          # NO borramos /usr/local/lib/android aquí
           sudo docker image prune -a -f
 
       - name: Set up Java
@@ -27,10 +28,10 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          # Sintaxis correcta para la v3: se definen los paquetes específicos
-          packages: 'platforms;android-36 build-tools;34.0.0 cmdline-tools;latest'
+        run: |
+          # Usamos el sdkmanager que ya viene instalado en la máquina
+          # Instalamos la plataforma 36 que pidió Flutter
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;34.0.0"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -50,26 +51,21 @@ jobs:
 
       - name: Prepare Clean Requirements
         run: |
-          # Limpiamos el archivo para evitar que 'watchdog' rompa el empaquetado
-          # Usamos flet-core para que sea ligero dentro del APK
+          # Evitamos watchdog para que no falle el empaquetado
           echo "flet-core==0.22.0" > requirements.txt
           echo "pg8000" >> requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
-          echo "Configuración de requirements.txt terminada:"
           cat requirements.txt
-
-      - name: Accept Android Licenses
-        run: |
-          # Aceptamos todas las licencias de forma proactiva
-          yes | sdkmanager --licenses || true
 
       - name: Build APK
         run: |
-          # Aumentamos memoria para Dart
+          # Aceptamos licencias de nuevo sobre el SDK existente
+          yes | sdkmanager --licenses || true
+          
           export DART_VM_OPTIONS="--max-old-space-size=4096"
           
-          # Construimos usando el CLI moderno pero forzando Python 3.11
+          # Construimos
           yes | flet build apk \
             --project "Lycoris Control" \
             --python-version 3.11 \
