@@ -1,4 +1,4 @@
-name: Build Android APK (Isolation Strategy)
+name: Build Android APK (SDK Force Fix)
 on:
   push:
     branches: [ main ]
@@ -29,33 +29,33 @@ jobs:
       - name: Install Flet
         run: pip install flet cookiecutter
 
-      - name: Build APK (Isolated)
+      - name: Build APK (Force SDK Path)
         run: |
-          # 1. Creamos una carpeta totalmente limpia fuera del repo
+          # 1. Crear carpeta aislada
           mkdir ../pure_app
-          
-          # 2. Copiamos SOLO tus archivos de Python (evitamos pubspec, build, etc.)
-          # Asumo que tu código principal está en la raíz. Si está en 'src', ajusta la ruta.
           cp *.py ../pure_app/ || true
-          # Copiamos assets si tienes
           cp -r assets ../pure_app/ || true
-          
-          # 3. Creamos un requirements.txt limpio ahí dentro
           echo "pg8000" > ../pure_app/requirements.txt
           echo "python-dotenv" >> ../pure_app/requirements.txt
-          
-          # 4. Entramos a la carpeta aislada
           cd ../pure_app
           
-          # 5. Configuramos entorno
+          # 2. VINCULACIÓN CRÍTICA: Decirle a Dart dónde está Flutter exactamente
+          # Esto es lo que serious_python necesita para no fallar
           export FLUTTER_ROOT=$FLUTTER_HOME
-          export PATH=$PATH:$FLUTTER_HOME/bin
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
+          export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
           
-          # 6. Lanzamos el build desde esta carpeta virgen
+          # 3. Aceptar licencias
+          yes | sdkmanager --licenses > /dev/null || true
+          
+          # 4. TRUCO FINAL: Forzar a Flutter a estar listo antes que Flet lo toque
+          flutter precache --android
+          
+          # 5. Build con el comando de Flet
+          # Usamos 'flet build apk' pero asegurándonos de que hereda el PATH
           flet build apk --verbose
           
-          # 7. Movemos el resultado de vuelta para que GitHub lo encuentre
+          # 6. Mover resultado
           mkdir -p $GITHUB_WORKSPACE/output
           cp build/apk/*.apk $GITHUB_WORKSPACE/output/ || true
         env:
