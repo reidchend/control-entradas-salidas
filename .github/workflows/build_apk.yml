@@ -1,4 +1,4 @@
-name: Build Android APK (Final Strategy)
+name: Build Android APK (Back to Basics)
 on:
   push:
     branches: [ main ]
@@ -29,43 +29,38 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Build Tools
+      - name: Install Flet CLI
         run: |
           python -m pip install --upgrade pip
-          # Instalamos flet y herramientas de empaquetado
           pip install flet cookiecutter
 
-      - name: Prepare Minimal Requirements
+      - name: Prepare Requirements
         run: |
-          # El error "Packaging Python app" suele ser por librerías incompatibles.
-          # Vamos a dejar solo lo vital. 
-          # NOTA: No incluyas 'flet' aquí, flet ya está en el core del build.
+          # Eliminamos flet de aquí si estuviera, Flet lo gestiona solo.
+          # Dejamos solo lo esencial en texto plano.
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
-          # Si usas alguna otra librería, asegúrate de que sea puro Python (no C++)
 
       - name: Build APK
         run: |
+          # 1. Rutas de entorno
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin
           
-          # Aceptamos licencias
+          # 2. Licencias (necesario siempre)
           yes | sdkmanager --licenses > /dev/null || true
           
-          # Forzamos la limpieza del build anterior si existiera
+          # 3. Limpieza de builds previos que puedan causar conflictos
           rm -rf build
           
-          # Usamos el comando build indicando explícitamente que no sea interactivo
-          # Agregamos --no-android-archive para acelerar y evitar errores de empaquetado extra
-          flet build apk \
-            --project "LycorisControl" \
-            --include-all-extras \
-            --verbose
+          # 4. El comando "Sagrado": Sin banderas raras que causen errores de argumentos.
+          # Flet 0.80.5 debería detectar todo automáticamente si FLUTTER_ROOT está presente.
+          flet build apk --verbose
         env:
           CI: true
-          # Aumentamos agresivamente la memoria de Gradle
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.parallel=false"
+          # Mantenemos la memoria alta porque el empaquetado de Python es pesado
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Upload APK
         if: success()
