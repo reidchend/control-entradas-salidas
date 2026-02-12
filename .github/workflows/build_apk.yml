@@ -1,4 +1,4 @@
-name: Build Android APK (Environmental Fix)
+name: Build Android APK (Final Strategy)
 on:
   push:
     branches: [ main ]
@@ -11,12 +11,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Free space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo docker image prune -a -f
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -35,36 +29,43 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet CLI
+      - name: Install Build Tools
         run: |
           python -m pip install --upgrade pip
+          # Instalamos flet y herramientas de empaquetado
           pip install flet cookiecutter
 
-      - name: Prepare Requirements
+      - name: Prepare Minimal Requirements
         run: |
+          # El error "Packaging Python app" suele ser por librerías incompatibles.
+          # Vamos a dejar solo lo vital. 
+          # NOTA: No incluyas 'flet' aquí, flet ya está en el core del build.
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
+          # Si usas alguna otra librería, asegúrate de que sea puro Python (no C++)
 
       - name: Build APK
         run: |
-          # 1. Definir rutas críticas para que Flet no se pierda
-          # FLUTTER_ROOT es la clave para que Flet encuentre el SDK sin preguntar
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin
           
-          # 2. Aceptar licencias silenciosamente
+          # Aceptamos licencias
           yes | sdkmanager --licenses > /dev/null || true
           
-          # 3. Configurar Flutter
-          flutter config --no-analytics
+          # Forzamos la limpieza del build anterior si existiera
+          rm -rf build
           
-          # 4. El comando de build más simple posible
-          # Si ya tiene la versión 3.38.7 y FLUTTER_ROOT, no debería pedir nada
-          yes | flet build apk --project "LycorisControl" --verbose
+          # Usamos el comando build indicando explícitamente que no sea interactivo
+          # Agregamos --no-android-archive para acelerar y evitar errores de empaquetado extra
+          flet build apk \
+            --project "LycorisControl" \
+            --include-all-extras \
+            --verbose
         env:
           CI: true
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
+          # Aumentamos agresivamente la memoria de Gradle
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.parallel=false"
 
       - name: Upload APK
         if: success()
