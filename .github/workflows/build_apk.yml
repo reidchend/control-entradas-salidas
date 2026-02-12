@@ -1,4 +1,4 @@
-name: Build Android APK (Final Fix)
+name: Build Android APK (Corrected SDK)
 on:
   push:
     branches: [ main ]
@@ -29,8 +29,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 36
-          build-tools: 34.0.0
+          # Sintaxis correcta para la v3: se definen los paquetes específicos
+          packages: 'platforms;android-36 build-tools;34.0.0 cmdline-tools;latest'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -46,26 +46,30 @@ jobs:
       - name: Install Build Tools
         run: |
           python -m pip install --upgrade pip
-          # Instalamos flet pero nos aseguramos de que el CLI sea el que mande
           pip install "flet>=0.25.0" cookiecutter
 
-      - name: Prepare Requirements
+      - name: Prepare Clean Requirements
         run: |
-          # Creamos un requirements limpio para la APK
-          # Eliminamos cualquier mención a watchdog o flet (el build ya lo incluye)
-          echo "pg8000" > requirements.txt
+          # Limpiamos el archivo para evitar que 'watchdog' rompa el empaquetado
+          # Usamos flet-core para que sea ligero dentro del APK
+          echo "flet-core==0.22.0" > requirements.txt
+          echo "pg8000" >> requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
-          echo "flet-core==0.22.0" >> requirements.txt
+          echo "Configuración de requirements.txt terminada:"
+          cat requirements.txt
+
+      - name: Accept Android Licenses
+        run: |
+          # Aceptamos todas las licencias de forma proactiva
+          yes | sdkmanager --licenses || true
 
       - name: Build APK
         run: |
-          # Aceptamos licencias de nuevo por si acaso
-          yes | sdkmanager --licenses || true
+          # Aumentamos memoria para Dart
+          export DART_VM_OPTIONS="--max-old-space-size=4096"
           
-          # Ejecutamos el build
-          # --python-version 3.11: Para que coincida con tu entorno de desarrollo
-          # yes | : Para saltar preguntas interactivas
+          # Construimos usando el CLI moderno pero forzando Python 3.11
           yes | flet build apk \
             --project "Lycoris Control" \
             --python-version 3.11 \
