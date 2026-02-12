@@ -50,27 +50,31 @@ jobs:
           pip install flet==0.22.0 pg8000 python-dotenv pydantic-settings
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Pre-download Python Distributive (Bypass Hang)
+      - name: Pre-inject Python Distributive to TMP
         run: |
-          # Creamos la carpeta de caché para serious_python
-          mkdir -p ~/.serious_python
-          # Descargamos manualmente el archivo que Flet intenta bajar
-          # Usamos -L para seguir redirecciones y --retry para evitar fallos de red
-          curl -L "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz" \
-               -o ~/.serious_python/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-          echo "Python distributive descargado correctamente en caché."
+          # 1. Definimos el nombre exacto que Flet busca
+          FILE_NAME="cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
+          URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/$FILE_NAME"
+          
+          # 2. Lo descargamos directamente en /tmp
+          echo "Descargando directamente en /tmp para saltar el paso de Flet..."
+          curl -L $URL -o /tmp/$FILE_NAME
+          
+          # 3. Verificamos que esté ahí
+          ls -lh /tmp/$FILE_NAME
 
-      - name: Accept Android Licenses
-        run: yes | sdkmanager --licenses || true
-
-      - name: Build APK
+      - name: Build APK (Emergency Mode)
         run: |
-          # Obligamos a Flet a no intentar descargar nada y usar la caché
+          # Usamos un timeout interno para que no se quede pegado sin avisar
+          # Aumentamos la memoria de Dart/Flutter también
+          export DART_VM_OPTIONS="--max-old-space-size=4096"
+          
+          # Ejecutamos el build
           flet build apk --verbose
         env:
           CI: true
-          # Esta variable es la que le dice a serious_python que no busque en /tmp, sino en nuestra carpeta
-          SERIOUS_PYTHON_CACHE: /home/runner/.serious_python
+          # Intentamos forzar la ruta de nuevo por si acaso
+          SERIOUS_PYTHON_CACHE: /tmp
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK
