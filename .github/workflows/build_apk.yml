@@ -1,4 +1,4 @@
-name: Build Android APK (Nuclear Option)
+name: Build Android APK (Final Fix)
 on:
   push:
     branches: [ main ]
@@ -29,51 +29,37 @@ jobs:
       - name: Install Flet
         run: pip install flet==0.24.1 cookiecutter
 
-      - name: Build APK (Hardcoded Paths)
+      - name: Build APK
         run: |
-          # 1. Definir rutas absolutas
-          export FLUTTER_ROOT=$FLUTTER_HOME
-          export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
-          export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
-          
-          # 2. Forzar que Flutter esté "caliente"
-          flutter config --no-analytics
-          flutter precache --android
+          # 1. Aceptar licencias
           yes | flutter doctor --android-licenses
 
-          # 3. Limpiar y preparar carpeta aislada
-          rm -rf build_app
-          mkdir build_app
-          cp *.py build_app/ || true
-          cp -r assets build_app/ || true
+          # 2. Preparar el entorno de compilación
+          # Creamos una carpeta limpia y movemos TODO lo necesario
+          mkdir build_dir
+          cp -r app config assets main.py build_dir/ || true
           
-          # 4. Crear un requirements.txt seguro (Pure Python)
-          echo "pg8000" > build_app/requirements.txt
-          echo "python-dotenv" >> build_app/requirements.txt
+          # 3. Crear requirements.txt dentro de la carpeta de build
+          # IMPORTANTE: pg8000 es puro python, perfecto para Android.
+          echo "pg8000" > build_dir/requirements.txt
+          echo "python-dotenv" >> build_dir/requirements.txt
           
-          # 5. EL TRUCO MAESTRO:
-          # Flet falla porque 'dart' no sabe dónde está el SDK de Flutter.
-          # Seteamos la variable que el motor de Dart busca internamente.
-          export FLUTTER_SDK=$FLUTTER_HOME
+          # 4. Entrar y Compilar
+          cd build_dir
           
-          cd build_app
+          # Forzamos las rutas para que serious_python no se pierda
+          export FLUTTER_HOME=$FLUTTER_ROOT
+          flet build apk --verbose --flutter-sdk-path "$FLUTTER_HOME"
           
-          # Ejecutamos flet usando 'python -m flet' para asegurar que usa el entorno correcto
-          python -m flet build apk \
-            --verbose \
-            --flutter-sdk-path "$FLUTTER_HOME"
-          
-          # 6. Mover el APK
-          mkdir -p $GITHUB_WORKSPACE/output
-          find build/apk -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/output/ \;
+          # 5. Extraer el APK
+          mkdir -p ../output
+          find build/apk -name "*.apk" -exec cp {} ../output/ \;
         env:
           CI: true
-          # Forzamos a Dart a ver el SDK
-          FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-Success
+          name: Lycoris-Control-App
           path: output/*.apk
