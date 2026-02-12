@@ -1,4 +1,4 @@
-name: Build Android APK (Version Sync Fix)
+name: Build Android APK (Environmental Fix)
 on:
   push:
     branches: [ main ]
@@ -27,7 +27,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          # Instalamos exactamente la que Flet está pidiendo a gritos
           flutter-version: '3.38.7'
           channel: 'stable'
 
@@ -41,24 +40,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install flet cookiecutter
 
+      - name: Prepare Requirements
+        run: |
+          echo "pg8000" > requirements.txt
+          echo "python-dotenv" >> requirements.txt
+          echo "pydantic-settings" >> requirements.txt
+
       - name: Build APK
         run: |
-          # 1. Aceptar licencias del SDK de Android
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          # 1. Definir rutas críticas para que Flet no se pierda
+          # FLUTTER_ROOT es la clave para que Flet encuentre el SDK sin preguntar
+          export FLUTTER_ROOT=$FLUTTER_HOME
+          export PATH=$PATH:$FLUTTER_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin
           
-          # 2. Configurar Flutter para que no sea interactivo
+          # 2. Aceptar licencias silenciosamente
+          yes | sdkmanager --licenses > /dev/null || true
+          
+          # 3. Configurar Flutter
           flutter config --no-analytics
-          flutter doctor
           
-          # 3. El Comando Maestro:
-          # Usamos 'expect' o simplemente 'yes' para responder a la pregunta de Flet
-          # --flutter-sdk-path: Le decimos exactamente dónde está para que no intente descargar otro
-          export FLUTTER_PATH=$(which flutter | sed 's/\/bin\/flutter//')
-          
-          yes | flet build apk \
-            --project "LycorisControl" \
-            --flutter-sdk-path "$FLUTTER_PATH" \
-            --verbose
+          # 4. El comando de build más simple posible
+          # Si ya tiene la versión 3.38.7 y FLUTTER_ROOT, no debería pedir nada
+          yes | flet build apk --project "LycorisControl" --verbose
         env:
           CI: true
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
