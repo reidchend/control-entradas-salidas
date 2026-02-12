@@ -1,4 +1,4 @@
-name: Build Android APK (Permission Fix)
+name: Build Android APK (Simple Fix)
 on:
   push:
     branches: [ main ]
@@ -12,13 +12,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Free disk space (Safe Clean)
+      # Limpieza mínima para no romper permisos del SDK de Android
+      - name: Free space
         run: |
-          # Borramos herramientas que NO usaremos para ganar espacio
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          # NO borramos /usr/local/lib/android aquí
           sudo docker image prune -a -f
 
       - name: Set up Java
@@ -26,12 +24,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Set up Android SDK
-        run: |
-          # Usamos el sdkmanager que ya viene instalado en la máquina
-          # Instalamos la plataforma 36 que pidió Flutter
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;34.0.0"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -44,34 +36,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Build Tools
+      - name: Install Flet Build Tool
         run: |
           python -m pip install --upgrade pip
-          pip install "flet>=0.25.0" cookiecutter
+          pip install flet cookiecutter
 
-      - name: Prepare Clean Requirements
+      - name: Prepare Requirements
         run: |
-          # Evitamos watchdog para que no falle el empaquetado
+          # Solo lo esencial para que la APK no pese 1GB ni falle por watchdog
           echo "flet-core==0.22.0" > requirements.txt
           echo "pg8000" >> requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
-          cat requirements.txt
 
       - name: Build APK
         run: |
-          # Aceptamos licencias de nuevo sobre el SDK existente
-          yes | sdkmanager --licenses || true
+          # Agregamos el path de Android explícitamente para que encuentre sdkmanager
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
           
-          export DART_VM_OPTIONS="--max-old-space-size=4096"
+          # Aceptamos licencias usando el path completo para evitar "command not found"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           
-          # Construimos
-          yes | flet build apk \
-            --project "Lycoris Control" \
-            --python-version 3.11 \
-            --verbose
+          # Construimos sin el argumento --python-version que daba error
+          # Usamos --project para darle nombre
+          flet build apk --project "LycorisControl" --verbose
         env:
           CI: true
+          # Aumentamos memoria para evitar que el compilador de Dart se muera
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK
