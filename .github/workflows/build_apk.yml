@@ -1,4 +1,4 @@
-name: Build Android APK (Simple Fix)
+name: Build Android APK (Silent Licenses)
 on:
   push:
     branches: [ main ]
@@ -12,7 +12,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Limpieza mínima para no romper permisos del SDK de Android
       - name: Free space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -36,33 +35,41 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet Build Tool
+      - name: Install Flet CLI
         run: |
           python -m pip install --upgrade pip
           pip install flet cookiecutter
 
       - name: Prepare Requirements
         run: |
-          # Solo lo esencial para que la APK no pese 1GB ni falle por watchdog
-          echo "flet-core==0.22.0" > requirements.txt
-          echo "pg8000" >> requirements.txt
+          # Solo lo estrictamente necesario para la App
+          echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "pydantic-settings" >> requirements.txt
+          # No incluimos flet aquí, el build lo hace solo
+
+      - name: Accept Android Licenses (The Robust Way)
+        run: |
+          # Forzamos la ruta del SDK
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          
+          # Creamos un archivo de config vacío que a veces pide sdkmanager
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          
+          # Aceptamos todas las licencias (1-6) de forma silenciosa
+          # El '|| true' evita que el job falle si ya estaban aceptadas
+          yes | sdkmanager --licenses > /dev/null || true
 
       - name: Build APK
         run: |
-          # Agregamos el path de Android explícitamente para que encuentre sdkmanager
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          # Nos aseguramos de que Flutter también esté en "modo CI"
+          flutter config --no-analytics
           
-          # Aceptamos licencias usando el path completo para evitar "command not found"
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          
-          # Construimos sin el argumento --python-version que daba error
-          # Usamos --project para darle nombre
+          # Build final sin argumentos extra que causen errores
           flet build apk --project "LycorisControl" --verbose
         env:
           CI: true
-          # Aumentamos memoria para evitar que el compilador de Dart se muera
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK
