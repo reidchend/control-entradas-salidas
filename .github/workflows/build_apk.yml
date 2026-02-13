@@ -1,4 +1,4 @@
-name: Build Android APK (Standard 2026 Workflow)
+name: Build Android APK (Standard Fix 2026)
 on:
   push:
     branches: [ main ]
@@ -16,7 +16,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Instalamos dependencias de sistema que Flet necesita para no "asustarse"
+      # Dependencias necesarias para que el motor de Flutter no falle en Linux
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -25,46 +25,46 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5' # Volvemos a la moderna, pero con el fix de PATH
+          flutter-version: '3.24.5'
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Flet (Stable 2025 Version)
+      - name: Install Flet
         run: |
           pip install flet==0.28.3 cookiecutter
           pip install setuptools wheel
 
       - name: Build APK
         run: |
-          # 1. Aceptar licencias (Obligatorio)
+          # 1. Licencias
           yes | flutter doctor --android-licenses
           
-          # 2. VINCULACIÓN MAESTRA
-          # Estas 3 variables son las que usan los workflows exitosos
+          # 2. VINCULACIÓN DE RUTAS (Lo que otros usan para evitar el error flutter_test)
           export FLUTTER_ROOT=$FLUTTER_HOME
-          export FLUTTER_SDK=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
           
-          # 3. Limpieza y Configuración
-          # Creamos un manifest mínimo si no existe para evitar que Flet invente rutas
+          # 3. Preparar el entorno de paquetes
+          # Esto "despierta" al SDK de Flutter antes de que Flet lo use
+          flutter pub get || true 
+          
+          # Crear requirements.txt limpio
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           
-          # 4. EL COMANDO (Sin iconos para asegurar el primer éxito)
-          # Los expertos usan --no-icons en el primer build de CI para evitar el crash de Dart
-          flet build apk --verbose --no-icons
+          # 4. EL COMANDO CORRECTO PARA 0.28.3
+          # Quitamos --no-icons (que no existe) y dejamos solo --verbose para ver el progreso.
+          # Flet usará los iconos por defecto si no encuentra configuración.
+          flet build apk --verbose
           
-          # 5. Mover resultado
+          # 5. Mover el resultado
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
           CI: true
-          # Forzamos a que Flet vea el SDK en su variable preferida
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
-          PYTHONUTF8: 1
 
       - name: Upload APK
         if: success()
