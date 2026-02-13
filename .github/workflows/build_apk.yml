@@ -41,21 +41,23 @@ jobs:
           # 1. Aceptar licencias de forma segura
           yes | flutter doctor --android-licenses || true
           
-          # 2. Crear el archivo .env ANTES de cualquier otra cosa
-          # Si usas Secrets de GitHub, cámbialo aquí. Si no, lo creamos vacío para que no rompa el build.
-          if [ -f .env ]; then
-            echo "El archivo .env ya existe."
-          else
-            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
-            echo "DB_USER=postgres" >> .env
-            # Añade aquí el resto de tus variables si las tienes en Secrets
-          fi
+          # 2. INYECCIÓN DE SECRETOS - Crear el archivo .env real
+          # Se inyectan las variables configuradas en Settings -> Secrets -> Actions
+          cat << EOF > .env
+          DB_TYPE=postgresql
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=6543
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          FLET_APP_NAME="Lycoris Control"
+          EOF
 
-          # 3. Ahora sí, copiamos con seguridad
+          # 3. DOBLE SEGURIDAD - Copiar el env a la carpeta config para evitar errores de ruta
           mkdir -p config
           cp .env config/.env
           
-          # 4. Generar requirements.txt
+          # 4. GENERAR REQUIREMENTS.TXT - Incluye SQLAlchemy y Greenlet
           cat << EOF > requirements.txt
           flet==0.28.3
           sqlalchemy
@@ -70,10 +72,11 @@ jobs:
           typing-extensions
           EOF
           
-          # 5. Construir
-          flet build apk --verbose
+          # 5. CONSTRUCCIÓN
+          # Forzamos el nombre del paquete para que coincida con flet.yaml
+          flet build apk --verbose --package-name com.reidchend.lycoris
           
-          # 5. Salida
+          # 6. ORGANIZAR SALIDA
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
@@ -84,5 +87,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-v1.0.1
+          name: Lycoris-Control-v1.0.1-Final
           path: output/*.apk
