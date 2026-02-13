@@ -1,3 +1,4 @@
+# flet.yaml
 app:
   name: "lycoris_control"
   product: "Lycoris Control"
@@ -8,21 +9,19 @@ android:
   build_number: 1
   build_version: "1.0.1"
 
-# ESTO ES LO QUE FALTA PARA QUE NO SE QUEDE PEGADO:
 package:
   include:
     - main.py
-    - assets/**
-    - app/**
-    - config/**
-    - assets/**
-    - .env # No incluyas el .env real por seguridad
+    - app/
+    - config/
+    - assets/
+    - requirements.txt
+    - .env
   exclude:
-    - venv/**
-    - .venv/**
-    - __pycache__/**
-    - build/**
-    - .git/**
-    - .github/**
+    - venv/
+    - .venv/
+    - __pycache__/
+    - build/
+    - .git/
+    - .github/
     - "*.pyc"
-    - test_db.py
