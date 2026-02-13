@@ -38,15 +38,15 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Aceptar licencias
+          # 1. Licencias
           yes | flutter doctor --android-licenses
           
-          # 2. Configuración de entorno para Flet
+          # 2. Rutas
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
           
-          # 3. Crear el archivo requirements.txt (Vital para el empaquetado)
-          # Esto es lo que Flet leerá para instalar dentro del APK
+          # 3. Requirements Completos (Blindados)
+          # Aquí metemos todo lo que tu app original usa
           echo "flet==0.28.3" > requirements.txt
           echo "pg8000" >> requirements.txt
           echo "python-dotenv" >> requirements.txt
@@ -55,14 +55,13 @@ jobs:
           echo "certifi" >> requirements.txt
           echo "charset-normalizer" >> requirements.txt
           echo "idna" >> requirements.txt
+          echo "typing-extensions" >> requirements.txt # Requerido por Pydantic a veces
           
-          # 4. COMANDO DE CONSTRUCCIÓN
-          # Flet detectará automáticamente tu flet.yaml en la raíz
+          # 4. Construcción
           flet build apk --verbose
           
-          # 5. Organizar salida
+          # 5. Salida
           mkdir -p output
-          # Buscamos el APK en la carpeta build que genera flet
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
           CI: true

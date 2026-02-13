@@ -1,17 +1,31 @@
 import sys
+import traceback
 
+# 1. INTENTO DE IMPORTACIÓN CRÍTICA
 try:
     import pydantic_settings
     import pydantic
     import flet as ft
-    import os
-    import time
-    import traceback
+    import pg8000
+    import dotenv
 except ImportError as e:
-    # Esto forzará a Flet (si logra iniciar) a decirnos qué falta
-    # Pero si falla aquí, el teléfono no mostrará nada.
-    print(f"FALTA LIBRERIA CRITICA: {e}")
+    # Si falta una librería, intentamos usar Flet para mostrar el error
+    try:
+        import flet as ft
+        def main(page: ft.Page):
+            page.add(ft.Text(f"❌ ERROR DE LIBRERÍA: Falta {e.name}", color="red", size=20, weight="bold"))
+            page.add(ft.Text(f"Detalle: {traceback.format_exc()}", selectable=True))
+            page.update()
+        ft.app(target=main)
+        sys.exit() # Detenemos la ejecución aquí
+    except:
+        # Si ni siquiera Flet carga, no hay nada que hacer, se quedará en negro
+        pass
 
+# 2. SI TODO CARGÓ BIEN, SIGUE TU CÓDIGO ORIGINAL...
+import os
+import time
+# (Aquí continúa el resto de tus imports y tu clase ControlEntradasSalidasApp)
 
 # Intentamos importar las configuraciones con seguridad
 try:
