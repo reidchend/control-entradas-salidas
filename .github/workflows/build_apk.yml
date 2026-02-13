@@ -1,4 +1,4 @@
-name: Build Android APK (Final Lap)
+name: Build Android APK (Skip Icons Fix)
 on:
   push:
     branches: [ main ]
@@ -34,33 +34,25 @@ jobs:
           # 1. Aceptar licencias
           yes | flutter doctor --android-licenses
           
-          # 2. Configuración de entorno y precarga de motor
+          # 2. Forzar entorno
           export FLUTTER_ROOT=$FLUTTER_HOME
           export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
           export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
           
-          # Inicialización forzosa del motor de Flutter
-          flutter config --no-analytics
-          cd $HOME
-          flutter create --template=app dummy_app
-          cd dummy_app && flutter pub get
-          cd $GITHUB_WORKSPACE
-          
-          # 3. Preparar archivos en la raíz (Flat Structure)
+          # 3. Preparar archivos
           echo ".git/" > .fletignore
           echo ".github/" >> .fletignore
           echo "build/" >> .fletignore
-          echo "dummy_app/" >> .fletignore
           
-          # Requirements para el APK
+          # Requirements
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           
-          # 4. EL COMANDO DE CONSTRUCCIÓN
-          # Quitamos --no-version-check para evitar el error de sintaxis
-          flet build apk --verbose
+          # 4. EL COMANDO CLAVE: --no-icons
+          # Al saltar los iconos, evitamos el subproceso de Dart que falla.
+          flet build apk --verbose --no-icons
           
-          # 5. Mover resultado a la carpeta de salida
+          # 5. Rescatar resultado
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
