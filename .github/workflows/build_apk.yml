@@ -1,4 +1,4 @@
-name: Build Android APK (Java 17 Fix)
+name: Build Android APK (Linking Fix)
 on:
   push:
     branches: [ main ]
@@ -10,7 +10,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Volvemos a Java 17 para que el sdkmanager no se queje
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -34,30 +33,42 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Configurar licencias (Ahora con Java 17 funcionará)
+          # 1. Aceptar licencias
           yes | flutter doctor --android-licenses
           
+          # 2. VINCULACIÓN MANUAL DE SDK (La clave)
+          # Forzamos a que Dart reconozca el SDK de Flutter antes de llamar a Flet
+          flutter config --no-analytics
           export FLUTTER_ROOT=$FLUTTER_HOME
-          export PATH=$PATH:$FLUTTER_HOME/bin
+          export PUB_CACHE=$HOME/.pub-cache
+          export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
           
-          # 2. Preparación Limpia
+          # 3. Preparar carpeta de build
           rm -rf build_dir
           mkdir build_dir
           cp -r app config assets main.py build_dir/ || true
           
-          # 3. Requirements Mínimos
+          # 4. Requirements
           echo "pg8000" > build_dir/requirements.txt
           echo "python-dotenv" >> build_dir/requirements.txt
           
-          # 4. Compilar
           cd build_dir
+          
+          # 5. PRE-BOOTSTRAP (Engañamos al sistema para que vea el SDK)
+          # Esto descarga las dependencias que Flet no encuentra
+          flutter precache --android
+          
+          # 6. Ejecutar Build
+          # Usamos la bandera --no-version-check para evitar llamadas externas lentas
           flet build apk --verbose
           
-          # 5. Rescatar el APK
+          # 7. Rescatar el APK
           mkdir -p ../output
           find build/apk -name "*.apk" -exec cp {} ../output/ \;
         env:
           CI: true
+          # Seteamos la variable que Dart busca para el SDK de Flutter
+          FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
       - name: Upload APK
         if: success()
