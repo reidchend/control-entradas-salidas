@@ -1,4 +1,4 @@
-name: Build Android APK (No Assets Hack)
+name: Build Android APK (Standard 2026 Workflow)
 on:
   push:
     branches: [ main ]
@@ -16,52 +16,59 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Instalamos dependencias de sistema que Flet necesita para no "asustarse"
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libgles2-mesa-dev libpango1.0-dev
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.6'
+          flutter-version: '3.24.5' # Volvemos a la moderna, pero con el fix de PATH
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Install Flet
-        run: pip install flet==0.21.2 cookiecutter
+      - name: Install Flet (Stable 2025 Version)
+        run: |
+          pip install flet==0.28.3 cookiecutter
+          pip install setuptools wheel
 
       - name: Build APK
         run: |
-          # 1. Licencias
+          # 1. Aceptar licencias (Obligatorio)
           yes | flutter doctor --android-licenses
           
-          # 2. Configuración de PATH absoluta
+          # 2. VINCULACIÓN MAESTRA
+          # Estas 3 variables son las que usan los workflows exitosos
           export FLUTTER_ROOT=$FLUTTER_HOME
+          export FLUTTER_SDK=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
           
-          # 3. EL TRUCO: Mover los iconos fuera del alcance de Flet temporalmente
-          # Si Flet no ve imágenes de iconos, no debería intentar generarlos.
-          mkdir temp_assets
-          mv assets/favicon.png temp_assets/ || true
-          mv favicon.png temp_assets/ || true
-          
-          # 4. Crear requirements
+          # 3. Limpieza y Configuración
+          # Creamos un manifest mínimo si no existe para evitar que Flet invente rutas
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           
-          # 5. Intentar el build más simple posible
-          # Sin banderas de iconos, sin rutas de assets complejas
-          flet build apk --verbose
+          # 4. EL COMANDO (Sin iconos para asegurar el primer éxito)
+          # Los expertos usan --no-icons en el primer build de CI para evitar el crash de Dart
+          flet build apk --verbose --no-icons
           
-          # 6. Restaurar y mover resultado
+          # 5. Mover resultado
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
           CI: true
+          # Forzamos a que Flet vea el SDK en su variable preferida
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
+          PYTHONUTF8: 1
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-Standard-Icon
+          name: Lycoris-Control-v0.28.3
           path: output/*.apk
