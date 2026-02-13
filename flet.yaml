@@ -12,17 +12,17 @@ android:
 package:
   include:
     - main.py
-    - app/
-    - config/
-    - assets/
-    - requirements.txt
     - .env
+    - requirements.txt
+    - app/** # <--- Agregado /** para recursividad completa
+    - config/** # <--- Agregado /** para recursividad completa
+    - assets/** # <--- Agregado /** para recursividad completa
   exclude:
-    - venv/
-    - .venv/
-    - __pycache__/
-    - build/
-    - .git/
-    - .github/
-    - old/
+    - venv/**
+    - .venv/**
+    - __pycache__/**
+    - build/**
+    - .git/**
+    - .github/**
+    - old/**
     - "*.pyc"
