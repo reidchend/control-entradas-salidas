@@ -1,4 +1,4 @@
-name: Build Android APK (Skip Icons Fix)
+name: Build Android APK (No Assets Hack)
 on:
   push:
     branches: [ main ]
@@ -31,28 +31,28 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Aceptar licencias
+          # 1. Licencias
           yes | flutter doctor --android-licenses
           
-          # 2. Forzar entorno
+          # 2. Configuración de PATH absoluta
           export FLUTTER_ROOT=$FLUTTER_HOME
-          export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
-          export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
+          export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
           
-          # 3. Preparar archivos
-          echo ".git/" > .fletignore
-          echo ".github/" >> .fletignore
-          echo "build/" >> .fletignore
+          # 3. EL TRUCO: Mover los iconos fuera del alcance de Flet temporalmente
+          # Si Flet no ve imágenes de iconos, no debería intentar generarlos.
+          mkdir temp_assets
+          mv assets/favicon.png temp_assets/ || true
+          mv favicon.png temp_assets/ || true
           
-          # Requirements
+          # 4. Crear requirements
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           
-          # 4. EL COMANDO CLAVE: --no-icons
-          # Al saltar los iconos, evitamos el subproceso de Dart que falla.
-          flet build apk --verbose --no-icons
+          # 5. Intentar el build más simple posible
+          # Sin banderas de iconos, sin rutas de assets complejas
+          flet build apk --verbose
           
-          # 5. Rescatar resultado
+          # 6. Restaurar y mover resultado
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
@@ -63,5 +63,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-v0.21.2
+          name: Lycoris-Control-Standard-Icon
           path: output/*.apk
