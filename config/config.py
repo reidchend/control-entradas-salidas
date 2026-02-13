@@ -1,23 +1,28 @@
 import os
 from typing import Optional
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
-# --- CORRECCIÓN PARA ANDROID ---
-# Buscamos la ruta absoluta del archivo .env relativo a este archivo config.py
-basedir = os.path.abspath(os.path.dirname(__file__))
-# Si config.py está en la carpeta /config, el .env está un nivel arriba (..)
-env_path = os.path.join(basedir, "..", ".env")
+# --- NUEVA LÓGICA DE BÚSQUEDA PARA ANDROID ---
+# Definimos las rutas donde el APK podría haber guardado el .env
+basedir = Path(__file__).parent
+posibles_rutas = [
+    basedir.parent / ".env",   # Raíz del proyecto (../.env)
+    basedir / ".env",          # Dentro de la carpeta config/
+    Path.cwd() / ".env",       # Directorio de trabajo actual
+]
 
-# Si el .env existe en esa ruta, lo cargamos. 
-# Si no, load_dotenv() buscará por defecto.
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-else:
-    load_dotenv()
-# ------------------------------
+env_path = None
+for ruta in posibles_rutas:
+    if ruta.exists():
+        env_path = str(ruta)
+        load_dotenv(env_path)
+        break
+# ---------------------------------------------
 
 class Settings(BaseSettings):
+    # --- TU CONFIGURACIÓN ORIGINAL (Mantenida intacta) ---
     DB_TYPE: str = os.getenv("DB_TYPE", "postgresql")
     DB_HOST: str = os.getenv("DB_HOST", "localhost")
     DB_PORT: str = os.getenv("DB_PORT", "6543")
@@ -27,21 +32,25 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
+        """Construye la URL de conexión a la base de datos de forma segura."""
         if self.DB_TYPE.lower() == "sqlite":
             return f"sqlite:///{self.SQLITE_PATH}"
         
         port_str = str(self.DB_PORT).strip()
         final_port = port_str if port_str.isdigit() else "5432"
         
-        # Este es el error que viste en la captura:
+        # Validación mejorada con diagnóstico de rutas
         if not self.DB_PASSWORD:
+            rutas_vistas = "\n".join([str(r) for r in posibles_rutas])
             raise ValueError(
-                f"DB_PASSWORD no está configurada. "
-                f"Buscando en: {env_path}" # Agregamos esto para depurar si falla
+                f"DB_PASSWORD no está configurada.\n"
+                f"Se buscó el archivo .env en:\n{rutas_vistas}\n"
+                f"Archivo cargado actualmente: {env_path}"
             )
         
         return f"postgresql+pg8000://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{final_port}/{self.DB_NAME}"
     
+    # --- EL RESTO DE TUS VARIABLES ORIGINALES ---
     FLET_APP_NAME: str = os.getenv("FLET_APP_NAME", "Lycoris_Control")
     FLET_APP_ICON: str = "favicon.png"
     FLET_APP_VERSION: str = os.getenv("FLET_APP_VERSION", "1.0.0")
@@ -55,10 +64,11 @@ class Settings(BaseSettings):
     SQLITE_PATH: str = os.getenv("SQLITE_PATH", "./control_entradas_salidas.db")
 
     class Config:
-        # Pydantic también necesita la ruta completa para estar seguro
-        env_file = env_path 
+        # Usamos la ruta encontrada dinámicamente
+        env_file = env_path if env_path else ".env"
         extra = "allow"
 
+# --- TU PATRÓN SINGLETON ORIGINAL ---
 _settings: Optional[Settings] = None
 
 def get_settings() -> Settings:
@@ -67,7 +77,7 @@ def get_settings() -> Settings:
         try:
             _settings = Settings()
         except ValueError as e:
-            # Esto saldrá en tu "Código Detective"
+            # Esto permitirá que tu código "Detective" atrape el error
             print(f"❌ Error de configuración: {e}")
             raise
     return _settings

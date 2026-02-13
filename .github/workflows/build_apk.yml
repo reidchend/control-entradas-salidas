@@ -60,6 +60,8 @@ jobs:
           typing-extensions
           EOF
           
+
+          cp .env config/.env
           # 4. Construcción
           flet build apk --verbose
           
@@ -74,5 +76,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-Final
+          name: Lycoris-Control-v1.0.1
           path: output/*.apk
