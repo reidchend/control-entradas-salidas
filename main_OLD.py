@@ -26,35 +26,29 @@ class ControlEntradasSalidasApp:
         self.current_view = None
         self.views = None
         self.splash_container = None
-        self.error_text = None
-        self._layout_row = None
+        self.error_text = None  # Definimos el atributo aquí
 
     def main(self, page: ft.Page):
         self.page = page
+        self.page.window_icon = settings.FLET_APP_ICON
+        self.page.title = settings.FLET_APP_NAME
         
-        # Configuraciones iniciales básicas
-        try:
-            self.page.window_icon = settings.FLET_APP_ICON
-            self.page.title = settings.FLET_APP_NAME
-        except:
-            pass
-            
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.padding = 0
         self.page.spacing = 0
 
-        # CORRECCIÓN DE SINTAXIS: Usamos "=" en lugar de ":="
+        # --- CORRECCIÓN: Creamos el control de error ANTES del layout ---
         self.error_text = ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
 
-        # 1. SPLASH SCREEN (Cambiamos overlay por add para asegurar visibilidad inicial)
+        # 1. SPLASH SCREEN (Overlay)
         self.splash_container = ft.Container(
             content=ft.Column(
                 [
-                    # Comentamos la imagen momentáneamente por si la ruta falla en Android
-                    # ft.Image(src="favicon.png", width=180, height=180, fit=ft.ImageFit.CONTAIN),
+                    ft.Image(src="favicon.png", width=180, height=180, fit=ft.ImageFit.CONTAIN),
                     ft.Container(height=20),
                     ft.ProgressRing(width=40, color="#6750A4"),
                     ft.Text("Iniciando sistema...", size=18, weight="bold", color="#6750A4"),
+                    # Usamos la referencia del objeto ya creado
                     self.error_text
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -67,7 +61,7 @@ class ControlEntradasSalidasApp:
             visible=True
         )
         
-        self.page.add(self.splash_container)
+        self.page.overlay.append(self.splash_container)
         self.page.update()
 
         # Si hubo un error en las importaciones iniciales (Config)
@@ -76,7 +70,7 @@ class ControlEntradasSalidasApp:
             return
 
         try:
-            # 2. CARGA DE VISTAS (Importación diferida para atrapar errores de librerías)
+            # 2. CARGA DE VISTAS
             from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
             
             self.views = {
@@ -92,24 +86,23 @@ class ControlEntradasSalidasApp:
             self._show_view(0)
             self._handle_resize()
 
-            # Pequeña pausa para asegurar carga
-            time.sleep(0.5) 
-
-            # 3. QUITAR SPLASH SI TODO OK
-            self.splash_container.visible = False
-            self.page.update()
+            time.sleep(1) # Feedback visual
 
         except Exception as e:
-            # Si algo falla aquí, veremos el error exacto en el teléfono
             error_detail = traceback.format_exc()
             self._handle_critical_error(error_detail)
+            return
+
+        # 3. QUITAR SPLASH SI TODO OK
+        self.splash_container.visible = False
+        self.page.update()
 
     def _handle_critical_error(self, error_message):
         print(f"--- ERROR CRÍTICO ---\n{error_message}")
+        # Detenemos el anillo de progreso y mostramos el error
         if self.splash_container:
-            # Ocultamos el anillo de carga y mostramos el texto del error
-            self.splash_container.content.controls[1].visible = False # ProgressRing
-            self.splash_container.content.controls[2].value = "Error al iniciar"
+            self.splash_container.content.controls[2].visible = False # Oculta ProgressRing
+            self.splash_container.content.controls[3].value = "Error al iniciar aplicación"
             self.error_text.value = error_message
             self.page.update()
 
@@ -152,23 +145,20 @@ class ControlEntradasSalidasApp:
             expand=True,
             spacing=0,
         )
-        # El layout se añade debajo del splash (que ya ocultaremos)
         self.page.add(self._layout_row)
 
     def _handle_resize(self):
         def on_resize(e):
             if self.page.width < 700:
-                if self.navigation_rail: self.navigation_rail.visible = False
+                self.navigation_rail.visible = False
                 self._layout_row.controls = [self.content_area]
                 self.page.navigation_bar = self.navigation_bar
             else:
-                if self.navigation_rail: self.navigation_rail.visible = True
+                self.navigation_rail.visible = True
                 self._layout_row.controls = [self.navigation_rail, self.content_area]
                 self.page.navigation_bar = None
             self.page.update()
-        
         self.page.on_resized = on_resize
-        # Disparamos el primer resize manualmente
         on_resize(None)
 
     def _on_navigation_change(self, e):
@@ -184,7 +174,12 @@ class ControlEntradasSalidasApp:
         if self.page.navigation_bar: self.page.navigation_bar.selected_index = index
         self.page.update()
 
-# Instanciamos y ejecutamos
-app_instance = ControlEntradasSalidasApp()
+def _per_page_main(page: ft.Page):
+    app = ControlEntradasSalidasApp()
+    app.main(page)
+
 if __name__ == "__main__":
-    ft.app(target=app_instance.main)
+    ft.app(
+        target=_per_page_main,
+        assets_dir=os.path.join(os.path.dirname(__file__), "assets")
+    )
