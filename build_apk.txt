@@ -51,9 +51,8 @@ jobs:
           flutter pub get || true 
           
           # 3. Requirements para el APK
-          # Añadimos 'flet' explícitamente para que el intérprete de Python lo encuentre
-          echo "flet==0.28.3" > requirements.txt
-          echo "pg8000" >> requirements.txt
+          # Añadimos certifi y charset-normalizer que son vitales para SSL en Android
+          echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           echo "certifi" >> requirements.txt
           echo "charset-normalizer" >> requirements.txt
