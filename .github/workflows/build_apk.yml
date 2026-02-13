@@ -38,11 +38,10 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Aceptar licencias de forma segura
+          # 1. Licencias
           yes | flutter doctor --android-licenses || true
           
-          # 2. INYECCIÓN DE SECRETOS - Crear el archivo .env real
-          # Se inyectan las variables configuradas en Settings -> Secrets -> Actions
+          # 2. Inyectar Secretos
           cat << EOF > .env
           DB_TYPE=postgresql
           DB_HOST=${{ secrets.DB_HOST }}
@@ -53,11 +52,11 @@ jobs:
           FLET_APP_NAME="Lycoris Control"
           EOF
 
-          # 3. DOBLE SEGURIDAD - Copiar el env a la carpeta config para evitar errores de ruta
+          # 3. Copias de seguridad
           mkdir -p config
           cp .env config/.env
           
-          # 4. GENERAR REQUIREMENTS.TXT - Incluye SQLAlchemy y Greenlet
+          # 4. Requirements
           cat << EOF > requirements.txt
           flet==0.28.3
           sqlalchemy
@@ -72,11 +71,10 @@ jobs:
           typing-extensions
           EOF
           
-          # 5. CONSTRUCCIÓN
-          # Forzamos el nombre del paquete para que coincida con flet.yaml
-          flet build apk --verbose --package-name com.reidchend.lycoris
+          # 5. CONSTRUCCIÓN (Versión compatible)
+          flet build apk --verbose
           
-          # 6. ORGANIZAR SALIDA
+          # 6. Salida
           mkdir -p output
           find build/apk -name "*.apk" -exec cp {} output/ \;
         env:
