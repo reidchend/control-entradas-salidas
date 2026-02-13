@@ -45,7 +45,7 @@ class ControlEntradasSalidasApp:
                     ft.ProgressRing(width=40, color="#6750A4"),
                     ft.Text("Iniciando sistema...", size=18, weight="bold", color="#6750A4"),
                     # Area para mensajes de error (vacía al inicio)
-                    self.error_text := ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
+                    self.error_text = ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
