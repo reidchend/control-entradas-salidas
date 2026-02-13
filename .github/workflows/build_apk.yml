@@ -1,4 +1,4 @@
-name: Build Android APK (Golden Era Stack)
+name: Build Android APK (Fixed Version 0.21.2)
 on:
   push:
     branches: [ main ]
@@ -10,69 +10,67 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Usamos Java 11 (Más compatible con versiones antiguas de Flutter)
+      # Usamos Java 11, el mejor amigo de Flutter 3.19
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '11'
 
-      # 2. Flutter 3.19.6: La versión más estable antes de los grandes cambios
+      # Flutter 3.19.6: Estable y compatible con Flet 0.21.x
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.6'
 
-      # 3. Python 3.10: Más estable para compilación cruzada que el 3.11
+      # Python 3.10: Máxima compatibilidad para compilación cruzada
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 4. Flet 0.21.0: La versión "Tanque". No falla.
+      # CORRECCIÓN: Instalamos la 0.21.2 que SÍ existe
       - name: Install Flet
         run: |
-          pip install flet==0.21.0 cookiecutter
-          # Instalamos las herramientas de compilación necesarias
+          pip install flet==0.21.2 cookiecutter
           pip install setuptools wheel
 
       - name: Build APK
         run: |
-          # Aceptar licencias
+          # 1. Configurar licencias y entorno
           yes | flutter doctor --android-licenses
-
-          # Rutas explícitas
+          
+          # Aseguramos que Flutter esté en el PATH
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin
           
-          # Limpieza preventiva
+          # 2. Preparación Limpia (La estrategia de aislamiento sigue siendo vital)
           rm -rf build_dir
           mkdir build_dir
           
-          # Copiamos archivos (Mantenemos tu estructura aislada que funcionó bien)
+          # Copiamos tu código
           cp -r app config assets main.py build_dir/ || true
           
-          # Requirements mínimos
+          # 3. Requirements Mínimos
+          # En Flet 0.21.x, menos es más. Solo lo esencial.
           echo "pg8000" > build_dir/requirements.txt
           echo "python-dotenv" >> build_dir/requirements.txt
           
+          # 4. Compilar
           cd build_dir
           
-          # EL COMANDO CLÁSICO
-          # Flet 0.21.0 usa un sistema de build más simple que rara vez falla con SDKs
+          # Comando directo sin banderas extrañas
           flet build apk --verbose
           
-          # Mover APK
+          # 5. Rescatar el APK
           mkdir -p ../output
           find build/apk -name "*.apk" -exec cp {} ../output/ \;
         env:
           CI: true
-          # Ayuda a que Flutter encuentre su propio SDK
-          FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-Legacy
+          name: Lycoris-Control-v0.21.2
           path: output/*.apk
