@@ -1,7 +1,17 @@
-import flet as ft
-import os
-import time
-import traceback
+import sys
+
+try:
+    import pydantic_settings
+    import pydantic
+    import flet as ft
+    import os
+    import time
+    import traceback
+except ImportError as e:
+    # Esto forzará a Flet (si logra iniciar) a decirnos qué falta
+    # Pero si falla aquí, el teléfono no mostrará nada.
+    print(f"FALTA LIBRERIA CRITICA: {e}")
+
 
 # Intentamos importar las configuraciones con seguridad
 try:

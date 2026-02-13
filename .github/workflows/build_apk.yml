@@ -50,6 +50,8 @@ jobs:
           echo "flet==0.28.3" > requirements.txt
           echo "pg8000" >> requirements.txt
           echo "python-dotenv" >> requirements.txt
+          echo "pydantic" >> requirements.txt
+          echo "pydantic-settings" >> requirements.txt
           echo "certifi" >> requirements.txt
           echo "charset-normalizer" >> requirements.txt
           echo "idna" >> requirements.txt
