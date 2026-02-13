@@ -1,4 +1,4 @@
-name: Build Android APK (Flat Path Fix)
+name: Build Android APK (Manual Engine Link)
 on:
   push:
     branches: [ main ]
@@ -34,28 +34,31 @@ jobs:
           # 1. Aceptar licencias
           yes | flutter doctor --android-licenses
           
-          # 2. FORZAR RECONOCIMIENTO DEL SDK
-          # Este comando obliga a Flutter a escribir sus rutas en el config de Dart
-          flutter config --no-analytics
-          flutter doctor
+          # 2. CONFIGURACIÓN AGRESIVA DEL ENTORNO
+          export FLUTTER_ROOT=$FLUTTER_HOME
+          export DART_SDK=$FLUTTER_HOME/bin/cache/dart-sdk
+          export PATH=$PATH:$FLUTTER_HOME/bin:$DART_SDK/bin
           
-          # 3. Preparar el entorno raíz
-          # En lugar de carpetas nuevas, limpiamos la raíz de basura de Git
+          # 3. EL TRUCO: Crear un proyecto flutter fantasma para inicializar el SDK
+          # Esto obliga a la máquina a descargar y enlazar 'flutter_test' y otras librerías
+          cd $HOME
+          flutter create --template=app dummy_app
+          cd dummy_app
+          flutter pub get
+          cd $GITHUB_WORKSPACE
+          
+          # 4. Preparar archivos
           echo ".git/" > .fletignore
           echo ".github/" >> .fletignore
           echo "build/" >> .fletignore
           
-          # Aseguramos los requirements
+          # Aseguramos dependencias de Python
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
           
-          # 4. Exportar rutas críticas
-          export FLUTTER_ROOT=$FLUTTER_HOME
-          export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
-          
-          # 5. EL COMANDO (Desde la raíz)
-          # Al no cambiar de carpeta, Dart tiene más probabilidades de mantener el contexto
-          flet build apk --verbose
+          # 5. EJECUCIÓN (Saltando generación de iconos si es necesario)
+          # Usamos --no-version-check para evitar ruidos de red
+          flet build apk --verbose --no-version-check
           
           # 6. Mover resultado
           mkdir -p output
@@ -68,5 +71,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-Flat
+          name: Lycoris-Control-v0.21.2
           path: output/*.apk
