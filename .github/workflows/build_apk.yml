@@ -50,13 +50,15 @@ jobs:
           # Esto "despierta" al SDK de Flutter antes de que Flet lo use
           flutter pub get || true 
           
-          # Crear requirements.txt limpio
+          # 3. Requirements para el APK
+          # Añadimos certifi y charset-normalizer que son vitales para SSL en Android
           echo "pg8000" > requirements.txt
           echo "python-dotenv" >> requirements.txt
+          echo "certifi" >> requirements.txt
+          echo "charset-normalizer" >> requirements.txt
+          echo "idna" >> requirements.txt
           
-          # 4. EL COMANDO CORRECTO PARA 0.28.3
-          # Quitamos --no-icons (que no existe) y dejamos solo --verbose para ver el progreso.
-          # Flet usará los iconos por defecto si no encuentra configuración.
+          # 4. EL COMANDO DE CONSTRUCCIÓN
           flet build apk --verbose
           
           # 5. Mover el resultado
