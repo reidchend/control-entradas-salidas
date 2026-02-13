@@ -38,14 +38,24 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Licencias
-          yes | flutter doctor --android-licenses
+          # 1. Aceptar licencias de forma segura
+          yes | flutter doctor --android-licenses || true
           
-          # 2. Rutas
-          export FLUTTER_ROOT=$FLUTTER_HOME
-          export PATH=$PATH:$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin
+          # 2. Crear el archivo .env ANTES de cualquier otra cosa
+          # Si usas Secrets de GitHub, cámbialo aquí. Si no, lo creamos vacío para que no rompa el build.
+          if [ -f .env ]; then
+            echo "El archivo .env ya existe."
+          else
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
+            echo "DB_USER=postgres" >> .env
+            # Añade aquí el resto de tus variables si las tienes en Secrets
+          fi
+
+          # 3. Ahora sí, copiamos con seguridad
+          mkdir -p config
+          cp .env config/.env
           
-          # 3. Generación de requirements (SIN espacios al inicio)
+          # 4. Generar requirements.txt
           cat << EOF > requirements.txt
           flet==0.28.3
           sqlalchemy
@@ -60,9 +70,7 @@ jobs:
           typing-extensions
           EOF
           
-
-          cp .env config/.env
-          # 4. Construcción
+          # 5. Construir
           flet build apk --verbose
           
           # 5. Salida
