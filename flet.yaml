@@ -24,4 +24,5 @@ package:
     - build/
     - .git/
     - .github/
+    - old/
     - "*.pyc"

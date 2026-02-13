@@ -7,3 +7,7 @@
 2026-02-13 17:26:00 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-13 17:26:00 | app.views.inventario_view | INFO     | Cargando categorías...
 2026-02-13 17:26:02 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-13 18:19:54 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-13 18:19:54 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-13 18:19:54 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-13 18:19:56 | app.views.inventario_view | INFO     | Se cargaron 1 categorías

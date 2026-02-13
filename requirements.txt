@@ -1,4 +1,4 @@
-flet==0.22.0
+flet==0.28.3
 python-dotenv
 pydantic-settings
 Pg8000
