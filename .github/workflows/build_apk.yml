@@ -1,4 +1,4 @@
-name: Build Android APK (Fixed Version 0.21.2)
+name: Build Android APK (Java 17 Fix)
 on:
   push:
     branches: [ main ]
@@ -10,26 +10,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Usamos Java 11, el mejor amigo de Flutter 3.19
+      # Volvemos a Java 17 para que el sdkmanager no se queje
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
 
-      # Flutter 3.19.6: Estable y compatible con Flet 0.21.x
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.6'
 
-      # Python 3.10: Máxima compatibilidad para compilación cruzada
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # CORRECCIÓN: Instalamos la 0.21.2 que SÍ existe
       - name: Install Flet
         run: |
           pip install flet==0.21.2 cookiecutter
@@ -37,29 +34,23 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Configurar licencias y entorno
+          # 1. Configurar licencias (Ahora con Java 17 funcionará)
           yes | flutter doctor --android-licenses
           
-          # Aseguramos que Flutter esté en el PATH
           export FLUTTER_ROOT=$FLUTTER_HOME
           export PATH=$PATH:$FLUTTER_HOME/bin
           
-          # 2. Preparación Limpia (La estrategia de aislamiento sigue siendo vital)
+          # 2. Preparación Limpia
           rm -rf build_dir
           mkdir build_dir
-          
-          # Copiamos tu código
           cp -r app config assets main.py build_dir/ || true
           
           # 3. Requirements Mínimos
-          # En Flet 0.21.x, menos es más. Solo lo esencial.
           echo "pg8000" > build_dir/requirements.txt
           echo "python-dotenv" >> build_dir/requirements.txt
           
           # 4. Compilar
           cd build_dir
-          
-          # Comando directo sin banderas extrañas
           flet build apk --verbose
           
           # 5. Rescatar el APK
