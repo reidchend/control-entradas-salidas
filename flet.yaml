@@ -1,4 +1,4 @@
-
+# flet.yaml
 app_name: "Lycoris Control"
 description: "Sistema de gestión Lycoris"
 package_name: "com.reidchend.lycoris"
