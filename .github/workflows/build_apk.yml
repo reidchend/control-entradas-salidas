@@ -85,5 +85,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-v1.0.1-Final
+          name: Lycoris-Control-v1.0.2
           path: output/*.apk
