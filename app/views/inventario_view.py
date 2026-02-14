@@ -494,10 +494,6 @@ class InventarioView(ft.Container):
         """Muestra un mensaje de error."""
         if self.page:
             logger.error(f"Error mostrado al usuario: {message}")
-            self.page.show_snack_bar(
-                ft.SnackBar(
-                    content=ft.Text(message), 
-                    bgcolor=ft.Colors.RED_700,
-                    duration=4000
-                )
-            )
+            self.page.snack_bar = ft.SnackBar(content=ft.Text(message,bgcolor=ft.Colors.RED_700,duration=4000))
+            self.page.snack_bar.open = True
+            self.page.update()

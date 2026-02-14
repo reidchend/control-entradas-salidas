@@ -95,3 +95,10 @@ AttributeError: module 'flet' has no attribute 'icons'. Did you mean: 'Icons'?
 2026-02-14 03:32:47 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-14 03:32:47 | app.views.inventario_view | INFO     | Cargando categorías...
 2026-02-14 03:32:48 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-14 04:05:47 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-14 04:05:47 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-14 04:05:47 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-14 04:05:49 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-14 04:05:52 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-14 04:05:52 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-14 04:05:53 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
