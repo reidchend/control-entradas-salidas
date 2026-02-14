@@ -1,17 +1,13 @@
 # flet.yaml
-app:
-  name: "lycoris_control"
-  product: "Lycoris_Control"
-  org: "com.reidchend.lycoris"
-  description: "Sistema de gestión Lycoris"
+app_name: "Lycoris Control"
+description: "Sistema de gestión Lycoris"
+package_name: "com.reidchend.lycoris"
 
 android:
-  package_name: "com.reidchend.lycoris"
-  product: "LycorisControl"
-  build_number: 1
-  build_version: "1.0.1"
+  label: "Lycoris Control" # Este es el nombre que verás en tu celular
   icons: "assets/favicon.png"
-  label: "Lycoris Control"
+  build_number: 1
+  build_version: "1.0.3"
 
 package:
   include:

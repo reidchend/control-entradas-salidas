@@ -81,9 +81,11 @@ jobs:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
+      - name: Rename APK
+        run: mv build/apk/*.apk build/apk/LycorisControl.apk
+
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Lycoris-Control-v1.0.2
-          path: output/*.apk
+          name: LycorisControl-APK
+          path: build/apk/LycorisControl.apk
