@@ -8,7 +8,7 @@ class LoginView(ft.Container):
         super().__init__()
         self.expand = True
         self.padding = ft.padding.all(20)
-        self.bgcolor = ft.colors.GREY_50
+        self.bgcolor = ft.Colors.GREY_50
         
         # Variables
         self.user_input = ft.TextField(label="Usuario", width=300)
@@ -20,9 +20,9 @@ class LoginView(ft.Container):
         self.content = ft.Column([
             ft.Container(height=50),  # Espaciador
             ft.Column([
-                ft.Icon(ft.icons.LOCK_ROUNDED, size=60, color=ft.colors.PRIMARY),
+                ft.Icon(ft.Icons.LOCK_ROUNDED, size=60, color=ft.Colors.PRIMARY),
                 ft.Text("Lycoris Control", size=28, weight="bold"),
-                ft.Text("Sistema de Inventario", size=14, color=ft.colors.GREY_500),
+                ft.Text("Sistema de Inventario", size=14, color=ft.Colors.GREY_500),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
             
             ft.Container(height=40),
@@ -63,6 +63,6 @@ class LoginView(ft.Container):
             self.page.show_snack_bar(
                 ft.SnackBar(
                     content=ft.Text(message),
-                    bgcolor=ft.colors.RED_700
+                    bgcolor=ft.Colors.RED_700
                 )
             )

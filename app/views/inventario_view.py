@@ -14,7 +14,7 @@ class InventarioView(ft.Container):
         self.visible = False
         self.expand = True
         self.padding = ft.padding.only(left=16, right=16, bottom=16, top=8)
-        self.bgcolor = ft.colors.GREY_50
+        self.bgcolor = ft.Colors.GREY_50
 
         # Componentes UI
         self.categorias_grid = None
@@ -42,12 +42,12 @@ class InventarioView(ft.Container):
             self.header_container = ft.Container(
                 content=ft.Row([
                     ft.Column([
-                        ft.Text("Inventario", size=24, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_900),
-                        ft.Text("Gestión de existencias y auditoría", size=14, color=ft.colors.BLUE_GREY_400),
+                        ft.Text("Inventario", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                        ft.Text("Gestión de existencias y auditoría", size=14, color=ft.Colors.BLUE_GREY_400),
                     ], expand=True, spacing=0),
                     ft.IconButton(
-                        icon=ft.icons.REFRESH_ROUNDED,
-                        icon_color=ft.colors.PRIMARY,
+                        icon=ft.Icons.REFRESH_ROUNDED,
+                        icon_color=ft.Colors.PRIMARY,
                         on_click=lambda _: self._load_categorias(force_refresh=True),
                         tooltip="Actualizar categorías"
                     )
@@ -58,11 +58,11 @@ class InventarioView(ft.Container):
             # Campo de búsqueda
             self.search_field = ft.TextField(
                 hint_text="Buscar producto...",
-                prefix_icon=ft.icons.SEARCH_ROUNDED,
+                prefix_icon=ft.Icons.SEARCH_ROUNDED,
                 border_radius=12,
-                bgcolor=ft.colors.WHITE,
-                border_color=ft.colors.GREY_300,
-                focused_border_color=ft.colors.PRIMARY,
+                bgcolor=ft.Colors.WHITE,
+                border_color=ft.Colors.GREY_300,
+                focused_border_color=ft.Colors.PRIMARY,
                 height=48,
                 text_size=14,
                 on_change=self._on_search_change,
@@ -83,7 +83,7 @@ class InventarioView(ft.Container):
                 self.header_container,
                 self.search_field,
                 ft.Container(height=10),
-                ft.Text("Seleccionar Categoría", size=16, weight=ft.FontWeight.W_600, color=ft.colors.BLUE_GREY_800),
+                ft.Text("Seleccionar Categoría", size=16, weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_GREY_800),
                 self.categorias_grid,
             ], spacing=0, expand=True)
             
@@ -149,7 +149,7 @@ class InventarioView(ft.Container):
             
             return ft.Container(
                 content=ft.Column([
-                    ft.Icon(ft.icons.CATEGORY_ROUNDED, size=40, color=ft.colors.PRIMARY),
+                    ft.Icon(ft.Icons.CATEGORY_ROUNDED, size=40, color=ft.Colors.PRIMARY),
                     ft.Text(
                         str(categoria.nombre).upper(), 
                         weight="bold", 
@@ -158,14 +158,14 @@ class InventarioView(ft.Container):
                         max_lines=2,
                         overflow=ft.TextOverflow.ELLIPSIS
                     ),
-                    ft.Text("Ver productos", size=10, color=ft.colors.GREY_500),
+                    ft.Text("Ver productos", size=10, color=ft.Colors.GREY_500),
                 ], alignment="center", horizontal_alignment="center", spacing=5),
-                bgcolor=ft.colors.WHITE,
+                bgcolor=ft.Colors.WHITE,
                 border_radius=15,
                 padding=15,
                 on_click=lambda _, c=categoria: self._show_productos(c),
-                border=ft.border.all(1, ft.colors.GREY_200),
-                animate_scale=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
+                border=ft.border.all(1, ft.Colors.GREY_200),
+                animate_scale=ft.Animation(300, ft.AnimationCurve.EASE_OUT)
             )
         except Exception as e:
             logger.error(f"Error al crear tarjeta de categoría: {e}")
@@ -177,7 +177,7 @@ class InventarioView(ft.Container):
         logger.info(f"Mostrando productos de categoría: {categoria.nombre}")
         
         header_nav = ft.Row([
-            ft.IconButton(ft.icons.ARROW_BACK_ROUNDED, on_click=lambda _: self._reset_view()),
+            ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=lambda _: self._reset_view()),
             ft.Text(categoria.nombre, size=20, weight="bold"),
         ])
         
@@ -220,7 +220,7 @@ class InventarioView(ft.Container):
                 logger.info("No hay productos en esta categoría")
                 self.productos_list.controls = [
                     ft.Container(
-                        content=ft.Text("No hay productos disponibles", color=ft.colors.GREY_500),
+                        content=ft.Text("No hay productos disponibles", color=ft.Colors.GREY_500),
                         padding=20,
                         alignment=ft.alignment.center
                     )
@@ -265,7 +265,7 @@ class InventarioView(ft.Container):
             stock_min = producto.stock_minimo or 0
             
             # Determinar color de stock
-            stock_color = ft.colors.RED_600 if stock < stock_min else ft.colors.PRIMARY
+            stock_color = ft.Colors.RED_600 if stock < stock_min else ft.Colors.PRIMARY
             
             return ft.Container(
                 content=ft.Row([
@@ -277,32 +277,32 @@ class InventarioView(ft.Container):
                                     f"Stock: {stock}", 
                                     size=11, 
                                     weight="bold", 
-                                    color=ft.colors.WHITE
+                                    color=ft.Colors.WHITE
                                 ),
                                 bgcolor=stock_color,
                                 padding=ft.padding.symmetric(horizontal=8, vertical=2),
                                 border_radius=5
                             ),
-                            ft.Text(f"Mín: {stock_min}", size=11, color=ft.colors.GREY_500),
+                            ft.Text(f"Mín: {stock_min}", size=11, color=ft.Colors.GREY_500),
                         ], spacing=10)
                     ], expand=True),
                     ft.IconButton(
-                        icon=ft.icons.ADD_CIRCLE_OUTLINE_ROUNDED, 
-                        icon_color=ft.colors.GREEN_600, 
+                        icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED, 
+                        icon_color=ft.Colors.GREEN_600, 
                         on_click=lambda _, p=producto: self._show_cantidad_dialog(p, "entrada"),
                         tooltip="Registrar Entrada"
                     ),
                     ft.IconButton(
-                        icon=ft.icons.REMOVE_CIRCLE_OUTLINE_ROUNDED, 
-                        icon_color=ft.colors.RED_600, 
+                        icon=ft.Icons.REMOVE_CIRCLE_OUTLINE_ROUNDED, 
+                        icon_color=ft.Colors.RED_600, 
                         on_click=lambda _, p=producto: self._show_cantidad_dialog(p, "salida"),
                         tooltip="Registrar Salida"
                     ),
                 ], spacing=10),
                 padding=12, 
-                bgcolor=ft.colors.WHITE, 
+                bgcolor=ft.Colors.WHITE, 
                 border_radius=12,
-                border=ft.border.all(1, ft.colors.GREY_200)
+                border=ft.border.all(1, ft.Colors.GREY_200)
             )
         except Exception as e:
             logger.error(f"Error al crear item de producto: {e}")
@@ -317,7 +317,7 @@ class InventarioView(ft.Container):
             label="Cantidad a registrar", 
             value="1", 
             keyboard_type=ft.KeyboardType.NUMBER,
-            focused_border_color=ft.colors.PRIMARY,
+            focused_border_color=ft.Colors.PRIMARY,
             autofocus=True
         )
 
@@ -370,15 +370,15 @@ class InventarioView(ft.Container):
             title=ft.Text(f"Registrar {tipo.capitalize()}"),
             content=ft.Column([
                 ft.Text(f"Producto: {producto.nombre}", size=14),
-                ft.Text(f"Stock actual: {producto.stock_actual}", size=12, color=ft.colors.GREY_500),
+                ft.Text(f"Stock actual: {producto.stock_actual}", size=12, color=ft.Colors.GREY_500),
                 cant_input
             ], tight=True, spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
                 ft.ElevatedButton(
                     "Confirmar", 
-                    bgcolor=ft.colors.PRIMARY if tipo == "entrada" else ft.colors.RED_600,
-                    color=ft.colors.WHITE,
+                    bgcolor=ft.Colors.PRIMARY if tipo == "entrada" else ft.Colors.RED_600,
+                    color=ft.Colors.WHITE,
                     on_click=confirmar
                 )
             ],
@@ -485,7 +485,7 @@ class InventarioView(ft.Container):
             self.page.show_snack_bar(
                 ft.SnackBar(
                     content=ft.Text(message), 
-                    bgcolor=ft.colors.GREEN_700,
+                    bgcolor=ft.Colors.GREEN_700,
                     duration=3000
                 )
             )
@@ -497,7 +497,7 @@ class InventarioView(ft.Container):
             self.page.show_snack_bar(
                 ft.SnackBar(
                     content=ft.Text(message), 
-                    bgcolor=ft.colors.RED_700,
+                    bgcolor=ft.Colors.RED_700,
                     duration=4000
                 )
             )

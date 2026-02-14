@@ -68,7 +68,7 @@ class ControlEntradasSalidasApp:
         self.page.spacing = 0
 
         # CORRECCIÓN DE SINTAXIS
-        self.error_text = ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
+        self.error_text = ft.Text("", color=ft.Colors.RED_700, size=12, selectable=True)
 
         # 1. SPLASH SCREEN
         self.splash_container = ft.Container(
@@ -84,7 +84,7 @@ class ControlEntradasSalidasApp:
                 scroll=ft.ScrollMode.ADAPTIVE 
             ),
             alignment=ft.alignment.center,
-            bgcolor=ft.colors.WHITE,
+            bgcolor=ft.Colors.WHITE,
             expand=True,
             visible=True
         )
@@ -126,7 +126,7 @@ class ControlEntradasSalidasApp:
     def _handle_critical_error(self, error_message):
         print(f"--- ERROR CRÍTICO ---\n{error_message}")
         if self.splash_container:
-            # CORRECCIÓN: Evitamos usar ft.icons aquí también por seguridad
+            # CORRECCIÓN: Evitamos usar ft.Icons aquí también por seguridad
             self.splash_container.content.controls[1].visible = False 
             self.splash_container.content.controls[2].value = "Error al iniciar"
             self.error_text.value = error_message
@@ -139,7 +139,7 @@ class ControlEntradasSalidasApp:
         )
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.colors.WHITE)
+        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.Colors.WHITE)
 
         # CORRECCIÓN: Iconos como Strings para evitar error de atributo en Android
         self.navigation_rail = ft.NavigationRail(

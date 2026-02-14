@@ -33,6 +33,8 @@ class ControlEntradasSalidasApp:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.padding = 0
         self.page.spacing = 0
+        self.page.expand = True       # La página se expande para llenar la ventana
+        self.page.vertical_alignment = ft.MainAxisAlignment.START
 
         self._setup_theme()
         self._create_layout()
@@ -47,29 +49,41 @@ class ControlEntradasSalidasApp:
         )
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.colors.WHITE)
+        # Área de contenido con bordes suaves para que parezca una "tarjeta" sobre el fondo
+        self.content_area = ft.Container(
+            expand=True, 
+            padding=0, 
+            bgcolor=ft.Colors.WHITE,
+            border_radius=ft.border_radius.only(top_left=20) if self.page.width >= 700 else 0
+        )
 
+        # BARRA LATERAL (PC/Tablet)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
-            extended=True,
-            label_type=ft.NavigationRailLabelType.ALL,
+            extended=False, # Cambiamos a False para que sea minimalista por defecto
+            label_type=ft.NavigationRailLabelType.ALL, # Muestra iconos y texto debajo
+            min_width=100,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, # Color gris muy suave moderno
             destinations=[
-                ft.NavigationRailDestination(icon="inventory", label="Inventario"),
-                ft.NavigationRailDestination(icon="fact_check", label="Validación"),
-                ft.NavigationRailDestination(icon="storage", label="Stock"),
-                ft.NavigationRailDestination(icon="history", label="Historial"),
-                ft.NavigationRailDestination(icon="settings", label="Configuración"),
+                ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
+                ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
+                ft.NavigationRailDestination(icon="storage_outlined", selected_icon="storage", label="Stock"),
+                ft.NavigationRailDestination(icon="history_outlined", selected_icon="history", label="Historial"),
+                ft.NavigationRailDestination(icon="settings_outlined", selected_icon="settings", label="Ajustes"),
             ],
             on_change=self._on_navigation_change,
         )
 
+        # BARRA INFERIOR (Móvil)
         self.navigation_bar = ft.NavigationBar(
+            visible=False, # Por defecto oculta
+            label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_HIDE,
             destinations=[
-                ft.NavigationDestination(icon="inventory", label="Inventario"),
-                ft.NavigationDestination(icon="fact_check", label="Validación"),
-                ft.NavigationDestination(icon="storage", label="Stock"),
-                ft.NavigationDestination(icon="history", label="Historial"),
-                ft.NavigationDestination(icon="settings", label="Config"),
+                ft.NavigationBarDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
+                ft.NavigationBarDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
+                ft.NavigationBarDestination(icon="storage_outlined", selected_icon="storage", label="Stock"),
+                ft.NavigationBarDestination(icon="history_outlined", selected_icon="history", label="Historial"),
+                ft.NavigationBarDestination(icon="settings_outlined", selected_icon="settings", label="Config"),
             ],
             on_change=self._on_navigation_change,
         )
@@ -83,18 +97,22 @@ class ControlEntradasSalidasApp:
 
     def _handle_resize(self):
         def on_resize(e):
+            # Si el ancho es menor a 700 píxeles (celulares)
             if self.page.width < 700:
-                if self.navigation_rail: self.navigation_rail.visible = False
-                self._layout_row.controls = [self.content_area]
+                self.navigation_rail.visible = False
                 self.page.navigation_bar = self.navigation_bar
+                self.page.navigation_bar.visible = True
+                self.content_area.border_radius = 0 # Sin bordes redondeados en móvil
+            # Si es mayor a 700 (tablets y PCs)
             else:
-                if self.navigation_rail: self.navigation_rail.visible = True
-                self._layout_row.controls = [self.navigation_rail, self.content_area]
-                self.page.navigation_bar = None
+                self.navigation_rail.visible = True
+                self.page.navigation_bar = None # Quita la barra de abajo
+                self.content_area.border_radius = ft.border_radius.only(top_left=20)
+            
             self.page.update()
         
         self.page.on_resized = on_resize
-        on_resize(None)
+        on_resize(None) # Ejecutar una vez al inicio
 
     def _on_navigation_change(self, e):
         self._show_view(int(e.control.selected_index))
@@ -113,7 +131,8 @@ class ControlEntradasSalidasApp:
 # --- 2. EL MOTOR SEGURO (Tu Código Detective Mejorado) ---
 def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.scroll = ft.ScrollMode.ADAPTIVE
+    page.scroll = None
+    page.expand = True
     
     # ¡PINTAR INMEDIATAMENTE PARA EVITAR PANTALLA NEGRA!
     loading_container = ft.Container(

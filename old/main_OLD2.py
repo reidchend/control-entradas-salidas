@@ -44,7 +44,7 @@ class ControlEntradasSalidasApp:
         self.page.spacing = 0
 
         # CORRECCIÓN DE SINTAXIS: Usamos "=" en lugar de ":="
-        self.error_text = ft.Text("", color=ft.colors.RED_700, size=12, selectable=True)
+        self.error_text = ft.Text("", color=ft.Colors.RED_700, size=12, selectable=True)
 
         # 1. SPLASH SCREEN (Cambiamos overlay por add para asegurar visibilidad inicial)
         self.splash_container = ft.Container(
@@ -62,7 +62,7 @@ class ControlEntradasSalidasApp:
                 scroll=ft.ScrollMode.ADAPTIVE 
             ),
             alignment=ft.alignment.center,
-            bgcolor=ft.colors.WHITE,
+            bgcolor=ft.Colors.WHITE,
             expand=True,
             visible=True
         )
@@ -120,29 +120,29 @@ class ControlEntradasSalidasApp:
         )
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.colors.WHITE)
+        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.Colors.WHITE)
 
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
             extended=True,
             label_type=ft.NavigationRailLabelType.ALL,
             destinations=[
-                ft.NavigationRailDestination(icon=ft.icons.INVENTORY, label="Inventario"),
-                ft.NavigationRailDestination(icon=ft.icons.FACT_CHECK, label="Validación"),
-                ft.NavigationRailDestination(icon=ft.icons.STORAGE, label="Stock"),
-                ft.NavigationRailDestination(icon=ft.icons.HISTORY, label="Historial"),
-                ft.NavigationRailDestination(icon=ft.icons.SETTINGS, label="Configuración"),
+                ft.NavigationRailDestination(icon=ft.Icons.INVENTORY, label="Inventario"),
+                ft.NavigationRailDestination(icon=ft.Icons.FACT_CHECK, label="Validación"),
+                ft.NavigationRailDestination(icon=ft.Icons.STORAGE, label="Stock"),
+                ft.NavigationRailDestination(icon=ft.Icons.HISTORY, label="Historial"),
+                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="Configuración"),
             ],
             on_change=self._on_navigation_change,
         )
 
         self.navigation_bar = ft.NavigationBar(
             destinations=[
-                ft.NavigationDestination(icon=ft.icons.INVENTORY, label="Inventario"),
-                ft.NavigationDestination(icon=ft.icons.FACT_CHECK, label="Validación"),
-                ft.NavigationDestination(icon=ft.icons.STORAGE, label="Stock"),
-                ft.NavigationDestination(icon=ft.icons.HISTORY, label="Historial"),
-                ft.NavigationDestination(icon=ft.icons.SETTINGS, label="Config"),
+                ft.NavigationDestination(icon=ft.Icons.INVENTORY, label="Inventario"),
+                ft.NavigationDestination(icon=ft.Icons.FACT_CHECK, label="Validación"),
+                ft.NavigationDestination(icon=ft.Icons.STORAGE, label="Stock"),
+                ft.NavigationDestination(icon=ft.Icons.HISTORY, label="Historial"),
+                ft.NavigationDestination(icon=ft.Icons.SETTINGS, label="Config"),
             ],
             on_change=self._on_navigation_change,
         )

@@ -8,7 +8,7 @@ class ValidacionView(ft.Container):
         super().__init__()
         self.visible = False
         self.expand = True
-        self.bgcolor = ft.colors.GREY_50
+        self.bgcolor = ft.Colors.GREY_50
         self.padding = 0
         
         # Componentes UI
@@ -41,12 +41,12 @@ class ValidacionView(ft.Container):
             content=ft.Column([
                 ft.Row([
                     ft.Column([
-                        ft.Text("Validación", size=26, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_900),
-                        ft.Text("Vincular entradas a facturas", size=13, color=ft.colors.BLUE_GREY_400),
+                        ft.Text("Validación", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                        ft.Text("Vincular entradas a facturas", size=13, color=ft.Colors.BLUE_GREY_400),
                     ], expand=True, spacing=0),
                     ft.IconButton(
-                        icon=ft.icons.REFRESH_ROUNDED,
-                        icon_color=ft.colors.BLUE_600,
+                        icon=ft.Icons.REFRESH_ROUNDED,
+                        icon_color=ft.Colors.BLUE_600,
                         on_click=lambda _: self._load_entradas_pendientes(),
                         tooltip="Refrescar lista"
                     )
@@ -58,10 +58,10 @@ class ValidacionView(ft.Container):
         # --- FILTROS Y ACCIONES ---
         self.search_field = ft.TextField(
             hint_text="Buscar producto...",
-            prefix_icon=ft.icons.SEARCH_ROUNDED,
+            prefix_icon=ft.Icons.SEARCH_ROUNDED,
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.TRANSPARENT,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.TRANSPARENT,
             height=45,
             text_size=14,
             content_padding=ft.padding.symmetric(horizontal=15),
@@ -70,9 +70,9 @@ class ValidacionView(ft.Container):
 
         self.validate_button = ft.ElevatedButton(
             text="Validar (0)",
-            icon=ft.icons.FACT_CHECK_ROUNDED,
+            icon=ft.Icons.FACT_CHECK_ROUNDED,
             color="white",
-            bgcolor=ft.colors.BLUE_600,
+            bgcolor=ft.Colors.BLUE_600,
             disabled=True,
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=self._show_validar_dialog,
@@ -80,8 +80,8 @@ class ValidacionView(ft.Container):
         
         self.clear_button = ft.TextButton(
             text="Limpiar",
-            icon=ft.icons.CLOSE_ROUNDED,
-            style=ft.ButtonStyle(color=ft.colors.BLUE_GREY_400),
+            icon=ft.Icons.CLOSE_ROUNDED,
+            style=ft.ButtonStyle(color=ft.Colors.BLUE_GREY_400),
             on_click=self._clear_selection,
             visible=False
         )
@@ -104,15 +104,15 @@ class ValidacionView(ft.Container):
 
     def _create_entrada_card(self, entrada: Movimiento):
         is_selected = entrada.id in self.selected_entradas
-        bg_color = ft.colors.BLUE_50 if is_selected else ft.colors.WHITE
-        border_side = ft.border.BorderSide(2, ft.colors.BLUE_600) if is_selected else ft.border.BorderSide(1, ft.colors.GREY_200)
+        bg_color = ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE
+        border_side = ft.border.BorderSide(2, ft.Colors.BLUE_600) if is_selected else ft.border.BorderSide(1, ft.Colors.GREY_200)
         
         return ft.Container(
             content=ft.Row([
                 ft.Container(
                     content=ft.Icon(
-                        ft.icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
-                        color=ft.colors.BLUE_600 if is_selected else ft.colors.GREY_300,
+                        ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
+                        color=ft.Colors.BLUE_600 if is_selected else ft.Colors.GREY_300,
                         size=22
                     ),
                     padding=2
@@ -120,14 +120,14 @@ class ValidacionView(ft.Container):
                 ft.Column([
                     ft.Text(
                         entrada.producto.nombre if entrada.producto else "Cargando...",
-                        weight=ft.FontWeight.BOLD, size=15, color=ft.colors.BLUE_GREY_900,
+                        weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_GREY_900,
                         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS
                     ),
                     ft.Row([
                         ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else ''}", 
-                                size=13, weight="w600", color=ft.colors.BLUE_700),
-                        ft.Text(" • ", color=ft.colors.GREY_300),
-                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=12, color=ft.colors.BLUE_GREY_400),
+                                size=13, weight="w600", color=ft.Colors.BLUE_700),
+                        ft.Text(" • ", color=ft.Colors.GREY_300),
+                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=12, color=ft.Colors.BLUE_GREY_400),
                     ], spacing=2)
                 ], expand=True, spacing=2)
             ], spacing=12),
@@ -159,8 +159,8 @@ class ValidacionView(ft.Container):
                 self.entradas_list.controls.append(
                     ft.Container(
                         content=ft.Column([
-                            ft.Icon(ft.icons.FACT_CHECK_OUTLINED, size=50, color=ft.colors.GREY_300),
-                            ft.Text("Sin entradas pendientes", color=ft.colors.GREY_400)
+                            ft.Icon(ft.Icons.FACT_CHECK_OUTLINED, size=50, color=ft.Colors.GREY_300),
+                            ft.Text("Sin entradas pendientes", color=ft.Colors.GREY_400)
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=100),
                         alignment=ft.alignment.center
@@ -220,7 +220,7 @@ class ValidacionView(ft.Container):
             ], tight=True, spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Validar ahora", bgcolor=ft.colors.BLUE_600, color="white", on_click=on_confirmar)
+                ft.ElevatedButton("Validar ahora", bgcolor=ft.Colors.BLUE_600, color="white", on_click=on_confirmar)
             ]
         )
         self.page.dialog.open = True
@@ -251,7 +251,7 @@ class ValidacionView(ft.Container):
             db.commit()
             self.selected_entradas.clear()
             self._load_entradas_pendientes()
-            self.page.show_snack_bar(ft.SnackBar(ft.Text("Entradas validadas y facturadas"), bgcolor=ft.colors.GREEN_700))
+            self.page.show_snack_bar(ft.SnackBar(ft.Text("Entradas validadas y facturadas"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
             db.rollback()
             print(f"Error procesando validación: {ex}")

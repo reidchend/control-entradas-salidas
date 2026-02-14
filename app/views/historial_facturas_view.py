@@ -10,7 +10,7 @@ class HistorialFacturasView(ft.Container):
         super().__init__()
         self.visible = False
         self.expand = True
-        self.bgcolor = ft.colors.GREY_50
+        self.bgcolor = ft.Colors.GREY_50
         self.padding = 0
         
         # Componentes UI
@@ -38,12 +38,12 @@ class HistorialFacturasView(ft.Container):
             content=ft.Column([
                 ft.Row([
                     ft.Column([
-                        ft.Text("Historial de Facturas", size=26, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_900),
-                        ft.Text("Consulta y seguimiento de facturas validadas", size=13, color=ft.colors.BLUE_GREY_400),
+                        ft.Text("Historial de Facturas", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                        ft.Text("Consulta y seguimiento de facturas validadas", size=13, color=ft.Colors.BLUE_GREY_400),
                     ], expand=True, spacing=0),
                     ft.IconButton(
-                        icon=ft.icons.REFRESH_ROUNDED,
-                        icon_color=ft.colors.BLUE_600,
+                        icon=ft.Icons.REFRESH_ROUNDED,
+                        icon_color=ft.Colors.BLUE_600,
                         on_click=lambda _: self._load_facturas(),
                         tooltip="Refrescar lista"
                     )
@@ -55,11 +55,11 @@ class HistorialFacturasView(ft.Container):
         # --- FILTROS DE BÚSQUEDA ---
         self.search_numero_field = ft.TextField(
             hint_text="Número de factura",
-            prefix_icon=ft.icons.RECEIPT_LONG_ROUNDED,
+            prefix_icon=ft.Icons.RECEIPT_LONG_ROUNDED,
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.GREY_300,
-            focused_border_color=ft.colors.BLUE_600,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.GREY_300,
+            focused_border_color=ft.Colors.BLUE_600,
             height=50,
             text_size=14,
             on_change=self._apply_filters,
@@ -67,11 +67,11 @@ class HistorialFacturasView(ft.Container):
         
         self.proveedor_field = ft.TextField(
             hint_text="Proveedor",
-            prefix_icon=ft.icons.BUSINESS_ROUNDED,
+            prefix_icon=ft.Icons.BUSINESS_ROUNDED,
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.GREY_300,
-            focused_border_color=ft.colors.BLUE_600,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.GREY_300,
+            focused_border_color=ft.Colors.BLUE_600,
             height=50,
             text_size=14,
             on_change=self._apply_filters,
@@ -87,10 +87,9 @@ class HistorialFacturasView(ft.Container):
             ],
             value="Todos",
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.GREY_300,
-            focused_border_color=ft.colors.BLUE_600,
-            height=50,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.GREY_300,
+            focused_border_color=ft.Colors.BLUE_600,
             text_size=14,
             on_change=self._apply_filters,
         )
@@ -102,11 +101,11 @@ class HistorialFacturasView(ft.Container):
         self.fecha_desde_field = ft.TextField(
             hint_text="Fecha desde",
             value=fecha_desde.strftime("%Y-%m-%d"),
-            prefix_icon=ft.icons.CALENDAR_TODAY_ROUNDED,
+            prefix_icon=ft.Icons.CALENDAR_TODAY_ROUNDED,
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.GREY_300,
-            focused_border_color=ft.colors.BLUE_600,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.GREY_300,
+            focused_border_color=ft.Colors.BLUE_600,
             height=50,
             text_size=14,
             on_change=self._apply_filters,
@@ -115,11 +114,11 @@ class HistorialFacturasView(ft.Container):
         self.fecha_hasta_field = ft.TextField(
             hint_text="Fecha hasta",
             value=fecha_hasta.strftime("%Y-%m-%d"),
-            prefix_icon=ft.icons.CALENDAR_TODAY_ROUNDED,
+            prefix_icon=ft.Icons.CALENDAR_TODAY_ROUNDED,
             border_radius=12,
-            bgcolor=ft.colors.WHITE,
-            border_color=ft.colors.GREY_300,
-            focused_border_color=ft.colors.BLUE_600,
+            bgcolor=ft.Colors.WHITE,
+            border_color=ft.Colors.GREY_300,
+            focused_border_color=ft.Colors.BLUE_600,
             height=50,
             text_size=14,
             on_change=self._apply_filters,
@@ -128,10 +127,10 @@ class HistorialFacturasView(ft.Container):
         # Botón de limpiar filtros
         clear_filters_btn = ft.OutlinedButton(
             text="Limpiar Filtros",
-            icon=ft.icons.CLEAR_ALL_ROUNDED,
+            icon=ft.Icons.CLEAR_ALL_ROUNDED,
             on_click=self._clear_filters,
             style=ft.ButtonStyle(
-                color=ft.colors.BLUE_700,
+                color=ft.Colors.BLUE_700,
                 shape=ft.RoundedRectangleBorder(radius=10)
             ),
         )
@@ -141,7 +140,7 @@ class HistorialFacturasView(ft.Container):
             "0 facturas encontradas",
             size=14,
             weight=ft.FontWeight.W_500,
-            color=ft.colors.BLUE_GREY_600,
+            color=ft.Colors.BLUE_GREY_600,
         )
         
         filters_section = ft.Container(
@@ -161,7 +160,7 @@ class HistorialFacturasView(ft.Container):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             ], spacing=12),
             padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            bgcolor=ft.colors.GREY_100,
+            bgcolor=ft.Colors.GREY_100,
             border_radius=12,
             margin=ft.margin.symmetric(horizontal=20),
         )
@@ -286,9 +285,9 @@ class HistorialFacturasView(ft.Container):
             self.facturas_list.controls.append(
                 ft.Container(
                     content=ft.Column([
-                        ft.Icon(ft.icons.RECEIPT_LONG_OUTLINED, size=60, color=ft.colors.GREY_400),
-                        ft.Text("No se encontraron facturas", size=16, color=ft.colors.GREY_600),
-                        ft.Text("Ajusta los filtros o registra nuevas facturas", size=12, color=ft.colors.GREY_400),
+                        ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=60, color=ft.Colors.GREY_400),
+                        ft.Text("No se encontraron facturas", size=16, color=ft.Colors.GREY_600),
+                        ft.Text("Ajusta los filtros o registra nuevas facturas", size=12, color=ft.Colors.GREY_400),
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                     alignment=ft.alignment.center,
                     padding=ft.padding.all(40),
@@ -305,10 +304,10 @@ class HistorialFacturasView(ft.Container):
         """Crear tarjeta de factura"""
         # Color según estado
         estado_color = {
-            "Validada": ft.colors.GREEN_600,
-            "Pendiente": ft.colors.ORANGE_600,
-            "Anulada": ft.colors.RED_600,
-        }.get(factura.estado, ft.colors.GREY_600)
+            "Validada": ft.Colors.GREEN_600,
+            "Pendiente": ft.Colors.ORANGE_600,
+            "Anulada": ft.Colors.RED_600,
+        }.get(factura.estado, ft.Colors.GREY_600)
         
         # Chip de estado
         estado_chip = ft.Container(
@@ -325,8 +324,8 @@ class HistorialFacturasView(ft.Container):
         # Header de la tarjeta
         card_header = ft.Row([
             ft.Column([
-                ft.Text(f"Factura #{factura.numero_factura}", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_900),
-                ft.Text(proveedor_str, size=13, color=ft.colors.BLUE_GREY_600),
+                ft.Text(f"Factura #{factura.numero_factura}", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                ft.Text(proveedor_str, size=13, color=ft.Colors.BLUE_GREY_600),
             ], expand=True, spacing=2),
             estado_chip,
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
@@ -334,21 +333,21 @@ class HistorialFacturasView(ft.Container):
         # Detalles de la factura
         detalles = ft.Row([
             ft.Row([
-                ft.Icon(ft.icons.CALENDAR_TODAY_ROUNDED, size=16, color=ft.colors.BLUE_600),
-                ft.Text(fecha_str, size=13, color=ft.colors.BLUE_GREY_700),
+                ft.Icon(ft.Icons.CALENDAR_TODAY_ROUNDED, size=16, color=ft.Colors.BLUE_600),
+                ft.Text(fecha_str, size=13, color=ft.Colors.BLUE_GREY_700),
             ], spacing=5),
             ft.Row([
-                ft.Icon(ft.icons.ATTACH_MONEY_ROUNDED, size=16, color=ft.colors.GREEN_600),
-                ft.Text(f"${factura.total_neto:,.2f}", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_800),
+                ft.Icon(ft.Icons.ATTACH_MONEY_ROUNDED, size=16, color=ft.Colors.GREEN_600),
+                ft.Text(f"${factura.total_neto:,.2f}", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_800),
             ], spacing=5),
         ], spacing=20)
         
         # Botón para ver detalles
         ver_detalles_btn = ft.ElevatedButton(
             text="Ver Productos",
-            icon=ft.icons.VISIBILITY_ROUNDED,
+            icon=ft.Icons.VISIBILITY_ROUNDED,
             style=ft.ButtonStyle(
-                bgcolor=ft.colors.BLUE_600,
+                bgcolor=ft.Colors.BLUE_600,
                 color="white",
                 shape=ft.RoundedRectangleBorder(radius=8),
             ),
@@ -362,8 +361,8 @@ class HistorialFacturasView(ft.Container):
             validado_por = factura.validada_por if factura.validada_por else "Sistema"
             validacion_info = ft.Container(
                 content=ft.Row([
-                    ft.Icon(ft.icons.CHECK_CIRCLE_ROUNDED, size=14, color=ft.colors.GREEN_600),
-                    ft.Text(f"Validada por {validado_por} el {fecha_validacion}", size=11, color=ft.colors.GREEN_700, italic=True),
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=14, color=ft.Colors.GREEN_600),
+                    ft.Text(f"Validada por {validado_por} el {fecha_validacion}", size=11, color=ft.Colors.GREEN_700, italic=True),
                 ], spacing=5),
                 padding=ft.padding.only(top=8),
             )
@@ -373,8 +372,8 @@ class HistorialFacturasView(ft.Container):
         if factura.observaciones:
             observaciones_info = ft.Container(
                 content=ft.Column([
-                    ft.Text("Observaciones:", size=12, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
-                    ft.Text(factura.observaciones, size=11, color=ft.colors.BLUE_GREY_600, italic=True),
+                    ft.Text("Observaciones:", size=12, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
+                    ft.Text(factura.observaciones, size=11, color=ft.Colors.BLUE_GREY_600, italic=True),
                 ], spacing=3),
                 padding=ft.padding.only(top=8),
             )
@@ -394,14 +393,14 @@ class HistorialFacturasView(ft.Container):
         # Tarjeta completa
         return ft.Container(
             content=ft.Column(card_content, spacing=8),
-            bgcolor=ft.colors.WHITE,
-            border=ft.border.all(1, ft.colors.GREY_300),
+            bgcolor=ft.Colors.WHITE,
+            border=ft.border.all(1, ft.Colors.GREY_300),
             border_radius=12,
             padding=ft.padding.all(15),
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=4,
-                color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK),
                 offset=ft.Offset(0, 2),
             ),
         )
@@ -429,7 +428,7 @@ class HistorialFacturasView(ft.Container):
                         content=ft.Text(
                             "No hay productos registrados en esta factura",
                             size=14,
-                            color=ft.colors.GREY_600,
+                            color=ft.Colors.GREY_600,
                             text_align=ft.TextAlign.CENTER,
                         ),
                         padding=ft.padding.all(20),
@@ -444,11 +443,11 @@ class HistorialFacturasView(ft.Container):
                         producto_card = ft.Container(
                             content=ft.Row([
                                 ft.Column([
-                                    ft.Text(producto.nombre, size=14, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_900),
+                                    ft.Text(producto.nombre, size=14, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_900),
                                     ft.Text(
                                         f"{categoria.nombre if categoria else 'Sin categoría'} • {mov.tipo.capitalize()}",
                                         size=12,
-                                        color=ft.colors.BLUE_GREY_500,
+                                        color=ft.Colors.BLUE_GREY_500,
                                     ),
                                 ], expand=True, spacing=2),
                                 ft.Column([
@@ -456,17 +455,17 @@ class HistorialFacturasView(ft.Container):
                                         f"{mov.cantidad} {producto.unidad_medida}",
                                         size=14,
                                         weight=ft.FontWeight.BOLD,
-                                        color=ft.colors.BLUE_600,
+                                        color=ft.Colors.BLUE_600,
                                     ),
                                     ft.Text(
                                         mov.fecha_movimiento.strftime("%d/%m/%Y %H:%M"),
                                         size=11,
-                                        color=ft.colors.BLUE_GREY_400,
+                                        color=ft.Colors.BLUE_GREY_400,
                                     ),
                                 ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            bgcolor=ft.colors.GREY_50,
-                            border=ft.border.all(1, ft.colors.GREY_200),
+                            bgcolor=ft.Colors.GREY_50,
+                            border=ft.border.all(1, ft.Colors.GREY_200),
                             border_radius=8,
                             padding=ft.padding.all(12),
                         )
@@ -476,36 +475,36 @@ class HistorialFacturasView(ft.Container):
             info_section = ft.Container(
                 content=ft.Column([
                     ft.Row([
-                        ft.Text("Número:", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
-                        ft.Text(factura.numero_factura, size=13, color=ft.colors.BLUE_GREY_900),
+                        ft.Text("Número:", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
+                        ft.Text(factura.numero_factura, size=13, color=ft.Colors.BLUE_GREY_900),
                     ], spacing=5),
                     ft.Row([
-                        ft.Text("Proveedor:", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
-                        ft.Text(factura.proveedor if factura.proveedor else "N/A", size=13, color=ft.colors.BLUE_GREY_900),
+                        ft.Text("Proveedor:", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
+                        ft.Text(factura.proveedor if factura.proveedor else "N/A", size=13, color=ft.Colors.BLUE_GREY_900),
                     ], spacing=5),
                     ft.Row([
-                        ft.Text("Fecha:", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
-                        ft.Text(factura.fecha_factura.strftime("%d/%m/%Y"), size=13, color=ft.colors.BLUE_GREY_900),
+                        ft.Text("Fecha:", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
+                        ft.Text(factura.fecha_factura.strftime("%d/%m/%Y"), size=13, color=ft.Colors.BLUE_GREY_900),
                     ], spacing=5),
                     ft.Row([
-                        ft.Text("Total:", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
-                        ft.Text(f"${factura.total_neto:,.2f}", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.GREEN_600),
+                        ft.Text("Total:", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
+                        ft.Text(f"${factura.total_neto:,.2f}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_600),
                     ], spacing=5),
                     ft.Row([
-                        ft.Text("Estado:", size=13, weight=ft.FontWeight.W_500, color=ft.colors.BLUE_GREY_700),
+                        ft.Text("Estado:", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_GREY_700),
                         ft.Container(
                             content=ft.Text(factura.estado, size=12, weight=ft.FontWeight.BOLD, color="white"),
                             bgcolor={
-                                "Validada": ft.colors.GREEN_600,
-                                "Pendiente": ft.colors.ORANGE_600,
-                                "Anulada": ft.colors.RED_600,
-                            }.get(factura.estado, ft.colors.GREY_600),
+                                "Validada": ft.Colors.GREEN_600,
+                                "Pendiente": ft.Colors.ORANGE_600,
+                                "Anulada": ft.Colors.RED_600,
+                            }.get(factura.estado, ft.Colors.GREY_600),
                             padding=ft.padding.symmetric(horizontal=10, vertical=3),
                             border_radius=10,
                         ),
                     ], spacing=5),
                 ], spacing=8),
-                bgcolor=ft.colors.BLUE_50,
+                bgcolor=ft.Colors.BLUE_50,
                 border_radius=8,
                 padding=ft.padding.all(12),
             )
@@ -517,8 +516,8 @@ class HistorialFacturasView(ft.Container):
                 content=ft.Container(
                     content=ft.Column([
                         info_section,
-                        ft.Divider(height=1, color=ft.colors.GREY_300),
-                        ft.Text("Productos:", size=15, weight=ft.FontWeight.W_600, color=ft.colors.BLUE_GREY_800),
+                        ft.Divider(height=1, color=ft.Colors.GREY_300),
+                        ft.Text("Productos:", size=15, weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_GREY_800),
                         productos_list,
                     ], spacing=12, tight=True),
                     width=600,
@@ -552,7 +551,7 @@ class HistorialFacturasView(ft.Container):
         """Mostrar mensaje de error"""
         snack = ft.SnackBar(
             content=ft.Text(mensaje, color="white"),
-            bgcolor=ft.colors.RED_600,
+            bgcolor=ft.Colors.RED_600,
         )
         self.page.snack_bar = snack
         snack.open = True

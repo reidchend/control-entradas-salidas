@@ -10,7 +10,7 @@ class ConfiguracionView(ft.Container):
         self.visible = False
         self.expand = True
         self.padding = ft.padding.only(left=16, right=16, bottom=16, top=8)
-        self.bgcolor = ft.colors.GREY_50
+        self.bgcolor = ft.Colors.GREY_50
         
         # Directorio de imágenes
         self.imagenes_dir = os.path.join(os.getcwd(), "uploads", "categorias")
@@ -40,15 +40,15 @@ class ConfiguracionView(ft.Container):
             self.selected_image_path = e.files[0].path
             if hasattr(self, "img_preview"):
                 self.img_preview.value = f"Imagen seleccionada: {e.files[0].name}"
-                self.img_preview.color = ft.colors.GREEN_700
+                self.img_preview.color = ft.Colors.GREEN_700
                 self.img_preview.update()
 
     def _build_ui(self):
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
-                    ft.Text("Configuración", size=24, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_900),
-                    ft.Text("Gestione sus categorías y catálogo de productos", size=14, color=ft.colors.BLUE_GREY_400),
+                    ft.Text("Configuración", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                    ft.Text("Gestione sus categorías y catálogo de productos", size=14, color=ft.Colors.BLUE_GREY_400),
                 ], expand=True, spacing=0),
             ]),
             margin=ft.margin.only(bottom=10)
@@ -58,8 +58,8 @@ class ConfiguracionView(ft.Container):
             selected_index=0,
             animation_duration=300,
             tabs=[
-                ft.Tab(text="Categorías", icon=ft.icons.CATEGORY_ROUNDED, content=self._build_categorias_tab()),
-                ft.Tab(text="Productos", icon=ft.icons.INVENTORY_ROUNDED, content=self._build_productos_tab()),
+                ft.Tab(text="Categorías", icon=ft.Icons.CATEGORY_ROUNDED, content=self._build_categorias_tab()),
+                ft.Tab(text="Productos", icon=ft.Icons.INVENTORY_ROUNDED, content=self._build_productos_tab()),
             ],
             expand=True,
         )
@@ -73,8 +73,8 @@ class ConfiguracionView(ft.Container):
             ft.Container(height=10),
             ft.ElevatedButton(
                 "Nueva Categoría",
-                icon=ft.icons.ADD_ROUNDED,
-                style=ft.ButtonStyle(color=ft.colors.WHITE, bgcolor=ft.colors.PRIMARY),
+                icon=ft.Icons.ADD_ROUNDED,
+                style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.PRIMARY),
                 on_click=lambda _: self._show_categoria_dialog()
             ),
             ft.Container(height=10),
@@ -87,12 +87,12 @@ class ConfiguracionView(ft.Container):
             label="Nombre de Categoría", 
             value=categoria.nombre if categoria else "",
             border_radius=10,
-            focused_border_color=ft.colors.PRIMARY
+            focused_border_color=ft.Colors.PRIMARY
         )
         
         self.img_preview = ft.Text(
             "No se ha seleccionado imagen" if not categoria else "Tiene imagen asignada (click para cambiar)",
-            size=12, color=ft.colors.BLUE_GREY_400
+            size=12, color=ft.Colors.BLUE_GREY_400
         )
 
         def save_click(e):
@@ -113,13 +113,13 @@ class ConfiguracionView(ft.Container):
                 self.img_preview,
                 ft.OutlinedButton(
                     "Seleccionar Imagen",
-                    icon=ft.icons.IMAGE_SEARCH_ROUNDED,
+                    icon=ft.Icons.IMAGE_SEARCH_ROUNDED,
                     on_click=lambda _: self.file_picker.pick_files(allow_multiple=False, file_type=ft.FilePickerFileType.IMAGE)
                 )
             ], tight=True, spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Guardar", bgcolor=ft.colors.PRIMARY, color=ft.colors.WHITE, on_click=save_click)
+                ft.ElevatedButton("Guardar", bgcolor=ft.Colors.PRIMARY, color=ft.Colors.WHITE, on_click=save_click)
             ]
         )
         self.page.dialog.open = True
@@ -153,12 +153,12 @@ class ConfiguracionView(ft.Container):
     def _create_categoria_item(self, categoria):
         return ft.Container(
             content=ft.Row([
-                ft.Icon(ft.icons.CATEGORY_ROUNDED, color=ft.colors.PRIMARY),
-                ft.Text(categoria.nombre, weight="bold", expand=True, color=ft.colors.BLUE_GREY_900),
-                ft.IconButton(ft.icons.EDIT_ROUNDED, icon_color=ft.colors.BLUE_GREY_400, on_click=lambda _: self._show_categoria_dialog(categoria)),
-                ft.IconButton(ft.icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.colors.RED_400, on_click=lambda _: self._show_confirm_delete(categoria.id, "categoria"))
+                ft.Icon(ft.Icons.CATEGORY_ROUNDED, color=ft.Colors.PRIMARY),
+                ft.Text(categoria.nombre, weight="bold", expand=True, color=ft.Colors.BLUE_GREY_900),
+                ft.IconButton(ft.Icons.EDIT_ROUNDED, icon_color=ft.Colors.BLUE_GREY_400, on_click=lambda _: self._show_categoria_dialog(categoria)),
+                ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.Colors.RED_400, on_click=lambda _: self._show_confirm_delete(categoria.id, "categoria"))
             ]),
-            padding=12, bgcolor=ft.colors.WHITE, border_radius=12, border=ft.border.all(1, ft.colors.GREY_200)
+            padding=12, bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.border.all(1, ft.Colors.GREY_200)
         )
 
     # --- SECCIÓN PRODUCTOS ---
@@ -168,8 +168,8 @@ class ConfiguracionView(ft.Container):
             ft.Container(height=10),
             ft.ElevatedButton(
                 "Nuevo Producto",
-                icon=ft.icons.ADD_BOX_ROUNDED,
-                style=ft.ButtonStyle(color=ft.colors.WHITE, bgcolor=ft.colors.PRIMARY),
+                icon=ft.Icons.ADD_BOX_ROUNDED,
+                style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.PRIMARY),
                 on_click=lambda _: self._show_producto_dialog()
             ),
             ft.Container(height=10),
@@ -225,7 +225,7 @@ class ConfiguracionView(ft.Container):
             ], tight=True, spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Guardar", bgcolor=ft.colors.PRIMARY, color=ft.colors.WHITE, on_click=save_prod_click)
+                ft.ElevatedButton("Guardar", bgcolor=ft.Colors.PRIMARY, color=ft.Colors.WHITE, on_click=save_prod_click)
             ]
         )
         self.page.dialog.open = True
@@ -261,15 +261,15 @@ class ConfiguracionView(ft.Container):
     def _create_producto_item(self, producto):
         return ft.Container(
             content=ft.Row([
-                ft.Icon(ft.icons.INVENTORY_2_ROUNDED, color=ft.colors.PRIMARY_CONTAINER),
+                ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, color=ft.Colors.PRIMARY_CONTAINER),
                 ft.Column([
                     ft.Text(producto.nombre, weight="bold", size=15),
-                    ft.Text(f"Categoría: {producto.categoria.nombre if producto.categoria else 'N/A'}", size=12, color=ft.colors.GREY_600)
+                    ft.Text(f"Categoría: {producto.categoria.nombre if producto.categoria else 'N/A'}", size=12, color=ft.Colors.GREY_600)
                 ], expand=True, spacing=2),
-                ft.IconButton(ft.icons.EDIT_ROUNDED, on_click=lambda _: self._show_producto_dialog(producto)),
-                ft.IconButton(ft.icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.colors.RED_400, on_click=lambda _: self._show_confirm_delete(producto.id, "producto"))
+                ft.IconButton(ft.Icons.EDIT_ROUNDED, on_click=lambda _: self._show_producto_dialog(producto)),
+                ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.Colors.RED_400, on_click=lambda _: self._show_confirm_delete(producto.id, "producto"))
             ]),
-            padding=12, bgcolor=ft.colors.WHITE, border_radius=12, border=ft.border.all(1, ft.colors.GREY_200)
+            padding=12, bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.border.all(1, ft.Colors.GREY_200)
         )
 
     # --- UTILIDADES ---
@@ -300,7 +300,7 @@ class ConfiguracionView(ft.Container):
             content=ft.Text(f"¿Está seguro de eliminar este/a {tipo}? Esta acción no se puede deshacer."),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Eliminar", bgcolor=ft.colors.RED_600, color=ft.colors.WHITE, on_click=borrar)
+                ft.ElevatedButton("Eliminar", bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, on_click=borrar)
             ]
         )
         self.page.dialog.open = True
@@ -341,7 +341,7 @@ class ConfiguracionView(ft.Container):
         self.page.update()
 
     def _show_message(self, message):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(message), bgcolor=ft.colors.GREEN_700))
+        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.GREEN_700))
 
     def _show_error(self, error):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(error), bgcolor=ft.colors.RED_700))
+        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(error), bgcolor=ft.Colors.RED_700))
