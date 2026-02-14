@@ -72,7 +72,7 @@ jobs:
           EOF
           
           # 5. CONSTRUCCIÓN (Versión compatible)
-          flet build apk --verbose
+          flet build apk --config flet-build.yaml 
           
           # 6. Salida
           mkdir -p output
