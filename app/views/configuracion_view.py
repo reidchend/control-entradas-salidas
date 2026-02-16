@@ -23,12 +23,13 @@ class ConfiguracionView(ft.Container):
         # Componentes UI
         self.lista_categorias = ft.ListView(expand=True, spacing=10)
         self.lista_productos = ft.ListView(expand=True, spacing=10)
+        self.test_result_text = ft.Text("", size=14)
+        self.db_info_text = ft.Text("", size=12, color=ft.Colors.BLUE_GREY_400)
         self.tabs = None
         
         self._build_ui()
 
     def did_mount(self):
-        # Registrar el file picker en la página al montar para que funcione
         if self.page:
             if self.file_picker not in self.page.overlay:
                 self.page.overlay.append(self.file_picker)
@@ -60,6 +61,7 @@ class ConfiguracionView(ft.Container):
             tabs=[
                 ft.Tab(text="Categorías", icon=ft.Icons.CATEGORY_ROUNDED, content=self._build_categorias_tab()),
                 ft.Tab(text="Productos", icon=ft.Icons.INVENTORY_ROUNDED, content=self._build_productos_tab()),
+                ft.Tab(text="Sistema", icon=ft.Icons.DASHBOARD_CUSTOMIZE_OUTLINED, content=self._build_sistema_tab()),
             ],
             expand=True,
         )
@@ -272,9 +274,69 @@ class ConfiguracionView(ft.Container):
             padding=12, bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.border.all(1, ft.Colors.GREY_200)
         )
 
+    # --- SECCIÓN SISTEMA ---
+
+    def _build_sistema_tab(self):
+        db_host = os.getenv("DB_HOST", "No definido")
+        
+        return ft.Column([
+            ft.Container(height=20),
+            ft.Card(
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.DASHBOARD_ROUNDED, color=ft.Colors.PRIMARY),
+                            title=ft.Text("Estado de la Base de Datos"),
+                            subtitle=ft.Text("Verifica la conexión con Supabase/PostgreSQL"),
+                        ),
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Text(f"Host detectado: {db_host}", weight="bold", size=13),
+                                self.db_info_text,
+                                ft.Divider(),
+                                ft.ElevatedButton(
+                                    "Probar Conexión Ahora",
+                                    icon=ft.Icons.PLUMBING_ROUNDED,
+                                    on_click=self._test_connection_action,
+                                    style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.BLUE_700)
+                                ),
+                                ft.Container(height=10),
+                                self.test_result_text
+                            ], spacing=10),
+                            padding=20
+                        )
+                    ])
+                )
+            ),
+            ft.Text("Información del Entorno", size=16, weight="bold", color=ft.Colors.BLUE_GREY_900),
+            ft.Text(f"Directorio de trabajo: {os.getcwd()}", size=11)
+        ], scroll=ft.ScrollMode.AUTO, expand=True)
+
+    def _test_connection_action(self, e):
+        self.test_result_text.value = "⏳ Probando conexión..."
+        self.test_result_text.color = ft.Colors.ORANGE_700
+        self.update()
+        
+        db = None
+        try:
+            db = next(get_db())
+            from sqlalchemy import text
+            db.execute(text("SELECT 1"))
+            self.test_result_text.value = "✅ ¡Conexión Exitosa! La base de datos responde correctamente."
+            self.test_result_text.color = ft.Colors.GREEN_700
+        except Exception as ex:
+            self.test_result_text.value = f"❌ Error de Conexión:\n{str(ex)}"
+            self.test_result_text.color = ft.Colors.RED_700
+        finally:
+            if db:
+                try: db.close()
+                except: pass
+            self.update()
+
     # --- UTILIDADES ---
 
     def _load_data(self):
+        db = None
         try:
             db = next(get_db())
             categorias = db.query(Categoria).all()
@@ -286,7 +348,7 @@ class ConfiguracionView(ft.Container):
         except Exception as e:
             print(f"Error cargando datos: {e}")
         finally:
-            db.close()
+            if db: db.close()
 
     def _show_confirm_delete(self, item_id, tipo):
         def borrar(e):
@@ -317,7 +379,7 @@ class ConfiguracionView(ft.Container):
                 if os.path.exists(img_path): os.remove(img_path)
                 self._load_data()
                 self._show_message("Categoría eliminada")
-        except Exception as e:
+        except Exception:
             self._show_error("No se puede eliminar: existen productos asociados")
         finally:
             db.close()
@@ -341,7 +403,13 @@ class ConfiguracionView(ft.Container):
         self.page.update()
 
     def _show_message(self, message):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.GREEN_700))
+        if self.page:
+            self.page.snack_bar = ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.GREEN_700)
+            self.page.snack_bar.open = True
+            self.page.update()
 
     def _show_error(self, error):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(error), bgcolor=ft.Colors.RED_700))
+        if self.page:
+            self.page.snack_bar = ft.SnackBar(content=ft.Text(str(error)), bgcolor=ft.Colors.RED_700)
+            self.page.snack_bar.open = True
+            self.page.update()

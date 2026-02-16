@@ -12,3 +12,19 @@
 2026-02-16 12:45:01 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-16 12:45:01 | app.views.inventario_view | INFO     | Cargando categorías...
 2026-02-16 12:45:02 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:55:36 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 12:55:36 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:55:36 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:55:37 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:55:45 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:55:45 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:07:35 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | Se cargaron 1 categorías

@@ -94,13 +94,10 @@ class InventarioView(ft.Container):
             self._show_error("Error al construir la interfaz")
 
     def _load_categorias(self, force_refresh=False):
-        """
-        Carga las categorías de la base de datos.
-        
-        Args:
-            force_refresh: Si True, ignora el cache
-        """
         db = None
+        self.categorias_grid.controls = [ft.ProgressRing()] # Muestra que está cargando
+        self.update()
+
         try:
             logger.info("Cargando categorías...")
             
