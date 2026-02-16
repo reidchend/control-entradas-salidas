@@ -306,88 +306,55 @@ class InventarioView(ft.Container):
             return None
 
     def _show_cantidad_dialog(self, producto, tipo):
-        """Muestra un diálogo para registrar cantidad de movimiento."""
         self.producto_seleccionado = producto
-        logger.info(f"Abriendo diálogo para {tipo} de {producto.nombre}")
         
         cant_input = ft.TextField(
-            label="Cantidad a registrar", 
+            label="Cantidad", 
             value="1", 
             keyboard_type=ft.KeyboardType.NUMBER,
-            focused_border_color=ft.Colors.PRIMARY,
             autofocus=True
         )
 
-        def confirmar(e):
-            """Valida y confirma la operación."""
+        def al_confirmar(e):
+            # 1. Validación básica de UI
             try:
-                # Validar entrada
-                cantidad_str = cant_input.value.strip()
-                
-                if not cantidad_str:
-                    cant_input.error_text = "La cantidad no puede estar vacía"
-                    cant_input.update()
-                    return
-                
-                try:
-                    cantidad = float(cantidad_str)
-                except ValueError:
-                    cant_input.error_text = "Ingrese un número válido"
-                    cant_input.update()
-                    logger.warning(f"Entrada inválida: {cantidad_str}")
-                    return
-                
-                # Validaciones
-                if cantidad <= 0:
-                    cant_input.error_text = "La cantidad debe ser mayor a 0"
-                    cant_input.update()
-                    return
-                
-                if cantidad > 999999:
-                    cant_input.error_text = "La cantidad es demasiado grande"
-                    cant_input.update()
-                    return
-                
-                # Para la mayoría de productos, debe ser número entero
-                if cantidad != int(cantidad):
-                    cant_input.error_text = "La cantidad debe ser un número entero"
-                    cant_input.update()
-                    return
-                
-                logger.info(f"Cantidad validada: {int(cantidad)}")
-                self._registrar_movimiento(tipo, int(cantidad))
-                self.page.dialog.open = False
-                self.page.update()
-                
-            except Exception as ex:
-                logger.error(f"Error en confirmación: {ex}")
-                self._show_error("Error al procesar la cantidad")
+                cantidad = int(cant_input.value)
+                if cantidad <= 0: raise ValueError()
+            except ValueError:
+                cant_input.error_text = "Número entero mayor a 0"
+                cant_input.update()
+                return
 
-        self.page.dialog = ft.AlertDialog(
+            # 2. Cerrar diálogo primero para dar sensación de rapidez
+            self.active_dialog.open = False
+            self.page.update()
+            
+            # 3. Llamar a la lógica de base de datos que ya tienes
+            self._registrar_movimiento(tipo, cantidad)
+
+        self.active_dialog = ft.AlertDialog(
             title=ft.Text(f"Registrar {tipo.capitalize()}"),
             content=ft.Column([
-                ft.Text(f"Producto: {producto.nombre}", size=14),
-                ft.Text(f"Stock actual: {producto.stock_actual}", size=12, color=ft.Colors.GREY_500),
+                ft.Text(f"Producto: {producto.nombre}"),
                 cant_input
-            ], tight=True, spacing=15),
+            ], tight=True),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton(
-                    "Confirmar", 
-                    bgcolor=ft.Colors.PRIMARY if tipo == "entrada" else ft.Colors.RED_600,
-                    color=ft.Colors.WHITE,
-                    on_click=confirmar
-                )
-            ],
-            shape=ft.RoundedRectangleBorder(radius=15)
+                ft.TextButton("Cancelar", on_click=self._close_dialog),
+                ft.ElevatedButton("Confirmar", on_click=al_confirmar)
+            ]
         )
-        self.page.dialog.open = True
+
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
         self.page.update()
 
     def _registrar_movimiento(self, tipo, cantidad):
         """Registra un movimiento (entrada/salida) de producto."""
         db = None
         try:
+            # 1. Feedback visual inmediato (opcional, pero recomendado)
+            logger.info(f"Iniciando registro de {tipo} para ID: {self.producto_seleccionado.id}")
+            
             db = next(get_db())
             
             # Re-obtener el producto dentro de la sesión activa
@@ -402,7 +369,7 @@ class InventarioView(ft.Container):
 
             # Gestión de usuario y auditoría de stock
             user_id = self.page.session.get("user_id") or 1
-            cant_anterior = prod.stock_actual
+            cant_anterior = prod.stock_actual or 0 # Asegurar que no sea None
             
             # Calcular cantidad nueva
             if tipo == "entrada":
@@ -410,7 +377,7 @@ class InventarioView(ft.Container):
             else:
                 if cant_anterior < cantidad:
                     logger.warning(f"Stock insuficiente: {cant_anterior} < {cantidad}")
-                    self._show_error("Error: Stock insuficiente para realizar la salida")
+                    self._show_error("Error: Stock insuficiente")
                     return
                 cant_nueva = cant_anterior - cantidad
 
@@ -432,30 +399,27 @@ class InventarioView(ft.Container):
             db.add(nuevo_mov)
             db.commit()
             
-            logger.info(
-                f"Movimiento registrado: {tipo} de {cantidad} unidades "
-                f"(Stock: {cant_anterior} -> {cant_nueva})"
-            )
+            logger.info(f"Éxito: {tipo} registrada. Nuevo stock: {cant_nueva}")
             
+            # 2. Actualizar la UI
             self._show_message(f"✓ {tipo.capitalize()} registrada: {prod.nombre}")
-            self._load_productos()
+            
+            # Refrescar la lista de productos para ver el nuevo stock
+            self._load_productos(search_term=self.search_field.value)
             
         except Exception as e:
             if db:
-                try:
-                    db.rollback()
-                except:
-                    pass
-            
-            logger.error(f"Error al registrar movimiento: {e}", exc_info=True)
+                db.rollback()
+            logger.error(f"Error crítico en registro: {e}", exc_info=True)
             self._show_error(f"Error al guardar: {str(e)[:50]}")
             
         finally:
             if db:
-                try:
-                    db.close()
-                except Exception as e:
-                    logger.warning(f"Error al cerrar conexión: {e}")
+                db.close()
+            # 3. Limpieza de seguridad: quitar el diálogo del overlay si aún existe
+            if hasattr(self, 'active_dialog') and self.active_dialog in self.page.overlay:
+                self.page.overlay.remove(self.active_dialog)
+                self.page.update()
 
     def _reset_view(self):
         """Vuelve a la vista de selección de categorías."""
@@ -471,26 +435,32 @@ class InventarioView(ft.Container):
         if self.categoria_seleccionada:
             self._load_productos(e.control.value)
 
-    def _close_dialog(self):
-        """Cierra el diálogo actual."""
-        self.page.dialog.open = False
+    def _close_dialog(self, e=None):
+        """Cierra el diálogo activo de forma segura."""
+        if hasattr(self, 'active_dialog') and self.active_dialog:
+            self.active_dialog.open = False
+            self.page.update()
+            # Opcional: limpiar el overlay para no acumular basura
+            # self.page.overlay.remove(self.active_dialog)
+
+    def _show_message(self, texto):
+        """Muestra un mensaje de éxito usando SnackBar moderno."""
+        snack = ft.SnackBar(
+            content=ft.Text(texto),
+            bgcolor=ft.Colors.GREEN_700,
+            action="OK"
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
         self.page.update()
 
-    def _show_message(self, message):
-        """Muestra un mensaje de éxito."""
-        if self.page:
-            self.page.show_snack_bar(
-                ft.SnackBar(
-                    content=ft.Text(message), 
-                    bgcolor=ft.Colors.GREEN_700,
-                    duration=3000
-                )
-            )
-
-    def _show_error(self, message):
-        """Muestra un mensaje de error."""
-        if self.page:
-            logger.error(f"Error mostrado al usuario: {message}")
-            self.page.snack_bar = ft.SnackBar(content=ft.Text(message),bgcolor=ft.Colors.RED_700, duration=4000)
-            self.page.snack_bar.open = True
-            self.page.update()
+    def _show_error(self, texto):
+        """Muestra un mensaje de error usando SnackBar moderno."""
+        snack = ft.SnackBar(
+            content=ft.Text(texto),
+            bgcolor=ft.Colors.RED_700,
+            action="Cerrar"
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()

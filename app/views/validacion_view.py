@@ -205,31 +205,47 @@ class ValidacionView(ft.Container):
         self._load_entradas_pendientes()
 
     def _show_validar_dialog(self, e):
-        factura_input = ft.TextField(label="Número de Factura", border_radius=10, autofocus=True)
+        factura_input = ft.TextField(
+            label="Número de Factura", 
+            border_radius=10, 
+            autofocus=True,
+            hint_text="Ej: FAC-2024-001"
+        )
         
         def on_confirmar(ev):
-            self._process_validation(factura_input.value)
-            self.page.dialog.open = False
+            # Cerramos el diálogo antes de procesar
+            self.active_dialog.open = False
             self.page.update()
+            self._process_validation(factura_input.value)
 
-        self.page.dialog = ft.AlertDialog(
+        # Creamos el diálogo como una variable de la clase
+        self.active_dialog = ft.AlertDialog(
             title=ft.Text("Validar Entradas"),
             content=ft.Column([
-                ft.Text(f"Se vincularán {len(self.selected_entradas)} entradas."),
+                ft.Text(f"Se vincularán {len(self.selected_entradas)} entradas seleccionadas."),
                 factura_input
             ], tight=True, spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Validar ahora", bgcolor=ft.Colors.BLUE_600, color="white", on_click=on_confirmar)
+                ft.ElevatedButton(
+                    "Validar ahora", 
+                    bgcolor=ft.Colors.BLUE_600, 
+                    color="white", 
+                    on_click=on_confirmar
+                )
             ]
         )
-        self.page.dialog.open = True
+        
+        # Agregamos al overlay y abrimos
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
         self.page.update()
 
     def _process_validation(self, ref_factura):
+        """Procesa la vinculación de entradas a una factura."""
         db = next(get_db())
         try:
-            # Crear la factura de respaldo
+            # 1. Crear la factura de respaldo
             nueva_fac = Factura(
                 numero_factura=ref_factura if ref_factura else f"V-REF-{datetime.now().strftime('%H%M%S')}",
                 proveedor="Varios",
@@ -243,21 +259,46 @@ class ValidacionView(ft.Container):
             db.add(nueva_fac)
             db.flush()
 
-            # Vincular los movimientos seleccionados
+            # 2. Vincular los movimientos seleccionados
             movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(self.selected_entradas))).all()
             for m in movimientos:
                 m.factura_id = nueva_fac.id
             
             db.commit()
+            
+            # 3. Limpiar estado y notificar
             self.selected_entradas.clear()
             self._load_entradas_pendientes()
-            self.page.show_snack_bar(ft.SnackBar(ft.Text("Entradas validadas y facturadas"), bgcolor=ft.Colors.GREEN_700))
+            
+            snack = ft.SnackBar(
+                content=ft.Text("✅ Entradas validadas correctamente"),
+                bgcolor=ft.Colors.GREEN_700
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+
         except Exception as ex:
             db.rollback()
-            print(f"Error procesando validación: {ex}")
+            logger.error(f"Error procesando validación: {ex}")
+            # Notificación de error
+            snack_err = ft.SnackBar(
+                content=ft.Text(f"❌ Error: {str(ex)[:50]}"),
+                bgcolor=ft.Colors.RED_700
+            )
+            self.page.overlay.append(snack_err)
+            snack_err.open = True
+            self.page.update()
+
         finally:
             db.close()
 
-    def _close_dialog(self):
-        self.page.dialog.open = False
-        self.page.update()
+    def _close_dialog(self, e=None):
+        """Cierra el diálogo de forma segura."""
+        if hasattr(self, 'active_dialog') and self.active_dialog:
+            self.active_dialog.open = False
+            self.page.update()
+            # Limpiamos el overlay para evitar acumular objetos
+            if self.active_dialog in self.page.overlay:
+                self.page.overlay.remove(self.active_dialog)
+                self.page.update()
