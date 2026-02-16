@@ -1,0 +1,7 @@
+2026-02-16 12:15:46 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 12:15:46 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:15:46 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:15:47 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
