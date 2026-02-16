@@ -1,25 +1,27 @@
-# flet.yaml
+# Identidad de la Aplicación
 app_name: "Lycoris Control"
 description: "Sistema de gestión Lycoris"
 package_name: "com.reidchend.lycoris"
 
 android:
-  label: "Lycoris Control" # Este es el nombre que verás en tu celular
+  # Nombre que aparece bajo el icono en el menú del celular
+  label: "Lycoris Control" 
+  # Se cambió 'icons' a 'icon' (singular) según el estándar de Flet
+  icon: "assets/favicon.png"
+  # Se añade splash_image para eliminar el logo de Flet al cargar
+  splash_image: "assets/favicon.png"
   permissions:
     - INTERNET
-  icons: "assets/favicon.png"
   build_number: 2
   build_version: "1.0.3"
 
 package:
+  # Tu técnica de recursividad profunda (/**) es excelente, la mantenemos.
   include:
     - main.py
     - .env
     - requirements.txt
-    - app/** # <--- Agregado /** para recursividad completa
-    - config/** # <--- Agregado /** para recursividad completa
-    - assets/** # <--- Agregado /** para recursividad completa
-  exclude:
+    - app/** - config/** - assets/** exclude:
     - venv/**
     - .venv/**
     - __pycache__/**

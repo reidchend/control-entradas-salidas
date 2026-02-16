@@ -133,6 +133,9 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = None
     page.expand = True
+
+    if page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]:
+        page.padding = ft.padding.only(top=40, left=10, right=10, bottom=10)
     
     # ¡PINTAR INMEDIATAMENTE PARA EVITAR PANTALLA NEGRA!
     loading_container = ft.Container(

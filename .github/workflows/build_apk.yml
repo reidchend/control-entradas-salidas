@@ -52,6 +52,10 @@ jobs:
           FLET_APP_NAME="Lycoris Control"
           EOF
 
+          # 3. Validar archivos críticos (Paso de seguridad)
+          if [ ! -f "flet.yaml" ]; then echo "ERROR: flet.yaml no encontrado"; exit 1; fi
+          if [ ! -f "assets/favicon.png" ]; then echo "ERROR: assets/favicon.png no encontrado"; exit 1; fi
+
           # 3. Copias de seguridad
           mkdir -p config
           cp .env config/.env
