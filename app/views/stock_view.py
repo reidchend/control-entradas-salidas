@@ -3,6 +3,7 @@ from app.database.base import get_db
 from app.models import Producto, Movimiento, Categoria
 from datetime import datetime
 import logging
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class StockView(ft.Container):
         self.search_field = None
         self.productos_list = None
         self.summary_container = None
-        self.active_dialog = None # Cambiado para mayor consistencia
+        self.active_dialog = None
         
         # Estado de resumen
         self.total_productos_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
@@ -33,16 +34,14 @@ class StockView(ft.Container):
         self._load_productos()
     
     def _build_ui(self):
-        # --- 1. ENCABEZADO ---
         header = ft.Container(
             content=ft.Column([
                 ft.Text("Gestión de Stock", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
-                ft.Text("Control e inventario de productos", size=14, color=ft.Colors.BLUE_GREY_400),
+                ft.Text("Control e inventario de productos y pesaje", size=14, color=ft.Colors.BLUE_GREY_400),
             ], spacing=2),
             padding=ft.padding.symmetric(horizontal=16, vertical=12)
         )
 
-        # --- 2. RESUMEN ---
         self.summary_container = ft.Container(
             content=ft.Row([
                 self._build_stat_card("Total", self.total_productos_text, ft.Icons.INVENTORY_2, ft.Colors.BLUE),
@@ -52,7 +51,6 @@ class StockView(ft.Container):
             padding=ft.padding.symmetric(horizontal=16)
         )
 
-        # --- 3. FILTROS ---
         self.search_field = ft.TextField(
             label="Buscar producto...",
             prefix_icon=ft.Icons.SEARCH,
@@ -60,6 +58,7 @@ class StockView(ft.Container):
             bgcolor=ft.Colors.WHITE,
             on_change=self._filter_productos,
             border_color=ft.Colors.TRANSPARENT,
+            focused_border_color=ft.Colors.BLUE_400,
         )
 
         self.categoria_filter = ft.Dropdown(
@@ -78,7 +77,6 @@ class StockView(ft.Container):
             padding=ft.padding.symmetric(horizontal=16, vertical=8),
         )
 
-        # --- 4. LISTA ---
         self.productos_list = ft.ListView(
             expand=True,
             spacing=12,
@@ -113,7 +111,6 @@ class StockView(ft.Container):
             width=160,
         )
 
-    # --- LÓGICA DE DATOS ---
     def _load_categorias(self):
         db = next(get_db())
         try:
@@ -150,66 +147,121 @@ class StockView(ft.Container):
 
     def _render_productos(self, productos):
         self.total_productos_text.value = str(len(productos))
-        self.stock_bajo_text.value = str(sum(1 for p in productos if 0 < p.stock_actual <= p.stock_minimo))
-        self.sin_stock_text.value = str(sum(1 for p in productos if p.stock_actual <= 0))
+        self.stock_bajo_text.value = str(sum(1 for p in productos if 0 < (p.stock_actual or 0) <= (p.stock_minimo or 0)))
+        self.sin_stock_text.value = str(sum(1 for p in productos if (p.stock_actual or 0) <= 0))
 
         self.productos_list.controls.clear()
+        
         if not productos:
             self.productos_list.controls.append(ft.Text("No se encontraron productos", color=ft.Colors.GREY_400, text_align="center"))
         else:
-            for p in productos:
-                # Determinamos colores según stock
-                if p.stock_actual <= 0: color = ft.Colors.RED_600
-                elif p.stock_actual <= p.stock_minimo: color = ft.Colors.ORANGE_600
-                else: color = ft.Colors.GREEN_600
+            db = next(get_db())
+            try:
+                for p in productos:
+                    stock_actual = p.stock_actual or 0
+                    if stock_actual <= 0: color = ft.Colors.RED_600
+                    elif stock_actual <= (p.stock_minimo or 0): color = ft.Colors.ORANGE_600
+                    else: color = ft.Colors.GREEN_600
 
-                self.productos_list.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Text(p.nombre, weight="bold", size=16),
-                                ft.Text(f"{p.stock_actual:.2f} {p.unidad_medida}", color=color, weight="bold")
-                            ], alignment="spaceBetween"),
-                            ft.Row([
-                                ft.Text(f"Código: {p.codigo or '---'}", size=12, color="grey"),
-                                ft.TextButton("Ver Movimientos", on_click=lambda e, prod=p: self._show_producto_details(prod))
-                            ], alignment="spaceBetween")
-                        ]),
-                        padding=15, bgcolor="white", border_radius=12, border=ft.border.all(1, "#eeeeee")
+                    peso_view = ft.Container()
+                    es_pesable = getattr(p, 'es_pesable', False)
+                    
+                    if es_pesable:
+                        peso_entrada = db.query(func.sum(Movimiento.peso_total)).filter(
+                            Movimiento.producto_id == p.id, Movimiento.tipo == "entrada"
+                        ).scalar() or 0.0
+                        
+                        peso_salida = db.query(func.sum(Movimiento.peso_total)).filter(
+                            Movimiento.producto_id == p.id, Movimiento.tipo == "salida"
+                        ).scalar() or 0.0
+                        
+                        peso_neto = peso_entrada - peso_salida
+                        
+                        peso_view = ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.SCALE_ROUNDED, size=16, color=ft.Colors.BLUE_600),
+                                ft.Text(f"Peso en Stock: {peso_neto:.2f} kg", size=14, weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_800),
+                            ], spacing=8),
+                            bgcolor=ft.Colors.BLUE_50,
+                            border_radius=8,
+                            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+                            margin=ft.margin.only(top=5, bottom=5)
+                        )
+
+                    self.productos_list.controls.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Column([
+                                        ft.Text(p.nombre, weight="bold", size=16, color=ft.Colors.BLUE_GREY_900),
+                                        ft.Text(f"Cat: {p.categoria.nombre if p.categoria else 'N/A'}", size=12, color=ft.Colors.GREY_500),
+                                    ], spacing=2, expand=True),
+                                    ft.Column([
+                                        ft.Text(f"{stock_actual:.0f}", color=color, weight="bold", size=20),
+                                        ft.Text("uds", color=color, size=10, weight="bold"),
+                                    ], horizontal_alignment="center"),
+                                ], alignment="spaceBetween"),
+                                
+                                peso_view,
+                                
+                                ft.Divider(height=1, color=ft.Colors.GREY_100),
+                                
+                                ft.Row([
+                                    ft.Text(f"Código: {p.codigo or '---'}", size=12, color=ft.Colors.GREY_600),
+                                    ft.Row([
+                                        ft.TextButton(
+                                            "Historial", 
+                                            icon=ft.Icons.HISTORY,
+                                            on_click=lambda e, prod=p: self._show_producto_details(prod)
+                                        )
+                                    ])
+                                ], alignment="spaceBetween")
+                            ], spacing=8),
+                            padding=16, 
+                            bgcolor=ft.Colors.WHITE, 
+                            border_radius=12, 
+                            border=ft.border.all(1, ft.Colors.GREY_200),
+                        )
                     )
-                )
+            finally:
+                db.close()
+                
         self.update()
 
-    # --- DIÁLOGOS Y NOTIFICACIONES (CORREGIDOS) ---
     def _show_producto_details(self, producto: Producto):
         db = next(get_db())
         try:
-            movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(10).all()
-            
-            mov_list = ft.ListView(height=300, spacing=10)
+            movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(20).all()
+            mov_list = ft.ListView(height=400, spacing=8)
             for m in movimientos:
-                icon = ft.Icons.ADD_CIRCLE if m.tipo == "entrada" else ft.Icons.REMOVE_CIRCLE
-                color = ft.Colors.GREEN if m.tipo == "entrada" else ft.Colors.RED
+                is_entrada = m.tipo == "entrada"
+                icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
+                color = ft.Colors.GREEN_600 if is_entrada else ft.Colors.RED_600
+                peso_info = f"\n⚖️ Peso: {m.peso_total:.2f} kg" if getattr(m, 'peso_total', 0) > 0 else ""
+
                 mov_list.controls.append(
-                    ft.ListTile(
-                        leading=ft.Icon(icon, color=color),
-                        title=ft.Text(f"{m.tipo.capitalize()}: {m.cantidad} {producto.unidad_medida}"),
-                        subtitle=ft.Text(m.fecha_movimiento.strftime("%d/%m/%Y %H:%M"))
+                    ft.Container(
+                        content=ft.ListTile(
+                            leading=ft.Icon(icon, color=color, size=28),
+                            title=ft.Text(f"{m.tipo.upper()}: {int(m.cantidad)} unidades", weight="bold"),
+                            subtitle=ft.Text(f"{m.fecha_movimiento.strftime('%d/%m/%Y %H:%M')}{peso_info}", size=12),
+                            trailing=ft.Text(f"{'+' if is_entrada else '-'}{int(m.cantidad)}", color=color, weight="bold"),
+                        ),
+                        bgcolor=ft.Colors.GREY_50,
+                        border_radius=10,
                     )
                 )
 
             self.active_dialog = ft.AlertDialog(
                 title=ft.Text(f"Historial: {producto.nombre}"),
-                content=mov_list,
-                actions=[ft.TextButton("Cerrar", on_click=self._close_dialog)]
+                content=ft.Column([ft.Divider(), mov_list], tight=True, width=450),
+                actions=[ft.TextButton("Cerrar", on_click=self._close_dialog)],
             )
-            
             self.page.overlay.append(self.active_dialog)
             self.active_dialog.open = True
             self.page.update()
-
         except Exception as e:
-            self._show_error(f"Error al cargar historial: {e}")
+            logger.error(f"Error historial: {e}")
         finally:
             db.close()
 
@@ -217,12 +269,3 @@ class StockView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             self.page.update()
-            # Limpiamos para no saturar memoria
-            if self.active_dialog in self.page.overlay:
-                self.page.overlay.remove(self.active_dialog)
-
-    def _show_error(self, msg):
-        snack = ft.SnackBar(content=ft.Text(msg), bgcolor=ft.Colors.RED_700)
-        self.page.overlay.append(snack)
-        snack.open = True
-        self.page.update()

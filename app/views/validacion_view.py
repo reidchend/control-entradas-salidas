@@ -2,6 +2,9 @@ import flet as ft
 from datetime import datetime
 from app.database.base import get_db
 from app.models import Movimiento, Factura, Producto, Categoria
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 class ValidacionView(ft.Container):
     def __init__(self):
@@ -20,6 +23,7 @@ class ValidacionView(ft.Container):
         self.search_field = None
         self.validate_button = None
         self.clear_button = None
+        self.active_dialog = None
         
         # Estado
         self.selected_entradas = set()
@@ -28,15 +32,14 @@ class ValidacionView(ft.Container):
         self._build_ui()
     
     def update_view(self):
-        """Refrescar datos (Llamar desde main.py al cambiar a esta pestaña)"""
+        """Refrescar datos"""
         self._load_entradas_pendientes()
 
     def did_mount(self):
-        """Carga inicial al montar el componente"""
+        """Carga inicial"""
         self._load_entradas_pendientes()
     
     def _build_ui(self):
-        # --- HEADER ---
         header = ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -55,7 +58,6 @@ class ValidacionView(ft.Container):
             padding=ft.padding.only(left=20, top=20, right=20, bottom=10)
         )
 
-        # --- FILTROS Y ACCIONES ---
         self.search_field = ft.TextField(
             hint_text="Buscar producto...",
             prefix_icon=ft.Icons.SEARCH_ROUNDED,
@@ -94,12 +96,10 @@ class ValidacionView(ft.Container):
             padding=ft.padding.symmetric(horizontal=20, vertical=10),
         )
 
-        # --- ENSAMBLADO FINAL ---
-        # Usamos un Column con expand=True para que el ListView ocupe el resto del espacio
         self.content = ft.Column([
             header,
             controls_section,
-            self.entradas_list # ListView ya tiene expand=True
+            self.entradas_list
         ], spacing=0, expand=True)
 
     def _create_entrada_card(self, entrada: Movimiento):
@@ -107,6 +107,21 @@ class ValidacionView(ft.Container):
         bg_color = ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE
         border_side = ft.border.BorderSide(2, ft.Colors.BLUE_600) if is_selected else ft.border.BorderSide(1, ft.Colors.GREY_200)
         
+        # --- LÓGICA DE PESO CORREGIDA ---
+        peso_info = []
+        if getattr(entrada, "peso_total", 0) and entrada.peso_total > 0:
+            peso_info.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.SCALE_ROUNDED, size=12, color=ft.Colors.ORANGE_800),
+                        ft.Text(f"{entrada.peso_total} kg", size=12, weight="bold", color=ft.Colors.ORANGE_800),
+                    ], spacing=4),
+                    bgcolor=ft.Colors.ORANGE_50,
+                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                    border_radius=4
+                )
+            )
+
         return ft.Container(
             content=ft.Row([
                 ft.Container(
@@ -124,12 +139,13 @@ class ValidacionView(ft.Container):
                         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS
                     ),
                     ft.Row([
-                        ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else ''}", 
+                        ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else 'uds'}", 
                                 size=13, weight="w600", color=ft.Colors.BLUE_700),
+                        *peso_info, # Inyecta el badge de peso si existe
                         ft.Text(" • ", color=ft.Colors.GREY_300),
-                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=12, color=ft.Colors.BLUE_GREY_400),
-                    ], spacing=2)
-                ], expand=True, spacing=2)
+                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=ft.Colors.BLUE_GREY_400),
+                    ], spacing=8, vertical_alignment="center")
+                ], expand=True, spacing=4)
             ], spacing=12),
             padding=15,
             bgcolor=bg_color,
@@ -139,9 +155,9 @@ class ValidacionView(ft.Container):
         )
 
     def _load_entradas_pendientes(self):
+        db = None
         try:
             db = next(get_db())
-            # Consulta idéntica a la funcional original: tipo entrada y factura_id nulo
             query = db.query(Movimiento).filter(
                 Movimiento.tipo == "entrada",
                 Movimiento.factura_id.is_(None)
@@ -171,11 +187,11 @@ class ValidacionView(ft.Container):
                     self.entradas_list.controls.append(self._create_entrada_card(ent))
             
             self._update_validate_button_state()
-            self.update()
+            if self.page: self.page.update()
         except Exception as ex:
-            print(f"Error en ValidacionView: {ex}")
+            logger.error(f"Error cargando entradas: {ex}")
         finally:
-            db.close()
+            if db: db.close()
 
     def _toggle_entrada_selection(self, eid):
         if eid in self.selected_entradas:
@@ -183,7 +199,6 @@ class ValidacionView(ft.Container):
         else:
             self.selected_entradas.add(eid)
         
-        # Actualización visual rápida
         self.entradas_list.controls.clear()
         for entrada in self.entradas_data.values():
             self.entradas_list.controls.append(self._create_entrada_card(entrada))
@@ -213,12 +228,10 @@ class ValidacionView(ft.Container):
         )
         
         def on_confirmar(ev):
-            # Cerramos el diálogo antes de procesar
             self.active_dialog.open = False
             self.page.update()
             self._process_validation(factura_input.value)
 
-        # Creamos el diálogo como una variable de la clase
         self.active_dialog = ft.AlertDialog(
             title=ft.Text("Validar Entradas"),
             content=ft.Column([
@@ -236,16 +249,13 @@ class ValidacionView(ft.Container):
             ]
         )
         
-        # Agregamos al overlay y abrimos
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True
         self.page.update()
 
     def _process_validation(self, ref_factura):
-        """Procesa la vinculación de entradas a una factura."""
         db = next(get_db())
         try:
-            # 1. Crear la factura de respaldo
             nueva_fac = Factura(
                 numero_factura=ref_factura if ref_factura else f"V-REF-{datetime.now().strftime('%H%M%S')}",
                 proveedor="Varios",
@@ -259,21 +269,15 @@ class ValidacionView(ft.Container):
             db.add(nueva_fac)
             db.flush()
 
-            # 2. Vincular los movimientos seleccionados
             movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(self.selected_entradas))).all()
             for m in movimientos:
                 m.factura_id = nueva_fac.id
             
             db.commit()
-            
-            # 3. Limpiar estado y notificar
             self.selected_entradas.clear()
             self._load_entradas_pendientes()
             
-            snack = ft.SnackBar(
-                content=ft.Text("✅ Entradas validadas correctamente"),
-                bgcolor=ft.Colors.GREEN_700
-            )
+            snack = ft.SnackBar(content=ft.Text("✅ Entradas validadas correctamente"), bgcolor=ft.Colors.GREEN_700)
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -281,24 +285,14 @@ class ValidacionView(ft.Container):
         except Exception as ex:
             db.rollback()
             logger.error(f"Error procesando validación: {ex}")
-            # Notificación de error
-            snack_err = ft.SnackBar(
-                content=ft.Text(f"❌ Error: {str(ex)[:50]}"),
-                bgcolor=ft.Colors.RED_700
-            )
+            snack_err = ft.SnackBar(content=ft.Text(f"❌ Error: {str(ex)[:50]}"), bgcolor=ft.Colors.RED_700)
             self.page.overlay.append(snack_err)
             snack_err.open = True
             self.page.update()
-
         finally:
             db.close()
 
     def _close_dialog(self, e=None):
-        """Cierra el diálogo de forma segura."""
         if hasattr(self, 'active_dialog') and self.active_dialog:
             self.active_dialog.open = False
             self.page.update()
-            # Limpiamos el overlay para evitar acumular objetos
-            if self.active_dialog in self.page.overlay:
-                self.page.overlay.remove(self.active_dialog)
-                self.page.update()

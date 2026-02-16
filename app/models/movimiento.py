@@ -3,9 +3,10 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database.base import Base
 
-
 class Movimiento(Base):
     __tablename__ = "movimientos"
+    # Esta línea permite que si el modelo se importa varias veces no de error
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     
@@ -25,7 +26,8 @@ class Movimiento(Base):
     cantidad_anterior = Column(Float, default=0)
     cantidad_nueva = Column(Float, default=0)
     
-    # Información de peso (para productos que requieren foto)
+    # Información de peso (para productos que requieren foto o son pesables)
+    peso_total = Column(Float, default=0.0, comment="Peso total registrado para el movimiento")
     peso_registrado = Column(Float, nullable=True, comment="Peso en kg registrado de la balanza")
     foto_peso_url = Column(String(500), nullable=True, comment="Ruta o URL de la foto de la balanza")
     

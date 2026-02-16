@@ -40,6 +40,11 @@ jobs:
         run: |
           # 1. Licencias
           yes | flutter doctor --android-licenses || true
+
+          if [ -f "assets/favicon.png" ]; then
+            cp assets/favicon.png assets/icon.png
+            echo "Icono preparado correctamente."
+          fi
           
           # 2. Inyectar Secretos
           cat << EOF > .env
@@ -75,8 +80,12 @@ jobs:
           typing-extensions
           EOF
           
-          # 5. CONSTRUCCIÓN (Versión compatible)
-          flet build apk
+          # 5. CONSTRUCCIÓN CON IDENTIDAD FORZADA
+          # --product: El nombre que ves debajo del icono ("Lycoris Control")
+          # --org: Tu organización (com.reidchend)
+          # --project: El nombre interno del proyecto (lycoris)
+          # El Package Name final será: com.reidchend.lycoris
+          flet build apk --verbose --product "Lycoris Control" --org "com.reidchend" --project "lycoris"
           
           # 6. Salida
           mkdir -p output

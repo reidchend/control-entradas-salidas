@@ -215,3 +215,33 @@ AttributeError: 'Page' object has no attribute 'show_snack_bar'
 2026-02-16 15:13:13 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-16 15:13:13 | app.views.inventario_view | INFO     | Cargando categorías...
 2026-02-16 15:13:13 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:54:11 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:58:13 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:58:13 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:58:13 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:58:14 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 16:01:15 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 16:01:15 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:01:15 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 16:01:16 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 16:16:49 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:24:08 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:36:37 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:36:41 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:02 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:49 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:39:12 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:55:05 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:55:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:00:43 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:14:55 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:15:20 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:15:30 | app.views.inventario_view | ERROR    | Error al guardar movimiento: 'nota' is an invalid keyword argument for Movimiento
+2026-02-16 17:17:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:18:09 | app.views.inventario_view | ERROR    | Error al guardar movimiento: 'nota' is an invalid keyword argument for Movimiento
+2026-02-16 17:19:47 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:23:07 | app.views.inventario_view | INFO     | InventarioView montada
