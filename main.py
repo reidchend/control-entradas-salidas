@@ -3,7 +3,7 @@ import traceback
 import time
 
 # --- 1. TU CLASE ORIGINAL DE INTERFAZ ---
-# Nota: Le quitamos las importaciones pesadas. Solo maneja el diseño.
+# Restaurado exactamente como lo tenías para compatibilidad con Flet 0.28.3
 class ControlEntradasSalidasApp:
     def __init__(self):
         self.page = None
@@ -33,7 +33,7 @@ class ControlEntradasSalidasApp:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.padding = 0
         self.page.spacing = 0
-        self.page.expand = True       # La página se expande para llenar la ventana
+        self.page.expand = True
         self.page.vertical_alignment = ft.MainAxisAlignment.START
 
         self._setup_theme()
@@ -49,7 +49,7 @@ class ControlEntradasSalidasApp:
         )
 
     def _create_layout(self):
-        # Área de contenido con bordes suaves para que parezca una "tarjeta" sobre el fondo
+        # Área de contenido
         self.content_area = ft.Container(
             expand=True, 
             padding=0, 
@@ -60,10 +60,10 @@ class ControlEntradasSalidasApp:
         # BARRA LATERAL (PC/Tablet)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
-            extended=False, # Cambiamos a False para que sea minimalista por defecto
-            label_type=ft.NavigationRailLabelType.ALL, # Muestra iconos y texto debajo
+            extended=False,
+            label_type=ft.NavigationRailLabelType.ALL,
             min_width=100,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, # Color gris muy suave moderno
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             destinations=[
                 ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
@@ -74,9 +74,9 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # BARRA INFERIOR (Móvil)
+        # BARRA INFERIOR (Móvil) - Restaurado NavigationBarDestination
         self.navigation_bar = ft.NavigationBar(
-            visible=False, # Por defecto oculta
+            visible=False,
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_HIDE,
             destinations=[
                 ft.NavigationBarDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
@@ -97,22 +97,20 @@ class ControlEntradasSalidasApp:
 
     def _handle_resize(self):
         def on_resize(e):
-            # Si el ancho es menor a 700 píxeles (celulares)
             if self.page.width < 700:
                 self.navigation_rail.visible = False
                 self.page.navigation_bar = self.navigation_bar
                 self.page.navigation_bar.visible = True
-                self.content_area.border_radius = 0 # Sin bordes redondeados en móvil
-            # Si es mayor a 700 (tablets y PCs)
+                self.content_area.border_radius = 0
             else:
                 self.navigation_rail.visible = True
-                self.page.navigation_bar = None # Quita la barra de abajo
+                self.page.navigation_bar = None
                 self.content_area.border_radius = ft.border_radius.only(top_left=20)
             
             self.page.update()
         
         self.page.on_resized = on_resize
-        on_resize(None) # Ejecutar una vez al inicio
+        on_resize(None)
 
     def _on_navigation_change(self, e):
         self._show_view(int(e.control.selected_index))
@@ -128,18 +126,18 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
 
-# --- 2. EL MOTOR SEGURO (Tu Código Detective Mejorado) ---
+# --- 2. EL MOTOR DE CARGA ---
 def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.scroll = None
     page.expand = True
     
-    # ¡PINTAR INMEDIATAMENTE PARA EVITAR PANTALLA NEGRA!
+    # UI de carga inicial
+    status_log = ft.Text("Verificando entorno...", color="grey")
     loading_container = ft.Container(
         content=ft.Column([
             ft.ProgressRing(),
             ft.Text("Iniciando Lycoris Control...", size=20, weight="bold"),
-            status_log := ft.Text("Verificando entorno...", color="grey")
+            status_log
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
         alignment=ft.alignment.center,
         expand=True
@@ -149,13 +147,13 @@ def main(page: ft.Page):
 
     try:
         # PASO 1: Configuraciones
-        status_log.value = "Cargando Pydantic y Config..."
+        status_log.value = "Cargando Configuración..."
         page.update()
         from config.config import get_settings
         settings = get_settings()
         
-        # PASO 2: Vistas (Base de datos)
-        status_log.value = "Conectando Base de Datos y Vistas..."
+        # PASO 2: Vistas
+        status_log.value = "Cargando Vistas y Base de Datos..."
         page.update()
         from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
         
@@ -170,14 +168,12 @@ def main(page: ft.Page):
         # PASO 3: Arrancar la App
         status_log.value = "Iniciando Interfaz Principal..."
         page.update()
-        time.sleep(0.3) # Pequeña pausa para que se vea fluido
+        time.sleep(0.3)
         
-        # Invocamos la clase
         app_instance = ControlEntradasSalidasApp()
         app_instance.arrancar_interfaz(page, settings, vistas)
         
     except Exception as e:
-        # SI ALGO FALLA, NUNCA SE QUEDARÁ EN NEGRO. VERÁS ESTO:
         page.clean()
         error_stack = traceback.format_exc()
         
@@ -204,6 +200,5 @@ def main(page: ft.Page):
         )
         page.update()
 
-# Punto de entrada estricto
 if __name__ == "__main__":
     ft.app(target=main)

@@ -1,6 +1,8 @@
 import flet as ft
 from app.database.base import get_db
-from app.models import Categoria, Producto
+from app.models import Categoria, Producto, Movimiento
+from sqlalchemy.orm import joinedload
+from sqlalchemy import text
 import os
 import shutil
 
@@ -12,23 +14,20 @@ class ConfiguracionView(ft.Container):
         self.padding = ft.padding.only(left=16, right=16, bottom=16, top=8)
         self.bgcolor = ft.Colors.GREY_50
         
-        # Directorio de imágenes
         self.imagenes_dir = os.path.join(os.getcwd(), "uploads", "categorias")
         os.makedirs(self.imagenes_dir, exist_ok=True)
         
-        # Estado de carga de imagen y FilePicker
         self.selected_image_path = None
         self.file_picker = ft.FilePicker(on_result=self._on_file_result)
         
-        # Componentes UI
         self.lista_categorias = ft.ListView(expand=True, spacing=10)
         self.lista_productos = ft.ListView(expand=True, spacing=10)
-        self.tabs = None
+        self.test_result_text = ft.Text("", size=14)
+        self.active_dialog = None
         
         self._build_ui()
 
     def did_mount(self):
-        # Registrar el file picker en la página al montar para que funcione
         if self.page:
             if self.file_picker not in self.page.overlay:
                 self.page.overlay.append(self.file_picker)
@@ -39,18 +38,16 @@ class ConfiguracionView(ft.Container):
         if e.files:
             self.selected_image_path = e.files[0].path
             if hasattr(self, "img_preview"):
-                self.img_preview.value = f"Imagen seleccionada: {e.files[0].name}"
+                self.img_preview.value = f"Seleccionado: {e.files[0].name}"
                 self.img_preview.color = ft.Colors.GREEN_700
                 self.img_preview.update()
 
     def _build_ui(self):
         header = ft.Container(
-            content=ft.Row([
-                ft.Column([
-                    ft.Text("Configuración", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
-                    ft.Text("Gestione sus categorías y catálogo de productos", size=14, color=ft.Colors.BLUE_GREY_400),
-                ], expand=True, spacing=0),
-            ]),
+            content=ft.Column([
+                ft.Text("Configuración", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
+                ft.Text("Gestione sus categorías y catálogo", size=14, color=ft.Colors.BLUE_GREY_400),
+            ], spacing=0),
             margin=ft.margin.only(bottom=10)
         )
 
@@ -60,21 +57,19 @@ class ConfiguracionView(ft.Container):
             tabs=[
                 ft.Tab(text="Categorías", icon=ft.Icons.CATEGORY_ROUNDED, content=self._build_categorias_tab()),
                 ft.Tab(text="Productos", icon=ft.Icons.INVENTORY_ROUNDED, content=self._build_productos_tab()),
+                ft.Tab(text="Sistema", icon=ft.Icons.DASHBOARD_CUSTOMIZE_OUTLINED, content=self._build_sistema_tab()),
             ],
             expand=True,
         )
 
         self.content = ft.Column([header, self.tabs], expand=True)
 
-    # --- SECCIÓN CATEGORÍAS ---
-
     def _build_categorias_tab(self):
         return ft.Column([
             ft.Container(height=10),
-            ft.ElevatedButton(
-                "Nueva Categoría",
-                icon=ft.Icons.ADD_ROUNDED,
-                style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.PRIMARY),
+            ft.FloatingActionButton(
+                content=ft.Row([ft.Icon(ft.Icons.ADD), ft.Text("Nueva Categoría")], alignment="center", spacing=5),
+                width=180,
                 on_click=lambda _: self._show_categoria_dialog()
             ),
             ft.Container(height=10),
@@ -83,93 +78,53 @@ class ConfiguracionView(ft.Container):
 
     def _show_categoria_dialog(self, categoria=None):
         self.selected_image_path = None
-        nombre_field = ft.TextField(
-            label="Nombre de Categoría", 
-            value=categoria.nombre if categoria else "",
-            border_radius=10,
-            focused_border_color=ft.Colors.PRIMARY
+        is_mobile = self.page.width < 600
+        
+        nombre_field = ft.TextField(label="Nombre", value=categoria.nombre if categoria else "", border=ft.InputBorder.OUTLINE)
+        descripcion_field = ft.TextField(label="Descripción", value=categoria.descripcion if categoria else "", multiline=True, max_length=255, border=ft.InputBorder.OUTLINE)
+        
+        colores = ["#2196F3", "#F44336", "#4CAF50", "#FFEB3B", "#9C27B0", "#FF9800", "#795548", "#607D8B"]
+        color_dropdown = ft.Dropdown(
+            label="Color del Botón",
+            options=[ft.dropdown.Option(c, c) for c in colores],
+            value=categoria.color if categoria else "#2196F3",
+            border=ft.InputBorder.OUTLINE
         )
         
-        self.img_preview = ft.Text(
-            "No se ha seleccionado imagen" if not categoria else "Tiene imagen asignada (click para cambiar)",
-            size=12, color=ft.Colors.BLUE_GREY_400
-        )
+        activo_sw = ft.Switch(label="Categoría Activa", value=categoria.activo if categoria else True)
+        self.img_preview = ft.Text("Sin imagen seleccionada", size=12)
 
         def save_click(e):
             if not nombre_field.value:
-                nombre_field.error_text = "El nombre es obligatorio"
-                nombre_field.update()
-                return
-            self._save_categoria(nombre_field.value, categoria.id if categoria else None)
-            self.page.dialog.open = False
-            self.page.update()
+                nombre_field.error_text = "Obligatorio"; nombre_field.update(); return
+            self._save_categoria(nombre_field.value, descripcion_field.value, color_dropdown.value, activo_sw.value, categoria.id if categoria else None)
+            self._close_dialog()
 
-        self.page.dialog = ft.AlertDialog(
+        self.active_dialog = ft.AlertDialog(
             title=ft.Text("Gestionar Categoría"),
-            content=ft.Column([
-                nombre_field,
-                ft.Divider(),
-                ft.Text("Imagen de Portada", weight="bold", size=14),
-                self.img_preview,
-                ft.OutlinedButton(
-                    "Seleccionar Imagen",
-                    icon=ft.Icons.IMAGE_SEARCH_ROUNDED,
-                    on_click=lambda _: self.file_picker.pick_files(allow_multiple=False, file_type=ft.FilePickerFileType.IMAGE)
-                )
-            ], tight=True, spacing=15),
+            content=ft.Container(
+                content=ft.Column([
+                    nombre_field, color_dropdown, descripcion_field, activo_sw,
+                    ft.Divider(), ft.Text("Imagen", weight="bold"), self.img_preview,
+                    ft.ElevatedButton("Buscar Imagen", icon=ft.Icons.IMAGE, on_click=lambda _: self.file_picker.pick_files(file_type="image"))
+                ], tight=True, spacing=15, scroll=ft.ScrollMode.AUTO),
+                width=400 if not is_mobile else None
+            ),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Guardar", bgcolor=ft.Colors.PRIMARY, color=ft.Colors.WHITE, on_click=save_click)
+                ft.TextButton("Cancelar", on_click=self._close_dialog),
+                ft.ElevatedButton("Guardar", on_click=save_click)
             ]
         )
-        self.page.dialog.open = True
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
         self.page.update()
-
-    def _save_categoria(self, nombre, cat_id=None):
-        db = next(get_db())
-        try:
-            if cat_id:
-                cat = db.query(Categoria).filter(Categoria.id == cat_id).first()
-                cat.nombre = nombre
-            else:
-                cat = Categoria(nombre=nombre)
-                db.add(cat)
-            
-            db.commit()
-            db.refresh(cat)
-
-            if self.selected_image_path:
-                dest_path = os.path.join(self.imagenes_dir, f"{cat.id}.png")
-                shutil.copy(self.selected_image_path, dest_path)
-
-            self._load_data()
-            self._show_message(f"Categoría '{nombre}' guardada correctamente")
-        except Exception as ex:
-            db.rollback()
-            self._show_error(f"Error al guardar categoría: {ex}")
-        finally:
-            db.close()
-
-    def _create_categoria_item(self, categoria):
-        return ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.CATEGORY_ROUNDED, color=ft.Colors.PRIMARY),
-                ft.Text(categoria.nombre, weight="bold", expand=True, color=ft.Colors.BLUE_GREY_900),
-                ft.IconButton(ft.Icons.EDIT_ROUNDED, icon_color=ft.Colors.BLUE_GREY_400, on_click=lambda _: self._show_categoria_dialog(categoria)),
-                ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.Colors.RED_400, on_click=lambda _: self._show_confirm_delete(categoria.id, "categoria"))
-            ]),
-            padding=12, bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.border.all(1, ft.Colors.GREY_200)
-        )
-
-    # --- SECCIÓN PRODUCTOS ---
 
     def _build_productos_tab(self):
         return ft.Column([
             ft.Container(height=10),
-            ft.ElevatedButton(
-                "Nuevo Producto",
-                icon=ft.Icons.ADD_BOX_ROUNDED,
-                style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.PRIMARY),
+            ft.FloatingActionButton(
+                content=ft.Row([ft.Icon(ft.Icons.ADD_BOX), ft.Text("Nuevo Producto")], alignment="center", spacing=5),
+                width=180,
                 on_click=lambda _: self._show_producto_dialog()
             ),
             ft.Container(height=10),
@@ -178,170 +133,211 @@ class ConfiguracionView(ft.Container):
 
     def _show_producto_dialog(self, producto=None):
         db = next(get_db())
-        categorias = db.query(Categoria).all()
-        db.close()
-
-        if not categorias:
-            self._show_error("Debe crear al menos una categoría primero")
-            return
-
-        nombre_field = ft.TextField(label="Nombre del Producto", value=producto.nombre if producto else "", border_radius=10)
-        stock_min_field = ft.TextField(label="Stock Mínimo", value=str(producto.stock_minimo) if producto else "5", keyboard_type=ft.KeyboardType.NUMBER, border_radius=10)
-        unidad_field = ft.TextField(label="Unidad (Kg, Unid, etc)", value=producto.unidad_medida if producto else "Unid.", border_radius=10)
-        
-        cat_dropdown = ft.Dropdown(
-            label="Categoría",
-            options=[ft.dropdown.Option(str(c.id), c.nombre) for c in categorias],
-            value=str(producto.categoria_id) if producto else str(categorias[0].id),
-            border_radius=10
-        )
-
-        def save_prod_click(e):
-            if not nombre_field.value:
-                nombre_field.error_text = "Requerido"
-                nombre_field.update()
+        try:
+            categorias = db.query(Categoria).filter(Categoria.activo == True).all()
+            if not categorias:
+                self._show_error("Cree una categoría activa primero")
                 return
-            try:
-                min_val = int(stock_min_field.value)
-                self._save_producto(
-                    nombre_field.value, 
-                    int(cat_dropdown.value), 
-                    min_val, 
-                    unidad_field.value,
-                    producto.id if producto else None
-                )
-                self.page.dialog.open = False
-                self.page.update()
-            except ValueError:
-                stock_min_field.error_text = "Número inválido"
-                stock_min_field.update()
 
-        self.page.dialog = ft.AlertDialog(
-            title=ft.Text("Gestionar Producto"),
-            content=ft.Column([
-                nombre_field,
-                cat_dropdown,
-                ft.Row([stock_min_field, unidad_field], spacing=10)
-            ], tight=True, spacing=15),
-            actions=[
-                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Guardar", bgcolor=ft.Colors.PRIMARY, color=ft.Colors.WHITE, on_click=save_prod_click)
-            ]
-        )
-        self.page.dialog.open = True
-        self.page.update()
+            is_mobile = self.page.width < 600
+            nombre_field = ft.TextField(label="Nombre", value=producto.nombre if producto else "", border=ft.InputBorder.OUTLINE, expand=True)
+            codigo_field = ft.TextField(label="Código", value=producto.codigo if producto else "", border=ft.InputBorder.OUTLINE, expand=True)
+            
+            cat_dropdown = ft.Dropdown(
+                label="Categoría",
+                options=[ft.dropdown.Option(str(c.id), c.nombre) for c in categorias],
+                value=str(producto.categoria_id) if producto else str(categorias[0].id),
+                border=ft.InputBorder.OUTLINE, expand=True
+            )
+            
+            descripcion_field = ft.TextField(label="Descripción", value=producto.descripcion if producto else "", multiline=True, min_lines=2, border=ft.InputBorder.OUTLINE)
+            stock_min_field = ft.TextField(label="Stock Mín.", value=str(producto.stock_minimo) if producto else "0", keyboard_type=ft.KeyboardType.NUMBER, border=ft.InputBorder.OUTLINE, expand=True)
+            unidad_field = ft.TextField(label="Unidad", value=producto.unidad_medida if producto else "unidad", border=ft.InputBorder.OUTLINE, expand=True)
+            
+            es_pesable_sw = ft.Switch(label="Producto Pesable", value=getattr(producto, 'es_pesable', False) if producto else False)
+            requiere_foto_sw = ft.Switch(label="Foto peso", value=producto.requiere_foto_peso if producto else False)
+            activo_sw = ft.Switch(label="Activo", value=producto.activo if producto else True)
 
-    def _save_producto(self, nombre, cat_id, stock_min, unidad, prod_id=None):
+            def save_prod_click(e):
+                if not nombre_field.value:
+                    nombre_field.error_text = "Requerido"; nombre_field.update(); return
+                try:
+                    self._save_producto(
+                        nombre_field.value, codigo_field.value, descripcion_field.value, 
+                        int(cat_dropdown.value), requiere_foto_sw.value, 0.0, 
+                        unidad_field.value, float(stock_min_field.value or 0), 
+                        activo_sw.value, producto.id if producto else None, es_pesable_sw.value
+                    )
+                    self._close_dialog()
+                except Exception as ex: 
+                    self._show_error(f"Error: {ex}")
+
+            content_layout = ft.Column([
+                ft.Row([nombre_field, codigo_field], spacing=10),
+                ft.Row([cat_dropdown], spacing=10),
+                descripcion_field,
+                ft.Row([stock_min_field, unidad_field], spacing=10),
+                ft.Divider(),
+                ft.Text("Opciones", size=14, weight="bold"),
+                es_pesable_sw,
+                ft.Row([requiere_foto_sw, activo_sw], alignment="spaceBetween"),
+            ], tight=True, spacing=15, scroll=ft.ScrollMode.AUTO)
+
+            self.active_dialog = ft.AlertDialog(
+                title=ft.Text("Gestionar Producto"),
+                content=ft.Container(content=content_layout, width=500),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=self._close_dialog),
+                    ft.ElevatedButton("Guardar", on_click=save_prod_click)
+                ]
+            )
+            self.page.overlay.append(self.active_dialog)
+            self.active_dialog.open = True
+            self.page.update()
+        finally:
+            db.close()
+
+    def _save_categoria(self, nombre, descripcion, color, activo, cat_id):
         db = next(get_db())
         try:
-            if prod_id:
-                prod = db.query(Producto).filter(Producto.id == prod_id).first()
-                prod.nombre = nombre
-                prod.categoria_id = cat_id
-                prod.stock_minimo = stock_min
-                prod.unidad_medida = unidad
+            if cat_id:
+                cat = db.query(Categoria).get(cat_id)
+                if cat: cat.nombre, cat.descripcion, cat.color, cat.activo = nombre, descripcion, color, activo
             else:
-                prod = Producto(
-                    nombre=nombre, 
-                    categoria_id=cat_id, 
-                    stock_minimo=stock_min, 
-                    stock_actual=0, 
-                    unidad_medida=unidad
-                )
-                db.add(prod)
+                cat = Categoria(nombre=nombre, descripcion=descripcion, color=color, activo=activo)
+                db.add(cat)
+            db.commit()
+            if self.selected_image_path:
+                db.refresh(cat)
+                ext = os.path.splitext(self.selected_image_path)[1]
+                dest = os.path.join(self.imagenes_dir, f"cat_{cat.id}{ext}")
+                shutil.copy(self.selected_image_path, dest)
+                cat.imagen = dest
+                db.commit()
+            self._load_data()
+        except Exception as e:
+            db.rollback(); self._show_error(f"Error DB: {e}")
+        finally: db.close()
+
+    def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
+        db = next(get_db())
+        try:
+            if p_id:
+                p = db.query(Producto).get(p_id)
+                if p:
+                    p.nombre, p.codigo, p.descripcion, p.categoria_id = n, c, d, cat_id
+                    p.requiere_foto_peso, p.peso_unitario, p.unidad_medida, p.stock_minimo, p.activo = rf, pu, u, sm, a
+                    if hasattr(p, 'es_pesable'): p.es_pesable = es_p
+            else:
+                p = Producto(nombre=n, codigo=c, descripcion=d, categoria_id=cat_id, requiere_foto_peso=rf, 
+                             peso_unitario=pu, unidad_medida=u, stock_minimo=sm, stock_actual=0, activo=a)
+                if hasattr(p, 'es_pesable'): p.es_pesable = es_p
+                db.add(p)
             db.commit()
             self._load_data()
-            self._show_message("Producto guardado")
-        except Exception as ex:
-            db.rollback()
-            self._show_error(f"Error: {ex}")
-        finally:
-            db.close()
-
-    def _create_producto_item(self, producto):
-        return ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, color=ft.Colors.PRIMARY_CONTAINER),
-                ft.Column([
-                    ft.Text(producto.nombre, weight="bold", size=15),
-                    ft.Text(f"Categoría: {producto.categoria.nombre if producto.categoria else 'N/A'}", size=12, color=ft.Colors.GREY_600)
-                ], expand=True, spacing=2),
-                ft.IconButton(ft.Icons.EDIT_ROUNDED, on_click=lambda _: self._show_producto_dialog(producto)),
-                ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.Colors.RED_400, on_click=lambda _: self._show_confirm_delete(producto.id, "producto"))
-            ]),
-            padding=12, bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.border.all(1, ft.Colors.GREY_200)
-        )
-
-    # --- UTILIDADES ---
-
-    def _load_data(self):
-        try:
-            db = next(get_db())
-            categorias = db.query(Categoria).all()
-            productos = db.query(Producto).all()
-            
-            self.lista_categorias.controls = [self._create_categoria_item(c) for c in categorias]
-            self.lista_productos.controls = [self._create_producto_item(p) for p in productos]
-            self.update()
         except Exception as e:
-            print(f"Error cargando datos: {e}")
-        finally:
-            db.close()
+            db.rollback(); self._show_error(f"Error DB: {e}")
+        finally: db.close()
 
-    def _show_confirm_delete(self, item_id, tipo):
-        def borrar(e):
-            if tipo == "categoria": self._delete_categoria(item_id)
-            else: self._delete_producto(item_id)
-            self.page.dialog.open = False
-            self.page.update()
-
-        self.page.dialog = ft.AlertDialog(
-            title=ft.Text("Confirmar eliminación"),
-            content=ft.Text(f"¿Está seguro de eliminar este/a {tipo}? Esta acción no se puede deshacer."),
+    def _confirm_delete(self, objeto, tipo="producto"):
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"Eliminar {tipo.capitalize()}"),
+            content=ft.Text(f"¿Desea eliminar '{objeto.nombre}'? Esto lo desactivará del catálogo."),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Eliminar", bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, on_click=borrar)
+                ft.TextButton("Cancelar", on_click=self._close_dialog),
+                ft.TextButton("Eliminar", color="red", on_click=lambda _: self._delete_logic(objeto, tipo))
             ]
         )
-        self.page.dialog.open = True
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
         self.page.update()
 
-    def _delete_categoria(self, cat_id):
+    def _delete_logic(self, objeto, tipo):
         db = next(get_db())
         try:
-            cat = db.query(Categoria).filter(Categoria.id == cat_id).first()
-            if cat:
-                db.delete(cat)
+            if tipo == "producto":
+                item = db.query(Producto).get(objeto.id)
+            else:
+                item = db.query(Categoria).get(objeto.id)
+            
+            if item:
+                item.activo = False # Borrado lógico para integridad de datos
                 db.commit()
-                img_path = os.path.join(self.imagenes_dir, f"{cat_id}.png")
-                if os.path.exists(img_path): os.remove(img_path)
+                self._show_message(f"{tipo.capitalize()} desactivado")
                 self._load_data()
-                self._show_message("Categoría eliminada")
+            self._close_dialog()
+        finally:
+            db.close()
+
+    def _load_data(self):
+        db = next(get_db())
+        try:
+            cats = db.query(Categoria).filter(Categoria.activo == True).all()
+            prods = db.query(Producto).filter(Producto.activo == True).options(joinedload(Producto.categoria)).all()
+            self.lista_categorias.controls = [self._create_categoria_item(c) for c in cats]
+            self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
+            self.update()
         except Exception as e:
-            self._show_error("No se puede eliminar: existen productos asociados")
-        finally:
-            db.close()
+            print(f"Error carga: {e}")
+        finally: db.close()
 
-    def _delete_producto(self, prod_id):
-        db = next(get_db())
-        try:
-            prod = db.query(Producto).filter(Producto.id == prod_id).first()
-            if prod:
-                db.delete(prod)
-                db.commit()
-                self._load_data()
-                self._show_message("Producto eliminado")
-        except Exception:
-            self._show_error("No se puede eliminar: tiene movimientos asociados")
-        finally:
-            db.close()
+    def _create_categoria_item(self, c):
+        return ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.CATEGORY, color=c.color),
+                ft.Column([ft.Text(c.nombre, weight="bold"), ft.Text(c.descripcion or "", size=11)], expand=True, spacing=1),
+                ft.IconButton(ft.Icons.EDIT, on_click=lambda _: self._show_categoria_dialog(c)),
+                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="red", on_click=lambda _: self._confirm_delete(c, "categoria")),
+            ]),
+            padding=10, bgcolor="white", border_radius=10, border=ft.border.all(1, ft.Colors.GREY_200)
+        )
 
-    def _close_dialog(self):
-        self.page.dialog.open = False
+    def _create_producto_item(self, p):
+        tag = " [PESABLE]" if getattr(p, 'es_pesable', False) else ""
+        return ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.INVENTORY_2, color="blue"),
+                ft.Column([
+                    ft.Text(f"{p.nombre}{tag}", weight="bold"), 
+                    ft.Text(f"Cat: {p.categoria.nombre if p.categoria else 'N/A'}", size=11)
+                ], expand=True, spacing=1),
+                ft.IconButton(ft.Icons.EDIT, on_click=lambda _: self._show_producto_dialog(p)),
+                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="red", on_click=lambda _: self._confirm_delete(p, "producto")),
+            ]),
+            padding=10, bgcolor="white", border_radius=10, border=ft.border.all(1, ft.Colors.GREY_200)
+        )
+
+    def _close_dialog(self, e=None):
+        if self.active_dialog:
+            self.active_dialog.open = False
         self.page.update()
 
-    def _show_message(self, message):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.GREEN_700))
+    def _show_error(self, m):
+        s = ft.SnackBar(content=ft.Text(m), bgcolor="red")
+        self.page.overlay.append(s); s.open = True; self.page.update()
 
-    def _show_error(self, error):
-        self.page.show_snack_bar(ft.SnackBar(content=ft.Text(error), bgcolor=ft.Colors.RED_700))
+    def _show_message(self, m):
+        s = ft.SnackBar(content=ft.Text(m), bgcolor="green")
+        self.page.overlay.append(s); s.open = True; self.page.update()
+
+    def _build_sistema_tab(self):
+        return ft.Column([
+            ft.Container(height=20),
+            ft.Card(content=ft.Container(content=ft.Column([
+                ft.ListTile(leading=ft.Icon(ft.Icons.DASHBOARD), title=ft.Text("Mantenimiento")),
+                ft.Text("Si experimenta errores tras actualizaciones, use 'Probar Conexión'."),
+                ft.ElevatedButton("Probar Conexión", on_click=self._test_connection_action),
+                self.test_result_text
+            ], spacing=10), padding=20))
+        ], scroll=ft.ScrollMode.AUTO, expand=True)
+
+    def _test_connection_action(self, e):
+        db = None
+        try:
+            db = next(get_db()); db.execute(text("SELECT 1"))
+            self.test_result_text.value = "✅ OK"; self.test_result_text.color = "green"
+        except Exception as ex:
+            self.test_result_text.value = f"❌ Error: {ex}"; self.test_result_text.color = "red"
+        finally:
+            if db: db.close()
+            self.update()

@@ -3,9 +3,10 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database.base import Base
 
-
 class Factura(Base):
     __tablename__ = "facturas"
+    # Esta línea permite que si el modelo se importa varias veces no de error
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     numero_factura = Column(String(50), nullable=False, index=True)

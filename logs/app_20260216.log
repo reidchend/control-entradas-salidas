@@ -1,0 +1,247 @@
+2026-02-16 12:15:46 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 12:15:46 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:15:46 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:15:47 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:15:56 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:44:40 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 12:44:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:44:40 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:44:40 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:45:01 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:45:01 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:45:02 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:55:36 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 12:55:36 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 12:55:36 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:55:37 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 12:55:45 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 12:55:45 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:07:35 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:07:36 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:08:48 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:09:15 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:53:43 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 13:53:44 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:53:44 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:53:44 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 13:53:47 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 13:53:47 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 13:53:47 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 13:53:48 | app.views.inventario_view | INFO     | Abriendo diálogo para entrada de JAMON
+2026-02-16 13:53:56 | app.views.inventario_view | INFO     | Abriendo diálogo para entrada de JAMON
+2026-02-16 13:53:59 | app.views.inventario_view | INFO     | Abriendo diálogo para entrada de JAMON
+2026-02-16 13:54:12 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 13:54:12 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 13:54:12 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:00:39 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:00:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:00:40 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:00:40 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:00:42 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:00:42 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:00:43 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:03:40 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:03:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:03:40 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:03:41 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:03:49 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:03:49 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:03:49 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:03:51 | app.views.inventario_view | INFO     | Abriendo diálogo para entrada de JAMON
+2026-02-16 14:04:04 | app.views.inventario_view | INFO     | Abriendo diálogo para entrada de JAMON
+2026-02-16 14:05:52 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:05:53 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:05:53 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:05:53 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:06:08 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:06:08 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:06:08 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:06:09 | app.views.inventario_view | INFO     | Diálogo enviado al overlay de la página
+2026-02-16 14:09:29 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:09:30 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:09:30 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:09:30 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:09:37 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:09:37 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:09:37 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:09:38 | app.views.inventario_view | INFO     | Diálogo abierto via Overlay
+2026-02-16 14:09:48 | app.views.inventario_view | INFO     | Diálogo abierto via Overlay
+2026-02-16 14:09:52 | app.views.inventario_view | INFO     | Diálogo abierto via Overlay
+2026-02-16 14:13:32 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:13:32 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:13:32 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:13:33 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:13:44 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:13:44 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:13:44 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:13:54 | app.views.inventario_view | INFO     | Iniciando registro de entrada para ID: 1
+2026-02-16 14:13:54 | app.views.inventario_view | INFO     | Éxito: entrada registrada. Nuevo stock: 2.0
+2026-02-16 14:13:54 | app.views.inventario_view | ERROR    | Error crítico en registro: 'Page' object has no attribute 'show_snack_bar'
+Traceback (most recent call last):
+  File "/workspaces/control-entradas-salidas/app/views/inventario_view.py", line 405, in _registrar_movimiento
+    self._show_message(f"✓ {tipo.capitalize()} registrada: {prod.nombre}")
+  File "/workspaces/control-entradas-salidas/app/views/inventario_view.py", line 449, in _show_message
+    self.page.show_snack_bar(
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Page' object has no attribute 'show_snack_bar'
+2026-02-16 14:13:54 | app.views.inventario_view | ERROR    | Error mostrado al usuario: Error al guardar: 'Page' object has no attribute 'show_snack_bar'
+2026-02-16 14:14:04 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:14:04 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:14:04 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:14:58 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:14:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:14:59 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:14:59 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:15:05 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:15:05 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:15:06 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:15:17 | app.views.inventario_view | INFO     | Iniciando registro de entrada para ID: 1
+2026-02-16 14:15:17 | app.views.inventario_view | INFO     | Éxito: entrada registrada. Nuevo stock: 3.0
+2026-02-16 14:15:17 | app.views.inventario_view | ERROR    | Error crítico en registro: 'Page' object has no attribute 'show_snack_bar'
+Traceback (most recent call last):
+  File "/workspaces/control-entradas-salidas/app/views/inventario_view.py", line 405, in _registrar_movimiento
+    self._show_message(f"✓ {tipo.capitalize()} registrada: {prod.nombre}")
+  File "/workspaces/control-entradas-salidas/app/views/inventario_view.py", line 449, in _show_message
+    self.page.show_snack_bar(
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Page' object has no attribute 'show_snack_bar'
+2026-02-16 14:15:17 | app.views.inventario_view | ERROR    | Error mostrado al usuario: Error al guardar: 'Page' object has no attribute 'show_snack_bar'
+2026-02-16 14:17:01 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:17:02 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:17:02 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:17:02 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:17:11 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:17:11 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:17:11 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:17:15 | app.views.inventario_view | INFO     | Iniciando registro de entrada para ID: 1
+2026-02-16 14:17:15 | app.views.inventario_view | INFO     | Éxito: entrada registrada. Nuevo stock: 4.0
+2026-02-16 14:17:15 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:17:16 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:17:53 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:17:53 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:17:53 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:34:41 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:34:41 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:34:41 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:34:42 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:34:45 | app.views.inventario_view | INFO     | Mostrando productos de categoría: CHARCUTERIA
+2026-02-16 14:34:45 | app.views.inventario_view | INFO     | Cargando productos para categoría: CHARCUTERIA
+2026-02-16 14:34:45 | app.views.inventario_view | INFO     | Se cargaron 1 productos
+2026-02-16 14:34:47 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:34:47 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:34:47 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:34:48 | app.views.inventario_view | INFO     | Volviendo a vista de categorías
+2026-02-16 14:34:48 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:34:48 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:34:48 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:37:39 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:37:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:37:40 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:37:40 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:42:12 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:43:36 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:43:36 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:43:36 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:43:36 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:46:21 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:46:21 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:46:21 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:46:22 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:47:49 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:47:50 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:47:50 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:47:50 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:48:02 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:48:02 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:48:02 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:49:18 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:49:19 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:49:19 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:49:19 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:50:41 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:50:42 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:50:42 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:50:42 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:53:41 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:53:41 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:53:41 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:53:42 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:56:44 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:56:44 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:56:44 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:56:44 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:56:50 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:56:50 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:56:50 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 14:59:16 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 14:59:17 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 14:59:17 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 14:59:17 | app.views.inventario_view | INFO     | Se cargaron 1 categorías
+2026-02-16 15:02:28 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:02:29 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:02:29 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:02:29 | app.views.inventario_view | INFO     | Se cargaron 2 categorías
+2026-02-16 15:03:39 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:03:39 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:03:39 | app.views.inventario_view | INFO     | Se cargaron 2 categorías
+2026-02-16 15:03:46 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:03:46 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:03:46 | app.views.inventario_view | INFO     | Se cargaron 2 categorías
+2026-02-16 15:10:17 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:10:18 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:10:18 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:10:18 | app.views.inventario_view | INFO     | Se cargaron 2 categorías
+2026-02-16 15:10:28 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:10:28 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:10:28 | app.views.inventario_view | INFO     | Se cargaron 2 categorías
+2026-02-16 15:11:25 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:11:25 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:11:25 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:11:27 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:11:27 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:11:28 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:11:28 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:11:34 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:11:34 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:11:34 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:13:13 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:13:13 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:13:13 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:54:11 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:54:12 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 15:58:13 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 15:58:13 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 15:58:13 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 15:58:14 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 16:01:15 | app.views.inventario_view | DEBUG    | UI construida correctamente
+2026-02-16 16:01:15 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:01:15 | app.views.inventario_view | INFO     | Cargando categorías...
+2026-02-16 16:01:16 | app.views.inventario_view | INFO     | Se cargaron 3 categorías
+2026-02-16 16:16:49 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:24:08 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:36:37 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:36:41 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:02 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:49 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:38:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:39:12 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:55:05 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 16:55:40 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:00:43 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:14:55 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:15:20 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:15:30 | app.views.inventario_view | ERROR    | Error al guardar movimiento: 'nota' is an invalid keyword argument for Movimiento
+2026-02-16 17:17:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:18:09 | app.views.inventario_view | ERROR    | Error al guardar movimiento: 'nota' is an invalid keyword argument for Movimiento
+2026-02-16 17:19:47 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-16 17:23:07 | app.views.inventario_view | INFO     | InventarioView montada
