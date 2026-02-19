@@ -1,23 +1,9 @@
-import sys
-import traceback
-import os
-import time
 import flet as ft
+import traceback
+import time
 
-# Intentamos importar las configuraciones
-try:
-    from config.config import get_settings
-    settings = get_settings()
-    CONFIG_ERROR = None
-except Exception as e:
-    # Objeto dummy para no romper el inicio si falla config
-    class DummySettings:
-        FLET_APP_NAME = "Error de Configuración"
-        FLET_APP_ICON = None
-    settings = DummySettings()
-    CONFIG_ERROR = str(e)
-
-
+# --- 1. TU CLASE ORIGINAL DE INTERFAZ ---
+# Restaurado exactamente como lo tenías para compatibilidad con Flet 0.28.3
 class ControlEntradasSalidasApp:
     def __init__(self):
         self.page = None
@@ -26,8 +12,6 @@ class ControlEntradasSalidasApp:
         self.content_area = None
         self.current_view = None
         self.views = None
-        self.splash_container = None
-        self.error_text = None
         self._layout_row = None
         self.settings = None
 
@@ -36,10 +20,10 @@ class ControlEntradasSalidasApp:
         self.settings = settings
         self.views = vistas_cargadas
         
-        # Limpiamos la pantalla de carga
+        # Limpiamos la pantalla de carga del Detective
         self.page.clean()
 
-        # Configuración visual
+        # Configuraciones iniciales
         try:
             self.page.window_icon = self.settings.FLET_APP_ICON
             self.page.title = self.settings.FLET_APP_NAME
@@ -47,11 +31,10 @@ class ControlEntradasSalidasApp:
             pass
             
         self.page.theme_mode = ft.ThemeMode.LIGHT
-        
-        # IMPORTANTE: Quitamos padding global para que el SafeArea controle los bordes
-        self.page.padding = 0 
+        self.page.padding = 0
         self.page.spacing = 0
         self.page.expand = True
+        self.page.vertical_alignment = ft.MainAxisAlignment.START
 
         self._setup_theme()
         self._create_layout()
@@ -66,7 +49,7 @@ class ControlEntradasSalidasApp:
         )
 
     def _create_layout(self):
-        # Contenedor principal del contenido
+        # Área de contenido
         self.content_area = ft.Container(
             expand=True, 
             padding=0, 
@@ -74,22 +57,24 @@ class ControlEntradasSalidasApp:
             border_radius=ft.border_radius.only(top_left=20) if self.page.width >= 700 else 0
         )
 
-        # Barra Lateral (Escritorio)
+        # BARRA LATERAL (PC/Tablet)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
             extended=False,
             label_type=ft.NavigationRailLabelType.ALL,
+            min_width=100,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             destinations=[
                 ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
                 ft.NavigationRailDestination(icon="storage_outlined", selected_icon="storage", label="Stock"),
                 ft.NavigationRailDestination(icon="history_outlined", selected_icon="history", label="Historial"),
-                ft.NavigationRailDestination(icon="settings_outlined", selected_icon="settings", label="Config"),
+                ft.NavigationRailDestination(icon="settings_outlined", selected_icon="settings", label="Ajustes"),
             ],
             on_change=self._on_navigation_change,
         )
 
-        # Barra Inferior (Móvil)
+        # BARRA INFERIOR (Móvil) - Restaurado NavigationBarDestination
         self.navigation_bar = ft.NavigationBar(
             visible=False,
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_HIDE,
@@ -103,22 +88,12 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # Layout principal
         self._layout_row = ft.Row(
             [self.navigation_rail, self.content_area],
             expand=True,
             spacing=0,
         )
-        
-        # --- SOLUCIÓN MAESTRA AL PROBLEMA DE LA BARRA DE ESTADO ---
-        # Envolvemos todo el layout en un SafeArea.
-        # Esto añade automáticamente el padding necesario arriba (notch) y abajo (gestos).
-        self.page.add(
-            ft.SafeArea(
-                content=self._layout_row,
-                expand=True,
-            )
-        )
+        self.page.add(self._layout_row)
 
     def _handle_resize(self):
         def on_resize(e):
@@ -151,48 +126,34 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
 
-# --- PUNTO DE ENTRADA CON SPLASH SCREEN ---
+# --- 2. EL MOTOR DE CARGA ---
 def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.scroll = None
     page.expand = True
-    page.padding = 0  # Quitamos padding manual, SafeArea se encarga
-
-    # Pantalla de carga (Splash)
-    # También le ponemos SafeArea por si el splash tiene texto muy arriba
+    
+    # UI de carga inicial
     status_log = ft.Text("Verificando entorno...", color="grey")
-    
-    loading_content = ft.Column([
-        ft.ProgressRing(),
-        ft.Container(height=10),
-        ft.Text("Iniciando Lycoris Control...", size=20, weight="bold"),
-        status_log
-    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-
     loading_container = ft.Container(
-        content=ft.SafeArea( # SafeArea para el splash también
-            ft.Container(
-                content=loading_content,
-                alignment=ft.alignment.center
-            ),
-            expand=True
-        ),
+        content=ft.Column([
+            ft.ProgressRing(),
+            ft.Text("Iniciando Lycoris Control...", size=20, weight="bold"),
+            status_log
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
         alignment=ft.alignment.center,
-        expand=True,
-        bgcolor=ft.Colors.WHITE
+        expand=True
     )
-    
     page.add(loading_container)
     page.update()
 
     try:
-        # Carga progresiva de módulos
-        status_log.value = "Cargando configuraciones..."
+        # PASO 1: Configuraciones
+        status_log.value = "Cargando Configuración..."
         page.update()
         from config.config import get_settings
         settings = get_settings()
         
-        status_log.value = "Conectando módulos..."
+        # PASO 2: Vistas
+        status_log.value = "Cargando Vistas y Base de Datos..."
         page.update()
         from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
         
@@ -204,11 +165,11 @@ def main(page: ft.Page):
             4: ConfiguracionView(),
         }
         
-        status_log.value = "Iniciando interfaz..."
+        # PASO 3: Arrancar la App
+        status_log.value = "Iniciando Interfaz Principal..."
         page.update()
         time.sleep(0.3)
         
-        # Lanzar la app real
         app_instance = ControlEntradasSalidasApp()
         app_instance.arrancar_interfaz(page, settings, vistas)
         
@@ -216,30 +177,25 @@ def main(page: ft.Page):
         page.clean()
         error_stack = traceback.format_exc()
         
-        # Pantalla de error crítica (También con SafeArea para poder leerla bien)
         page.add(
-            ft.SafeArea(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(name="error_outline", color="red", size=60),
-                        ft.Text("ERROR DE INICIO", size=24, weight="bold", color="red"),
-                        ft.Divider(),
-                        ft.Text("Detalle:", weight="bold"),
-                        ft.Container(
-                            content=ft.Text(f"{e}", color="red", selectable=True),
-                            bgcolor="#ffeeee", padding=10, border_radius=5
-                        ),
-                        ft.Text("Traceback:", weight="bold"),
-                        ft.Container(
-                            content=ft.Text(error_stack, size=10, font_family="monospace", selectable=True),
-                            bgcolor="#f4f4f4", padding=10, border_radius=5, expand=True
-                        ),
-                        ft.ElevatedButton("Reintentar", on_click=lambda _: page.update())
-                    ], spacing=10),
-                    padding=20,
-                    expand=True
-                ),
-                expand=True
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(name="error_outline", color="red", size=60),
+                    ft.Text("SE DETECTÓ UN ERROR", size=24, weight="bold", color="red"),
+                    ft.Divider(),
+                    ft.Text("Detalle del error:", weight="bold"),
+                    ft.Container(
+                        content=ft.Text(f"{e}", color="red", selectable=True),
+                        bgcolor="#ffeeee", padding=10, border_radius=5
+                    ),
+                    ft.Text("Traceback:", weight="bold"),
+                    ft.Container(
+                        content=ft.Text(error_stack, size=11, font_family="monospace", selectable=True),
+                        bgcolor="#f4f4f4", padding=10, border_radius=5
+                    ),
+                    ft.ElevatedButton("Reintentar", on_click=lambda _: page.update())
+                ], spacing=15, scroll=ft.ScrollMode.ALWAYS),
+                padding=20
             )
         )
         page.update()
