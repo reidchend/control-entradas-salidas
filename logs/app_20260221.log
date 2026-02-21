@@ -33,3 +33,17 @@
 2026-02-21 08:30:15 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-21 08:34:05 | app.views.inventario_view | INFO     | InventarioView montada
 2026-02-21 08:35:00 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:27:13 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:27:13 | app.views.inventario_view | ERROR    | Error al cargar categorías: module 'flet' has no attribute 'animation'
+2026-02-21 09:30:33 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:30:33 | app.views.inventario_view | ERROR    | Error al cargar categorías: cannot access local variable 'container' where it is not associated with a value
+2026-02-21 09:36:14 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:43:28 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:43:43 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:47:13 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:47:24 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:52:49 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:55:48 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 09:56:01 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 10:02:05 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 10:04:03 | app.views.inventario_view | INFO     | InventarioView montada

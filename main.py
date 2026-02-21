@@ -118,11 +118,11 @@ class ControlEntradasSalidasApp:
             visible=False,
             bgcolor=ft.Colors.DEEP_PURPLE_50,
             destinations=[
-                ft.NavigationBarDestination(icon="inventory_2_outlined", label="Inventario"),
-                ft.NavigationBarDestination(icon="fact_check_outlined", label="Validación"),
-                ft.NavigationBarDestination(icon="storage_outlined", label="Stock"),
-                ft.NavigationBarDestination(icon="history_outlined", label="Historial"),
-                ft.NavigationBarDestination(icon="settings_outlined", label="Config"),
+                ft.NavigationBarDestination(icon="inventory_2_outlined"),
+                ft.NavigationBarDestination(icon="fact_check_outlined"),
+                ft.NavigationBarDestination(icon="storage_outlined"),
+                ft.NavigationBarDestination(icon="history_outlined"),
+                ft.NavigationBarDestination(icon="settings_outlined"),
             ],
             on_change=self._on_navigation_change,
         )
