@@ -85,6 +85,12 @@ jobs:
             --product "Lycoris Control" \
             --org "com.reidchend" \
             --project "lycoris" \
+            --build-number 2 \
+            --build-version 1.0.1 \
+            --org com.reidchend.lycoris \
+            --permissions post_notifications,internet \
+            --include-services \
+            --android-service-account-file google-services.json
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
