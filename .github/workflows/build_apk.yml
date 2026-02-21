@@ -86,8 +86,7 @@ jobs:
             --org com.reidchend.lycoris \
             --project "Lycoris Control" \
             --build-number 2 \
-            --build-version 1.0.1 \
-            --include-services
+            --build-version 1.0.1
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
