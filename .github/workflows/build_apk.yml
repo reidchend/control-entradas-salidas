@@ -88,7 +88,7 @@ jobs:
             --build-number 2 \
             --build-version 1.0.1 \
             --org com.reidchend.lycoris \
-            --permissions post_notifications,internet \
+            --android-permissions android.permission.POST_NOTIFICATIONS,android.permission.INTERNET \
             --include-services \
             --android-service-account-file google-services.json
         env:
