@@ -83,14 +83,12 @@ jobs:
           # Agregamos --include-external-assets para asegurar que el json se procese
           flet build apk --verbose \
             --product "Lycoris Control" \
-            --org "com.reidchend" \
-            --project "lycoris" \
+            --org com.reidchend.lycoris \
+            --project "Lycoris Control" \
             --build-number 2 \
             --build-version 1.0.1 \
-            --org com.reidchend.lycoris \
             --android-permissions android.permission.POST_NOTIFICATIONS,android.permission.INTERNET \
-            --include-services \
-            --android-service-account-file google-services.json
+            --include-services
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
