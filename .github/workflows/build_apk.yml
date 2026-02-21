@@ -85,7 +85,6 @@ jobs:
             --product "Lycoris Control" \
             --org "com.reidchend" \
             --project "lycoris" \
-            --include-external-assets
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
