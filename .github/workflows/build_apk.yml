@@ -87,7 +87,8 @@ jobs:
             --project "Lycoris Control" \
             --build-number 2 \
             --build-version 1.0.1 \
-            --android-permissions android.permission.POST_NOTIFICATIONS,android.permission.INTERNET
+            --android-permissions POST_NOTIFICATIONS \
+            --android-permissions INTERNET
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
