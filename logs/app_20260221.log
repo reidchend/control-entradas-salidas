@@ -1,0 +1,24 @@
+2026-02-21 02:15:03 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:17:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:22:16 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:27:24 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:31:48 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:31:48 | app.views.inventario_view | ERROR    | Error al cargar categorías: module 'flet' has no attribute 'animation'
+2026-02-21 02:31:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:31:59 | app.views.inventario_view | ERROR    | Error al cargar categorías: module 'flet' has no attribute 'animation'
+2026-02-21 02:33:25 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:48:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:55:44 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:55:54 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 02:57:48 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:00:55 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:02:29 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:04:00 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:11:58 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:14:59 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:16:42 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:18:55 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:20:55 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:22:02 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:23:22 | app.views.inventario_view | INFO     | InventarioView montada
+2026-02-21 03:24:13 | app.views.inventario_view | INFO     | InventarioView montada

@@ -77,12 +77,20 @@ class InventarioView(ft.Container):
                 run_spacing=15,
             )
 
+            self.main_content_area = ft.AnimatedSwitcher(
+                content=self.categorias_grid, # Contenido inicial
+                transition=ft.AnimatedSwitcherTransition.FADE,
+                duration=300,
+                reverse_duration=200,
+                switch_in_curve=ft.AnimationCurve.EASE_OUT,
+            )
+
             self.content = ft.Column([
                 self.header_container,
                 self.search_field,
                 ft.Container(height=10),
-                ft.Text("Seleccionar Categoría", size=16, weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_GREY_800),
-                self.categorias_grid,
+                # Usamos el switcher en lugar del grid directamente
+                self.main_content_area, 
             ], spacing=0, expand=True)
             
         except Exception as e:
@@ -113,29 +121,67 @@ class InventarioView(ft.Container):
             if db: db.close()
 
     def _create_categoria_card(self, categoria):
-        return ft.Container(
+        cat_color = categoria.color if categoria.color else ft.Colors.BLUE_900
+
+        container = ft.Container(
             content=ft.Column([
-                ft.Icon(ft.Icons.CATEGORY_ROUNDED, size=40, color=ft.Colors.PRIMARY),
-                ft.Text(str(categoria.nombre).upper(), weight="bold", size=13, text_align="center"),
+                ft.Icon(ft.Icons.CATEGORY_ROUNDED, size=40, color=cat_color),
+                ft.Text(str(categoria.nombre).upper(), weight="bold", size=13, text_align="center", color=cat_color),
                 ft.Text("Ver productos", size=10, color=ft.Colors.GREY_500),
             ], alignment="center", horizontal_alignment="center", spacing=5),
             bgcolor=ft.Colors.WHITE,
             border_radius=15,
             padding=15,
-            on_click=lambda _, c=categoria: self._show_productos(c),
-            border=ft.border.all(1, ft.Colors.GREY_200)
+            scale=1.0,
+            animate_scale=150, # Animación rápida de rebote
+            border=ft.border.all(1.2, ft.Colors.with_opacity(0.1, cat_color)),
         )
+
+        def on_click_animated(e):
+            container.scale = 0.90 # Encogimiento más notorio
+            container.update()
+            
+            # Un pequeño delay para que el ojo vea el botón hundirse
+            import time
+            time.sleep(0.12) 
+            
+            container.scale = 1.0
+            container.update()
+            
+            # Ahora llamamos al cambio de vista (que ya es suave por el Switcher)
+            self._show_productos(categoria)
+
+        container.on_click = on_click_animated
+        return container
 
     def _show_productos(self, categoria):
         self.categoria_seleccionada = categoria
+        
+        # Preparamos la nueva vista (la lista de productos)
         header_nav = ft.Row([
             ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=lambda _: self._reset_view()),
-            ft.Text(categoria.nombre, size=20, weight="bold"),
+            ft.Text(categoria.nombre, size=20, weight="bold", color=categoria.color),
         ])
+        
         self.productos_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
-        self.content.controls = [header_nav, self.search_field, self.productos_list]
+        
+        # El nuevo contenido que queremos mostrar
+        nueva_vista = ft.Column([
+            header_nav,
+            self.productos_list
+        ], expand=True)
+
+        # Cambiamos el contenido del switcher y actualizamos
+        self.main_content_area.content = nueva_vista
         self._load_productos()
-        if self.page: self.page.update()
+        self.page.update()
+
+    def _reset_view(self):
+        self.categoria_seleccionada = None
+        # Volvemos a poner el grid de categorías
+        self.main_content_area.content = self.categorias_grid
+        self._load_categorias()
+        self.page.update()
 
     def _load_productos(self, search_term=""):
         if not self.categoria_seleccionada: return

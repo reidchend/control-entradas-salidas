@@ -3,7 +3,6 @@ import traceback
 import time
 
 # --- 1. TU CLASE ORIGINAL DE INTERFAZ ---
-# Restaurado exactamente como lo tenías para compatibilidad con Flet 0.28.3
 class ControlEntradasSalidasApp:
     def __init__(self):
         self.page = None
@@ -37,6 +36,9 @@ class ControlEntradasSalidasApp:
         self.page.vertical_alignment = ft.MainAxisAlignment.START
 
         self._setup_theme()
+        # --- NUEVO: Configuración de Notificaciones ---
+        self._setup_notifications() 
+        
         self._create_layout()
         self._show_view(0)
         self._handle_resize()
@@ -44,9 +46,35 @@ class ControlEntradasSalidasApp:
 
     def _setup_theme(self):
         self.page.theme = ft.Theme(
-            color_scheme=ft.ColorScheme(primary="#6750A4"),
-            use_material3=True,
+            color_scheme_seed=ft.Colors.DEEP_PURPLE, # Prueba con GREEN, ORANGE, o INDIGO
+            visual_density=ft.VisualDensity.COMFORTABLE,
+            use_material3=True, # Asegúrate de que esté en True
         )
+
+    # --- NUEVA FUNCIÓN: Lógica de Notificaciones Push ---
+    def _setup_notifications(self):
+        # En Flet 0.28+, las notificaciones se manejan directamente con page.subscribe
+        def on_fcm_message(e):
+            self.page.show_snack_bar(
+                ft.SnackBar(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.NOTIFICATION_IMPORTANT, color="white"),
+                        ft.Text(f"Stock: {e.data}")
+                    ]),
+                    bgcolor="#6750A4"
+                )
+            )
+
+
+        try:
+            # Verificamos si el método existe antes de llamarlo
+            if hasattr(self.page, "subscribe"):
+                self.page.subscribe("stock_updates")
+                print("Suscripción a notificaciones activa")
+            else:
+                print("Notificaciones nativas no soportadas en esta plataforma")
+        except Exception as ex:
+            print(f"FCM saltado: {ex}")
 
     def _create_layout(self):
         # Área de contenido
@@ -63,7 +91,7 @@ class ControlEntradasSalidasApp:
             extended=False,
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=100,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            bgcolor=ft.Colors.DEEP_PURPLE_100,
             destinations=[
                 ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
@@ -74,10 +102,11 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # BARRA INFERIOR (Móvil) - Restaurado NavigationBarDestination
+        # BARRA INFERIOR (Móvil)
         self.navigation_bar = ft.NavigationBar(
             visible=False,
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_HIDE,
+            bgcolor=ft.Colors.DEEP_PURPLE_100,
             destinations=[
                 ft.NavigationBarDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationBarDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
@@ -128,10 +157,9 @@ class ControlEntradasSalidasApp:
 
 # --- 2. EL MOTOR DE CARGA ---
 def main(page: ft.Page):
-    page.theme_mode = ft.ThemeMode.LIGHT
+    #page.theme_mode = ft.ThemeMode.LIGHT
     page.expand = True
     
-    # UI de carga inicial
     status_log = ft.Text("Verificando entorno...", color="grey")
     loading_container = ft.Container(
         content=ft.Column([
@@ -146,13 +174,11 @@ def main(page: ft.Page):
     page.update()
 
     try:
-        # PASO 1: Configuraciones
         status_log.value = "Cargando Configuración..."
         page.update()
         from config.config import get_settings
         settings = get_settings()
         
-        # PASO 2: Vistas
         status_log.value = "Cargando Vistas y Base de Datos..."
         page.update()
         from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
@@ -165,7 +191,6 @@ def main(page: ft.Page):
             4: ConfiguracionView(),
         }
         
-        # PASO 3: Arrancar la App
         status_log.value = "Iniciando Interfaz Principal..."
         page.update()
         time.sleep(0.3)

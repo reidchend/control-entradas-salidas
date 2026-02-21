@@ -136,66 +136,92 @@ class ConfiguracionView(ft.Container):
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             if not categorias:
-                self._show_error("Cree una categoría activa primero")
+                self._show_error("Debe crear al menos una categoría primero")
                 return
 
-            is_mobile = self.page.width < 600
-            nombre_field = ft.TextField(label="Nombre", value=producto.nombre if producto else "", border=ft.InputBorder.OUTLINE, expand=True)
-            codigo_field = ft.TextField(label="Código", value=producto.codigo if producto else "", border=ft.InputBorder.OUTLINE, expand=True)
+            # --- LÓGICA DE AUTO-GENERACIÓN DE CÓDIGO CON CEROS ---
+            nuevo_codigo = ""
+            if not producto:  # Solo si es un producto nuevo
+                try:
+                    # Buscamos el código más alto convirtiéndolo a entero para ordenar bien
+                    ultimo_prod = db.query(Producto).order_by(text("CAST(codigo AS INTEGER) DESC")).first()
+                    
+                    if ultimo_prod and ultimo_prod.codigo.isdigit():
+                        longitud_original = len(ultimo_prod.codigo) # Detecta si es 4, 5, etc.
+                        siguiente_numero = int(ultimo_prod.codigo) + 1
+                        
+                        # .zfill asegura que se mantengan los ceros (ej: "0001" -> "0002")
+                        nuevo_codigo = str(siguiente_numero).zfill(longitud_original)
+                    else:
+                        # Código inicial por defecto con 4 dígitos
+                        nuevo_codigo = "0001" 
+                except Exception:
+                    nuevo_codigo = "0001" 
+            else:
+                nuevo_codigo = producto.codigo
+            # -----------------------------------------------------
+
+            nombre_field = ft.TextField(label="Nombre", value=producto.nombre if producto else "", expand=True)
+            
+            # El campo código ahora tiene el valor auto-generado
+            codigo_field = ft.TextField(
+                label="Código/SKU", 
+                value=nuevo_codigo, 
+                expand=True,
+                prefix_icon=ft.Icons.AUTO_AWESOME_OUTLINED, # Un icono para indicar que es automático
+                helper_text="Sugerencia basada en el último registro" if not producto else ""
+            )
             
             cat_dropdown = ft.Dropdown(
                 label="Categoría",
                 options=[ft.dropdown.Option(str(c.id), c.nombre) for c in categorias],
                 value=str(producto.categoria_id) if producto else str(categorias[0].id),
-                border=ft.InputBorder.OUTLINE, expand=True
+                expand=True
             )
             
-            descripcion_field = ft.TextField(label="Descripción", value=producto.descripcion if producto else "", multiline=True, min_lines=2, border=ft.InputBorder.OUTLINE)
-            stock_min_field = ft.TextField(label="Stock Mín.", value=str(producto.stock_minimo) if producto else "0", keyboard_type=ft.KeyboardType.NUMBER, border=ft.InputBorder.OUTLINE, expand=True)
-            unidad_field = ft.TextField(label="Unidad", value=producto.unidad_medida if producto else "unidad", border=ft.InputBorder.OUTLINE, expand=True)
+            stock_min_field = ft.TextField(label="Alerta Stock Mín.", value=str(producto.stock_minimo) if producto else "5", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+            unidad_field = ft.TextField(label="Unidad (kg, un, m)", value=producto.unidad_medida if producto else "unidad", expand=True)
             
-            es_pesable_sw = ft.Switch(label="Producto Pesable", value=getattr(producto, 'es_pesable', False) if producto else False)
-            requiere_foto_sw = ft.Switch(label="Foto peso", value=producto.requiere_foto_peso if producto else False)
-            activo_sw = ft.Switch(label="Activo", value=producto.activo if producto else True)
+            es_pesable_sw = ft.Switch(label="Usa Balanza", value=getattr(producto, 'es_pesable', False) if producto else False)
+            activo_sw = ft.Switch(label="Habilitado", value=producto.activo if producto else True)
 
             def save_prod_click(e):
                 if not nombre_field.value:
-                    nombre_field.error_text = "Requerido"; nombre_field.update(); return
+                    nombre_field.error_text = "Campo requerido"; nombre_field.update(); return
+                if not codigo_field.value:
+                    codigo_field.error_text = "El código es necesario"; codigo_field.update(); return
                 try:
                     self._save_producto(
-                        nombre_field.value, codigo_field.value, descripcion_field.value, 
-                        int(cat_dropdown.value), requiere_foto_sw.value, 0.0, 
+                        nombre_field.value, codigo_field.value, "", 
+                        int(cat_dropdown.value), False, 0.0, 
                         unidad_field.value, float(stock_min_field.value or 0), 
                         activo_sw.value, producto.id if producto else None, es_pesable_sw.value
                     )
                     self._close_dialog()
-                except Exception as ex: 
-                    self._show_error(f"Error: {ex}")
-
-            content_layout = ft.Column([
-                ft.Row([nombre_field, codigo_field], spacing=10),
-                ft.Row([cat_dropdown], spacing=10),
-                descripcion_field,
-                ft.Row([stock_min_field, unidad_field], spacing=10),
-                ft.Divider(),
-                ft.Text("Opciones", size=14, weight="bold"),
-                es_pesable_sw,
-                ft.Row([requiere_foto_sw, activo_sw], alignment="spaceBetween"),
-            ], tight=True, spacing=15, scroll=ft.ScrollMode.AUTO)
+                except: self._show_error("Error al procesar datos")
 
             self.active_dialog = ft.AlertDialog(
-                title=ft.Text("Gestionar Producto"),
-                content=ft.Container(content=content_layout, width=500),
+                title=ft.Text("Ficha de Producto"),
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Row([nombre_field, codigo_field]),
+                        cat_dropdown,
+                        ft.Row([stock_min_field, unidad_field]),
+                        ft.Divider(),
+                        es_pesable_sw,
+                        activo_sw,
+                    ], tight=True, spacing=20, scroll=ft.ScrollMode.AUTO),
+                    width=500
+                ),
                 actions=[
                     ft.TextButton("Cancelar", on_click=self._close_dialog),
-                    ft.ElevatedButton("Guardar", on_click=save_prod_click)
+                    ft.ElevatedButton("Guardar", on_click=save_prod_click, bgcolor=ft.Colors.GREEN_800, color=ft.Colors.WHITE)
                 ]
             )
             self.page.overlay.append(self.active_dialog)
             self.active_dialog.open = True
             self.page.update()
-        finally:
-            db.close()
+        finally: db.close()
 
     def _save_categoria(self, nombre, descripcion, color, activo, cat_id):
         db = next(get_db())
