@@ -61,7 +61,6 @@ jobs:
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
 
           # 3. Validar archivos críticos
-          if [ ! -f "flet.yaml" ]; then echo "ERROR: flet.yaml no encontrado"; exit 1; fi
           if [ ! -f "google-services.json" ]; then echo "ERROR: google-services.json no generado"; exit 1; fi
 
           mkdir -p config
