@@ -55,37 +55,48 @@ class ControlEntradasSalidasApp:
         self.page.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
 
     async def _setup_notifications(self):
-        # Manejador de mensajes recibidos
-        def on_fcm_message(e):
-            self.page.show_snack_bar(
-                ft.SnackBar(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.NOTIFICATION_IMPORTANT, color="white"),
-                        ft.Text(f"Aviso Stock: {e.data}")
-                    ]),
-                    bgcolor=ft.Colors.DEEP_PURPLE_700
-                )
-            )
-
-        self.page.on_fcm_message = on_fcm_message
-
         try:
-            # MÉTODO COMPATIBLE 0.28.x:
-            # Intentamos pedir el permiso de forma directa. 
-            # Si el método no existe, lo saltamos silenciosamente para evitar el cierre de la app.
-            if hasattr(self.page, "request_permission"):
-                # Algunos entornos de Flet prefieren la versión sincrónica que internamente es async
-                await self.page.request_permission_async(ft.PermissionType.REMOTE_NOTIFICATIONS)
-            
-            # Suscripción a tópicos
-            # En 0.28.3, subscribe suele ser un método directo de page si está compilado para móvil
-            if hasattr(self.page, "subscribe"):
-                # Intentamos la suscripción
-                self.page.subscribe("stock_updates")
-                print("Suscripción exitosa a stock_updates")
+            # Intentamos la importación dinámica. 
+            # En Codespaces fallará e irá al 'except ImportError', lo cual está perfecto.
+            import flet_fcm as fcm 
+            from supabase import create_client
+
+            def on_token(e):
+                token_dispositivo = e.token
+                print(f"🎫 Token generado: {token_dispositivo[:10]}...")
                 
-        except Exception as ex:
-            print(f"Aviso: FCM no configurado en este entorno (Posiblemente Web/PC): {ex}")
+                try:
+                    # 1. Aseguramos conexión con tus settings actuales
+                    supabase = create_client(
+                        self.settings.SUPABASE_URL, 
+                        self.settings.SUPABASE_KEY
+                    )
+                    
+                    # 2. Guardamos el token. Usamos upsert para no duplicar si el usuario abre la app varias veces
+                    supabase.table("fcm_tokens").upsert({
+                        "token": token_dispositivo,
+                        "platform": "android",
+                        "app_name": self.settings.FLET_APP_NAME
+                    }).execute()
+                    
+                    print("🚀 Token sincronizado con Supabase exitosamente.")
+                except Exception as e_db:
+                    print(f"❌ Error al guardar token en DB: {e_db}")
+
+            # Inicializamos el componente dentro de la App
+            self.fcm_handler = fcm.Fcm(on_token=on_token)
+            self.page.overlay.append(self.fcm_handler)
+            
+            # Opcional: Solicitar permiso inmediatamente o vía botón
+            # self.fcm_handler.request_permission()
+            
+            print("✅ Sistema de notificaciones listo y vinculado a Supabase.")
+            
+        except ImportError:
+            # Esto es lo que verás en Codespaces. Es normal y deseado.
+            print("⚠️ Entorno de desarrollo local: Las notificaciones Push están desactivadas.")
+        except Exception as e:
+            print(f"❌ Error inesperado al configurar FCM: {e}")
 
     def _create_layout(self):
         # Área de contenido

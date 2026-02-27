@@ -848,6 +848,7 @@ class ConfiguracionView(ft.Container):
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
+                            # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
                             ft.Row([
                                 ft.Container(
                                     content=ft.Icon(ft.Icons.DASHBOARD, color=ft.Colors.WHITE, size=28),
@@ -861,19 +862,40 @@ class ConfiguracionView(ft.Container):
                                 ], spacing=2),
                             ], spacing=15),
                             ft.Divider(height=20, color="#E0E0E0"),
+                            
                             ft.Text(
                                 "Si experimenta errores tras actualizaciones o cambios de configuración, use 'Probar Conexión' para verificar la base de datos.",
                                 size=13,
                                 color="#424242",
                             ),
-                            ft.Container(height=10),
                             ft.ElevatedButton(
                                 "Probar Conexión", 
                                 on_click=self._test_connection_action,
-                                icon=ft.Icons.STORAGE,  # ✅ CAMBIO: DATABASE → STORAGE
+                                icon=ft.Icons.STORAGE,
                                 bgcolor="#7B1FA2",
                                 color=ft.Colors.WHITE,
                             ),
+
+                            # --- NUEVA SECCIÓN: NOTIFICACIONES PUSH (2026 Fix) ---
+                            ft.Divider(height=20, color="#E0E0E0"),
+                            ft.Text(
+                                "Configuración de Alertas", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Habilite las notificaciones para recibir alertas de stock bajo y validaciones en tiempo real.",
+                                size=12,
+                                color="#757575",
+                            ),
+                            ft.ElevatedButton(
+                                "Habilitar Notificaciones", 
+                                on_click=self._request_notifications_action,
+                                icon=ft.Icons.NOTIFICATIONS_ACTIVE,
+                                bgcolor="#4A148C", # Un morado más oscuro para diferenciar
+                                color=ft.Colors.WHITE,
+                            ),
+
                             ft.Container(
                                 content=self.test_result_text,
                                 padding=10,
@@ -912,3 +934,22 @@ class ConfiguracionView(ft.Container):
     def refresh(self):
         self.is_mobile = self.page.width < 768 if self.page else False
         self._load_data()
+    
+    def _request_notifications_action(self, e):
+        try:
+            # Buscamos el fcm_handler que definimos en el main (app_instance.fcm_handler)
+            # Flet permite acceder a la instancia de la página
+            if hasattr(self.page, "overlay"):
+                # Buscamos el componente Fcm en el overlay de la página
+                fcm_component = next((c for c in self.page.overlay if hasattr(c, "request_permission")), None)
+                
+                if fcm_component:
+                    fcm_component.request_permission()
+                    self._show_message("Solicitando permiso de notificaciones...")
+                else:
+                    self._show_error("El servicio de notificaciones no está activo en este entorno.")
+            else:
+                self._show_error("No se pudo acceder al sistema de la aplicación.")
+                
+        except Exception as ex:
+            self._show_error(f"Error al activar notificaciones: {str(ex)}")

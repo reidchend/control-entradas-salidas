@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "828115636853",
+    "project_id": "lycoris-alertas",
+    "storage_bucket": "lycoris-alertas.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828115636853:android:4e6451ad812c177702de3c",
+        "android_client_info": {
+          "package_name": "com.reidchend.lycoris"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASWOwNQyE-HtDi7hA0qjDv1tWsQac-yf0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
