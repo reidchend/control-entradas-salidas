@@ -66,10 +66,9 @@ jobs:
           mkdir -p config
           cp .env config/.env
           
-          # 4. Requirements (Añadimos flet-fcm si vas a usarlo en el código)
+          # 4. Requirements 
           cat << EOF > requirements.txt
           flet==0.28.3
-          flet_fcm
           sqlalchemy
           greenlet
           pg8000
@@ -81,12 +80,21 @@ jobs:
           
           # 5. CONSTRUCCIÓN CON FIREBASE
           # Agregamos --include-external-assets para asegurar que el json se procese
-          flet build apk --verbose \
+          flet build apk \
             --product "Lycoris Control" \
-            --org com.reidchend.lycoris \
+            --org "com.reidchend.lycoris" \
             --project "Lycoris Control" \
             --build-number 4 \
-            --build-version 1.0.3\
+            --build-version "1.0.3" \
+            --android-permissions "INTERNET" "POST_NOTIFICATIONS" "CAMERA" \
+            --android-adaptive-icon-background "#7B1FA2" \
+            --splash-color "#7B1FA2" \
+            --compile-app \
+            --compile-packages \
+            --split-per-abi \
+            --cleanup-app \
+            --no-rich-output \
+            --yes
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
