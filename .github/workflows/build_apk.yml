@@ -93,8 +93,7 @@ jobs:
             --compile-packages \
             --split-per-abi \
             --cleanup-app \
-            --no-rich-output \
-            --yes
+            --no-rich-output
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
