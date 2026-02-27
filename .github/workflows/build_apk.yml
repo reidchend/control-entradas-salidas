@@ -69,6 +69,7 @@ jobs:
           # 4. Requirements (Añadimos flet-fcm si vas a usarlo en el código)
           cat << EOF > requirements.txt
           flet==0.28.3
+          flet_fcm
           sqlalchemy
           greenlet
           pg8000
