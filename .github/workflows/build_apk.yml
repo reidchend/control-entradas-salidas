@@ -86,8 +86,6 @@ jobs:
             --project "Lycoris Control" \
             --build-number 4 \
             --build-version 1.0.3\
-            --include-packages flet_fcm \
-            --attach-data google-services.json
         env:
           CI: true
           FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
