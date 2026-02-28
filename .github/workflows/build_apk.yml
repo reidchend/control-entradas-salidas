@@ -31,24 +31,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet
+      - name: Install Flet & Tools
         run: |
-          pip install flet==0.28.3 cookiecutter
-          pip install setuptools wheel
+          pip install flet==0.28.3 cookiecutter setuptools wheel
 
-      - name: Setup Android Permissions
+      - name: Prepare Professional Android Structure
         run: |
-          # Flet busca las plantillas en esta ruta específica
-          mkdir -p android/app/src/main
+          # IMPORTANTE: En Flet 0.28.3, la forma más segura de inyectar archivos nativos 
+          # es crear una carpeta 'assets' y dentro la estructura de 'android'
+          mkdir -p assets/android/app/src/main
           
-          cat << EOF > android/app/src/main/AndroidManifest.xml
+          # Inyectamos el Manifiesto con los permisos
+          cat << EOF > assets/android/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.reidchend.lycoris">
-              
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.WAKE_LOCK"/>
-              
               <application android:label="Lycoris Control">
                   <service android:name="com.google.firebase.messaging.FirebaseMessagingService"
                            android:exported="false">
@@ -60,17 +59,15 @@ jobs:
           </manifest>
           EOF
 
+          # El archivo google-services debe ir en la raíz para ser detectado
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
+
       - name: Build APK
         run: |
-          # 1. Licencias
+          # 1. Aceptar licencias de forma robusta
           yes | flutter doctor --android-licenses || true
 
-          if [ -f "assets/favicon.png" ]; then
-            cp assets/favicon.png assets/icon.png
-            echo "Icono preparado correctamente."
-          fi
-          
-          # 2. Inyectar Secretos de Base de Datos
+          # 2. Inyectar Secretos
           cat << EOF > .env
           DB_TYPE=postgresql
           DB_HOST=${{ secrets.DB_HOST }}
@@ -81,16 +78,10 @@ jobs:
           FLET_APP_NAME="Lycoris Control"
           EOF
 
-          # --- NUEVO: Inyectar google-services.json para Firebase ---
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
-
-          # 3. Validar archivos críticos
-          if [ ! -f "google-services.json" ]; then echo "ERROR: google-services.json no generado"; exit 1; fi
-
           mkdir -p config
           cp .env config/.env
           
-          # 4. Requirements 
+          # 3. Requirements limpios
           cat << EOF > requirements.txt
           flet==0.28.3
           supabase
@@ -103,21 +94,21 @@ jobs:
           certifi
           EOF
           
-          # 5. CONSTRUCCIÓN CON FIREBASE
+          # 4. Construcción (Quitamos --project que a veces causa conflictos con --product)
           flet build apk \
             --product "Lycoris Control" \
             --org "com.reidchend.lycoris" \
-            --project "Lycoris Control" \
             --build-number 4 \
             --build-version "1.0.3" \
-            --include-fcm \
-            --no-rich-output
+            --no-rich-output \
+            --yes
         env:
           CI: true
-          FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
       - name: Rename APK
-        run: mv build/apk/*.apk build/apk/LycorisControl.apk
+        run: |
+          # Usamos un comando más flexible por si genera varios APKs
+          find build/apk -name "*.apk" -exec mv {} build/apk/LycorisControl.apk \;
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
