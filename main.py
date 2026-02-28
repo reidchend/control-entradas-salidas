@@ -55,22 +55,26 @@ class ControlEntradasSalidasApp:
     async def _setup_notifications(self):
         if self.page.web: return
 
-        try:
-            # En Flet 0.28.3, si el APK se compila con soporte de Firebase,
-            # el token se recibe a través de este evento de la página.
-            def on_fcm_token(e):
-                print(f"🎫 Token Recibido: {e.token}")
-                # Aquí ejecutas tu lógica de guardado en Supabase
-                asyncio.create_task(self._sincronizar_token_supabase(e.token, "android"))
+        # Esperamos 2 segundos a que la interfaz cargue completamente
+        await asyncio.sleep(2)
 
+        try:
+            # Definimos el manejador del token
+            def on_fcm_token(e):
+                token = e.token
+                print(f"🎫 Token recibido: {token}")
+                # Guardamos en Supabase
+                asyncio.create_task(self._sincronizar_token_supabase(token, "android"))
+
+            # Asignamos el evento a la página
             self.page.on_fcm_token = on_fcm_token
             
-            # Intentamos disparar la solicitud de permiso nativa de Android 13+
-            # Algunos dispositivos lo piden al primer 'update' si el Manifiesto tiene el permiso.
-            print("🔔 Sistema de notificaciones en espera de token...")
+            # Forzamos un update para que Flet revise los permisos del Manifiesto
+            self.page.update()
+            print("✅ Esperando respuesta del sistema de notificaciones...")
             
         except Exception as e:
-            print(f"❌ Error en configuración nativa: {e}")
+            print(f"❌ Error en setup nativo: {e}")
 
     async def _sincronizar_token_supabase(self, token, plataforma):
         """Envía el token a la base de datos de forma segura"""
