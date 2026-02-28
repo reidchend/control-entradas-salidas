@@ -36,41 +36,26 @@ jobs:
           pip install flet==0.28.3 cookiecutter
           pip install setuptools wheel
 
-      - name: Setup Android Professional Manifest
+      - name: Setup Android Permissions
         run: |
-          # Creamos la ruta de plantillas que Flet inyectará en el APK
-          mkdir -p android/app
+          # Flet busca las plantillas en esta ruta específica
+          mkdir -p android/app/src/main
           
-          # Escribimos el Manifiesto que fuerza los permisos en Android 13+
-          cat << EOF > android/app/AndroidManifest.xml
+          cat << EOF > android/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.reidchend.lycoris">
               
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.WAKE_LOCK"/>
-              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-              <uses-permission android:name="android.permission.VIBRATE"/>
-
-              <application
-                  android:label="Lycoris Control"
-                  android:icon="@mipmap/ic_launcher">
-                  
-                  <receiver android:name="me.pushy.sdk.reactors.PushyUpdateReceiver" android:exported="false">
+              
+              <application android:label="Lycoris Control">
+                  <service android:name="com.google.firebase.messaging.FirebaseMessagingService"
+                           android:exported="false">
                       <intent-filter>
-                          <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                          <action android:name="com.google.firebase.MESSAGING_EVENT" />
                       </intent-filter>
-                  </receiver>
-
-                  <receiver android:name="me.pushy.sdk.reactors.PushyBootReceiver" android:exported="false">
-                      <intent-filter>
-                          <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                      </intent-filter>
-                  </receiver>
-
-                  <service android:name="me.pushy.sdk.services.PushyJobService"
-                           android:permission="android.permission.BIND_JOB_SERVICE"
-                           android:exported="false" />
+                  </service>
               </application>
           </manifest>
           EOF
@@ -109,7 +94,6 @@ jobs:
           cat << EOF > requirements.txt
           flet==0.28.3
           supabase
-          pushy-python-sdk
           sqlalchemy
           greenlet
           pg8000
@@ -126,6 +110,7 @@ jobs:
             --project "Lycoris Control" \
             --build-number 4 \
             --build-version "1.0.3" \
+            --include-fcm \
             --no-rich-output
         env:
           CI: true

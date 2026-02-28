@@ -4,4 +4,3 @@ pydantic-settings
 Pg8000
 sqlalchemy
 supabase
-pushy-python-sdk

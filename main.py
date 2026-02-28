@@ -53,37 +53,26 @@ class ControlEntradasSalidasApp:
 
 
     async def _setup_notifications(self):
-        """Configuración inteligente de notificaciones multiplataforma"""
-        
-        # 1. Identificamos la plataforma actual
-        # Flet nos dice si es android, ios, windows, macos, linux o web
-        plataforma = self.page.platform
-        es_web = self.page.web
-        
-        print(f"📱 Detectada plataforma: {plataforma} (Web: {es_web})")
+        if self.page.web: return
 
-        # 2. Filtro de compatibilidad: Pushy funciona principalmente en Móvil (Android/iOS)
-        # Si estás en Windows, Mac o Web, saltamos la configuración para evitar errores
-        if es_web or plataforma not in ["android", "ios"]:
-            print(f"ℹ️ Notificaciones Push omitidas para {plataforma}. Solo disponibles en APK/IPA.")
-            return
-
-        # 3. Solo llegamos aquí si es Android o iOS (Móvil Nativo)
         try:
-            import pushy
+            # En Flet moderno, el manejo de FCM es un evento de la página
+            def on_fcm_token(e):
+                token = e.token
+                print(f"🎫 Token recibido: {token}")
+                # Aquí llamas a tu función de Supabase para guardarlo
+                asyncio.create_task(self._sincronizar_token_supabase(token, "android"))
+
+            # Suscribirse al evento de token
+            self.page.on_fcm_token = on_fcm_token
             
-            # Registro en segundo plano para no bloquear la interfaz
-            # Reemplaza 'TU_APP_ID_DE_PUSHY' por tu ID real del dashboard de Pushy
-            token = pushy.register({'appId': "Tfe6e2cf5a8910ddc9877f4bd2b5730013a8ebe1e575a00830fba18b6d47b8a15"})
+            # (Opcional) Solicitar permiso explícito si la versión de Flet lo permite
+            # En algunas versiones se hace automáticamente al detectar el flag --include-fcm
             
-            if token:
-                print(f"🎫 Token Pushy generado: {token[:10]}...")
-                await self._sincronizar_token_supabase(token, plataforma)
+            print("✅ Sistema FCM configurado vía Flet Native.")
             
-        except ImportError:
-            print("⚠️ SDK de Pushy no encontrado. ¿Está en el requirements.txt del build?")
         except Exception as e:
-            print(f"❌ Error al configurar notificaciones en {plataforma}: {e}")
+            print(f"❌ Error configurando notificaciones: {e}")
 
     async def _sincronizar_token_supabase(self, token, plataforma):
         """Envía el token a la base de datos de forma segura"""
