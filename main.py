@@ -13,7 +13,6 @@ class ControlEntradasSalidasApp:
         self.views = None
         self._layout_row = None
         self.settings = None
-        self.fcm_handler = None
 
     async def arrancar_interfaz(self, page: ft.Page, settings, vistas_cargadas):
         self.page = page
@@ -52,55 +51,56 @@ class ControlEntradasSalidasApp:
         )
         self.page.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
 
-    async def _handle_fcm_token(self, e):
-        """Manejador de token que sincroniza con Supabase"""
-        token_dispositivo = e.token
-        print(f"🎫 Token generado: {token_dispositivo[:15]}...")
-        
-        try:
-            # Importación local para evitar cargar la librería si no es necesario
-            from supabase import create_client
-            
-            # Inicializamos cliente
-            supabase = create_client(
-                self.settings.SUPABASE_URL, 
-                self.settings.SUPABASE_KEY
-            )
-            
-            # Sincronizamos con la tabla fcm_tokens
-            supabase.table("fcm_tokens").upsert({
-                "token": token_dispositivo,
-                "platform": "android",
-                "app_name": self.settings.FLET_APP_NAME
-            }).execute()
-            
-            print("🚀 Sincronización con Supabase exitosa.")
-        except Exception as ex:
-            print(f"❌ Error de registro en DB: {ex}")
 
     async def _setup_notifications(self):
-        """Configura el handler de FCM y solicita permisos en Android"""
-        try:
-            # El módulo flet_fcm solo existirá dentro del APK generado
-            import flet_fcm as fcm 
+        """Configuración inteligente de notificaciones multiplataforma"""
+        
+        # 1. Identificamos la plataforma actual
+        # Flet nos dice si es android, ios, windows, macos, linux o web
+        plataforma = self.page.platform
+        es_web = self.page.web
+        
+        print(f"📱 Detectada plataforma: {plataforma} (Web: {es_web})")
 
-            # Inicializamos el componente con el manejador de la clase
-            self.fcm_handler = fcm.Fcm(on_token=self._handle_fcm_token)
+        # 2. Filtro de compatibilidad: Pushy funciona principalmente en Móvil (Android/iOS)
+        # Si estás en Windows, Mac o Web, saltamos la configuración para evitar errores
+        if es_web or plataforma not in ["android", "ios"]:
+            print(f"ℹ️ Notificaciones Push omitidas para {plataforma}. Solo disponibles en APK/IPA.")
+            return
+
+        # 3. Solo llegamos aquí si es Android o iOS (Móvil Nativo)
+        try:
+            import pushy
             
-            # Agregamos al overlay para que esté activo en toda la app
-            self.page.overlay.append(self.fcm_handler)
-            self.page.update()
+            # Registro en segundo plano para no bloquear la interfaz
+            # Reemplaza 'TU_APP_ID_DE_PUSHY' por tu ID real del dashboard de Pushy
+            token = pushy.register({'appId': "Tfe6e2cf5a8910ddc9877f4bd2b5730013a8ebe1e575a00830fba18b6d47b8a15"})
             
-            # SOLICITUD DE PERMISO (Vital para Android 13+)
-            print("🔔 Solicitando permiso de notificaciones...")
-            self.fcm_handler.request_permission()
-            
-            print("✅ Sistema de notificaciones inicializado.")
+            if token:
+                print(f"🎫 Token Pushy generado: {token[:10]}...")
+                await self._sincronizar_token_supabase(token, plataforma)
             
         except ImportError:
-            print("⚠️ FCM no disponible: Entorno de desarrollo local detectado.")
+            print("⚠️ SDK de Pushy no encontrado. ¿Está en el requirements.txt del build?")
         except Exception as e:
-            print(f"❌ Error inesperado en FCM: {e}")
+            print(f"❌ Error al configurar notificaciones en {plataforma}: {e}")
+
+    async def _sincronizar_token_supabase(self, token, plataforma):
+        """Envía el token a la base de datos de forma segura"""
+        try:
+            from supabase import create_client
+            supabase = create_client(self.settings.SUPABASE_URL, self.settings.SUPABASE_KEY)
+            
+            supabase.table("fcm_tokens").upsert({
+                "token": token,
+                "platform": plataforma,
+                "app_name": self.settings.FLET_APP_NAME,
+                "last_update": "now()" # Opcional: para saber cuándo se renovó
+            }).execute()
+            
+            print(f"🚀 Token de {plataforma} guardado en Supabase.")
+        except Exception as e:
+            print(f"❌ Error sincronizando con Supabase: {e}")
 
     def _create_layout(self):
         # Área de contenido

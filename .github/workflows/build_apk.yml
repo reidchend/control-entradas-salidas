@@ -36,25 +36,41 @@ jobs:
           pip install flet==0.28.3 cookiecutter
           pip install setuptools wheel
 
-      - name: Prepare Android Configurations
+      - name: Setup Android Professional Manifest
         run: |
-          # 1. Crear carpeta de assets y plantillas nativas
-          mkdir -p assets
+          # Creamos la ruta de plantillas que Flet inyectará en el APK
           mkdir -p android/app
           
-          # 2. Crear el Manifiesto con los permisos exactos que pide Android 13+
+          # Escribimos el Manifiesto que fuerza los permisos en Android 13+
           cat << EOF > android/app/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.reidchend.lycoris">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.reidchend.lycoris">
+              
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.WAKE_LOCK"/>
-              <application android:label="Lycoris Control">
-                  <service android:name="com.google.firebase.messaging.FirebaseMessagingService"
-                           android:exported="false">
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+              <uses-permission android:name="android.permission.VIBRATE"/>
+
+              <application
+                  android:label="Lycoris Control"
+                  android:icon="@mipmap/ic_launcher">
+                  
+                  <receiver android:name="me.pushy.sdk.reactors.PushyUpdateReceiver" android:exported="false">
                       <intent-filter>
-                          <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                          <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                       </intent-filter>
-                  </service>
+                  </receiver>
+
+                  <receiver android:name="me.pushy.sdk.reactors.PushyBootReceiver" android:exported="false">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                      </intent-filter>
+                  </receiver>
+
+                  <service android:name="me.pushy.sdk.services.PushyJobService"
+                           android:permission="android.permission.BIND_JOB_SERVICE"
+                           android:exported="false" />
               </application>
           </manifest>
           EOF
@@ -93,6 +109,7 @@ jobs:
           cat << EOF > requirements.txt
           flet==0.28.3
           supabase
+          pushy-python-sdk
           sqlalchemy
           greenlet
           pg8000
@@ -109,9 +126,6 @@ jobs:
             --project "Lycoris Control" \
             --build-number 4 \
             --build-version "1.0.3" \
-            --compile-app \
-            --compile-packages \
-            --cleanup-app \
             --no-rich-output
         env:
           CI: true

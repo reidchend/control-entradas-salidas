@@ -31,10 +31,8 @@ class InventarioView(ft.Container):
             run_spacing=10,
         )
 
-        self.main_content_area = ft.AnimatedSwitcher(
+        self.main_content_area = ft.Container(
             content=self.categorias_grid,
-            transition=ft.AnimatedSwitcherTransition.FADE,
-            duration=150,
             expand=True, 
         )
 
@@ -117,7 +115,7 @@ class InventarioView(ft.Container):
             await asyncio.sleep(0.1)
             container.scale = 1.0
             container.update()
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.15)
             self._show_productos(categoria)
         except Exception as e:
             logger.error(f"Error en clic categoría: {e}")

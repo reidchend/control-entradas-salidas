@@ -1,0 +1,2 @@
+2026-02-28 03:18:46 | usr.views.inventario_view | ERROR    | Error UI: 'InventarioView' object has no attribute 'main_content_area'
+2026-02-28 03:21:16 | usr.views.inventario_view | ERROR    | Error UI: 'InventarioView' object has no attribute 'main_content_area'
