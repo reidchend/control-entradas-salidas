@@ -100,7 +100,6 @@ jobs:
             --splash-color "#7B1FA2" \
             --compile-app \
             --compile-packages \
-            --split-per-abi \
             --cleanup-app \
             --no-rich-output
         env:
