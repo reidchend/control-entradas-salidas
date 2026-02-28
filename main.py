@@ -1,6 +1,5 @@
 import flet as ft
 import traceback
-import time
 import asyncio
 
 # --- 1. CLASE DE INTERFAZ MODIFICADA ---
@@ -14,6 +13,7 @@ class ControlEntradasSalidasApp:
         self.views = None
         self._layout_row = None
         self.settings = None
+        self.fcm_handler = None
 
     async def arrancar_interfaz(self, page: ft.Page, settings, vistas_cargadas):
         self.page = page
@@ -30,7 +30,6 @@ class ControlEntradasSalidasApp:
             pass
             
         self.page.theme_mode = ft.ThemeMode.LIGHT
-        # Quitamos el padding de la página porque usaremos SafeArea
         self.page.padding = 0
         self.page.spacing = 0
         self.page.expand = True
@@ -46,7 +45,6 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
     def _setup_theme(self):
-        # Usando el color morado fuerte que pediste anteriormente
         self.page.theme = ft.Theme(
             color_scheme_seed=ft.Colors.DEEP_PURPLE_700, 
             visual_density=ft.VisualDensity.COMFORTABLE,
@@ -54,49 +52,55 @@ class ControlEntradasSalidasApp:
         )
         self.page.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
 
-    async def _setup_notifications(self):
+    async def _handle_fcm_token(self, e):
+        """Manejador de token que sincroniza con Supabase"""
+        token_dispositivo = e.token
+        print(f"🎫 Token generado: {token_dispositivo[:15]}...")
+        
         try:
-            # Intentamos la importación dinámica. 
-            # En Codespaces fallará e irá al 'except ImportError', lo cual está perfecto.
-            import flet_fcm as fcm 
+            # Importación local para evitar cargar la librería si no es necesario
             from supabase import create_client
+            
+            # Inicializamos cliente
+            supabase = create_client(
+                self.settings.SUPABASE_URL, 
+                self.settings.SUPABASE_KEY
+            )
+            
+            # Sincronizamos con la tabla fcm_tokens
+            supabase.table("fcm_tokens").upsert({
+                "token": token_dispositivo,
+                "platform": "android",
+                "app_name": self.settings.FLET_APP_NAME
+            }).execute()
+            
+            print("🚀 Sincronización con Supabase exitosa.")
+        except Exception as ex:
+            print(f"❌ Error de registro en DB: {ex}")
 
-            def on_token(e):
-                token_dispositivo = e.token
-                print(f"🎫 Token generado: {token_dispositivo[:10]}...")
-                
-                try:
-                    # 1. Aseguramos conexión con tus settings actuales
-                    supabase = create_client(
-                        self.settings.SUPABASE_URL, 
-                        self.settings.SUPABASE_KEY
-                    )
-                    
-                    # 2. Guardamos el token. Usamos upsert para no duplicar si el usuario abre la app varias veces
-                    supabase.table("fcm_tokens").upsert({
-                        "token": token_dispositivo,
-                        "platform": "android",
-                        "app_name": self.settings.FLET_APP_NAME
-                    }).execute()
-                    
-                    print("🚀 Token sincronizado con Supabase exitosamente.")
-                except Exception as e_db:
-                    print(f"❌ Error al guardar token en DB: {e_db}")
+    async def _setup_notifications(self):
+        """Configura el handler de FCM y solicita permisos en Android"""
+        try:
+            # El módulo flet_fcm solo existirá dentro del APK generado
+            import flet_fcm as fcm 
 
-            # Inicializamos el componente dentro de la App
-            self.fcm_handler = fcm.Fcm(on_token=on_token)
+            # Inicializamos el componente con el manejador de la clase
+            self.fcm_handler = fcm.Fcm(on_token=self._handle_fcm_token)
+            
+            # Agregamos al overlay para que esté activo en toda la app
             self.page.overlay.append(self.fcm_handler)
+            self.page.update()
             
-            # Opcional: Solicitar permiso inmediatamente o vía botón
-            # self.fcm_handler.request_permission()
+            # SOLICITUD DE PERMISO (Vital para Android 13+)
+            print("🔔 Solicitando permiso de notificaciones...")
+            self.fcm_handler.request_permission()
             
-            print("✅ Sistema de notificaciones listo y vinculado a Supabase.")
+            print("✅ Sistema de notificaciones inicializado.")
             
         except ImportError:
-            # Esto es lo que verás en Codespaces. Es normal y deseado.
-            print("⚠️ Entorno de desarrollo local: Las notificaciones Push están desactivadas.")
+            print("⚠️ FCM no disponible: Entorno de desarrollo local detectado.")
         except Exception as e:
-            print(f"❌ Error inesperado al configurar FCM: {e}")
+            print(f"❌ Error inesperado en FCM: {e}")
 
     def _create_layout(self):
         # Área de contenido
@@ -107,13 +111,13 @@ class ControlEntradasSalidasApp:
             border_radius=ft.border_radius.only(top_left=20) if self.page.width >= 700 else 0
         )
 
-        # BARRA LATERAL
+        # BARRA LATERAL (Desktop/Tablet)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
             extended=False,
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=100,
-            bgcolor=ft.Colors.DEEP_PURPLE_50, # Un tono más claro para el fondo
+            bgcolor=ft.Colors.DEEP_PURPLE_50,
             destinations=[
                 ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
@@ -124,22 +128,21 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # BARRA INFERIOR
+        # BARRA INFERIOR (Mobile)
         self.navigation_bar = ft.NavigationBar(
             visible=False,
             bgcolor=ft.Colors.DEEP_PURPLE_50,
             destinations=[
-                ft.NavigationBarDestination(icon="inventory_2_outlined"),
-                ft.NavigationBarDestination(icon="fact_check_outlined"),
-                ft.NavigationBarDestination(icon="storage_outlined"),
-                ft.NavigationBarDestination(icon="history_outlined"),
-                ft.NavigationBarDestination(icon="settings_outlined"),
+                ft.NavigationBarDestination(icon="inventory_2_outlined", label="Inventario"),
+                ft.NavigationBarDestination(icon="fact_check_outlined", label="Validar"),
+                ft.NavigationBarDestination(icon="storage_outlined", label="Stock"),
+                ft.NavigationBarDestination(icon="history_outlined", label="Historial"),
+                ft.NavigationBarDestination(icon="settings_outlined", label="Ajustes"),
             ],
             on_change=self._on_navigation_change,
         )
 
-        # --- MEJORA: SAFE AREA ---
-        # El SafeArea protege el contenido de la barra de estado y el notch
+        # DISEÑO PRINCIPAL CON SAFE AREA
         self._layout_row = ft.SafeArea(
             content=ft.Row(
                 [self.navigation_rail, self.content_area],
@@ -147,7 +150,7 @@ class ControlEntradasSalidasApp:
                 spacing=0,
             ),
             expand=True,
-            minimum_padding=ft.padding.only(top=10) # Espacio extra por seguridad
+            minimum_padding=ft.padding.only(top=5)
         )
         self.page.add(self._layout_row)
 
@@ -183,12 +186,12 @@ class ControlEntradasSalidasApp:
 async def main(page: ft.Page):
     page.expand = True
     
-    # Pantalla de Carga
-    status_log = ft.Text("Verificando entorno...", color="grey")
+    # Pantalla de Carga Inicial
+    status_log = ft.Text("Verificando sistema...", color="grey")
     loading_container = ft.Container(
         content=ft.Column([
             ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_700),
-            ft.Text("Iniciando Control...", size=20, weight="bold"),
+            ft.Text("Lycoris Control", size=22, weight="bold"),
             status_log
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
         alignment=ft.alignment.center,
@@ -203,7 +206,7 @@ async def main(page: ft.Page):
         from config.config import get_settings
         settings = get_settings()
         
-        status_log.value = "Cargando Vistas..."
+        status_log.value = "Cargando Módulos..."
         page.update()
         from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
         
@@ -216,7 +219,6 @@ async def main(page: ft.Page):
         }
         
         app_instance = ControlEntradasSalidasApp()
-        # Llamada asíncrona al arranque
         await app_instance.arrancar_interfaz(page, settings, vistas)
         
     except Exception as e:
@@ -226,8 +228,10 @@ async def main(page: ft.Page):
             ft.SafeArea(ft.Container(
                 content=ft.Column([
                     ft.Icon(name="error_outline", color="red", size=60),
-                    ft.Text("ERROR DE CARGA", size=24, weight="bold"),
-                    ft.Text(f"{e}", color="red"),
+                    ft.Text("ERROR CRÍTICO", size=24, weight="bold"),
+                    ft.Text(f"{e}", color="red", weight="bold"),
+                    ft.Divider(),
+                    ft.Text("Detalles técnicos:", size=12, color="grey"),
                     ft.Text(error_stack, size=10, font_family="monospace")
                 ], scroll=ft.ScrollMode.ALWAYS), padding=20
             ))
@@ -235,5 +239,4 @@ async def main(page: ft.Page):
         page.update()
 
 if __name__ == "__main__":
-    # Ejecución asíncrona
     ft.app(target=main)
