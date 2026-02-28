@@ -36,6 +36,16 @@ jobs:
           pip install flet==0.28.3 cookiecutter
           pip install setuptools wheel
 
+      - name: Setup Android Custom Manifest
+        run: |
+          mkdir -p android/app
+          cat << EOF > android/app/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.reidchend.lycoris">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+          </manifest>
+          EOF
+
       - name: Build APK
         run: |
           # 1. Licencias
@@ -86,7 +96,6 @@ jobs:
             --project "Lycoris Control" \
             --build-number 4 \
             --build-version "1.0.3" \
-            --android-permissions "android.permission.POST_NOTIFICATIONS" "android.permission.CAMERA" \
             --android-adaptive-icon-background "#7B1FA2" \
             --splash-color "#7B1FA2" \
             --compile-app \
