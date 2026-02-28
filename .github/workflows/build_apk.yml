@@ -100,8 +100,7 @@ jobs:
             --org "com.reidchend.lycoris" \
             --build-number 4 \
             --build-version "1.0.3" \
-            --no-rich-output \
-            --yes
+            --no-rich-output 
         env:
           CI: true
 
