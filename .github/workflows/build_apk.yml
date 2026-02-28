@@ -36,13 +36,26 @@ jobs:
           pip install flet==0.28.3 cookiecutter
           pip install setuptools wheel
 
-      - name: Setup Android Custom Manifest
+      - name: Prepare Android Configurations
         run: |
+          # 1. Crear carpeta de assets y plantillas nativas
+          mkdir -p assets
           mkdir -p android/app
+          
+          # 2. Crear el Manifiesto con los permisos exactos que pide Android 13+
           cat << EOF > android/app/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.reidchend.lycoris">
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.WAKE_LOCK"/>
+              <application android:label="Lycoris Control">
+                  <service android:name="com.google.firebase.messaging.FirebaseMessagingService"
+                           android:exported="false">
+                      <intent-filter>
+                          <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                      </intent-filter>
+                  </service>
+              </application>
           </manifest>
           EOF
 
@@ -79,6 +92,7 @@ jobs:
           # 4. Requirements 
           cat << EOF > requirements.txt
           flet==0.28.3
+          supabase
           sqlalchemy
           greenlet
           pg8000
@@ -95,7 +109,6 @@ jobs:
             --project "Lycoris Control" \
             --build-number 4 \
             --build-version "1.0.3" \
-            --android-adaptive-icon \
             --compile-app \
             --compile-packages \
             --cleanup-app \

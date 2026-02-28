@@ -1,5 +1,5 @@
 import flet as ft
-from app.logger import get_logger
+from usr.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -208,7 +208,7 @@ async def main(page: ft.Page):
         
         status_log.value = "Cargando Módulos..."
         page.update()
-        from app.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
+        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
         
         vistas = {
             0: InventarioView(),

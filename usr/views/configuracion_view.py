@@ -1,6 +1,6 @@
 import flet as ft
-from app.database.base import get_db
-from app.models import Categoria, Producto, Movimiento
+from usr.database.base import get_db
+from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
 from sqlalchemy import text
 

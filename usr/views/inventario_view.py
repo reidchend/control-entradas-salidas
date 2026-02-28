@@ -1,9 +1,9 @@
 import flet as ft
 import asyncio
 from datetime import datetime
-from app.database.base import get_db
-from app.models import Categoria, Producto, Movimiento
-from app.logger import get_logger
+from usr.database.base import get_db
+from usr.models import Categoria, Producto, Movimiento
+from usr.logger import get_logger
 import traceback
 
 logger = get_logger(__name__)
@@ -34,7 +34,7 @@ class InventarioView(ft.Container):
         self.main_content_area = ft.AnimatedSwitcher(
             content=self.categorias_grid,
             transition=ft.AnimatedSwitcherTransition.FADE,
-            duration=300,
+            duration=150,
             expand=True, 
         )
 
@@ -112,11 +112,12 @@ class InventarioView(ft.Container):
     async def _handle_category_click(self, container, categoria):
         """Maneja la animación y el cambio de vista."""
         try:
-            container.scale = 0.90
+            container.scale = 0.95
             container.update()
             await asyncio.sleep(0.1)
             container.scale = 1.0
             container.update()
+            await asyncio.sleep(0.1)
             self._show_productos(categoria)
         except Exception as e:
             logger.error(f"Error en clic categoría: {e}")

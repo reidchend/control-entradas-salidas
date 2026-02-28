@@ -1,7 +1,7 @@
 import flet as ft
 from datetime import datetime
-from app.database.base import get_db
-from app.models import Factura, Movimiento, Producto
+from usr.database.base import get_db
+from usr.models import Factura, Movimiento, Producto
 from sqlalchemy.orm import joinedload
 
 class HistorialFacturasView(ft.Container):

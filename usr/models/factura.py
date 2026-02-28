@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.database.base import Base
+from usr.database.base import Base
 
 class Factura(Base):
     __tablename__ = "facturas"
