@@ -63,6 +63,7 @@ jobs:
           greenlet
           pg8000
           pydantic
+          flet-webview
           pydantic-settings
           python-dotenv
           certifi

@@ -36,7 +36,7 @@ class ControlEntradasSalidasApp:
         self._setup_theme()
         
         # --- SOLICITUD DE PERMISOS Y NOTIFICACIONES ---
-        await self._setup_notifications() 
+        await self._setup_notification_bridge() 
         
         self._create_layout()
         self._show_view(0)
@@ -52,32 +52,36 @@ class ControlEntradasSalidasApp:
         self.page.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
 
 
-    async def _setup_notifications(self):
-        if self.page.web: return
+    async def _setup_notification_bridge(self):
+        """Configura el WebView usando asignación directa para evitar errores de versión"""
+        
+        async def on_web_message(e):
+            token = e.data
+            if token and "error" not in token:
+                print(f"🎫 TOKEN CAPTURADO: {token[:20]}...")
+                await self._sincronizar_token_supabase(token, "web_push_android")
+                
+                self.page.snack_bar = ft.SnackBar(ft.Text("🔔 Notificaciones vinculadas"))
+                self.page.snack_bar.open = True
+                self.page.update()
 
-        # Esperamos 2 segundos a que la interfaz cargue completamente
-        await asyncio.sleep(2)
+        # Creamos el objeto sin pasarle el handler en el constructor
+        bridge_webview = ft.WebView(
+            url="https://reidchend.github.io/LycorisNotifycation.github.io/",
+            expand=False,
+            width=1,
+            height=1,
+            visible=False
+        )
 
-        try:
-            # Definimos el manejador del token
-            def on_fcm_token(e):
-                token = e.token
-                print(f"🎫 Token recibido: {token}")
-                # Guardamos en Supabase
-                asyncio.create_task(self._sincronizar_token_supabase(token, "android"))
+        # ASIGNACIÓN DIRECTA (Esto evita el TypeError del constructor)
+        bridge_webview.on_message = on_web_message
+        bridge_webview.on_page_started = lambda _: print("🌐 Puente iniciado...")
 
-            # Asignamos el evento a la página
-            self.page.on_fcm_token = on_fcm_token
-            
-            # Forzamos un update para que Flet revise los permisos del Manifiesto
-            self.page.update()
-            print("✅ Esperando respuesta del sistema de notificaciones...")
-            
-        except Exception as e:
-            print(f"❌ Error en setup nativo: {e}")
+        self.page.overlay.append(bridge_webview)
+        self.page.update()
 
     async def _sincronizar_token_supabase(self, token, plataforma):
-        """Envía el token a la base de datos de forma segura"""
         try:
             from supabase import create_client
             supabase = create_client(self.settings.SUPABASE_URL, self.settings.SUPABASE_KEY)
@@ -86,12 +90,12 @@ class ControlEntradasSalidasApp:
                 "token": token,
                 "platform": plataforma,
                 "app_name": self.settings.FLET_APP_NAME,
-                "last_update": "now()" # Opcional: para saber cuándo se renovó
+                "last_update": "now()" 
             }).execute()
             
-            print(f"🚀 Token de {plataforma} guardado en Supabase.")
+            print(f"🚀 Token guardado en Supabase.")
         except Exception as e:
-            print(f"❌ Error sincronizando con Supabase: {e}")
+            print(f"❌ Error Supabase: {e}")
 
     def _create_layout(self):
         # Área de contenido

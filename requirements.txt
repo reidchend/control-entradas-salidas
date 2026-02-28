@@ -4,3 +4,4 @@ pydantic-settings
 Pg8000
 sqlalchemy
 supabase
+flet-webview
