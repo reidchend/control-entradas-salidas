@@ -111,9 +111,11 @@ class InventarioView(ft.Container):
         """Maneja la animación y el cambio de vista."""
         try:
             container.scale = 0.95
+            container.bgcolor = ft.Colors.BLUE_GREY_200
             container.update()
             await asyncio.sleep(0.1)
             container.scale = 1.0
+            container.bgcolor = ft.Colors.WHITE
             container.update()
             await asyncio.sleep(0.15)
             self._show_productos(categoria)
