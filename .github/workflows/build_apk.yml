@@ -31,21 +31,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet
+      - name: Install Flet & Tools
         run: |
-          pip install flet==0.28.3 cookiecutter
-          pip install setuptools wheel
+          pip install flet==0.28.3 cookiecutter setuptools wheel
+          
 
       - name: Build APK
         run: |
-          # 1. Licencias
+          # 1. Aceptar licencias de forma robusta
           yes | flutter doctor --android-licenses || true
 
-          if [ -f "assets/favicon.png" ]; then
-            cp assets/favicon.png assets/icon.png
-            echo "Icono preparado correctamente."
-          fi
-          
           # 2. Inyectar Secretos
           cat << EOF > .env
           DB_TYPE=postgresql
@@ -57,45 +52,51 @@ jobs:
           FLET_APP_NAME="Lycoris Control"
           EOF
 
-          # 3. Validar archivos críticos (Paso de seguridad)
-          if [ ! -f "flet.yaml" ]; then echo "ERROR: flet.yaml no encontrado"; exit 1; fi
-          if [ ! -f "assets/favicon.png" ]; then echo "ERROR: assets/favicon.png no encontrado"; exit 1; fi
-
-          # 3. Copias de seguridad
           mkdir -p config
           cp .env config/.env
           
-          # 4. Requirements
+          # 3. Requirements limpios
           cat << EOF > requirements.txt
           flet==0.28.3
+          supabase
           sqlalchemy
           greenlet
           pg8000
           pydantic
+          flet-webview
           pydantic-settings
           python-dotenv
           certifi
-          charset-normalizer
-          idna
-          typing-extensions
           EOF
+
+          # 1. Creamos el archivo de extensión de Flet (La llave maestra)
+          cat << EOF > ext.yaml
+          android:
+            permissions:
+              - android.permission.INTERNET
+              - android.permission.POST_NOTIFICATIONS
+              - android.permission.WAKE_LOCK
+            manifest_placeholders:
+              appName: "Lycoris Control"
+          EOF
+
+          # 2. Google Services en la raíz (Indispensable)
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
           
-          # 5. CONSTRUCCIÓN CON IDENTIDAD FORZADA
-          # --product: El nombre que ves debajo del icono ("Lycoris Control")
-          # --org: Tu organización (com.reidchend)
-          # --project: El nombre interno del proyecto (lycoris)
-          # El Package Name final será: com.reidchend.lycoris
-          flet build apk --verbose --product "Lycoris Control" --org "com.reidchend" --project "lycoris"
-          
-          # 6. Salida
-          mkdir -p output
-          find build/apk -name "*.apk" -exec cp {} output/ \;
+          # 4. Construcción (Quitamos --project que a veces causa conflictos con --product)
+          flet build apk \
+            --product "Lycoris Control" \
+            --org "com.reidchend.lycoris" \
+            --build-number 4 \
+            --build-version "1.0.3" \
+            --no-rich-output 
         env:
           CI: true
-          FLUTTER_SDK: ${{ env.FLUTTER_HOME }}
 
       - name: Rename APK
-        run: mv build/apk/*.apk build/apk/LycorisControl.apk
+        run: |
+          # Usamos un comando más flexible por si genera varios APKs
+          find build/apk -name "*.apk" -exec mv {} build/apk/LycorisControl.apk \;
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

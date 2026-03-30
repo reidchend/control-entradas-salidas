@@ -1,8 +1,8 @@
 import flet as ft
 from datetime import datetime
-from app.database.base import get_db
-from app.models import Movimiento, Factura, Producto, Categoria
-from app.logger import get_logger
+from usr.database.base import get_db
+from usr.models import Movimiento, Factura, Producto, Categoria
+from usr.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -13,6 +13,8 @@ class ValidacionView(ft.Container):
         self.expand = True
         self.bgcolor = ft.Colors.GREY_50
         self.padding = 0
+        self.is_loading = False
+        self.cards_dict = {}
         
         # Componentes UI
         self.entradas_list = ft.ListView(
@@ -104,59 +106,69 @@ class ValidacionView(ft.Container):
 
     def _create_entrada_card(self, entrada: Movimiento):
         is_selected = entrada.id in self.selected_entradas
-        bg_color = ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE
-        border_side = ft.border.BorderSide(2, ft.Colors.BLUE_600) if is_selected else ft.border.BorderSide(1, ft.Colors.GREY_200)
         
-        # --- LÓGICA DE PESO CORREGIDA ---
-        peso_info = []
+        # 1. Lógica de Peso (Badge condicional)
+        peso_badge = ft.Container()
         if getattr(entrada, "peso_total", 0) and entrada.peso_total > 0:
-            peso_info.append(
-                ft.Container(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.SCALE_ROUNDED, size=12, color=ft.Colors.ORANGE_800),
-                        ft.Text(f"{entrada.peso_total} kg", size=12, weight="bold", color=ft.Colors.ORANGE_800),
-                    ], spacing=4),
-                    bgcolor=ft.Colors.ORANGE_50,
-                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
-                    border_radius=4
-                )
+            peso_badge = ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.SCALE_ROUNDED, size=12, color=ft.Colors.ORANGE_800),
+                    ft.Text(f"{entrada.peso_total} kg", size=12, weight="bold", color=ft.Colors.ORANGE_800),
+                ], spacing=4),
+                bgcolor=ft.Colors.ORANGE_50,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                border_radius=4
             )
 
-        return ft.Container(
+        # 2. Icono de selección (guardamos referencia)
+        check_icon = ft.Icon(
+            ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
+            color=ft.Colors.BLUE_600 if is_selected else ft.Colors.GREY_300,
+            size=22
+        )
+
+        # 3. Construcción de la Card
+        card = ft.Container(
             content=ft.Row([
-                ft.Container(
-                    content=ft.Icon(
-                        ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
-                        color=ft.Colors.BLUE_600 if is_selected else ft.Colors.GREY_300,
-                        size=22
-                    ),
-                    padding=2
-                ),
+                ft.Container(content=check_icon, padding=2),
                 ft.Column([
                     ft.Text(
-                        entrada.producto.nombre if entrada.producto else "Cargando...",
+                        entrada.producto.nombre if entrada.producto else "Producto sin nombre",
                         weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_GREY_900,
                         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS
                     ),
                     ft.Row([
                         ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else 'uds'}", 
                                 size=13, weight="w600", color=ft.Colors.BLUE_700),
-                        *peso_info, # Inyecta el badge de peso si existe
+                        peso_badge, # Inyección del peso
                         ft.Text(" • ", color=ft.Colors.GREY_300),
                         ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=ft.Colors.BLUE_GREY_400),
                     ], spacing=8, vertical_alignment="center")
                 ], expand=True, spacing=4)
             ], spacing=12),
             padding=15,
-            bgcolor=bg_color,
+            animate=200, # Animación de color suave
+            bgcolor=ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE,
             border_radius=12,
-            border=ft.border.all(border_side.width, border_side.color),
+            border=ft.border.all(2, ft.Colors.BLUE_600) if is_selected else ft.border.all(1, ft.Colors.GREY_200),
             on_click=lambda _: self._toggle_entrada_selection(entrada.id)
         )
+        
+        # Guardamos referencias para actualizar sin reconstruir
+        self.cards_dict[entrada.id] = (card, check_icon)
+        return card
 
     def _load_entradas_pendientes(self):
+
+        if self.is_loading:
+            return
+
+        self.is_loading = True
+
         db = None
         try:
+            self.entradas_list.controls = [ft.ProgressBar(color="blue")]
+            self.update()
             db = next(get_db())
             query = db.query(Movimiento).filter(
                 Movimiento.tipo == "entrada",
@@ -192,19 +204,37 @@ class ValidacionView(ft.Container):
             logger.error(f"Error cargando entradas: {ex}")
         finally:
             if db: db.close()
+            self.is_loading = False
+            self.update()
 
     def _toggle_entrada_selection(self, eid):
+        # Verificamos que la card exista en nuestro diccionario de referencias
+        if eid not in self.cards_dict:
+            return
+
+        card, icon = self.cards_dict[eid]
+
         if eid in self.selected_entradas:
+            # DESELECCIONAR
             self.selected_entradas.remove(eid)
+            card.bgcolor = ft.Colors.WHITE
+            card.border = ft.border.all(1, ft.Colors.GREY_200)
+            icon.name = ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED
+            icon.color = ft.Colors.GREY_300
         else:
+            # SELECCIONAR
             self.selected_entradas.add(eid)
+            card.bgcolor = ft.Colors.BLUE_50
+            card.border = ft.border.all(2, ft.Colors.BLUE_600)
+            icon.name = ft.Icons.CHECK_CIRCLE_ROUNDED
+            icon.color = ft.Colors.BLUE_600
         
-        self.entradas_list.controls.clear()
-        for entrada in self.entradas_data.values():
-            self.entradas_list.controls.append(self._create_entrada_card(entrada))
-        
+        # Actualizamos solo los componentes afectados
+        card.update()
         self._update_validate_button_state()
-        self.update()
+        self.validate_button.update()
+        if self.clear_button:
+            self.clear_button.update()
 
     def _update_validate_button_state(self):
         count = len(self.selected_entradas)

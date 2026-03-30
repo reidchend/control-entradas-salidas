@@ -5,8 +5,8 @@ ADVERTENCIA: Este script ELIMINA todas las tablas y datos existentes
 para reconstruir la base de datos con la estructura actualizada.
 """
 
-from app.database.base import engine, Base
-from app.models import Categoria, Producto, Movimiento, Factura
+from usr.database.base import engine, Base
+from usr.models import Categoria, Producto, Movimiento, Factura
 from sqlalchemy import text, inspect
 
 def reset_database():

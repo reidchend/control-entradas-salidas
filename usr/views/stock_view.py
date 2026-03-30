@@ -1,6 +1,6 @@
 import flet as ft
-from app.database.base import get_db
-from app.models import Producto, Movimiento, Categoria
+from usr.database.base import get_db
+from usr.models import Producto, Movimiento, Categoria
 from datetime import datetime
 import logging
 from sqlalchemy import func
