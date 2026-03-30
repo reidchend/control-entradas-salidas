@@ -31,7 +31,10 @@ class Producto(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    almacen_predeterminado = Column(String(50), default="principal")
+
     movimientos = relationship("Movimiento", back_populates="producto", cascade="all, delete-orphan")
+    existencias = relationship("Existencia", primaryjoin="Producto.id==Existencia.producto_id", viewonly=True)
 
     def __repr__(self):
         return f"<Producto(id={self.id}, nombre='{self.nombre}')>"

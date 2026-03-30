@@ -2,8 +2,9 @@ import flet as ft
 import asyncio
 from datetime import datetime
 from usr.database.base import get_db
-from usr.models import Categoria, Producto, Movimiento
+from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
+from sqlalchemy import func
 import traceback
 
 logger = get_logger(__name__)
@@ -123,26 +124,41 @@ class InventarioView(ft.Container):
             logger.error(f"Error en clic categoría: {e}")
 
     def _create_categoria_card(self, categoria):
-        cat_color = categoria.color if categoria.color else ft.Colors.BLUE_900
+        cat_color = categoria.color if categoria.color else "#2563eb"
         
         card = ft.Container(
-            bgcolor=ft.Colors.WHITE,
-            border_radius=12,
-            padding=8,
-            animate_scale=150,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.1, cat_color)),
+            bgcolor="#f0f4f8",
+            border_radius=20,
+            padding=20,
+            animate_scale=200,
+            scale=1.0,
+            shadow=ft.BoxShadow(
+                color=ft.Colors.with_opacity(0.3, cat_color),
+                blur_radius=10,
+                offset=ft.Offset(0, 4),
+                spread_radius=0,
+            ),
+            border=ft.border.all(1, ft.Colors.with_opacity(0.2, cat_color)),
             content=ft.Column([
-                ft.Icon(ft.Icons.CATEGORY_ROUNDED, size=28, color=cat_color),
+                ft.Container(
+                    content=ft.Icon(ft.Icons.CATEGORY_ROUNDED, size=36, color="white"),
+                    bgcolor=cat_color,
+                    width=64,
+                    height=64,
+                    border_radius=32,
+                    alignment=ft.alignment.center,
+                ),
+                ft.Container(height=10),
                 ft.Text(
                     str(categoria.nombre).upper(), 
                     weight="bold", 
-                    size=10, 
+                    size=12, 
                     text_align="center", 
                     color=cat_color,
                     max_lines=2,
                     overflow=ft.TextOverflow.ELLIPSIS
                 ),
-            ], alignment="center", horizontal_alignment="center", spacing=2)
+            ], alignment="center", horizontal_alignment="center", spacing=0)
         )
 
         # Capturamos el evento 'e' para que no se confunda con 'container'
@@ -177,12 +193,24 @@ class InventarioView(ft.Container):
         db = None
         try:
             db = next(get_db())
-            query = db.query(Producto).filter(Producto.categoria_id == self.categoria_seleccionada.id)
-            if search_term:
-                query = query.filter(Producto.nombre.ilike(f"%{search_term}%"))
-            productos = query.all()
             
-            items = [self._create_producto_item(p) for p in productos if p]
+            productos = db.query(Producto).filter(Producto.categoria_id == self.categoria_seleccionada.id).all()
+            producto_ids = [p.id for p in productos]
+            
+            existencias_map = {}
+            if producto_ids:
+                existencias = db.query(Existencia.producto_id, Existencia.almacen, Existencia.cantidad).filter(
+                    Existencia.producto_id.in_(producto_ids)
+                ).all()
+                for e in existencias:
+                    if e.producto_id not in existencias_map:
+                        existencias_map[e.producto_id] = {}
+                    existencias_map[e.producto_id][e.almacen] = e.cantidad
+            
+            if search_term:
+                productos = [p for p in productos if search_term.lower() in p.nombre.lower()]
+            
+            items = [self._create_producto_item(p, existencias_map.get(p.id, {})) for p in productos if p]
             self.productos_list.controls = items if items else [ft.Text("No hay productos")]
             if self.page: self.update()
         except Exception as e:
@@ -190,8 +218,10 @@ class InventarioView(ft.Container):
         finally:
             if db: db.close()
 
-    def _create_producto_item(self, producto):
-        stock = producto.stock_actual or 0
+    def _create_producto_item(self, producto, stock_por_almacen=None):
+        if stock_por_almacen is None:
+            stock_por_almacen = {}
+        stock = sum(stock_por_almacen.values()) or 0
         stock_min = producto.stock_minimo or 0
         stock_color = ft.Colors.RED_600 if stock < stock_min else ft.Colors.PRIMARY
         
@@ -223,18 +253,61 @@ class InventarioView(ft.Container):
             padding=10, bgcolor=ft.Colors.WHITE, border_radius=10, border=ft.border.all(1, "#eeeeee")
         )
 
+    def _get_almacenes(self):
+        db = next(get_db())
+        try:
+            almacenes = db.query(Existencia.almacen).distinct().all()
+            opciones = [a[0] for a in almacenes]
+            if "principal" not in opciones:
+                opciones.insert(0, "principal")
+            return opciones
+        finally:
+            db.close()
+
     def _show_cantidad_dialog(self, producto, tipo):
         self.producto_seleccionado = producto
         es_pesable = getattr(producto, 'es_pesable', False)
         
+        almacen_default = producto.almacen_predeterminado or "principal"
+        
+        db = next(get_db())
+        try:
+            existencias = db.query(Existencia).filter(Existencia.producto_id == producto.id).all()
+            stock_por_almacen = {e.almacen: e.cantidad for e in existencias}
+            almacenes_disponibles = list(set([e.almacen for e in existencias] + ["principal", "secundario", "bodega"]))
+        finally:
+            db.close()
+        
         cant_input = ft.TextField(label="Unidades/Bultos", value="1", keyboard_type=ft.KeyboardType.NUMBER, autofocus=True, suffix_text="uds")
         peso_input = ft.TextField(label="Peso Total (Kg)", hint_text="0.00", keyboard_type=ft.KeyboardType.NUMBER, visible=es_pesable, suffix_text="kg")
+        
+        almacen_options = [ft.dropdown.Option(a, a.capitalize()) for a in almacenes_disponibles]
+        almacen_dropdown = ft.Dropdown(
+            label="Almacén",
+            value=almacen_default,
+            options=almacen_options
+        )
+        
+        stock_texts = [ft.Text(f"{k.capitalize()}: {v:.0f}", size=11) for k, v in stock_por_almacen.items()]
+        if not stock_texts:
+            stock_texts = [ft.Text("Sin stock", size=11)]
+        
+        stock_info = ft.Container(
+            content=ft.Column([
+                ft.Text("Stock por almacén:", size=12, weight="bold"),
+            ] + stock_texts, spacing=2),
+            bgcolor=ft.Colors.BLUE_50,
+            padding=10,
+            border_radius=8,
+            margin=ft.margin.only(bottom=10)
+        )
 
         def al_confirmar(e):
             try:
-                cantidad = int(cant_input.value)
+                valor = cant_input.value.replace(",", "").replace(" ", "")
+                cantidad = int(float(valor))
                 if cantidad <= 0: raise ValueError()
-            except ValueError:
+            except (ValueError, AttributeError):
                 cant_input.error_text = "Número entero mayor a 0"; cant_input.update(); return
 
             peso_valor = 0.0
@@ -245,25 +318,40 @@ class InventarioView(ft.Container):
                 except ValueError:
                     peso_input.error_text = "Ingrese un peso válido"; peso_input.update(); return
 
+            almacen = almacen_dropdown.value or "principal"
             self._close_dialog()
-            self._registrar_movimiento(tipo, cantidad, peso_total=peso_valor)
+            self._registrar_movimiento(tipo, cantidad, peso_total=peso_valor, almacen=almacen)
 
         self.active_dialog = ft.AlertDialog(
             title=ft.Text(f"Registrar {tipo.capitalize()}"),
-            content=ft.Column([ft.Text(f"Producto: {producto.nombre}", weight="bold"), cant_input, peso_input], tight=True, spacing=15),
+            content=ft.Column([
+                ft.Text(f"Producto: {producto.nombre}", weight="bold"),
+                stock_info,
+                almacen_dropdown,
+                cant_input, 
+                peso_input
+            ], tight=True, spacing=10),
             actions=[ft.TextButton("Cancelar", on_click=self._close_dialog), ft.ElevatedButton("Confirmar", on_click=al_confirmar)]
         )
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True
         if self.page: self.page.update()
 
-    def _registrar_movimiento(self, tipo, cantidad, peso_total=0.0):
+    def _registrar_movimiento(self, tipo, cantidad, peso_total=0.0, almacen=None):
         db = None
         try:
             db = next(get_db())
             prod = db.query(Producto).filter(Producto.id == self.producto_seleccionado.id).first()
             user_id = self.page.session.get("user_id") or 1
-            cant_anterior = prod.stock_actual or 0
+            
+            almacen_seleccionado = almacen or prod.almacen_predeterminado or "principal"
+            
+            existencia = db.query(Existencia).filter(
+                Existencia.producto_id == prod.id,
+                Existencia.almacen == almacen_seleccionado
+            ).first()
+            
+            cant_anterior = existencia.cantidad if existencia else 0
             
             if tipo == "entrada":
                 cant_nueva = cant_anterior + cantidad
@@ -272,16 +360,32 @@ class InventarioView(ft.Container):
                     self._show_error("Stock insuficiente"); return
                 cant_nueva = cant_anterior - cantidad
 
+            if existencia:
+                existencia.cantidad = cant_nueva
+            else:
+                existencia = Existencia(
+                    producto_id=prod.id,
+                    almacen=almacen_seleccionado,
+                    cantidad=cant_nueva,
+                    unidad=prod.unidad_medida or "unidad"
+                )
+                db.add(existencia)
+
+            stock_total = db.query(func.coalesce(func.sum(Existencia.cantidad), 0)).filter(
+                Existencia.producto_id == prod.id
+            ).scalar() or 0
+
             nuevo_mov = Movimiento(
                 producto_id=prod.id, tipo=tipo, cantidad=cantidad,
                 cantidad_anterior=cant_anterior, cantidad_nueva=cant_nueva,
-                registrado_por=user_id, fecha_movimiento=datetime.now(), peso_total=peso_total
+                registrado_por=user_id, fecha_movimiento=datetime.now(), 
+                peso_total=peso_total, almacen=almacen_seleccionado
             )
-            prod.stock_actual = cant_nueva
+            prod.stock_actual = stock_total
             db.add(nuevo_mov)
             db.commit()
             
-            self._show_message(f"✓ {tipo.capitalize()} registrada")
+            self._show_message(f"✓ {tipo.capitalize()} registrada en {almacen_seleccionado}")
             self._load_productos(search_term=self.search_field.value)
         except Exception as e:
             if db: db.rollback()

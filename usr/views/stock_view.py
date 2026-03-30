@@ -1,6 +1,7 @@
 import flet as ft
+import asyncio
 from usr.database.base import get_db
-from usr.models import Producto, Movimiento, Categoria
+from usr.models import Producto, Movimiento, Categoria, Existencia
 from datetime import datetime
 import logging
 from sqlalchemy import func
@@ -17,10 +18,13 @@ class StockView(ft.Container):
         
         # Componentes UI
         self.categoria_filter = None
+        self.almacen_filter = None
         self.search_field = None
         self.productos_list = None
         self.summary_container = None
         self.active_dialog = None
+        
+
         
         # Estado de resumen
         self.total_productos_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
@@ -69,10 +73,20 @@ class StockView(ft.Container):
             border_color=ft.Colors.TRANSPARENT,
         )
 
+        self.almacen_filter = ft.Dropdown(
+            label="Almacén",
+            border_radius=12,
+            bgcolor=ft.Colors.WHITE,
+            on_change=self._filter_productos,
+            border_color=ft.Colors.TRANSPARENT,
+            value=""
+        )
+
         filters_section = ft.Container(
             content=ft.ResponsiveRow([
-                ft.Column([self.search_field], col={"xs": 12, "md": 8}),
-                ft.Column([self.categoria_filter], col={"xs": 12, "md": 4}),
+                ft.Column([self.search_field], col={"xs": 12, "md": 6}),
+                ft.Column([self.categoria_filter], col={"xs": 12, "md": 3}),
+                ft.Column([self.almacen_filter], col={"xs": 12, "md": 3}),
             ], spacing=12),
             padding=ft.padding.symmetric(horizontal=16, vertical=8),
         )
@@ -118,6 +132,12 @@ class StockView(ft.Container):
             self.categoria_filter.options = [ft.dropdown.Option("", "Todas")]
             for cat in categorias:
                 self.categoria_filter.options.append(ft.dropdown.Option(str(cat.id), cat.nombre))
+            
+            almacenes = db.query(Existencia.almacen).distinct().all()
+            self.almacen_filter.options = [ft.dropdown.Option("", "Todos")]
+            for a in almacenes:
+                self.almacen_filter.options.append(ft.dropdown.Option(a[0], a[0].capitalize()))
+            
             self.update()
         finally:
             db.close()
@@ -125,27 +145,74 @@ class StockView(ft.Container):
     def _load_productos(self):
         db = next(get_db())
         try:
-            productos = db.query(Producto).filter(Producto.activo == True).all()
-            self._render_productos(productos)
+            productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(50).all()
+            
+            producto_ids = [p.id for p in productos]
+            existencias_map = self._get_existencias_map(producto_ids)
+            
+            self._render_productos(productos, existencias_map)
         finally:
             db.close()
 
-    def _filter_productos(self, e):
+    def _get_existencias_map(self, producto_ids):
+        if not producto_ids:
+            return {}
+        
         db = next(get_db())
+        existencias_map = {}
         try:
-            query = db.query(Producto).filter(Producto.activo == True)
-            if self.categoria_filter.value and self.categoria_filter.value.isdigit():
-                query = query.filter(Producto.categoria_id == int(self.categoria_filter.value))
-            
-            search = self.search_field.value.lower().strip() if self.search_field.value else ""
-            if search:
-                query = query.filter((Producto.nombre.ilike(f"%{search}%")) | (Producto.codigo.ilike(f"%{search}%")))
-            
-            self._render_productos(query.all())
+            existencias = db.query(Existencia.producto_id, Existencia.almacen, Existencia.cantidad).filter(Existencia.producto_id.in_(producto_ids)).all()
+            for e in existencias:
+                if e.producto_id not in existencias_map:
+                    existencias_map[e.producto_id] = {}
+                existencias_map[e.producto_id][e.almacen] = e.cantidad
         finally:
             db.close()
+        return existencias_map
 
-    def _render_productos(self, productos):
+    def _filter_productos(self, e=None):
+        if hasattr(self, '_debounce_task') and self._debounce_task and not self._debounce_task.done():
+            self._debounce_task.cancel()
+        self._debounce_task = self.page.run_task(self._buscar_async)
+
+    async def _buscar_async(self):
+        await asyncio.sleep(0.4)
+        
+        try:
+            search = self.search_field.value.strip() if self.search_field.value else ""
+            categoria = self.categoria_filter.value if self.categoria_filter.value else ""
+            almacen = self.almacen_filter.value if self.almacen_filter.value else ""
+            
+            db = next(get_db())
+            try:
+                query = db.query(Producto).filter(Producto.activo == True)
+                
+                if categoria and categoria.isdigit():
+                    query = query.filter(Producto.categoria_id == int(categoria))
+                
+                if search:
+                    query = query.filter((Producto.nombre.ilike(f"%{search}%")) | (Producto.codigo.ilike(f"%{search}%")))
+                
+                productos = query.order_by(Producto.nombre).limit(50).all()
+                
+                producto_ids = [p.id for p in productos]
+                existencias_map = self._get_existencias_map(producto_ids)
+                
+                if almacen:
+                    productos = [p for p in productos if existencias_map.get(p.id, {}).get(almacen, 0) > 0]
+                
+                self._render_productos(productos, existencias_map)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            pass
+        except Exception as ex:
+            print(f"Error búsqueda: {ex}")
+
+    def _render_productos(self, productos, existencias_map=None):
+        if existencias_map is None:
+            existencias_map = {}
+            
         self.total_productos_text.value = str(len(productos))
         self.stock_bajo_text.value = str(sum(1 for p in productos if 0 < (p.stock_actual or 0) <= (p.stock_minimo or 0)))
         self.sin_stock_text.value = str(sum(1 for p in productos if (p.stock_actual or 0) <= 0))
@@ -158,10 +225,25 @@ class StockView(ft.Container):
             db = next(get_db())
             try:
                 for p in productos:
-                    stock_actual = p.stock_actual or 0
+                    stock_por_almacen = existencias_map.get(p.id, {})
+                    stock_actual = sum(stock_por_almacen.values()) or 0
+                    
                     if stock_actual <= 0: color = ft.Colors.RED_600
                     elif stock_actual <= (p.stock_minimo or 0): color = ft.Colors.ORANGE_600
                     else: color = ft.Colors.GREEN_600
+
+                    almacen_info = ft.Container(
+                        content=ft.Column([
+                            ft.Text("Stock por almacén:", size=11, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                            ft.Column([
+                                ft.Text(f"{k.capitalize()}: {v:.0f}", size=10) for k, v in stock_por_almacen.items()
+                            ], spacing=0),
+                        ], spacing=2),
+                        bgcolor=ft.Colors.BLUE_50,
+                        padding=8,
+                        border_radius=6,
+                        margin=ft.margin.only(top=5)
+                    )
 
                     peso_view = ft.Container()
                     es_pesable = getattr(p, 'es_pesable', False)
@@ -204,6 +286,8 @@ class StockView(ft.Container):
                                 
                                 peso_view,
                                 
+                                almacen_info,
+                                
                                 ft.Divider(height=1, color=ft.Colors.GREY_100),
                                 
                                 ft.Row([
@@ -225,8 +309,9 @@ class StockView(ft.Container):
                     )
             finally:
                 db.close()
-                
-        self.update()
+        
+        if self.page:
+            self.update()
 
     def _show_producto_details(self, producto: Producto):
         db = next(get_db())

@@ -37,6 +37,9 @@ class Movimiento(Base):
     # Observaciones
     observaciones = Column(Text, nullable=True)
     
+    # Almacén
+    almacen = Column(String(50), nullable=True)
+    
     # Fecha del movimiento
     fecha_movimiento = Column(DateTime(timezone=True), server_default=func.now())
     

@@ -50,6 +50,10 @@ class HistorialFacturasView(ft.Container):
         self._res_cantidad = ft.Text("0",       size=22, weight="bold", color=ft.Colors.BLUE_700)
         self._res_peso     = ft.Text("0.00 kg", size=22, weight="bold", color=ft.Colors.ORANGE_700)
         self._res_prods    = ft.Text("0",       size=22, weight="bold", color=ft.Colors.GREEN_700)
+        
+        self._fecha_especifica = None
+        self.fecha_picker_btn = None
+        self.fecha_seleccionada_txt = None
 
         self._build_ui()
 
@@ -148,6 +152,28 @@ class HistorialFacturasView(ft.Container):
             padding=ft.padding.symmetric(horizontal=20, vertical=12),
         )
 
+        self.fecha_picker_btn = ft.ElevatedButton(
+            content=ft.Row([
+                ft.Icon(ft.Icons.CALENDAR_MONTH, size=18),
+                ft.Text("Elegir fecha específica"),
+            ], spacing=8),
+            bgcolor=ft.Colors.WHITE,
+            color=ft.Colors.BLUE_700,
+            on_click=self._show_date_picker,
+        )
+
+        self.fecha_seleccionada_txt = ft.Text("", size=13, color=ft.Colors.BLUE_600, weight="bold")
+
+        fecha_selector_row = ft.Container(
+            content=ft.Column([
+                ft.Text("O selecciona una fecha específica:", size=12, color=ft.Colors.BLUE_GREY_500),
+                ft.Row([self.fecha_picker_btn, self.fecha_seleccionada_txt], spacing=15),
+            ], spacing=8),
+            padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            bgcolor=ft.Colors.BLUE_50,
+            border_radius=12,
+        )
+
         resumen_row = ft.Container(
             content=ft.Row([
                 self._stat_mini("Unidades",  self._res_cantidad, ft.Icons.INVENTORY_2_ROUNDED, ft.Colors.BLUE),
@@ -160,10 +186,31 @@ class HistorialFacturasView(ft.Container):
         return ft.Column([
             ft.Container(height=10),
             chips_row,
+            fecha_selector_row,
             resumen_row,
             ft.Container(height=8),
             ft.Container(content=self.entradas_list, expand=True),
         ], expand=True, spacing=0)
+
+    def _show_date_picker(self, e):
+        def on_date_select(e):
+            if e.control.value:
+                fecha = e.control.value
+                self._fecha_especifica = fecha
+                self.fecha_seleccionada_txt.value = f"📅 {fecha.strftime('%d/%m/%Y')}"
+                self._load_entradas_por_fecha()
+                date_picker.open = False
+                self.page.update()
+
+        date_picker = ft.DatePicker(
+            first_date=datetime(2023, 1, 1).date(),
+            last_date=datetime.today().date(),
+            on_change=on_date_select,
+        )
+        
+        self.page.overlay.append(date_picker)
+        date_picker.open = True
+        self.page.update()
 
     def _stat_mini(self, title, value_ctrl, icon, color):
         return ft.Container(
@@ -425,6 +472,10 @@ class HistorialFacturasView(ft.Container):
         return datetime.combine(inicio, datetime.min.time()), datetime.combine(fin, datetime.max.time())
 
     def _select_periodo(self, key: str):
+        self._fecha_especifica = None
+        if self.fecha_seleccionada_txt:
+            self.fecha_seleccionada_txt.value = ""
+        
         for k, chip in self._periodo_buttons.items():
             is_sel = (k == key)
             chip.bgcolor = ft.Colors.BLUE_600 if is_sel else ft.Colors.WHITE
@@ -438,7 +489,12 @@ class HistorialFacturasView(ft.Container):
     def _load_entradas_por_fecha(self):
         db = None
         try:
-            dt_inicio, dt_fin = self._get_rango(self._periodo_seleccionado)
+            if self._fecha_especifica:
+                fecha = self._fecha_especifica
+                dt_inicio = datetime.combine(fecha, datetime.min.time())
+                dt_fin = datetime.combine(fecha, datetime.max.time())
+            else:
+                dt_inicio, dt_fin = self._get_rango(self._periodo_seleccionado)
             db = next(get_db())
             entradas = (
                 db.query(Movimiento)

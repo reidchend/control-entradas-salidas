@@ -1,7 +1,7 @@
 import flet as ft
 from datetime import datetime
 from usr.database.base import get_db
-from usr.models import Movimiento, Factura, Producto, Categoria
+from usr.models import Movimiento, Factura, Producto, Categoria, Existencia
 from usr.logger import get_logger
 
 logger = get_logger(__name__)
@@ -107,7 +107,19 @@ class ValidacionView(ft.Container):
     def _create_entrada_card(self, entrada: Movimiento):
         is_selected = entrada.id in self.selected_entradas
         
-        # 1. Lógica de Peso (Badge condicional)
+        # 1. Badge de Almacén
+        almacen_nombre = getattr(entrada, 'almacen', None) or 'principal'
+        almacen_badge = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.WAREHOUSE_ROUNDED, size=12, color=ft.Colors.PURPLE_700),
+                ft.Text(f"{almacen_nombre}", size=11, weight="bold", color=ft.Colors.PURPLE_700),
+            ], spacing=3),
+            bgcolor=ft.Colors.PURPLE_50,
+            padding=ft.padding.symmetric(horizontal=6, vertical=2),
+            border_radius=4
+        )
+
+        # 2. Lógica de Peso (Badge condicional)
         peso_badge = ft.Container()
         if getattr(entrada, "peso_total", 0) and entrada.peso_total > 0:
             peso_badge = ft.Container(
@@ -120,7 +132,7 @@ class ValidacionView(ft.Container):
                 border_radius=4
             )
 
-        # 2. Icono de selección (guardamos referencia)
+        # 3. Icono de selección (guardamos referencia)
         check_icon = ft.Icon(
             ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
             color=ft.Colors.BLUE_600 if is_selected else ft.Colors.GREY_300,
@@ -140,7 +152,8 @@ class ValidacionView(ft.Container):
                     ft.Row([
                         ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else 'uds'}", 
                                 size=13, weight="w600", color=ft.Colors.BLUE_700),
-                        peso_badge, # Inyección del peso
+                        peso_badge,
+                        almacen_badge,
                         ft.Text(" • ", color=ft.Colors.GREY_300),
                         ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=ft.Colors.BLUE_GREY_400),
                     ], spacing=8, vertical_alignment="center")
