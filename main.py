@@ -117,6 +117,7 @@ class ControlEntradasSalidasApp:
                 ft.NavigationRailDestination(icon="inventory_2_outlined", selected_icon="inventory_2", label="Inventario"),
                 ft.NavigationRailDestination(icon="fact_check_outlined", selected_icon="fact_check", label="Validación"),
                 ft.NavigationRailDestination(icon="storage_outlined", selected_icon="storage", label="Stock"),
+                ft.NavigationRailDestination(icon="assignment_outlined", selected_icon="assignment", label="Requisiciones"),
                 ft.NavigationRailDestination(icon="history_outlined", selected_icon="history", label="Historial"),
                 ft.NavigationRailDestination(icon="settings_outlined", selected_icon="settings", label="Ajustes"),
             ],
@@ -131,6 +132,7 @@ class ControlEntradasSalidasApp:
                 ft.NavigationBarDestination(icon="inventory_2_outlined", label="Inventario"),
                 ft.NavigationBarDestination(icon="fact_check_outlined", label="Validar"),
                 ft.NavigationBarDestination(icon="storage_outlined", label="Stock"),
+                ft.NavigationBarDestination(icon="assignment_outlined", label="Req."),
                 ft.NavigationBarDestination(icon="history_outlined", label="Historial"),
                 ft.NavigationBarDestination(icon="settings_outlined", label="Ajustes"),
             ],
@@ -203,17 +205,23 @@ async def main(page: ft.Page):
         
         status_log.value = "Cargando Módulos..."
         page.update()
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView
+        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+        
+        inventario_view = InventarioView()
+        requisiciones_view = RequisicionesView()
+        requisiciones_view.inventario_view = inventario_view
         
         vistas = {
-            0: InventarioView(),
+            0: inventario_view,
             1: ValidacionView(),
             2: StockView(),
-            3: HistorialFacturasView(),
-            4: ConfiguracionView(),
+            3: requisiciones_view,
+            4: HistorialFacturasView(),
+            5: ConfiguracionView(),
         }
         
         app_instance = ControlEntradasSalidasApp()
+        requisiciones_view.app_controller = app_instance
         await app_instance.arrancar_interfaz(page, settings, vistas)
         
     except Exception as e:

@@ -3,5 +3,6 @@ from .validacion_view import ValidacionView
 from .stock_view import StockView
 from .configuracion_view import ConfiguracionView
 from .historial_facturas_view import HistorialFacturasView
+from .requisiciones_view import RequisicionesView
 
-__all__ = ['InventarioView', 'ValidacionView', 'StockView', 'ConfiguracionView', 'HistorialFacturasView']
+__all__ = ['InventarioView', 'ValidacionView', 'StockView', 'ConfiguracionView', 'HistorialFacturasView', 'RequisicionesView']
