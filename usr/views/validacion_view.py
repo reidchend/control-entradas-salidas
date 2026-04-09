@@ -3,15 +3,22 @@ from datetime import datetime
 from usr.database.base import get_db
 from usr.models import Movimiento, Factura, Producto, Categoria, Existencia
 from usr.logger import get_logger
+from usr.theme import get_theme
 
 logger = get_logger(__name__)
+
+
+def _colors(page):
+    if page and hasattr(page, 'theme_mode'):
+        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
+    return get_theme(True)
 
 class ValidacionView(ft.Container):
     def __init__(self):
         super().__init__()
         self.visible = False
         self.expand = True
-        self.bgcolor = ft.Colors.GREY_50
+        self.bgcolor = '#1A1A1A'
         self.padding = 0
         self.is_loading = False
         self.cards_dict = {}
@@ -33,26 +40,53 @@ class ValidacionView(ft.Container):
         
         self._build_ui()
     
+    def on_theme_change(self):
+        """Se llama cuando cambia el tema"""
+        if not self.page or not self.page.client_storage:
+            return
+        colors = _colors(self.page)
+        self.bgcolor = colors['bg']
+        try:
+            self._build_ui()
+            self._load_entradas_pendientes()
+        except:
+            pass
+    
     def update_view(self):
         """Refrescar datos"""
         self._load_entradas_pendientes()
 
+    def _on_refresh(self):
+        """Refresca la lista de entradas pendientes"""
+        if self.page:
+            snack = ft.SnackBar(
+                content=ft.Text("🔄 Actualizando..."),
+                bgcolor=ft.Colors.BLUE_600,
+                duration=1,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+        self._load_entradas_pendientes()
+
     def did_mount(self):
         """Carga inicial"""
-        self._load_entradas_pendientes()
+        if self.page and self.page.client_storage:
+            self._load_entradas_pendientes()
     
     def _build_ui(self):
+        colors = _colors(self.page)
         header = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Column([
-                        ft.Text("Validación", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_900),
-                        ft.Text("Vincular entradas a facturas", size=13, color=ft.Colors.BLUE_GREY_400),
+                        ft.Text("Validación", size=26, weight=ft.FontWeight.BOLD, color=colors['text_primary']),
+                        ft.Text("Vincular entradas a facturas", size=13, color=colors['text_secondary']),
                     ], expand=True, spacing=0),
                     ft.IconButton(
                         icon=ft.Icons.REFRESH_ROUNDED,
-                        icon_color=ft.Colors.BLUE_600,
-                        on_click=lambda _: self._load_entradas_pendientes(),
+                        icon_color=colors['text_secondary'],
+                        on_click=lambda _: self._on_refresh(),
                         tooltip="Refrescar lista"
                     )
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -64,8 +98,8 @@ class ValidacionView(ft.Container):
             hint_text="Buscar producto...",
             prefix_icon=ft.Icons.SEARCH_ROUNDED,
             border_radius=12,
-            bgcolor=ft.Colors.WHITE,
-            border_color=ft.Colors.TRANSPARENT,
+            border_color=colors['input_border'],
+            focused_border_color=colors['accent'],
             height=45,
             text_size=14,
             content_padding=ft.padding.symmetric(horizontal=15),
@@ -76,7 +110,7 @@ class ValidacionView(ft.Container):
             text="Validar (0)",
             icon=ft.Icons.FACT_CHECK_ROUNDED,
             color="white",
-            bgcolor=ft.Colors.BLUE_600,
+            bgcolor=colors['accent'],
             disabled=True,
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=self._show_validar_dialog,
@@ -85,7 +119,7 @@ class ValidacionView(ft.Container):
         self.clear_button = ft.TextButton(
             text="Limpiar",
             icon=ft.Icons.CLOSE_ROUNDED,
-            style=ft.ButtonStyle(color=ft.Colors.BLUE_GREY_400),
+            style=ft.ButtonStyle(color=colors['text_secondary']),
             on_click=self._clear_selection,
             visible=False
         )
@@ -106,39 +140,36 @@ class ValidacionView(ft.Container):
 
     def _create_entrada_card(self, entrada: Movimiento):
         is_selected = entrada.id in self.selected_entradas
+        colors = _colors(self.page)
         
-        # 1. Badge de Almacén
+        # 1. Badge de Almacén (más sutil)
         almacen_nombre = getattr(entrada, 'almacen', None) or 'principal'
-        almacen_badge = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.WAREHOUSE_ROUNDED, size=12, color=ft.Colors.PURPLE_700),
-                ft.Text(f"{almacen_nombre}", size=11, weight="bold", color=ft.Colors.PURPLE_700),
-            ], spacing=3),
-            bgcolor=ft.Colors.PURPLE_50,
-            padding=ft.padding.symmetric(horizontal=6, vertical=2),
-            border_radius=4
+        almacen_badge = ft.Text(
+            f"📦 {almacen_nombre.title()}",
+            size=10,
+            color=colors['text_secondary'],
         )
 
-        # 2. Lógica de Peso (Badge condicional)
-        peso_badge = ft.Container()
-        if getattr(entrada, "peso_total", 0) and entrada.peso_total > 0:
-            peso_badge = ft.Container(
-                content=ft.Row([
-                    ft.Icon(ft.Icons.SCALE_ROUNDED, size=12, color=ft.Colors.ORANGE_800),
-                    ft.Text(f"{entrada.peso_total} kg", size=12, weight="bold", color=ft.Colors.ORANGE_800),
-                ], spacing=4),
-                bgcolor=ft.Colors.ORANGE_50,
-                padding=ft.padding.symmetric(horizontal=6, vertical=2),
-                border_radius=4
+        # 2. Lógica de Peso (solo si hay peso)
+        peso_valor = getattr(entrada, "peso_total", 0) or 0
+        peso_badge = ft.Text()
+        if peso_valor > 0.001:
+            peso_badge = ft.Text(
+                f"⚖️ {peso_valor:.3f} kg",
+                size=10,
+                color='#FF9800',
             )
 
         # 3. Icono de selección (guardamos referencia)
         check_icon = ft.Icon(
             ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED,
-            color=ft.Colors.BLUE_600 if is_selected else ft.Colors.GREY_300,
+            color=colors['accent'] if is_selected else colors['text_hint'],
             size=22
         )
 
+        def on_eliminar(e):
+            self._eliminar_entrada(entrada)
+        
         # 3. Construcción de la Card
         card = ft.Container(
             content=ft.Row([
@@ -146,24 +177,30 @@ class ValidacionView(ft.Container):
                 ft.Column([
                     ft.Text(
                         entrada.producto.nombre if entrada.producto else "Producto sin nombre",
-                        weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_GREY_900,
+                        weight=ft.FontWeight.BOLD, size=15, color=colors['text_primary'],
                         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS
                     ),
                     ft.Row([
                         ft.Text(f"{entrada.cantidad} {entrada.producto.unidad_medida if entrada.producto else 'uds'}", 
-                                size=13, weight="w600", color=ft.Colors.BLUE_700),
+                                size=13, weight="w600", color=colors['success']),
                         peso_badge,
-                        almacen_badge,
-                        ft.Text(" • ", color=ft.Colors.GREY_300),
-                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=ft.Colors.BLUE_GREY_400),
-                    ], spacing=8, vertical_alignment="center")
-                ], expand=True, spacing=4)
-            ], spacing=12),
+                        ft.Container(expand=True),
+                        ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=colors['text_secondary']),
+                    ], spacing=8, vertical_alignment="center"),
+                    almacen_badge,
+                ], expand=True, spacing=2),
+                ft.IconButton(
+                    icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+                    icon_color=colors['error'],
+                    tooltip="Eliminar entrada",
+                    on_click=on_eliminar,
+                )
+            ], spacing=8),
             padding=15,
-            animate=200, # Animación de color suave
-            bgcolor=ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE,
+            animate=200,
+            bgcolor=colors['card_hover'] if is_selected else colors['card'],
             border_radius=12,
-            border=ft.border.all(2, ft.Colors.BLUE_600) if is_selected else ft.border.all(1, ft.Colors.GREY_200),
+            border=ft.border.all(2, colors['accent']) if is_selected else ft.border.all(1, colors['border']),
             on_click=lambda _: self._toggle_entrada_selection(entrada.id)
         )
         
@@ -212,13 +249,14 @@ class ValidacionView(ft.Container):
                     self.entradas_list.controls.append(self._create_entrada_card(ent))
             
             self._update_validate_button_state()
-            if self.page: self.page.update()
+            if self.page and self.page.client_storage: self.page.update()
         except Exception as ex:
             logger.error(f"Error cargando entradas: {ex}")
         finally:
             if db: db.close()
             self.is_loading = False
-            self.update()
+            if self.page and self.page.client_storage:
+                self.update()
 
     def _toggle_entrada_selection(self, eid):
         # Verificamos que la card exista en nuestro diccionario de referencias
@@ -261,6 +299,69 @@ class ValidacionView(ft.Container):
 
     def _filter_entradas(self, e):
         self._load_entradas_pendientes()
+
+    def _eliminar_entrada(self, entrada: Movimiento):
+        producto_nombre = entrada.producto.nombre if entrada.producto else "este producto"
+        
+        def on_confirmar(e):
+            db = next(get_db())
+            try:
+                almacen = getattr(entrada, 'almacen', 'principal') or 'principal'
+                
+                # Obtener existencia actual
+                existencia = db.query(Existencia).filter(
+                    Existencia.producto_id == entrada.producto_id,
+                    Existencia.almacen == almacen
+                ).first()
+                
+                if existencia:
+                    existencia.cantidad = max(0, existencia.cantidad - entrada.cantidad)
+                
+                # Eliminar el movimiento
+                db.delete(entrada)
+                db.commit()
+                
+                snack = ft.SnackBar(
+                    content=ft.Text(f"✓ Entrada de {entrada.cantidad} {producto_nombre} eliminada. Stock revertido."),
+                    bgcolor=ft.Colors.GREEN_700
+                )
+                self.page.overlay.append(snack)
+                snack.open = True
+                self.page.update()
+                
+                self._load_entradas_pendientes()
+                
+            except Exception as ex:
+                db.rollback()
+                logger.error(f"Error eliminando entrada: {ex}")
+                snack_err = ft.SnackBar(content=ft.Text(f"❌ Error: {str(ex)[:50]}"), bgcolor=ft.Colors.RED_700)
+                self.page.overlay.append(snack_err)
+                snack_err.open = True
+                self.page.update()
+            finally:
+                db.close()
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text("Eliminar Entrada"),
+            content=ft.Column([
+                ft.Text(f"¿Eliminar la entrada de {entrada.cantidad} {producto_nombre}?"),
+                ft.Container(height=5),
+                ft.Text(
+                    "Esta acción revertirá el stock. Si había 0 unidades y se agregaron "
+                    f"{entrada.cantidad}, volverán a quedar en 0.",
+                    size=12, color=ft.Colors.ORANGE_700
+                ),
+            ], tight=True),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
+                ft.ElevatedButton("Eliminar", bgcolor=ft.Colors.RED_600, color="white", on_click=on_confirmar),
+            ],
+        )
+        
+        self.active_dialog = dialog
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
 
     def _show_validar_dialog(self, e):
         factura_input = ft.TextField(

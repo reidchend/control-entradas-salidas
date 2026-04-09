@@ -1,0 +1,6 @@
+2026-04-06 19:55:27 | usr.views.inventario_view | ERROR    | Error carga: 'Categoria' object has no attribute 'icono'
+2026-04-06 19:56:44 | usr.views.inventario_view | ERROR    | Error carga productos: 'Producto' object has no attribute 'precio'
+2026-04-06 19:56:55 | usr.views.inventario_view | ERROR    | Error carga productos: 'Producto' object has no attribute 'precio'
+2026-04-06 20:39:43 | usr.views.inventario_view | ERROR    | Error UI: TextField.__init__() got an unexpected keyword argument 'text_color'
+2026-04-06 20:48:44 | usr.views.inventario_view | ERROR    | Error UI: 'InventarioView' object has no attribute '_on_search_change'
+2026-04-06 20:58:16 | usr.views.inventario_view | ERROR    | Error carga: module 'flet' has no attribute 'colors'

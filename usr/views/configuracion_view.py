@@ -3,6 +3,38 @@ from usr.database.base import get_db
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
 from sqlalchemy import text
+from usr.theme import get_theme
+
+
+def _colors(page):
+    if page and hasattr(page, 'theme_mode'):
+        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
+    return get_theme(True)
+
+
+def _c(page, color_name):
+    """Mapea colores de ft.Colors a tema dinámico"""
+    colors = _colors(page)
+    mapping = {
+        'WHITE': colors['white'],
+        'GREY_300': colors['text_hint'],
+        'GREY_400': colors['text_secondary'],
+        'GREY_500': colors['text_secondary'],
+        'GREY_600': colors['text_secondary'],
+        'GREY_50': colors['bg'],
+        'BLUE_GREY_900': colors['text_primary'],
+        'BLUE_GREY_800': colors['text_primary'],
+        'BLUE_600': colors['accent'],
+        'BLUE_700': colors['accent'],
+        'GREEN_600': colors['success'],
+        'GREEN_700': colors['success'],
+        'RED_600': colors['error'],
+        'RED_700': colors['error'],
+        'ORANGE_600': colors['warning'],
+        'ORANGE_700': colors['warning'],
+    }
+    return mapping.get(color_name, colors['text_primary'])
+
 
 class ConfiguracionView(ft.Container):
     def __init__(self):
@@ -10,7 +42,7 @@ class ConfiguracionView(ft.Container):
         self.visible = False
         self.expand = True
         self.padding = 0
-        self.bgcolor = "#f5f5f5"
+        self.bgcolor = "#1A1A1A"
         
         self.selected_image_path = None
         self.active_dialog = None
@@ -21,6 +53,8 @@ class ConfiguracionView(ft.Container):
         self.lista_productos = ft.Column(expand=True, spacing=12, scroll=ft.ScrollMode.AUTO)
         self.test_result_text = ft.Text("", size=14, weight=ft.FontWeight.BOLD)
         
+        colors = _colors(None)  # Default for __init__
+        
         self._build_ui()
 
     def did_mount(self):
@@ -29,28 +63,41 @@ class ConfiguracionView(ft.Container):
             self.page.on_resize = self._on_resize
             self._load_data()
 
+    def on_theme_change(self):
+        """Se llama cuando cambia el tema"""
+        if not self.page:
+            return
+        colors = _colors(self.page)
+        self.bgcolor = colors['bg']
+        try:
+            self._build_ui()
+            self._load_data()
+        except:
+            pass
+
     def _on_resize(self, e):
         self.is_mobile = self.page.width < 768
         self.update()
 
     def _build_ui(self):
+        colors = _colors(self.page)
         header = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.SETTINGS, size=32, color=ft.Colors.WHITE),
-                        bgcolor="#1976D2",
+                        content=ft.Icon(ft.Icons.SETTINGS, size=32, color=colors['white']),
+                        bgcolor=colors['accent'],
                         padding=12,
                         border_radius=12
                     ),
                     ft.Column([
-                        ft.Text("Configuración", size=26, weight=ft.FontWeight.BOLD, color="#212121"),
-                        ft.Text("Gestione categorías y catálogo de productos", size=13, color="#757575"),
+                        ft.Text("Configuración", size=26, weight=ft.FontWeight.BOLD, color=colors['text_primary']),
+                        ft.Text("Gestione categorías y catálogo de productos", size=13, color=colors['text_secondary']),
                     ], spacing=2, expand=True),
                 ], alignment=ft.MainAxisAlignment.START),
             ], spacing=8),
             padding=ft.padding.only(left=20, right=20, top=20, bottom=15),
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=colors['surface'],
             border_radius=ft.border_radius.only(bottom_left=20, bottom_right=20),
         )
 
@@ -81,24 +128,38 @@ class ConfiguracionView(ft.Container):
         self.content = ft.Column([header, self.tabs], expand=True, spacing=0)
 
     def _build_categorias_tab(self):
+        colors = _colors(self.page)
         fab_content = ft.Row([
             ft.Icon(ft.Icons.ADD, size=20),
             ft.Text("Nueva Categoría" if not self.is_mobile else "Nueva", weight=ft.FontWeight.BOLD),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
 
+        # Search field for categorias
+        self.categoria_search = ft.TextField(
+            hint_text="Buscar categorías...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=10,
+            bgcolor=colors['card'],
+            border_color=colors['border'],
+            height=40,
+            expand=True,
+            on_change=self._filter_categorias,
+        )
+
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=15),
                 ft.Row([
+                    self.categoria_search,
                     ft.Container(
                         content=fab_content,
-                        bgcolor="#1976D2",
+                        bgcolor=colors['accent'],
                         padding=ft.padding.symmetric(horizontal=20, vertical=12),
                         border_radius=30,
                         on_click=lambda _: self._show_categoria_dialog(),
                     ),
-                ], alignment=ft.MainAxisAlignment.END if not self.is_mobile else ft.MainAxisAlignment.CENTER),
-                ft.Container(height=10),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10),
+                ft.Container(height=15),
                 self.lista_categorias,
             ], expand=True, spacing=0),
             padding=20,
@@ -106,24 +167,38 @@ class ConfiguracionView(ft.Container):
         )
 
     def _build_productos_tab(self):
+        colors = _colors(self.page)
         fab_content = ft.Row([
             ft.Icon(ft.Icons.ADD_BOX, size=20),
             ft.Text("Nuevo Producto" if not self.is_mobile else "Nuevo", weight=ft.FontWeight.BOLD),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
 
+        # Search field for productos
+        self.producto_search = ft.TextField(
+            hint_text="Buscar productos...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=10,
+            bgcolor=colors['card'],
+            border_color=colors['border'],
+            height=40,
+            expand=True,
+            on_change=self._filter_productos,
+        )
+
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=15),
                 ft.Row([
+                    self.producto_search,
                     ft.Container(
                         content=fab_content,
-                        bgcolor="#388E3C",
+                        bgcolor=colors['success'],
                         padding=ft.padding.symmetric(horizontal=20, vertical=12),
                         border_radius=30,
                         on_click=lambda _: self._show_producto_dialog(),
                     ),
-                ], alignment=ft.MainAxisAlignment.END if not self.is_mobile else ft.MainAxisAlignment.CENTER),
-                ft.Container(height=10),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10),
+                ft.Container(height=15),
                 self.lista_productos,
             ], expand=True, spacing=0),
             padding=20,
@@ -187,7 +262,7 @@ class ConfiguracionView(ft.Container):
                         height=30 if is_mobile else 35,
                         bgcolor=c[0],
                         border_radius=20,
-                        border=ft.border.all(2, "#FFFFFF" if c[0] == color_dropdown.value else "transparent"),
+                        border=ft.border.all(2, colors['white'] if c[0] == color_dropdown.value else "transparent"),
                     ),
                     on_tap=lambda e, color=c[0]: self._update_color_preview(color, color_preview, color_dropdown),
                 )
@@ -200,7 +275,7 @@ class ConfiguracionView(ft.Container):
         activo_sw = ft.Switch(
             label="Activa",
             value=categoria.activo if categoria else True,
-            active_color="#388E3C",
+            active_color=colors['success'],
         )
 
         def save_click(e):
@@ -222,14 +297,14 @@ class ConfiguracionView(ft.Container):
             color_dropdown,
             color_preview,
             descripcion_field,
-            ft.Divider(height=15, color="#E0E0E0"),
+            ft.Divider(height=15, color=colors['border']),
             activo_sw,
         ], spacing=12 if is_mobile else 18, tight=True, scroll=ft.ScrollMode.AUTO)
 
         # ✅ CORREGIDO: Sin fullscreen, usar width=None en móvil
         self.active_dialog = ft.AlertDialog(
             title=ft.Row([
-                ft.Icon(ft.Icons.CATEGORY, color="#1976D2", size=24 if is_mobile else 28),
+                ft.Icon(ft.Icons.CATEGORY, color=colors['accent'], size=24 if is_mobile else 28),
                 ft.Text(
                     "Categoría" if is_mobile else "Gestionar Categoría",
                     weight=ft.FontWeight.BOLD,
@@ -246,8 +321,8 @@ class ConfiguracionView(ft.Container):
                 ft.ElevatedButton(
                     "Guardar", 
                     on_click=save_click,
-                    bgcolor="#1976D2",
-                    color=ft.Colors.WHITE,
+                    bgcolor=colors['accent'],
+                    color=colors['white'],
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
@@ -263,7 +338,7 @@ class ConfiguracionView(ft.Container):
             dropdown.value = color
         for ctrl in preview_row.controls:
             container = ctrl.content
-            container.border = ft.border.all(2, "#FFFFFF" if container.bgcolor == color else "transparent")
+            container.border = ft.border.all(2, colors['white'] if container.bgcolor == color else "transparent")
         preview_row.update()
         if dropdown:
             dropdown.update()
@@ -357,13 +432,13 @@ class ConfiguracionView(ft.Container):
             es_pesable_sw = ft.Switch(
                 label="Usa balanza",
                 value=getattr(producto, 'es_pesable', False) if producto else False,
-                active_color="#F57C00",
+                active_color=colors['warning'],
             )
             
             activo_sw = ft.Switch(
                 label="Habilitado",
                 value=producto.activo if producto else True,
-                active_color="#388E3C",
+                active_color=colors['success'],
             )
 
             def save_prod_click(e):
@@ -400,7 +475,7 @@ class ConfiguracionView(ft.Container):
                     cat_dropdown,
                     stock_min_field,
                     unidad_field,
-                    ft.Divider(height=15, color="#E0E0E0"),
+                    ft.Divider(height=15, color=colors['border']),
                     es_pesable_sw,
                     activo_sw,
                 ], spacing=12, tight=True, scroll=ft.ScrollMode.AUTO)
@@ -409,7 +484,7 @@ class ConfiguracionView(ft.Container):
                     ft.Row([nombre_field, codigo_field], spacing=15),
                     cat_dropdown,
                     ft.Row([stock_min_field, unidad_field], spacing=15),
-                    ft.Divider(height=20, color="#E0E0E0"),
+                    ft.Divider(height=20, color=colors['border']),
                     es_pesable_sw,
                     activo_sw,
                 ], spacing=15, tight=True)
@@ -417,7 +492,7 @@ class ConfiguracionView(ft.Container):
             # ✅ CORREGIDO: Sin fullscreen
             self.active_dialog = ft.AlertDialog(
                 title=ft.Row([
-                    ft.Icon(ft.Icons.INVENTORY_2, color="#388E3C", size=24 if is_mobile else 28),
+                    ft.Icon(ft.Icons.INVENTORY_2, color=colors['success'], size=24 if is_mobile else 28),
                     ft.Text(
                         "Producto" if is_mobile else "Ficha de Producto",
                         weight=ft.FontWeight.BOLD,
@@ -434,8 +509,8 @@ class ConfiguracionView(ft.Container):
                     ft.ElevatedButton(
                         "Guardar", 
                         on_click=save_prod_click, 
-                        bgcolor="#388E3C", 
-                        color=ft.Colors.WHITE,
+                        bgcolor=colors['success'], 
+                        color=colors['white'],
                     ),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
@@ -513,11 +588,11 @@ class ConfiguracionView(ft.Container):
             db.close()
 
     def _confirm_delete(self, objeto, tipo="producto"):
-        color = "#f44336" if tipo == "producto" else "#ff9800"
+        color = colors['error'] if tipo == "producto" else "#ff9800"
         
         self.active_dialog = ft.AlertDialog(
             title=ft.Row([
-                ft.Icon(ft.Icons.WARNING, color="#f44336"),
+                ft.Icon(ft.Icons.WARNING, color=colors['error']),
                 ft.Text(f"Eliminar {tipo.capitalize()}", weight=ft.FontWeight.BOLD),
             ], spacing=10),
             content=ft.Column([
@@ -528,7 +603,7 @@ class ConfiguracionView(ft.Container):
                 ft.Text(
                     "Esto lo desactivará del catálogo pero mantendrá el historial.",
                     size=12,
-                    color="#757575",
+                    color=colors['text_secondary'],
                     italic=True,
                 ),
             ], spacing=10),
@@ -536,7 +611,7 @@ class ConfiguracionView(ft.Container):
                 ft.TextButton("Cancelar", on_click=self._close_dialog),
                 ft.ElevatedButton(
                     "Eliminar", 
-                    color=ft.Colors.WHITE,
+                    color=colors['white'],
                     bgcolor=color,
                     on_click=lambda _: self._delete_logic(objeto, tipo),
                 ),
@@ -568,6 +643,7 @@ class ConfiguracionView(ft.Container):
             db.close()
 
     def _load_data(self):
+        colors = _colors(self.page)
         db = next(get_db())
         try:
             # ✅ Detectar modo móvil ANTES de cargar datos
@@ -577,6 +653,10 @@ class ConfiguracionView(ft.Container):
             prods = db.query(Producto).filter(Producto.activo == True).options(
                 joinedload(Producto.categoria)
             ).all()
+            
+            # Store for filtering
+            self.categorias_cache = cats
+            self.productos_cache = prods
             
             # ✅ Usar el método correcto según el dispositivo
             if self.is_mobile:
@@ -595,8 +675,28 @@ class ConfiguracionView(ft.Container):
         finally:
             db.close()
 
+    def _filter_categorias(self, e=None):
+        if not hasattr(self, 'categorias_cache'):
+            return
+        search = self.categoria_search.value.lower() if self.categoria_search.value else ""
+        filtered = [c for c in self.categorias_cache if search in c.nombre.lower()]
+        if self.is_mobile:
+            self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in filtered]
+        else:
+            self.lista_categorias.controls = self._create_categoria_grid(filtered)
+        self.update()
+
+    def _filter_productos(self, e=None):
+        if not hasattr(self, 'productos_cache'):
+            return
+        search = self.producto_search.value.lower() if self.producto_search.value else ""
+        filtered = [p for p in self.productos_cache if search in p.nombre.lower()]
+        self.lista_productos.controls = [self._create_producto_item(p) for p in filtered]
+        self.update()
+
     def _create_categoria_grid(self, categorias):
         """Grid de 2 columnas solo para desktop"""
+        colors = _colors(self.page)
         grid_items = []
         
         # ✅ Crear pares de categorías para filas de 2 columnas
@@ -624,32 +724,33 @@ class ConfiguracionView(ft.Container):
 
     def _create_categoria_card(self, c):
         """Card de categoría para desktop - 2 columnas"""
+        colors = _colors(self.page)
         return ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.CATEGORY, color=ft.Colors.WHITE, size=28),
+                        content=ft.Icon(ft.Icons.CATEGORY, color=colors['white'], size=28),
                         bgcolor=c.color,
                         padding=12,
                         border_radius=12,
                     ),
                     ft.Column([
-                        ft.Text(c.nombre, weight=ft.FontWeight.BOLD, size=15, color="#212121"),
+                        ft.Text(c.nombre, weight=ft.FontWeight.BOLD, size=15, color=colors['text_primary']),
                         ft.Text(
                             c.descripcion or "Sin descripción", 
                             size=12, 
-                            color="#757575", 
+                            color=colors['text_secondary'], 
                             max_lines=1, 
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
                     ], expand=True, spacing=2),
                 ], alignment=ft.MainAxisAlignment.START),
-                ft.Divider(height=1, color="#E0E0E0"),
+                ft.Divider(height=1, color=colors['border']),
                 ft.Row([
                     ft.Container(
                         content=ft.Row([
-                            ft.Icon(ft.Icons.CIRCLE, size=8, color="#388E3C" if c.activo else "#9E9E9E"),
-                            ft.Text("Activo" if c.activo else "Inactivo", size=11, color="#757575"),
+                            ft.Icon(ft.Icons.CIRCLE, size=8, color=colors['success'] if c.activo else "#9E9E9E"),
+                            ft.Text("Activo" if c.activo else "Inactivo", size=11, color=colors['text_secondary']),
                         ], spacing=5),
                     ),
                     ft.Row([
@@ -667,29 +768,30 @@ class ConfiguracionView(ft.Container):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ], spacing=10),
             padding=15,
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=colors['card'],
             border_radius=15,
-            border=ft.border.all(1, "#E0E0E0"),
+            border=ft.border.all(1, colors['border']),
             expand=True,  # ✅ Solo en desktop
         )
 
     def _create_categoria_item_mobile(self, c):
         """Item de categoría para móvil - 1 sola columna"""
+        colors = _colors(self.page)
         return ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.CATEGORY, color=ft.Colors.WHITE, size=24),
+                        content=ft.Icon(ft.Icons.CATEGORY, color=colors['white'], size=24),
                         bgcolor=c.color,
                         padding=10,
                         border_radius=10,
                     ),
                     ft.Column([
-                        ft.Text(c.nombre, weight=ft.FontWeight.BOLD, size=14, color="#212121"),
+                        ft.Text(c.nombre, weight=ft.FontWeight.BOLD, size=14, color=colors['text_primary']),
                         ft.Text(
                             c.descripcion or "Sin descripción", 
                             size=11, 
-                            color="#757575", 
+                            color=colors['text_secondary'], 
                             max_lines=1, 
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
@@ -698,8 +800,8 @@ class ConfiguracionView(ft.Container):
                 ft.Row([
                     ft.Container(
                         content=ft.Row([
-                            ft.Icon(ft.Icons.CIRCLE, size=6, color="#388E3C" if c.activo else "#9E9E9E"),
-                            ft.Text("Activo" if c.activo else "Inactivo", size=10, color="#757575"),
+                            ft.Icon(ft.Icons.CIRCLE, size=6, color=colors['success'] if c.activo else "#9E9E9E"),
+                            ft.Text("Activo" if c.activo else "Inactivo", size=10, color=colors['text_secondary']),
                         ], spacing=4),
                     ),
                     ft.Row([
@@ -719,17 +821,18 @@ class ConfiguracionView(ft.Container):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ], spacing=8),
             padding=15,  # ✅ Más padding para touch
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=colors['card'],
             border_radius=12,
-            border=ft.border.all(1, "#E0E0E0"),
+            border=ft.border.all(1, colors['border']),
             # ✅ NO usar expand=True en móvil para evitar deformaciones
             width=None,  
         )
 
     def _create_producto_item(self, p):
+        colors = _colors(self.page)
         tag = ft.Container(
-            content=ft.Text("PESABLE", size=9, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            bgcolor="#F57C00",
+            content=ft.Text("PESABLE", size=9, weight=ft.FontWeight.BOLD, color=colors['white']),
+            bgcolor=colors['warning'],
             padding=ft.padding.symmetric(horizontal=6, vertical=2),
             border_radius=4,
         ) if getattr(p, 'es_pesable', False) else None
@@ -738,27 +841,27 @@ class ConfiguracionView(ft.Container):
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.INVENTORY_2, color=ft.Colors.WHITE, size=24),
-                        bgcolor="#1976D2",
+                        content=ft.Icon(ft.Icons.INVENTORY_2, color=colors['white'], size=24),
+                        bgcolor=colors['accent'],
                         padding=10,
                         border_radius=10,
                     ),
                     ft.Column([
                         ft.Row([
-                            ft.Text(p.nombre, weight=ft.FontWeight.BOLD, size=14, color="#212121"),
+                            ft.Text(p.nombre, weight=ft.FontWeight.BOLD, size=14, color=colors['text_primary']),
                             tag if tag else ft.Container(),
                         ], spacing=8),
                         ft.Text(
                             f"Cat: {p.categoria.nombre if p.categoria else 'N/A'} • SKU: {p.codigo}",
                             size=11, 
-                            color="#757575",
+                            color=colors['text_secondary'],
                         ),
                     ], expand=True, spacing=2),
                 ], alignment=ft.MainAxisAlignment.START),
                 ft.Row([
                     ft.Row([
-                        ft.Icon(ft.Icons.LIST, size=14, color="#757575"),
-                        ft.Text(f"Mín: {p.stock_minimo} {p.unidad_medida}", size=11, color="#757575"),
+                        ft.Icon(ft.Icons.LIST, size=14, color=colors['text_secondary']),
+                        ft.Text(f"Mín: {p.stock_minimo} {p.unidad_medida}", size=11, color=colors['text_secondary']),
                     ], spacing=5),
                     ft.Row([
                         ft.IconButton(
@@ -775,9 +878,9 @@ class ConfiguracionView(ft.Container):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ], spacing=8),
             padding=12,
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=colors['card'],
             border_radius=12,
-            border=ft.border.all(1, "#E0E0E0"),
+            border=ft.border.all(1, colors['border']),
         )
 
     def _close_dialog(self, e=None):
@@ -811,12 +914,13 @@ class ConfiguracionView(ft.Container):
 
     def _show_error(self, m):
         self._remove_snackbar()
+        colors = _colors(self.page)
         self.active_snackbar = ft.SnackBar(
             content=ft.Row([
-                ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE),
-                ft.Text(m, color=ft.Colors.WHITE),
+                ft.Icon(ft.Icons.ERROR, color=colors['white']),
+                ft.Text(m, color=colors['white']),
             ], spacing=10),
-            bgcolor="#d32f2f",
+            bgcolor=colors['error'],
             margin=20,
         )
         self._add_to_overlay(self.active_snackbar)
@@ -827,10 +931,10 @@ class ConfiguracionView(ft.Container):
         self._remove_snackbar()
         self.active_snackbar = ft.SnackBar(
             content=ft.Row([
-                ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE),
-                ft.Text(m, color=ft.Colors.WHITE),
+                ft.Icon(ft.Icons.CHECK_CIRCLE, color=colors['white']),
+                ft.Text(m, color=colors['white']),
             ], spacing=10),
-            bgcolor="#388E3C",
+            bgcolor=colors['success'],
             margin=20,
         )
         self._add_to_overlay(self.active_snackbar)
@@ -842,6 +946,7 @@ class ConfiguracionView(ft.Container):
             self.page.overlay.remove(self.active_snackbar)
 
     def _build_sistema_tab(self):
+        colors = _colors(self.page)
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=20),
@@ -851,17 +956,17 @@ class ConfiguracionView(ft.Container):
                             # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
                             ft.Row([
                                 ft.Container(
-                                    content=ft.Icon(ft.Icons.DASHBOARD, color=ft.Colors.WHITE, size=28),
-                                    bgcolor="#7B1FA2",
+                                    content=ft.Icon(ft.Icons.DASHBOARD, color=colors['white'], size=28),
+                                    bgcolor=colors['accent_dark'],
                                     padding=12,
                                     border_radius=12,
                                 ),
                                 ft.Column([
                                     ft.Text("Mantenimiento del Sistema", weight=ft.FontWeight.BOLD, size=16),
-                                    ft.Text("Herramientas de diagnóstico y configuración", size=12, color="#757575"),
+                                    ft.Text("Herramientas de diagnóstico y configuración", size=12, color=colors['text_secondary']),
                                 ], spacing=2),
                             ], spacing=15),
-                            ft.Divider(height=20, color="#E0E0E0"),
+                            ft.Divider(height=20, color=colors['border']),
                             
                             ft.Text(
                                 "Si experimenta errores tras actualizaciones o cambios de configuración, use 'Probar Conexión' para verificar la base de datos.",
@@ -873,11 +978,11 @@ class ConfiguracionView(ft.Container):
                                 on_click=self._test_connection_action,
                                 icon=ft.Icons.STORAGE,
                                 bgcolor="#7B1FA2",
-                                color=ft.Colors.WHITE,
+                                color=colors['white'],
                             ),
 
                             # --- NUEVA SECCIÓN: NOTIFICACIONES PUSH (2026 Fix) ---
-                            ft.Divider(height=20, color="#E0E0E0"),
+                            ft.Divider(height=20, color=colors['border']),
                             ft.Text(
                                 "Configuración de Alertas", 
                                 weight=ft.FontWeight.BOLD, 
@@ -886,20 +991,20 @@ class ConfiguracionView(ft.Container):
                             ft.Text(
                                 "Habilite las notificaciones para recibir alertas de stock bajo y validaciones en tiempo real.",
                                 size=12,
-                                color="#757575",
+                                color=colors['text_secondary'],
                             ),
                             ft.ElevatedButton(
                                 "Habilitar Notificaciones", 
                                 on_click=self._request_notifications_action,
                                 icon=ft.Icons.NOTIFICATIONS_ACTIVE,
-                                bgcolor="#4A148C", # Un morado más oscuro para diferenciar
-                                color=ft.Colors.WHITE,
+                                bgcolor=colors['accent_dark'],
+                                color=colors['white'],
                             ),
 
                             ft.Container(
                                 content=self.test_result_text,
                                 padding=10,
-                                bgcolor="#f5f5f5",
+                                bgcolor=colors['bg'],
                                 border_radius=8,
                                 visible=False,
                             ),

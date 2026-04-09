@@ -3,8 +3,46 @@ from datetime import datetime
 from usr.database.base import get_db
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
+from usr.theme import get_theme
 
 logger = logging.getLogger(__name__)
+
+
+def _colors(page):
+    if page and hasattr(page, 'theme_mode'):
+        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
+    return get_theme(True)
+
+
+def _get_color(page, color_name):
+    """Obtiene color dinámico desde constantes de ft.Colors"""
+    colors = _colors(page)
+    color_map = {
+        'GREY_300': colors['text_hint'],
+        'GREY_400': colors['text_secondary'],
+        'GREY_500': colors['text_secondary'],
+        'GREY_200': colors['border'],
+        'GREY_50': colors['bg'],
+        'BLUE_GREY_900': colors['text_primary'],
+        'BLUE_GREY_800': colors['text_primary'],
+        'BLUE_GREY_500': colors['text_secondary'],
+        'BLUE_GREY_400': colors['text_secondary'],
+        'WHITE': colors['white'],
+        'BLUE_600': colors['accent'],
+        'BLUE_700': colors['accent'],
+        'GREEN_600': colors['success'],
+        'GREEN_700': colors['success'],
+        'RED_400': colors['error'],
+        'RED_700': colors['error'],
+        'ORANGE_600': colors['warning'],
+        'ORANGE_700': colors['warning'],
+    }
+    return color_map.get(color_name, colors['text_primary'])
+
+
+def _c(page, color_name):
+    """Alias corto para _get_color"""
+    return _get_color(page, color_name)
 
 
 class RequisicionesView(ft.Container):
@@ -12,7 +50,7 @@ class RequisicionesView(ft.Container):
         super().__init__()
         self.visible = False
         self.expand = True
-        self.bgcolor = ft.Colors.GREY_50
+        self.bgcolor = '#1A1A1A'
         self.padding = 0
         
         self.requisiciones_list = ft.ListView(expand=True, spacing=10, padding=20)
@@ -23,22 +61,36 @@ class RequisicionesView(ft.Container):
         
         self._build_ui()
 
+    def on_theme_change(self):
+        """Se llama cuando cambia el tema"""
+        if not self.page:
+            return
+        colors = _colors(self.page)
+        self.bgcolor = colors['bg']
+        try:
+            self._build_ui()
+            self._load_requisiciones()
+        except:
+            pass
+
     def _build_ui(self):
+        colors = _colors(self.page)
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
-                    ft.Text("Requisiciones", size=26, weight="bold", color=ft.Colors.BLUE_GREY_900),
-                    ft.Text("Gestión de traslados", size=13, color=ft.Colors.BLUE_GREY_400),
+                    ft.Text("Requisiciones", size=26, weight="bold", color=colors['text_primary']),
+                    ft.Text("Gestión de traslados", size=13, color=colors['text_secondary']),
                 ], expand=True, spacing=0),
                 ft.IconButton(
                     ft.Icons.ADD_ROUNDED,
-                    icon_color=ft.Colors.WHITE,
-                    bgcolor=ft.Colors.BLUE_600,
+                    icon_color=colors['white'],
+                    bgcolor=colors['accent'],
                     on_click=lambda _: self._show_crear_dialog(),
                     tooltip="Nueva requisición",
                 ),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=ft.padding.only(left=20, right=20, top=20, bottom=10),
+            bgcolor=colors['surface'],
         )
         
         self.content = ft.Column([
@@ -58,12 +110,13 @@ class RequisicionesView(ft.Container):
             self.requisiciones_list.controls.clear()
             
             if not reqs:
+                colors = _colors(self.page)
                 self.requisiciones_list.controls.append(
                     ft.Container(
                         content=ft.Column([
-                            ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=50, color=ft.Colors.GREY_300),
-                            ft.Text("No hay requisiciones", color=ft.Colors.GREY_400),
-                            ft.Text("Crea una nueva para comenzar", size=12, color=ft.Colors.GREY_400),
+                            ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=50, color=colors['text_hint']),
+                            ft.Text("No hay requisiciones", color=colors['text_secondary']),
+                            ft.Text("Crea una nueva para comenzar", size=12, color=colors['text_secondary']),
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=80),
                         alignment=ft.alignment.top_center,
@@ -81,12 +134,13 @@ class RequisicionesView(ft.Container):
             db.close()
 
     def _create_requisicion_card(self, req: Requisicion):
-        estado_colors = {
-            "pendiente": ft.Colors.ORANGE_600,
-            "completada": ft.Colors.GREEN_600,
-            "cancelada": ft.Colors.RED_600,
+        colors = _colors(self.page)
+        estado_colors_map = {
+            "pendiente": colors['warning'],
+            "completada": colors['success'],
+            "cancelada": colors['error'],
         }
-        estado_color = estado_colors.get(req.estado, ft.Colors.GREY_600)
+        estado_color = estado_colors_map.get(req.estado, colors['text_secondary'])
         
         db = next(get_db())
         try:
@@ -100,30 +154,30 @@ class RequisicionesView(ft.Container):
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.ASSIGNMENT_ROUNDED, size=24, color=ft.Colors.WHITE),
-                        bgcolor=ft.Colors.BLUE_600,
+                        content=ft.Icon(ft.Icons.ASSIGNMENT_ROUNDED, size=24, color=colors['white']),
+                        bgcolor=colors['accent'],
                         width=44, height=44, border_radius=10,
                         alignment=ft.alignment.center,
                     ),
                     ft.Column([
-                        ft.Text(f"#{req.numero}", weight="bold", size=16, color=ft.Colors.BLUE_GREY_900),
+                        ft.Text(f"#{req.numero}", weight="bold", size=16, color=colors['text_primary']),
                         ft.Row([
-                            ft.Text(f"{req.origen} → {req.destino}", size=12, color=ft.Colors.BLUE_GREY_500),
+                            ft.Text(f"{req.origen} → {req.destino}", size=12, color=colors['text_secondary']),
                         ], spacing=5),
                     ], expand=True),
                     ft.Column([
                         ft.Container(
-                            content=ft.Text(req.estado.upper(), size=10, weight="bold", color="white"),
+                            content=ft.Text(req.estado.upper(), size=10, weight="bold", color=colors['white']),
                             bgcolor=estado_color, padding=ft.padding.symmetric(horizontal=8, vertical=4),
                             border_radius=5,
                         ),
-                        ft.Text(f"{total_items} items", size=11, color=ft.Colors.GREY_500),
+                        ft.Text(f"{total_items} items", size=11, color=colors['text_secondary']),
                     ], horizontal_alignment="center"),
                 ]),
-                ft.Divider(height=1, color=ft.Colors.GREY_200),
+                ft.Divider(height=1, color=colors['border']),
                 ft.Row([
                     ft.Text(f"Creada: {req.fecha_creacion.strftime('%d/%m/%Y %H:%M') if req.fecha_creacion else '-'}", 
-                            size=11, color=ft.Colors.GREY_500, expand=True),
+                            size=11, color=colors['text_secondary'], expand=True),
                     ft.Row([
                         ft.TextButton("Ver", on_click=lambda _, r=req: self._show_detalles(r)),
                         ft.TextButton("Editar", on_click=lambda _, r=req: self._editar_requisicion(r)),
@@ -131,9 +185,9 @@ class RequisicionesView(ft.Container):
                 ]),
             ], spacing=8),
             padding=15,
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=colors['card'],
             border_radius=12,
-            border=ft.border.all(1, ft.Colors.GREY_200),
+            border=ft.border.all(1, _c(self.page, 'GREY_200')),
             on_click=lambda _, r=req: self._show_detalles(r),
         )
         return card
@@ -225,12 +279,12 @@ class RequisicionesView(ft.Container):
                 producto.nombre,
                 size=14,
                 weight="bold",
-                color=ft.Colors.BLUE_GREY_800,
+                color=_c(self.page, 'BLUE_GREY_800'),
             )
             
             delete_btn = ft.IconButton(
                 ft.Icons.DELETE_ROUNDED, 
-                icon_color=ft.Colors.RED_400, 
+                icon_color=colors['error'], 
                 on_click=lambda _, dbtn=delete_btn: self._eliminar_producto_row(dbtn, productos_container)
             )
             
@@ -314,14 +368,14 @@ class RequisicionesView(ft.Container):
                 self.page.update()
                 self._load_requisiciones()
                 
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición #{req.numero} creada"), bgcolor=ft.Colors.GREEN_700)
+                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición #{req.numero} creada"), bgcolor=colors['success'])
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
             except Exception as ex:
                 db.rollback()
                 logger.error(f"Error creando requisición: {ex}")
-                snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=ft.Colors.RED_700)
+                snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=colors['error'])
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -341,7 +395,7 @@ class RequisicionesView(ft.Container):
             ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Crear", on_click=on_confirmar, bgcolor=ft.Colors.BLUE_600, color="white"),
+                ft.ElevatedButton("Crear", on_click=on_confirmar, bgcolor=colors['accent'], color="white"),
             ],
         )
         self.page.overlay.append(self.active_dialog)
@@ -361,7 +415,7 @@ class RequisicionesView(ft.Container):
 
     def _editar_requisicion(self, req: Requisicion):
         if req.estado == "completada":
-            snack = ft.SnackBar(content=ft.Text("No se puede editar una requisición completada"), bgcolor=ft.Colors.ORANGE_700)
+            snack = ft.SnackBar(content=ft.Text("No se puede editar una requisición completada"), bgcolor=colors['warning'])
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -414,7 +468,7 @@ class RequisicionesView(ft.Container):
             
             delete_btn = ft.IconButton(
                 ft.Icons.DELETE_ROUNDED, 
-                icon_color=ft.Colors.RED_400, 
+                icon_color=colors['error'], 
             )
             
             fila = ft.Row([
@@ -441,13 +495,13 @@ class RequisicionesView(ft.Container):
                 content=ft.Row([
                     ft.Column([
                         ft.Text(producto.nombre, weight="bold", size=14),
-                        ft.Text(f"Unidad: {producto.unidad_medida or 'unidad'}", size=11, color=ft.Colors.GREY_500),
+                        ft.Text(f"Unidad: {producto.unidad_medida or 'unidad'}", size=11, color=colors['text_secondary']),
                     ], expand=True),
-                    ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, 
+                    ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=colors['success'], 
                                   on_click=lambda _, p=producto: agregar_producto(p)),
                 ]),
                 padding=10,
-                bgcolor=ft.Colors.GREY_50,
+                bgcolor=colors['bg'],
                 border_radius=8,
                 on_click=lambda _, p=producto: agregar_producto(p),
             )
@@ -465,9 +519,9 @@ class RequisicionesView(ft.Container):
                 ft.Container(height=10),
                 ft.Container(
                     content=resultados_container,
-                    bgcolor=ft.Colors.WHITE,
+                    bgcolor=colors['card'],
                     border_radius=10,
-                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border=ft.border.all(1, _c(self.page, 'GREY_300')),
                     padding=5,
                 ),
             ], tight=True, scroll=ft.ScrollMode.AUTO),
@@ -513,7 +567,7 @@ class RequisicionesView(ft.Container):
             
             prod_label = ft.Text(producto.nombre, size=14, expand=True)
             
-            delete_btn = ft.IconButton(ft.Icons.DELETE_ROUNDED, icon_color=ft.Colors.RED_400)
+            delete_btn = ft.IconButton(ft.Icons.DELETE_ROUNDED, icon_color=colors['error'])
             
             fila = ft.Row([prod_label, cantidad_input, unidad_input, delete_btn], spacing=10)
             
@@ -534,10 +588,10 @@ class RequisicionesView(ft.Container):
         return ft.Container(
             content=ft.Row([
                 ft.Text(producto.nombre, weight="bold", size=14, expand=True),
-                ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, on_click=lambda _: agregar()),
+                ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=colors['success'], on_click=lambda _: agregar()),
             ]),
             padding=10,
-            bgcolor=ft.Colors.GREY_50,
+            bgcolor=colors['bg'],
             border_radius=8,
             on_click=lambda _: agregar(),
         )
@@ -565,17 +619,17 @@ class RequisicionesView(ft.Container):
                     ft.Container(
                         content=ft.Row([
                             ft.Text(d.ingrediente, weight="bold", expand=True),
-                            ft.Text(f"{d.cantidad:.2f} {d.unidad}", color=ft.Colors.BLUE_700),
+                            ft.Text(f"{d.cantidad:.2f} {d.unidad}", color=colors['accent']),
                         ]),
                         padding=10,
-                        bgcolor=ft.Colors.GREY_50,
+                        bgcolor=colors['bg'],
                         border_radius=8,
                     )
                 )
             
             if not detalles:
                 content.controls.append(
-                    ft.Text("No hay productos en esta requisición", color=ft.Colors.GREY_500)
+                    ft.Text("No hay productos en esta requisición", color=colors['text_secondary'])
                 )
             
             dialog = ft.AlertDialog(
@@ -584,14 +638,14 @@ class RequisicionesView(ft.Container):
                     ft.Row([
                         ft.Container(
                             content=ft.Column([
-                                ft.Text("Origen", size=11, color=ft.Colors.GREY_500),
+                                ft.Text("Origen", size=11, color=colors['text_secondary']),
                                 ft.Text(req.origen.capitalize(), weight="bold"),
                             ], spacing=2),
                         ),
-                        ft.Icon(ft.Icons.ARROW_FORWARD, color=ft.Colors.GREY_400),
+                        ft.Icon(ft.Icons.ARROW_FORWARD, color=_c(self.page, 'GREY_400')),
                         ft.Container(
                             content=ft.Column([
-                                ft.Text("Destino", size=11, color=ft.Colors.GREY_500),
+                                ft.Text("Destino", size=11, color=colors['text_secondary']),
                                 ft.Text(req.destino.capitalize(), weight="bold"),
                             ], spacing=2),
                         ),
@@ -600,9 +654,9 @@ class RequisicionesView(ft.Container):
                     ft.Text("Productos:", weight="bold"),
                     content,
                     ft.Divider(),
-                    ft.Text(f"Estado: {req.estado.upper()}", weight="bold", color=ft.Colors.BLUE_700),
-                    ft.Text(f"Creada: {req.fecha_creacion.strftime('%d/%m/%Y %H:%M') if req.fecha_creacion else '-'}", size=11, color=ft.Colors.GREY_500),
-                    ft.Text(f"Observaciones: {req.observaciones or 'Sin observaciones'}", size=11, color=ft.Colors.GREY_500),
+                    ft.Text(f"Estado: {req.estado.upper()}", weight="bold", color=colors['accent']),
+                    ft.Text(f"Creada: {req.fecha_creacion.strftime('%d/%m/%Y %H:%M') if req.fecha_creacion else '-'}", size=11, color=colors['text_secondary']),
+                    ft.Text(f"Observaciones: {req.observaciones or 'Sin observaciones'}", size=11, color=colors['text_secondary']),
                 ], tight=True, spacing=10),
                 actions=[
                     ft.TextButton("Cerrar", on_click=lambda _: self._close_dialog()),
