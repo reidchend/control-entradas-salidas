@@ -1,7 +1,9 @@
 import flet as ft
 import asyncio
 import hashlib
+import threading
 from datetime import datetime
+from contextlib import contextmanager
 from usr.database.base import get_db
 from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
@@ -15,7 +17,21 @@ def _generar_color(texto):
     return f"#{hash_hcl[:6]}"
 
 
+def _get_attr(obj, key, default=""):
+    """Obtiene atributo de forma segura - maneja dict u objeto"""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def _colors(page):
+    if page and hasattr(page, 'theme_mode'):
+        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
+    return get_theme(True)
+
+
+def _get_safe_colors(page):
+    """Obtiene colores de forma segura, evita problemas cuando page no está disponible"""
     if page and hasattr(page, 'theme_mode'):
         return get_theme(page.theme_mode == ft.ThemeMode.DARK)
     return get_theme(True)
@@ -27,6 +43,17 @@ except ImportError:
     CACHE_AVAILABLE = False
 
 logger = get_logger(__name__)
+
+
+@contextmanager
+def _safe_db():
+    """Manejador seguro para sesiones de base de datos"""
+    db = next(get_db())
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 class InventarioView(ft.Container):
     def __init__(self):
@@ -65,6 +92,10 @@ class InventarioView(ft.Container):
         self.producto_seleccionado = None
         self._is_initialized = False
         self._categorias_cache = None
+        self._productos_cache = None
+        self._existencias_cache = None
+        self._snack = None
+        self._search_timer = None  # Para debounce de búsqueda
 
         self._build_ui()
 
@@ -73,7 +104,7 @@ class InventarioView(ft.Container):
         if not self.page:
             return
             
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         self.bgcolor = colors['bg']
         
         if hasattr(self, 'main_content_area'):
@@ -99,7 +130,7 @@ class InventarioView(ft.Container):
 
     def _build_ui(self):
         try:
-            colors = _colors(self.page)
+            colors = _get_safe_colors(self.page)
             self.header_container = ft.Container(
                 content=ft.Row([
                     ft.Column([
@@ -148,6 +179,9 @@ class InventarioView(ft.Container):
 
     def _on_refresh(self):
         """Refresca datos desde la BD directamente"""
+        if not self.page:
+            return
+        
         self.page.run_task(self._load_categorias, True)
         
         if self.categoria_seleccionada:
@@ -155,19 +189,28 @@ class InventarioView(ft.Container):
         elif self._vista_requisicion_activa:
             pass
         
-        if self.page:
-            snack = ft.SnackBar(
-                content=ft.Text("🔄 Actualizando..."),
-                bgcolor=ft.Colors.BLUE_600,
-                duration=1,
-            )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()
+        self.page.overlay.clear()
+        snack = ft.SnackBar(
+            content=ft.Text("🔄 Actualizando..."),
+            bgcolor=ft.Colors.BLUE_600,
+            duration=1,
+        )
+        self.page.overlay.clear()
+        snack = ft.SnackBar(
+            content=ft.Text("🔄 Actualizando..."),
+            bgcolor=ft.Colors.BLUE_600,
+            duration=1,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
 
     async def _load_categorias(self, force_refresh=False):
         db = None
         try:
+            # Always rebuild UI when force_refresh
+            rebuild_ui = force_refresh
+            
             # 1. Intentar cargar del caché primero (rápido)
             if CACHE_AVAILABLE and not force_refresh:
                 cached_cats = get_cache_any_age("categorias")
@@ -191,14 +234,17 @@ class InventarioView(ft.Container):
                 ]
                 set_cache("categorias", cats_data, ttl_seconds=86400)
             
+            # Always rebuild cards from DB objects for proper rendering
             if not categorias:
                 self.categorias_grid.controls = [ft.Text("No hay categorías")]
             else:
                 self.categorias_grid.controls = [self._create_categoria_card(c) for c in categorias]
             
+            # Force multiple updates to ensure rendering
             if self.page:
                 self.update()
                 if force_refresh:
+                    self.page.overlay.clear()
                     snack = ft.SnackBar(
                         content=ft.Text("✓ Datos actualizados desde BD"),
                         bgcolor=ft.Colors.GREEN_700,
@@ -212,17 +258,7 @@ class InventarioView(ft.Container):
         finally:
             if db: db.close()
 
-    def _on_search_change(self, e=None):
-        """Filtra categorías según el término de búsqueda"""
-        search_term = self.search_field.value.lower().strip() if self.search_field and self.search_field.value else ""
-        if self._categorias_cache:
-            if search_term:
-                filtered = [c for c in self._categorias_cache if search_term in c.get("nombre", "").lower()]
-            else:
-                filtered = self._categorias_cache
-            self.categorias_grid.controls = [self._create_categoria_card_from_dict(c) for c in filtered]
-            if self.page:
-                self.update()
+
 
     async def _handle_category_click(self, container, categoria):
         """Maneja la animación y el cambio de vista."""
@@ -244,10 +280,11 @@ class InventarioView(ft.Container):
         return '#2D2D2D'
 
     def _create_categoria_card(self, categoria):
-        cat_color = categoria.color if categoria.color else _generar_color(categoria.nombre)
-        inicial = categoria.nombre[0].upper() if categoria.nombre else "?"
+        nombre = getattr(categoria, 'nombre', '') or ''
+        cat_color = getattr(categoria, 'color', None) or _generar_color(nombre)
+        inicial = nombre[0].upper() if nombre else "?"
         
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         card_bg = colors['card']
         text_color = colors['text_primary']
         text_secondary = colors['text_secondary']
@@ -318,7 +355,7 @@ class InventarioView(ft.Container):
         cat_color = cat_dict.get("color") or _generar_color(nombre)
         inicial = nombre[0].upper() if nombre else "?"
         
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         card_bg = colors['card']
         text_color = colors['text_primary']
         text_secondary = colors['text_secondary']
@@ -365,13 +402,19 @@ class InventarioView(ft.Container):
             )
         )
         card.on_hover = lambda e: self._al_pasar_mouse(e, card, cat_color)
-        cat_obj = type('Categoria', (), cat_dict)()
+        cat_obj = type('Categoria', (), {})()
+        for key, value in cat_dict.items():
+            setattr(cat_obj, key, value)
         card.on_click = lambda e: self.page.run_task(self._handle_category_click, card, cat_obj)
         return card
 
     def _show_productos(self, categoria):
         self.categoria_seleccionada = categoria
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
+        
+        if self.search_field:
+            self.search_field.visible = False
+        
         header_nav = ft.Container(
             content=ft.Row([
                 ft.IconButton(
@@ -388,19 +431,78 @@ class InventarioView(ft.Container):
         
         self.productos_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
         
-        nueva_vista = ft.Column([header_nav, self.productos_list], expand=True, spacing=5)
+        self.search_for_products = ft.TextField(
+            hint_text="Buscar productos...",
+            prefix_icon=ft.Icons.SEARCH_ROUNDED,
+            border_radius=12,
+            border_color=colors['input_border'],
+            focused_border_color=colors['accent'],
+            height=45,
+            text_size=14,
+            on_change=self._on_search_change,
+            value="",
+        )
+        
+        nueva_vista = ft.Column([header_nav, self.search_for_products, self.productos_list], expand=True, spacing=5)
         self.main_content_area.content = nueva_vista
         self._load_productos()
         if self.page: self.update()
 
     def _reset_view(self):
         self.categoria_seleccionada = None
-        self.search_field.value = ""
+        if self.search_field:
+            self.search_field.value = ""
+            self.search_field.hint_text = "Buscar..."
+            self.search_field.visible = True
+        if hasattr(self, 'search_for_products'):
+            self.search_for_products.value = ""
         self.main_content_area.content = self.categorias_grid
-        # Refrescamos el grid para asegurar el estado limpio
         if self._categorias_cache:
             self.categorias_grid.controls = [self._create_categoria_card(c) for c in self._categorias_cache]
         if self.page: self.update()
+
+    def _on_search_change(self, e=None):
+        """Filtra categorías o productos según el contexto con debounce"""
+        if self._search_timer:
+            self._search_timer.cancel()
+        
+        def do_search():
+            active_search_field = self.search_for_products if self.categoria_seleccionada else self.search_field
+            search_term = active_search_field.value.lower().strip() if active_search_field and active_search_field.value else ""
+            
+            if self.categoria_seleccionada and hasattr(self, '_productos_cache') and self._productos_cache:
+                if not self._productos_cache:
+                    return
+                if search_term:
+                    filtered = [p for p in self._productos_cache if search_term in _get_attr(p, "nombre", "").lower()]
+                else:
+                    filtered = self._productos_cache
+                
+                existencias_map = getattr(self, '_existencias_cache', {})
+                self.productos_list.controls = [
+                    self._create_producto_item_from_dict(p, existencias_map.get(_get_attr(p, "id", 0), {})) 
+                    for p in filtered
+                ]
+            else:
+                if not self._categorias_cache or len(self._categorias_cache) == 0:
+                    return
+                
+                if search_term:
+                    filtered = [c for c in self._categorias_cache if search_term in _get_attr(c, "nombre", "").lower()]
+                else:
+                    filtered = self._categorias_cache
+                
+                if not filtered:
+                    colors = _get_safe_colors(self.page)
+                    self.categorias_grid.controls = [ft.Text("Sin resultados", size=16, color=colors['text_secondary'])]
+                else:
+                    self.categorias_grid.controls = [self._create_categoria_card_from_dict(c) for c in filtered]
+            
+            if self.page:
+                self.update()
+        
+        self._search_timer = threading.Timer(0.3, do_search)
+        self._search_timer.start()
 
     def _load_productos(self, search_term=""):
         if not self.categoria_seleccionada: return
@@ -415,6 +517,8 @@ class InventarioView(ft.Container):
                 
                 if cached_prods:
                     existencias_map = cached_exist or {}
+                    self._productos_cache = cached_prods
+                    self._existencias_cache = existencias_map
                     if search_term:
                         cached_prods = [p for p in cached_prods if search_term.lower() in p.get("nombre", "").lower()]
                     
@@ -425,8 +529,21 @@ class InventarioView(ft.Container):
             # 2. Cargar de la BD
             db = next(get_db())
             
-            productos = db.query(Producto).filter(Producto.categoria_id == cat_id).all()
-            producto_ids = [p.id for p in productos]
+            productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).all()
+            
+            # Convertir a diccionarios inmediatamente para evitar DetachedInstanceError
+            self._productos_cache = [
+                {
+                    "id": p.id,
+                    "nombre": p.nombre,
+                    "unidad_medida": p.unidad_medida,
+                    "stock_minimo": p.stock_minimo,
+                    "es_pesable": getattr(p, 'es_pesable', False),
+                    "almacen_predeterminado": getattr(p, 'almacen_predeterminado', 'principal')
+                } for p in productos_raw
+            ]
+            
+            producto_ids = [p["id"] for p in self._productos_cache]
             
             existencias_map = {}
             if producto_ids:
@@ -438,19 +555,17 @@ class InventarioView(ft.Container):
                         existencias_map[e.producto_id] = {}
                     existencias_map[e.producto_id][e.almacen] = e.cantidad
             
+            self._existencias_cache = existencias_map
+            
             # 3. Guardar en caché
-            if CACHE_AVAILABLE and productos:
-                prods_data = [
-                    {"id": p.id, "nombre": p.nombre, "unidad_medida": p.unidad_medida, "stock_minimo": p.stock_minimo}
-                    for p in productos
-                ]
-                set_cache(f"productos_cat_{cat_id}", prods_data, ttl_seconds=86400)
+            if CACHE_AVAILABLE and self._productos_cache:
+                set_cache(f"productos_cat_{cat_id}", self._productos_cache, ttl_seconds=86400)
                 set_cache(f"existencias_cat_{cat_id}", existencias_map, ttl_seconds=3600)
             
             if search_term:
-                productos = [p for p in productos if search_term.lower() in p.nombre.lower()]
+                self._productos_cache = [p for p in self._productos_cache if search_term.lower() in p.get("nombre", "").lower()]
             
-            items = [self._create_producto_item(p, existencias_map.get(p.id, {})) for p in productos if p]
+            items = [self._create_producto_item_from_dict(p, existencias_map.get(p["id"], {})) for p in self._productos_cache]
             self.productos_list.controls = items if items else [ft.Text("No hay productos")]
             if self.page: self.update()
         except Exception as e:
@@ -461,7 +576,7 @@ class InventarioView(ft.Container):
     def _create_producto_item(self, producto, stock_por_almacen=None):
         if stock_por_almacen is None:
             stock_por_almacen = {}
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         stock = sum(stock_por_almacen.values()) or 0
         stock_min = producto.stock_minimo or 0
         stock_color = colors['error'] if stock < stock_min else colors['success']
@@ -498,7 +613,7 @@ class InventarioView(ft.Container):
         """Crea item de producto desde diccionario (caché)"""
         if stock_por_almacen is None:
             stock_por_almacen = {}
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         stock = sum(stock_por_almacen.values()) or 0
         stock_min = prod_dict.get("stock_minimo", 0) or 0
         stock_color = colors['error'] if stock < stock_min else colors['success']
@@ -538,13 +653,14 @@ class InventarioView(ft.Container):
 
     def _show_cantidad_dialog(self, producto, tipo):
         self.producto_seleccionado = producto
-        es_pesable = getattr(producto, 'es_pesable', False)
+        es_pesable = _get_attr(producto, 'es_pesable', False)
         
-        almacen_default = producto.almacen_predeterminado or "principal"
+        almacen_default = _get_attr(producto, 'almacen_predeterminado', 'principal')
         
         db = next(get_db())
         try:
-            existencias = db.query(Existencia).filter(Existencia.producto_id == producto.id).all()
+            producto_id = _get_attr(producto, 'id')
+            existencias = db.query(Existencia).filter(Existencia.producto_id == producto_id).all()
             stock_por_almacen = {e.almacen: e.cantidad for e in existencias}
             todos_almacenes = db.query(Existencia.almacen).distinct().all()
             almacenes_disponibles = [a[0] for a in todos_almacenes]
@@ -553,7 +669,7 @@ class InventarioView(ft.Container):
         finally:
             db.close()
         
-        colors = _colors(self.page)
+        colors = _get_safe_colors(self.page)
         cant_input = ft.TextField(
             label="Cantidad (Bultos/Unidades)",
             value="1", 
@@ -651,9 +767,17 @@ class InventarioView(ft.Container):
             ],
             actions_alignment="end",
         )
+        self.page.overlay.clear()
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True
         self.page.update()
+
+    def _close_dialog(self, e=None):
+        if self.active_dialog:
+            self.active_dialog.open = False
+            if self.page:
+                self.page.update()
+            self.active_dialog = None
 
     def _eliminar_item_req(self, idx, tabla):
         if idx < len(self.lista_requisicion):

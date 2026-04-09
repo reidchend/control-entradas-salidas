@@ -55,9 +55,7 @@ class ControlEntradasSalidasApp:
 
         self._setup_theme()
         
-        # --- SOLICITUD DE PERMISOS Y NOTIFICACIONES ---
-        await self._setup_notification_bridge() 
-        
+        # Crear layout y mostrar vista inicial
         self._create_layout()
         self._show_view(0)
         self._handle_resize()
@@ -105,53 +103,7 @@ class ControlEntradasSalidasApp:
         try:
             self.page.update()
         except:
-            pass
-
-
-    async def _setup_notification_bridge(self):
-        """Configura el WebView usando asignación directa para evitar errores de versión"""
-        
-        async def on_web_message(e):
-            token = e.data
-            if token and "error" not in token:
-                print(f"🎫 TOKEN CAPTURADO: {token[:20]}...")
-                await self._sincronizar_token_supabase(token, "web_push_android")
-                
-                self.page.snack_bar = ft.SnackBar(ft.Text("🔔 Notificaciones vinculadas"))
-                self.page.snack_bar.open = True
-                self.page.update()
-
-        # Creamos el objeto sin pasarle el handler en el constructor
-        bridge_webview = ft.WebView(
-            url="https://reidchend.github.io/LycorisNotifycation.github.io/",
-            expand=False,
-            width=1,
-            height=1,
-            visible=False
-        )
-
-        # ASIGNACIÓN DIRECTA (Esto evita el TypeError del constructor)
-        bridge_webview.on_message = on_web_message
-        bridge_webview.on_page_started = lambda _: print("🌐 Puente iniciado...")
-
-        self.page.overlay.append(bridge_webview)
-        self.page.update()
-
-    async def _sincronizar_token_supabase(self, token, plataforma):
-        try:
-            from supabase import create_client
-            supabase = create_client(self.settings.SUPABASE_URL, self.settings.SUPABASE_KEY)
-            
-            supabase.table("fcm_tokens").upsert({
-                "token": token,
-                "platform": plataforma,
-                "app_name": self.settings.FLET_APP_NAME,
-                "last_update": "now()" 
-            }).execute()
-            
-            print(f"🚀 Token guardado en Supabase.")
-        except Exception as e:
-            print(f"❌ Error Supabase: {e}")
+             pass
 
     def _create_layout(self):
         # Área de contenido - modo oscuro por defecto

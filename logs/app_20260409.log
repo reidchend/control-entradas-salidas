@@ -1,0 +1,4 @@
+2026-04-09 19:12:21 | usr.views.inventario_view | ERROR    | Error carga productos: name 'producto_ids' is not defined
+2026-04-09 19:15:36 | usr.views.inventario_view | ERROR    | Error carga productos: name 'producto_ids' is not defined
+2026-04-09 19:15:41 | usr.views.inventario_view | ERROR    | Error carga productos: name 'producto_ids' is not defined
+2026-04-09 19:15:54 | usr.views.inventario_view | ERROR    | Error carga productos: cannot access local variable 'existencias_map' where it is not associated with a value
