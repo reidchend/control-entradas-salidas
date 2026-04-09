@@ -1,5 +1,5 @@
 """
-Sistema de caché local para работу offline
+Sistema de caché local para trabajo offline
 """
 import sqlite3
 import json
@@ -7,8 +7,25 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-CACHE_DIR = Path.home() / ".control_entradas_cache"
-CACHE_DIR.mkdir(exist_ok=True)
+def get_cache_dir():
+    """Obtiene el directorio de caché válido para todas las plataformas"""
+    # En Android/Flet, usamos el directorio de trabajo actual
+    # que es escribible
+    cache_dir = Path("./.control_entradas_cache")
+    try:
+        cache_dir.mkdir(exist_ok=True)
+    except PermissionError:
+        # Si falla, usamos un directorio alternativo
+        cache_dir = Path("/data/data/com.reidchend.lycoris.control_entradas_salidas/cache")
+        try:
+            cache_dir.mkdir(exist_ok=True)
+        except:
+            # Último recurso: directorio temporal
+            cache_dir = Path("./cache")
+            cache_dir.mkdir(exist_ok=True)
+    return cache_dir
+
+CACHE_DIR = get_cache_dir()
 DB_PATH = CACHE_DIR / "cache.db"
 
 def get_cache_conn():

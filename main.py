@@ -43,9 +43,13 @@ class ControlEntradasSalidasApp:
 
         # Configuraciones iniciales
         try:
-            self.page.window_icon = self.settings.FLET_APP_ICON
+            from pathlib import Path
+            icon_path = Path(self.settings.FLET_APP_ICON)
+            if icon_path.exists():
+                self.page.window_icon = str(icon_path.absolute())
             self.page.title = self.settings.FLET_APP_NAME
-        except:
+        except Exception as e:
+            print(f"Error configurando icono: {e}")
             pass
             
         self.page.theme_mode = ft.ThemeMode.DARK

@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     
     # --- EL RESTO DE TUS VARIABLES ORIGINALES ---
     FLET_APP_NAME: str = os.getenv("FLET_APP_NAME", "Lycoris_Control")
-    FLET_APP_ICON: str = "favicon.png"
+    FLET_APP_ICON: str = os.getenv("FLET_APP_ICON", "favicon.png")
     FLET_APP_VERSION: str = os.getenv("FLET_APP_VERSION", "1.0.0")
     
     FLET_WEB_PORT: str = os.getenv("FLET_WEB_PORT", "8502")
