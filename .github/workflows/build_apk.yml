@@ -33,7 +33,7 @@ jobs:
 
       - name: Install Flet & Tools
         run: |
-          pip install flet==0.28.3 cookiecutter setuptools wheel
+          pip install flet-cli cookiecutter setuptools wheel
           
 
       - name: Build APK
@@ -57,7 +57,7 @@ jobs:
           
           # 3. Requirements limpios
           cat << EOF > requirements.txt
-          flet==0.28.3
+          flet
           supabase
           sqlalchemy
           greenlet
@@ -68,6 +68,8 @@ jobs:
           python-dotenv
           certifi
           EOF
+          
+          pip install -r requirements.txt
 
           # 1. Creamos el archivo de extensión de Flet (La llave maestra)
           cat << EOF > ext.yaml
@@ -86,7 +88,8 @@ jobs:
           # 4. Construcción (Quitamos --project que a veces causa conflictos con --product)
           flet build apk \
             --product "Lycoris Control" \
-            --org "com.reidchend.lycoris" \
+            --org "com.reidchend" \
+            --android-adaptive-icon-background "#1A1A1A" \
             --build-number 5 \
             --build-version "1.0.4" \
             --no-rich-output 
