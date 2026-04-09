@@ -1,1 +1,5 @@
-flet pack main.py --name "Lycoris_Control" --icon "assets/icono.ico" --add-data "assets;assets" --add-data ".env;." --hidden-import "pydantic_settings" --hidden-import "sqlalchemy" --hidden-import "supabase" --hidden-import "postgrest" --hidden-import "gotrue" --hidden-import "pg8000" --hidden-import "sqlalchemy.dialects.postgresql"
+pyinstaller --noconfirm --onefile --windowed --name "Lycoris_Control" --icon "assets/icono.ico" --add-data "assets;assets" --add-data ".env;." --collect-all "supabase" --collect-all "pydantic_settings" --collect-submodules "sqlalchemy" --hidden-import "sqlalchemy.dialects.postgresql" --hidden-import "pg8000" main.py
+
+
+pip install flet[desktop]
+pip install Pillow

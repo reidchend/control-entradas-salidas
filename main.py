@@ -43,10 +43,21 @@ class ControlEntradasSalidasApp:
 
         # Configuraciones iniciales
         try:
+            import sys
+            import os
             from pathlib import Path
-            icon_path = Path(self.settings.FLET_APP_ICON)
-            if icon_path.exists():
-                self.page.window_icon = str(icon_path.absolute())
+
+            def get_abs_path(relative_path):
+                """Obtiene ruta absoluta para desarrollo y .exe"""
+                if hasattr(sys, '_MEIPASS'):
+                    return os.path.join(sys._MEIPASS, relative_path)
+                return os.path.join(os.path.abspath("."), relative_path)
+
+            icon_path_str = get_abs_path(self.settings.FLET_APP_ICON)
+            
+            if os.path.exists(icon_path_str):
+                self.page.window_icon = icon_path_str
+            
             self.page.title = self.settings.FLET_APP_NAME
         except Exception as e:
             print(f"Error configurando icono: {e}")

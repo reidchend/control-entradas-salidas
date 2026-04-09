@@ -1,0 +1,9 @@
+[tool.flet]
+product = "Lycoris Control"
+org = "com.reidchend"
+android.adaptive_icon_background = "#1A1A1A"
+
+[project]
+name = "lycoris-control"
+version = "1.0.0"
+description = "Control de Entradas y Salidas"
