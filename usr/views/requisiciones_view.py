@@ -62,6 +62,9 @@ class RequisicionesView(ft.Container):
         self.inventario_view = None
         self.app_controller = None
         
+        self._vista_actual = "lista"  # lista | crear
+        self.lista_productos_req = []
+        
         self._build_ui()
 
     def on_theme_change(self):
@@ -88,7 +91,7 @@ class RequisicionesView(ft.Container):
                     ft.Icons.ADD_ROUNDED,
                     icon_color=colors['white'],
                     bgcolor=colors['accent'],
-                    on_click=lambda _: self._show_crear_dialog(),
+                    on_click=lambda _: self._show_crear_vista(),
                     tooltip="Nueva requisición",
                 ),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -766,3 +769,559 @@ class RequisicionesView(ft.Container):
             logger.error(f"Error mostrando detalles: {ex}")
         finally:
             db.close()
+
+    def _show_crear_vista(self):
+        """Muestra la vista de crear requisición - optimizada para móvil"""
+        colors = _colors(self.page)
+        is_mobile = self.page.width < 700 if self.page else False
+        self._vista_actual = "crear"
+        self.lista_productos_req = []
+        
+        db = next(get_db())
+        almacenes = []
+        try:
+            almacenes_result = db.query(Existencia.almacen).distinct().all()
+            almacenes = [a[0] for a in almacenes_result]
+            if "principal" not in almacenes:
+                almacenes.append("principal")
+            if "restaurante" not in almacenes:
+                almacenes.append("restaurante")
+        finally:
+            db.close()
+        
+        origen_dropdown = ft.Dropdown(
+            label="Desde",
+            options=[ft.dropdown.Option(a, a.title()) for a in almacenes],
+            value="principal",
+            border_radius=10,
+            expand=True,
+        )
+        
+        self._origen_dropdown = origen_dropdown
+        
+        destino_dropdown = ft.Dropdown(
+            label="Hacia",
+            options=[ft.dropdown.Option(a, a.title()) for a in almacenes],
+            value="restaurante",
+            border_radius=10,
+            expand=True,
+        )
+        
+        almacenes_card = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.LOCATION_ON_OUTLINED, color=colors['accent'], size=20),
+                    ft.Text("Ruta de Traslado", weight="bold", size=14, color=colors['text_primary']),
+                ], spacing=10),
+                ft.Divider(height=5),
+                ft.Row([
+                    ft.Column([ft.Text("Desde", size=11, color=colors['text_secondary']), origen_dropdown], expand=True),
+                    ft.Icon(ft.Icons.ARROW_FORWARD, color=colors['text_secondary']),
+                    ft.Column([ft.Text("Hacia", size=11, color=colors['text_secondary']), destino_dropdown], expand=True),
+                ], spacing=10),
+            ], spacing=5),
+            padding=12,
+            bgcolor=colors['card'],
+            border_radius=12,
+        )
+        
+        observaciones_input = ft.TextField(
+            label="Observaciones",
+            hint_text="Notas...",
+            border_radius=10,
+            multiline=True,
+            min_lines=1,
+        )
+        
+        buscador = ft.TextField(
+            hint_text="Buscar producto...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=12,
+            on_change=lambda e: self._buscar_productos_buscador(e.control.value, resultados_container),
+        )
+        
+        resultados_container = ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=5,
+        )
+        
+        productos_lista = ft.ListView(
+            expand=True,
+            spacing=8,
+            padding=10,
+        )
+        self._productos_lista_req = productos_lista
+        
+        def abrir_buscador(e):
+            self._abrir_buscador_productos()
+        
+        boton_agregar = ft.ElevatedButton(
+            icon=ft.Icons.ADD,
+            text="Agregar Producto",
+            on_click=abrir_buscador,
+            bgcolor=colors['accent'],
+            color="white",
+        )
+        
+        header = ft.Container(
+            content=ft.Row([
+                ft.IconButton(
+                    ft.Icons.ARROW_BACK,
+                    on_click=lambda _: self._volver_lista(),
+                ),
+                ft.Text("Nueva Requisición", size=18, weight="bold", color=colors['text_primary']),
+                ft.Container(expand=True),
+                ft.ElevatedButton(
+                    "Crear",
+                    on_click=lambda _: self._crear_requisicion_vista(origen_dropdown, destino_dropdown, observaciones_input),
+                    bgcolor=colors['success'],
+                    color="white",
+                ),
+            ], spacing=10),
+            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            bgcolor=colors['surface'],
+        )
+        
+        panel_productos = ft.Column([
+            ft.Row([
+                ft.Text(f"Productos ({len(self.lista_productos_req)})", weight="bold", size=14, color=colors['text_primary']),
+                ft.Container(expand=True),
+                boton_agregar,
+            ], spacing=10),
+            ft.Container(
+                content=productos_lista,
+                bgcolor=colors['bg'],
+                border_radius=12,
+                expand=True,
+                padding=5,
+            ),
+        ], spacing=5)
+        
+        if is_mobile:
+            contenido = ft.Column([
+                header,
+                almacenes_card,
+                ft.Container(height=5),
+                ft.Container(content=panel_productos, padding=10, expand=True),
+            ], spacing=0, scroll=ft.ScrollMode.AUTO)
+        else:
+            row_busqueda = ft.Container(
+                content=ft.Column([
+                    ft.Text("Buscar productos", weight="bold", size=14, color=colors['text_primary']),
+                    buscador,
+                    ft.Container(
+                        content=resultados_container,
+                        bgcolor=colors['card'],
+                        border_radius=10,
+                        height=250,
+                    ),
+                ], spacing=5),
+                width=320,
+                padding=10,
+            )
+            contenido = ft.Column([
+                header,
+                almacenes_card,
+                ft.Container(height=5),
+                ft.Row([
+                    row_busqueda,
+                    ft.Container(content=panel_productos, expand=True, padding=10),
+                ], spacing=10),
+            ], spacing=0, scroll=ft.ScrollMode.AUTO)
+        
+        self._vista_crear = ft.Container(
+            content=contenido,
+            bgcolor=colors['bg'],
+            padding=0,
+        )
+        
+        self.content = self._vista_crear
+        self.update()
+
+    def _abrir_buscador_productos(self):
+        """Abre el buscador de productos como BottomSheet"""
+        colors = _colors(self.page)
+        
+        busqueda = ft.TextField(
+            hint_text="Buscar producto...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=12,
+            autofocus=True,
+        )
+        
+        resultados = ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=5,
+        )
+        
+        self._resultados_buscador = resultados
+        
+        self._bs_buscador = None
+        
+        def on_change(e):
+            self._buscar_productos_buscador(e.control.value, resultados)
+        
+        busqueda.on_change = on_change
+        
+        def close(e):
+            bs.open = False
+            self.page.update()
+        
+        def agregar_y_cerrar(producto):
+            self._agregar_producto_req(producto)
+            bs.open = False
+            self.page.update()
+        
+        bs = ft.BottomSheet(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text("Buscar Producto", size=18, weight="bold"),
+                        ft.IconButton(ft.Icons.CLOSE, on_click=close),
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    busqueda,
+                    ft.Container(
+                        content=resultados,
+                        height=400,
+                    ),
+                ], spacing=10),
+                padding=20,
+            ),
+            is_scroll_controlled=True,
+            bgcolor=colors['surface'],
+        )
+        
+        self.page.overlay.append(bs)
+        self._bs_buscador = bs
+        bs.open = True
+        self.page.update()
+        
+        self._buscar_productos_buscador("", resultados)
+        
+        self._buscar_productos_buscador("", resultados)
+
+    def _buscar_productos_buscador(self, texto, container):
+        db = next(get_db())
+        try:
+            query = db.query(Producto).filter(Producto.activo == True)
+            if texto:
+                query = query.filter(Producto.nombre.ilike(f"%{texto}%"))
+            resultados = query.limit(30).all()
+        finally:
+            db.close()
+        
+        colors = _colors(self.page)
+        container.controls.clear()
+        
+        for p in resultados:
+            es_pesable = getattr(p, 'es_pesable', False)
+            badge = ft.Container(
+                content=ft.Text("PESABLE", size=9, color="white", weight="bold"),
+                bgcolor=colors['warning'],
+                padding=ft.padding.symmetric(horizontal=4, vertical=1),
+                border_radius=3,
+            ) if es_pesable else ft.Container()
+            
+            container.controls.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Column([
+                            ft.Text(p.nombre, weight="bold", size=14, color=colors['text_primary']),
+                            ft.Row([
+                                ft.Text(f"{p.unidad_medida or 'uds'}", size=11, color=colors['text_secondary']),
+                                badge,
+                            ], spacing=5),
+                        ], expand=True),
+                        ft.Container(
+                            content=ft.Icon(ft.Icons.ADD_CIRCLE, color=colors['success'], size=28),
+                            on_click=lambda _, prod=p: self._agregar_producto_req(prod),
+                            padding=5,
+                        ),
+                    ], spacing=10),
+                    padding=12,
+                    bgcolor=colors['card'],
+                    border_radius=10,
+                    ink=True,
+                    on_click=lambda _, prod=p: self._agregar_producto_req(prod),
+                )
+            )
+        
+        if not resultados and texto:
+            container.controls.append(
+                ft.Text("Sin resultados", color=colors['text_secondary'], text_align="center")
+            )
+        
+        container.update()
+        db = next(get_db())
+        try:
+            query = db.query(Producto).filter(Producto.activo == True)
+            if texto:
+                query = query.filter(Producto.nombre.ilike(f"%{texto}%"))
+            resultados = query.limit(30).all()
+        finally:
+            db.close()
+        
+        colors = _colors(self.page)
+        container.controls.clear()
+        
+        for p in resultados:
+            es_pesable = getattr(p, 'es_pesable', False)
+            badge = ft.Container(
+                content=ft.Text("PESABLE", size=9, color="white", weight="bold"),
+                bgcolor=colors['warning'],
+                padding=ft.padding.symmetric(horizontal=4, vertical=1),
+                border_radius=3,
+            ) if es_pesable else ft.Container()
+            
+            container.controls.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Column([
+                            ft.Text(p.nombre, weight="bold", size=13, color=colors['text_primary']),
+                            ft.Row([
+                                ft.Text(f"Unidad: {p.unidad_medida or 'uds'}", size=11, color=colors['text_secondary']),
+                                badge,
+                            ], spacing=5),
+                        ], expand=True),
+                        ft.IconButton(
+                            ft.Icons.ADD_CIRCLE,
+                            icon_color=colors['success'],
+                            on_click=lambda _, prod=p: self._agregar_producto_req(prod),
+                        ),
+                    ], spacing=10),
+                    padding=10,
+                    bgcolor=colors['card'],
+                    border_radius=8,
+                )
+            )
+        
+        if not resultados and texto:
+            container.controls.append(ft.Text("Sin resultados", color=colors['text_secondary']))
+        
+        container.update()
+
+    def _agregar_producto_req(self, producto):
+        """Agrega un producto con diálogo de cantidad"""
+        colors = _colors(self.page)
+        es_pesable = getattr(producto, 'es_pesable', False)
+        
+        almacen_origen = getattr(self, '_origen_dropdown', None)
+        origen = almacen_origen.value if almacen_origen else "principal"
+        
+        db = next(get_db())
+        disponible = 0
+        try:
+            exist = db.query(Existencia).filter(
+                Existencia.producto_id == producto.id,
+                Existencia.almacen == origen
+            ).first()
+            disponible = exist.cantidad if exist else 0
+        finally:
+            db.close()
+        
+        stock_color = colors['success'] if disponible > 0 else colors['error']
+        
+        cant_input = ft.TextField(
+            label="Cantidad",
+            value="1",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            border_radius=10,
+            width=100,
+            autofocus=True,
+        )
+        
+        peso_input = ft.TextField(
+            label="Peso (kg)",
+            value="0",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            border_radius=10,
+            width=100,
+            visible=es_pesable,
+        )
+        
+        stock_info = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, size=16, color=stock_color),
+                ft.Text(f"Disponible: {disponible} {producto.unidad_medida or 'uds'}", size=12, color=stock_color, weight="bold"),
+            ], spacing=5),
+            bgcolor=colors['card'],
+            padding=10,
+            border_radius=8,
+        )
+        
+        def on_agregar(e):
+            try:
+                cantidad = int(float(cant_input.value.replace(",", "")))
+                if cantidad <= 0:
+                    raise ValueError()
+            except:
+                cant_input.error_text = "Inválido"
+                cant_input.update()
+                return
+            
+            peso = 0.0
+            if es_pesable:
+                try:
+                    peso = float(peso_input.value.replace(",", "."))
+                except:
+                    peso = 0.0
+            
+            existe = next((item for item in self.lista_productos_req if item['producto_id'] == producto.id), None)
+            if existe:
+                existe['cantidad'] += cantidad
+                existe['peso'] = (existe.get('peso') or 0) + peso
+            else:
+                self.lista_productos_req.append({
+                    'producto_id': producto.id,
+                    'nombre': producto.nombre,
+                    'cantidad': cantidad,
+                    'peso': peso,
+                    'unidad': producto.unidad_medida or 'uds',
+                    'es_pesable': es_pesable,
+                })
+            
+            dialog.open = False
+            self._actualizar_lista_productos()
+            self.page.update()
+            
+            if hasattr(self, '_bs_buscador') and self._bs_buscador:
+                self._bs_buscador.open = False
+            
+            snack = ft.SnackBar(content=ft.Text(f"+ {producto.nombre}"), bgcolor=colors['success'])
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Agregar: {producto.nombre}"),
+            content=ft.Column([
+                stock_info,
+                ft.Container(height=10),
+                ft.Text(f"Unidad: {producto.unidad_medida or 'uds'}", size=12, color=colors['text_secondary']),
+                ft.Container(height=5),
+                ft.Row([cant_input, peso_input], spacing=10) if es_pesable else cant_input,
+            ], tight=True),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: setattr(dialog, 'open', False) or self.page.update()),
+                ft.ElevatedButton("Agregar", on_click=on_agregar, bgcolor=colors['accent'], color="white"),
+            ],
+        )
+        
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
+
+    def _actualizar_lista_productos(self):
+        colors = _colors(self.page)
+        self._productos_lista_req.controls.clear()
+        
+        if not self.lista_productos_req:
+            self._productos_lista_req.controls.append(
+                ft.Text("Sin productos agregados", color=colors['text_secondary'], text_align="center")
+            )
+        else:
+            for i, item in enumerate(self.lista_productos_req):
+                es_pesable = item.get('es_pesable', False)
+                peso = item.get('peso', 0) or 0
+                
+                peso_badge = ft.Container()
+                if es_pesable and peso > 0:
+                    peso_badge = ft.Container(
+                        content=ft.Text(f"{peso:.2f} kg", size=11, color=colors['warning'], weight="bold"),
+                        bgcolor=colors.get('orange_50', colors['bg']),
+                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        border_radius=5,
+                    )
+                
+                self._productos_lista_req.controls.append(
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Column([
+                                ft.Text(f"{i+1}. {item['nombre']}", size=13, weight="bold", color=colors['text_primary']),
+                                ft.Row([
+                                    ft.Text(f"{item['cantidad']} {item['unidad']}", size=11, color=colors['accent']),
+                                    peso_badge,
+                                ], spacing=5),
+                            ], expand=True),
+                            ft.IconButton(
+                                ft.Icons.DELETE_OUTLINE,
+                                icon_color=colors['error'],
+                                icon_size=20,
+                                on_click=lambda _, idx=i: self._eliminar_producto_req(idx),
+                            ),
+                        ], spacing=10),
+                        padding=12,
+                        bgcolor=colors['card'],
+                        border_radius=10,
+                    )
+                )
+        
+        self._productos_lista_req.update()
+
+    def _eliminar_producto_req(self, idx):
+        if idx < len(self.lista_productos_req):
+            self.lista_productos_req.pop(idx)
+            self._actualizar_lista_productos()
+
+    def _crear_requisicion_vista(self, origen_dropdown, destino_dropdown, observaciones):
+        if not self.lista_productos_req:
+            snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=ft.Colors.ORANGE_700)
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+            return
+        
+        origen = origen_dropdown.value or "principal"
+        destino = destino_dropdown.value or "restaurante"
+        
+        db = next(get_db())
+        try:
+            req = Requisicion(
+                numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                origen=origen,
+                destino=destino,
+                estado="pendiente",
+                observaciones=observaciones.value or "",
+                creada_por=self.page.session.get("user_id") or "Admin" if self.page else "Admin",
+            )
+            db.add(req)
+            db.flush()
+            
+            for item in self.lista_productos_req:
+                detalle = RequisicionDetalle(
+                    requisicion_id=req.id,
+                    producto_id=item['producto_id'],
+                    ingrediente=item['nombre'],
+                    cantidad=item['cantidad'],
+                    unidad=item['unidad'],
+                )
+                db.add(detalle)
+            
+            db.commit()
+            
+            snack = ft.SnackBar(content=ft.Text(f"✓ Requisición creada: {origen} → {destino}"), bgcolor=ft.Colors.GREEN_700)
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+            
+            self.lista_productos_req = []
+            self._volver_lista()
+            
+        except Exception as ex:
+            db.rollback()
+            logger.error(f"Error creando requisición: {ex}")
+            snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=ft.Colors.RED_700)
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+        finally:
+            db.close()
+
+    def _volver_lista(self):
+        """Regresa a la lista de requisiciones"""
+        self._vista_actual = "lista"
+        self.lista_productos_req = []
+        self._build_ui()
+        self.update()
