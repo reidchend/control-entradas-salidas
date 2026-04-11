@@ -138,9 +138,15 @@ class ControlEntradasSalidasApp:
 
     def _show_view(self, index: int):
         print(f">>> SHOW VIEW {index}")
+        view = self.views[index]
+        print(f">>> VIEW type: {type(view)}, content: {view.content is not None}, visible: {view.visible}")
+        
+        if hasattr(view, 'build_ui_now'):
+            print(">>> calling build_ui_now()")
+            view.build_ui_now()
+        
         if self.current_view: 
             self.current_view.visible = False
-        view = self.views[index]
         self.content_area.content = view
         view.visible = True
         self.current_view = view

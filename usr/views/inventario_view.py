@@ -98,7 +98,10 @@ class InventarioView(ft.Container):
         self._search_timer = None  # Para debounce de búsqueda
 
     def did_mount(self):
-        """Called when control is added to page - safe to use page here"""
+        print(">>> InventarioView did_mount")
+        self._build_ui()
+
+    def build_ui_now(self):
         self._build_ui()
 
     def on_theme_change(self):
