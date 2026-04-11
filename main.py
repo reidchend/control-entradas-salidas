@@ -2,11 +2,25 @@ import flet as ft
 import traceback
 import sys
 import os
+import time
 
+
+_debug_file = "/sdcard/Android/data/com.reidchend.control_entradas_salidas/files/debug.log"
 
 def log_debug(msg):
-    """Log para debug que aparece en consola"""
+    """Log para debug que aparece en archivo"""
+    ts = time.strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}\n"
     print(f"[DEBUG] {msg}", flush=True)
+    try:
+        with open(_debug_file, "a") as f:
+            f.write(line)
+    except:
+        pass
+
+
+def log_error(msg):
+    log_debug(f"ERROR: {msg}")
 
 
 def get_theme_colors(page):
@@ -313,21 +327,23 @@ async def main(page: ft.Page):
     debug_info = ft.Text("", size=11, color=ft.Colors.BLUE_GREY_300, selectable=True)
     
     loading_container = ft.Container(
+        bgcolor="#1A1A1A",
+        expand=True,
         content=ft.Column([
-            ft.Image(src="icon.png", width=80, height=80, fit="contain") if os.path.exists("icon.png") else ft.Icon(ft.Icons.INVENTORY_2, size=80, color=ft.Colors.DEEP_PURPLE_300),
-            ft.Text("Lycoris Control", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_400, width=40, height=40),
+            ft.Container(height=100),
+            ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.ProgressRing(stroke_width=3),
             step_indicator,
             status_log,
-            ft.Container(height=10),
             debug_info,
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=10),
-        padding=20,
-        expand=True
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+        padding=20
     )
+    log_debug("Adding loading container to page...")
     page.add(loading_container)
+    log_debug("Calling page.update()...")
     page.update()
-    log_debug("Loading screen shown")
+    log_debug("page.update() DONE")
 
     try:
         step_indicator.value = "Step: 1/5"
@@ -363,34 +379,43 @@ async def main(page: ft.Page):
         
         step_indicator.value = "Step: 3/5"
         status_log.value = "Cargando módulos de vistas..."
-        debug_info.value = "usr.views..."
+        debug_info.value = "from usr.views import..."
         page.update()
+        log_debug("Step 3: importing views...")
         try:
             from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-            debug_info.value = "Views imported OK"
+            debug_info.value = "Views import OK"
             page.update()
-            log_debug("Views imported")
+            log_debug("Views imported OK")
         except Exception as e:
-            debug_info.value = f"ERROR: {str(e)[:50]}"
+            debug_info.value = f"ERROR import: {str(e)[:80]}"
             page.update()
+            log_error(f"Import error: {e}")
             raise
         
         step_indicator.value = "Step: 4/5"
         status_log.value = "Creando vistas..."
         debug_info.value = "InventarioView()..."
         page.update()
+        log_debug("Step 4: creating InventarioView...")
         
         try:
             inventario_view = InventarioView()
+            log_debug("InventarioView created")
             debug_info.value = "RequisicionesView()..."
             page.update()
+            
+            log_debug("Creating RequisicionesView...")
             requisiciones_view = RequisicionesView()
             requisiciones_view.inventario_view = inventario_view
-            debug_info.value = "Vistas creadas OK"
+            log_debug("RequisicionesView created")
+            
+            debug_info.value = "Vistas OK"
             page.update()
         except Exception as e:
-            debug_info.value = f"ERROR: {str(e)[:60]}"
+            debug_info.value = f"ERROR view: {str(e)[:60]}"
             page.update()
+            log_error(f"View creation error: {e}")
             raise
         
         vistas = {
