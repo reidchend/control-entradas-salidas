@@ -70,7 +70,7 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=ft.border_radius.only(top_left=20) if self.page.width >= 700 else 0)
+        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=ft.BorderRadius.only(top_left=20) if self.page.width >= 700 else 0)
 
         self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
@@ -96,7 +96,7 @@ class ControlEntradasSalidasApp:
             ], on_change=self._on_navigation_change,
         )
 
-        self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True, minimum_padding=ft.padding.only(top=5))
+        self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True, minimum_padding=ft.Padding.only(top=5))
         self.page.add(self._layout_row)
 
     def _handle_resize(self):
