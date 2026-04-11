@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+
 import flet as ft
 from datetime import datetime
 from usr.database.base import get_db
@@ -193,14 +196,9 @@ class RequisicionesView(ft.Container):
         return card
 
     def _show_crear_dialog(self):
+        colors = _colors(self.page)
+        is_mobile = self.page.width < 700 if self.page else False
         self.detalles_temp = []
-        
-        numero_input = ft.TextField(
-            label="Número de requisición",
-            hint_text="REQ-001",
-            border_radius=10,
-            autofocus=True,
-        )
         
         db = next(get_db())
         try:
@@ -208,6 +206,8 @@ class RequisicionesView(ft.Container):
             opciones_almacen = [a[0] for a in almacenes]
             if "principal" not in opciones_almacen:
                 opciones_almacen.append("principal")
+            if "restaurante" not in opciones_almacen:
+                opciones_almacen.append("restaurante")
             
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(200).all()
             self._productos_cache = productos
@@ -215,44 +215,46 @@ class RequisicionesView(ft.Container):
             db.close()
         
         origen_dropdown = ft.Dropdown(
-            label="Almacén Origen",
-            options=[ft.dropdown.Option(a, a.capitalize()) for a in opciones_almacen],
+            label="Origen",
+            options=[ft.dropdown.Option(a, a.title()) for a in opciones_almacen],
             value="principal",
             border_radius=10,
+            expand=True,
         )
         
         destino_dropdown = ft.Dropdown(
-            label="Almacén Destino",
-            options=[ft.dropdown.Option(a, a.capitalize()) for a in opciones_almacen],
+            label="Destino",
+            options=[ft.dropdown.Option(a, a.title()) for a in opciones_almacen],
             value="restaurante",
             border_radius=10,
+            expand=True,
         )
         
         observaciones_input = ft.TextField(
             label="Observaciones",
-            hint_text="Notas adicionales...",
+            hint_text="Notas...",
             border_radius=10,
             multiline=True,
             min_lines=2,
         )
         
         productos_container = ft.Column([], spacing=5)
+        self._productos_container = productos_container
         
-        # Barra de búsqueda de productos
         busqueda_input = ft.TextField(
-            label="Buscar producto",
-            hint_text="Escribe para buscar...",
-            border_radius=10,
+            hint_text="Buscar producto...",
             prefix_icon=ft.Icons.SEARCH,
+            border_radius=12,
             on_change=lambda e: self._filtrar_productos_busqueda(e.control.value, resultados_container),
         )
         
         resultados_container = ft.Column([], spacing=5)
+        self._resultados_container = resultados_container
         
-        def agregar_producto_rapido(producto, cantidad):
+        def agregar_producto_rapido(producto, cantidad, peso=0):
             for fila in productos_container.controls:
-                prod_drop = fila.controls[0]
-                if prod_drop.value == str(producto.id):
+                prod_label = fila.controls[0]
+                if hasattr(prod_label, 'producto_id') and prod_label.producto_id == producto.id:
                     cant_input = fila.controls[1]
                     try:
                         cant_input.value = str(float(cant_input.value or "0") + cantidad)
@@ -261,94 +263,118 @@ class RequisicionesView(ft.Container):
                         pass
                     return
             
+            es_pesable = getattr(producto, 'es_pesable', False)
+            
             cant_input = ft.TextField(
-                label="Cantidad",
                 value=str(cantidad),
                 keyboard_type=ft.KeyboardType.NUMBER,
                 border_radius=10,
-                width=100,
+                width=80,
             )
-            unidad_input = ft.TextField(
-                label="Unidad",
-                value=producto.unidad_medida or "unidad",
+            
+            peso_input = ft.TextField(
+                value=str(peso) if es_pesable else "0",
+                keyboard_type=ft.KeyboardType.NUMBER,
                 border_radius=10,
-                width=100,
+                width=80,
+                visible=es_pesable,
             )
             
             prod_label = ft.Text(
                 producto.nombre,
                 size=14,
                 weight="bold",
-                color=_c(self.page, 'BLUE_GREY_800'),
+                color=colors['text_primary'],
+            )
+            prod_label.producto_id = producto.id
+            
+            unit_text = ft.Text(
+                producto.unidad_medida or "uds",
+                size=12,
+                color=colors['text_secondary'],
             )
             
             delete_btn = ft.IconButton(
                 ft.Icons.DELETE_ROUNDED, 
                 icon_color=colors['error'], 
-                on_click=lambda _, dbtn=delete_btn: self._eliminar_producto_row(dbtn, productos_container)
+                on_click=lambda _, pl=prod_label: self._eliminar_producto_row(pl, productos_container)
             )
             
-            fila = ft.Row([
-                prod_label,
-                cant_input,
-                unidad_input,
-                delete_btn,
-            ], spacing=10)
+            if es_pesable:
+                fila = ft.Row([
+                    prod_label,
+                    cant_input,
+                    unit_text,
+                    peso_input,
+                    ft.Text("kg", size=12, color=colors['text_secondary']),
+                    delete_btn,
+                ], spacing=5)
+            else:
+                fila = ft.Row([
+                    prod_label,
+                    cant_input,
+                    unit_text,
+                    delete_btn,
+                ], spacing=5)
             
             productos_container.controls.append(fila)
             productos_container.update()
         
-        def on_agregar_click(producto):
-            agregar_producto_rapido(producto, 1)
-            busqueda_input.value = ""
-            resultados_container.controls.clear()
-            resultados_container.update()
-        
-        self._on_agregar_producto = on_agregar_click
-        self._resultados_container = resultados_container
+        self._agregar_producto_req = agregar_producto_rapido
         
         agregar_btn = ft.ElevatedButton(
-            "Agregar Producto",
+            "Agregar",
             icon=ft.Icons.ADD,
-            on_click=lambda _: self._show_agregar_producto_dialog(productos_container),
+            on_click=lambda _: self._show_agregar_producto_dialog(),
         )
         
         def on_confirmar(e):
-            if not numero_input.value:
-                numero_input.error_text = "Requerido"
-                numero_input.update()
+            if not productos_container.controls:
+                snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=colors['warning'])
+                self.page.overlay.append(snack)
+                snack.open = True
+                self.page.update()
                 return
             
             db = next(get_db())
             try:
                 detalles = []
+                origen = origen_dropdown.value or "principal"
+                destino = destino_dropdown.value or "restaurante"
+                
                 for fila in productos_container.controls:
-                    prod_dropdown = fila.controls[0]
+                    prod_label = fila.controls[0]
                     cant_input = fila.controls[1]
-                    unidad_input = fila.controls[2]
+                    unidad_text = fila.controls[2]
                     
-                    if prod_dropdown.value and cant_input.value:
+                    producto_id = getattr(prod_label, 'producto_id', None)
+                    if producto_id and cant_input.value:
                         try:
                             cantidad = float(cant_input.value.replace(",", ""))
-                            producto_id = int(prod_dropdown.value)
+                            peso = 0
+                            if len(fila.controls) > 3:
+                                peso = float(fila.controls[3].value or "0")
+                            
                             producto = db.query(Producto).filter(Producto.id == producto_id).first()
+                            
                             
                             detalles.append({
                                 "producto_id": producto_id,
                                 "ingrediente": producto.nombre if producto else "Desconocido",
                                 "cantidad": cantidad,
-                                "unidad": unidad_input.value or "unidad",
+                                "peso": peso,
+                                "unidad": unidad_text.value if hasattr(unidad_text, 'value') else str(unidad_text),
                             })
                         except ValueError:
                             pass
                 
                 req = Requisicion(
-                    numero=numero_input.value,
-                    origen=origen_dropdown.value or "principal",
-                    destino=destino_dropdown.value or "restaurante",
-                    estado="pendiente",
-                    observaciones=observaciones_input.value,
-                    creada_por=self.page.session.get("user_id") or "Admin",
+                    numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    origen=origen,
+                    destino=destino,
+                    estado="completada",
+                    observaciones=observaciones_input.value or "",
+                    creada_por=self.page.session.get("user_id") or "Admin" if self.page else "Admin",
                 )
                 db.add(req)
                 db.flush()
@@ -362,13 +388,34 @@ class RequisicionesView(ft.Container):
                         unidad=d["unidad"],
                     )
                     db.add(detalle)
+                    
+                    exist_orig = db.query(Existencia).filter(
+                        Existencia.producto_id == d["producto_id"],
+                        Existencia.almacen == origen
+                    ).first()
+                    if exist_orig:
+                        exist_orig.cantidad = max(0, (exist_orig.cantidad or 0) - d["cantidad"])
+                    
+                    exist_dest = db.query(Existencia).filter(
+                        Existencia.producto_id == d["producto_id"],
+                        Existencia.almacen == destino
+                    ).first()
+                    if exist_dest:
+                        exist_dest.cantidad = (exist_dest.cantidad or 0) + d["cantidad"]
+                    else:
+                        nueva_exist = Existencia(
+                            producto_id=d["producto_id"],
+                            almacen=destino,
+                            cantidad=d["cantidad"]
+                        )
+                        db.add(nueva_exist)
                 
                 db.commit()
                 self.active_dialog.open = False
                 self.page.update()
                 self._load_requisiciones()
                 
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición #{req.numero} creada"), bgcolor=colors['success'])
+                snack = ft.SnackBar(content=ft.Text(f"✓ {origen} → {destino}"), bgcolor=colors['success'])
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -379,23 +426,63 @@ class RequisicionesView(ft.Container):
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
-            finally:
-                db.close()
+            is_mobile = self.page.width < 700 if self.page else False
+        
+        almacenes_row = ft.Container(
+            content=ft.Row([
+                ft.Column([ft.Text("De", size=11, color=colors['text_secondary']), origen_dropdown], expand=True),
+                ft.Icon(ft.Icons.ARROW_FORWARD, color=colors['text_secondary'], size=20),
+                ft.Column([ft.Text("A", size=11, color=colors['text_secondary']), destino_dropdown], expand=True),
+            ], spacing=10),
+            padding=10,
+            bgcolor=colors['card'],
+            border_radius=10,
+        )
+        
+        panel_productos = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("Productos", weight="bold", size=14, color=colors['text_primary']),
+                    ft.Container(expand=True),
+                    agregar_btn,
+                ]),
+                ft.Row([
+                    ft.Container(content=busqueda_input, expand=True),
+                ], spacing=5),
+                ft.Container(
+                    content=productos_container,
+                    bgcolor=colors['bg'],
+                    border_radius=10,
+                    height=200,
+                ),
+            ], spacing=5),
+            padding=10,
+            bgcolor=colors['card'],
+            border_radius=10,
+        )
+        
+        if is_mobile:
+            contenido = ft.Column([
+                almacenes_row,
+                panel_productos,
+                observaciones_input,
+            ], spacing=10, tight=True, scroll=ft.ScrollMode.AUTO)
+        else:
+            contenido = ft.Column([
+                almacenes_row,
+                panel_productos,
+                observaciones_input,
+            ], spacing=10, tight=True, scroll=ft.ScrollMode.AUTO)
         
         self.active_dialog = ft.AlertDialog(
-            title=ft.Text("Nueva Requisición"),
-            content=ft.Column([
-                numero_input,
-                ft.Row([origen_dropdown, destino_dropdown], spacing=15),
-                observaciones_input,
-                ft.Divider(),
-                ft.Text("Productos:", weight="bold"),
-                productos_container,
-                agregar_btn,
-            ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO),
+            title=ft.Text("Nueva Requisición", weight="bold"),
+            content=ft.Container(
+                content=contenido,
+                width=450 if not is_mobile else None,
+            ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Crear", on_click=on_confirmar, bgcolor=colors['accent'], color="white"),
+                ft.ElevatedButton("Crear", on_click=on_confirmar, bgcolor=colors['success'], color="white"),
             ],
         )
         self.page.overlay.append(self.active_dialog)
@@ -414,6 +501,10 @@ class RequisicionesView(ft.Container):
                 break
 
     def _editar_requisicion(self, req: Requisicion):
+        if not self.page:
+            return
+        
+        colors = _colors(self.page)
         if req.estado == "completada":
             snack = ft.SnackBar(content=ft.Text("No se puede editar una requisición completada"), bgcolor=colors['warning'])
             self.page.overlay.append(snack)
@@ -606,6 +697,10 @@ class RequisicionesView(ft.Container):
             self.page.update()
 
     def _show_detalles(self, req: Requisicion):
+        if not self.page:
+            return
+        
+        colors = _colors(self.page)
         db = next(get_db())
         try:
             detalles = db.query(RequisicionDetalle).filter(

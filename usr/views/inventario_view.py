@@ -137,15 +137,7 @@ class InventarioView(ft.Container):
                         ft.Text("Inventario", size=22, weight=ft.FontWeight.BOLD, color=colors['text_primary']),
                         ft.Text("Gestión de existencias", size=12, color=colors['text_secondary']),
                     ], expand=True, spacing=0),
-                    ft.ElevatedButton(
-                        content=ft.Row([
-                            ft.Icon(ft.Icons.ASSIGNMENT, size=18),
-                            ft.Text("Requisición"),
-                        ], spacing=5),
-                        on_click=lambda _: self._show_panel_requisicion(),
-                        bgcolor='#FF9800',
-                        color="white",
-                    ),
+                    ft.Container(),
                     ft.IconButton(
                         icon=ft.Icons.REFRESH_ROUNDED,
                         on_click=lambda _: self._on_refresh(),
@@ -496,7 +488,7 @@ class InventarioView(ft.Container):
                     colors = _get_safe_colors(self.page)
                     self.categorias_grid.controls = [ft.Text("Sin resultados", size=16, color=colors['text_secondary'])]
                 else:
-                    self.categorias_grid.controls = [self._create_categoria_card_from_dict(c) for c in filtered]
+                    self.categorias_grid.controls = [self._create_categoria_card(c) for c in filtered]
             
             if self.page:
                 self.update()
@@ -811,3 +803,92 @@ class InventarioView(ft.Container):
                         )
                     )
             tabla.update()
+
+    def _registrar_movimiento(self, tipo, cantidad, peso_total=0.0, almacen=None):
+        from usr.database.sync import get_sync_manager
+        from usr.database.cache import add_pending_sync
+        
+        sync = get_sync_manager()
+        has_connection = sync.check_connection() if sync else False
+        
+        producto_id = self.producto_seleccionado.id if hasattr(self.producto_seleccionado, 'id') else self.producto_seleccionado.get('id')
+        
+        if has_connection:
+            db = None
+            try:
+                db = next(get_db())
+                prod = db.query(Producto).filter(Producto.id == producto_id).first()
+                user_id = self.page.session.get("user_id") or 1
+                
+                almacen_seleccionado = almacen or prod.almacen_predeterminado or "principal"
+                
+                existencia = db.query(Existencia).filter(
+                    Existencia.producto_id == prod.id,
+                    Existencia.almacen == almacen_seleccionado
+                ).first()
+                
+                cant_anterior = existencia.cantidad if existencia else 0
+                
+                if tipo == "entrada":
+                    cant_nueva = cant_anterior + cantidad
+                else:
+                    if cant_anterior < cantidad:
+                        self._show_error("Stock insuficiente"); return
+                    cant_nueva = cant_anterior - cantidad
+
+                if existencia:
+                    existencia.cantidad = cant_nueva
+                else:
+                    existencia = Existencia(
+                        producto_id=prod.id,
+                        almacen=almacen_seleccionado,
+                        cantidad=cant_nueva,
+                        unidad=prod.unidad_medida or "unidad"
+                    )
+                    db.add(existencia)
+
+                nuevo_mov = Movimiento(
+                    producto_id=prod.id, tipo=tipo, cantidad=cantidad,
+                    cantidad_anterior=cant_anterior, cantidad_nueva=cant_nueva,
+                    registrado_por=user_id, fecha_movimiento=datetime.now(), 
+                    peso_total=peso_total, almacen=almacen_seleccionado
+                )
+                db.add(nuevo_mov)
+                db.commit()
+                
+                self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad} {prod.unidad_medida}")
+                self._load_productos()
+            except Exception as e:
+                if db: db.rollback()
+                self._show_error(f"Error: {e}")
+            finally:
+                if db: db.close()
+        else:
+            movimiento_data = {
+                "producto_id": producto_id,
+                "tipo": tipo,
+                "cantidad": cantidad,
+                "peso_total": peso_total,
+                "almacen": almacen or "principal",
+                "fecha_movimiento": datetime.now().isoformat(),
+                "observaciones": "",
+                "sincronizado": False
+            }
+            add_pending_sync("movimientos", 0, "INSERT", movimiento_data)
+            self._show_message("⚠️ Sin conexión. Movimiento guardado para sync.")
+            if hasattr(self, '_load_productos'):
+                self._load_productos()
+
+    def _show_message(self, texto):
+        if self.page:
+            snack = ft.SnackBar(content=ft.Text(texto), bgcolor=ft.Colors.GREEN_700)
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+
+    def _show_error(self, texto):
+        if self.page:
+            snack = ft.SnackBar(content=ft.Text(texto), bgcolor=ft.Colors.RED_700)
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()

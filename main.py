@@ -284,6 +284,16 @@ class ControlEntradasSalidasApp:
 async def main(page: ft.Page):
     page.expand = True
     
+    # Configurar localización en español
+    if hasattr(page, 'locale_configuration'):
+        page.locale_configuration = ft.LocaleConfiguration(
+            supported_locales=[
+                ft.Locale("es", "ES"),
+                ft.Locale("en", "US"),
+            ],
+            current_locale=ft.Locale("es", "ES"),
+        )
+    
     # Pantalla de Carga Inicial
     status_log = ft.Text("Verificando sistema...", color="grey")
     loading_container = ft.Container(
@@ -291,8 +301,7 @@ async def main(page: ft.Page):
             ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_700),
             ft.Text("Lycoris Control", size=22, weight="bold"),
             status_log
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        alignment=ft.alignment.center,
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
         expand=True
     )
     page.add(loading_container)
@@ -303,6 +312,14 @@ async def main(page: ft.Page):
         page.update()
         from config.config import get_settings
         settings = get_settings()
+        
+        print("[SYNC] Inicializando sincronización...")
+        status_log.value = "Inicializando sincronización..."
+        page.update()
+        from usr.database.base import engine, SessionLocal
+        from usr.database.sync import init_sync_manager, get_sync_manager
+        sync_manager = init_sync_manager(engine)
+        print(f"[SYNC] Sync initialized: {sync_manager}")
         
         status_log.value = "Cargando Módulos..."
         page.update()
@@ -323,6 +340,18 @@ async def main(page: ft.Page):
         
         app_instance = ControlEntradasSalidasApp()
         requisiciones_view.app_controller = app_instance
+        
+        status_log.value = "Iniciando sync..."
+        page.update()
+        sync_manager.start_background_sync(SessionLocal)
+        print("[SYNC] Background sync started")
+        
+        if sync_manager.check_connection():
+            print("[SYNC] Connection OK - downloading data...")
+            sync_manager.download_from_server(["categorias", "productos"], SessionLocal)
+        else:
+            print("[SYNC] No connection - working offline")
+        
         await app_instance.arrancar_interfaz(page, settings, vistas)
         
     except Exception as e:

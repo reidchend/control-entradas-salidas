@@ -304,6 +304,7 @@ class ValidacionView(ft.Container):
         producto_nombre = entrada.producto.nombre if entrada.producto else "este producto"
         
         def on_confirmar(e):
+            self._close_dialog()
             db = next(get_db())
             try:
                 almacen = getattr(entrada, 'almacen', 'principal') or 'principal'

@@ -47,26 +47,28 @@ class StockView(ft.Container):
             self._load_productos()
 
     def _on_refresh(self):
-        if self.page:
-            snack = ft.SnackBar(
-                content=ft.Text("🔄 Actualizando..."),
-                bgcolor=colors['accent'],
-                duration=1,
-            )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()
+        if not self.page:
+            return
+        
+        colors = _colors(self.page)
+        snack = ft.SnackBar(
+            content=ft.Text("🔄 Actualizando..."),
+            bgcolor=colors['accent'],
+            duration=1,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
         self._load_categorias()
         self._load_productos()
-        if self.page:
-            snack = ft.SnackBar(
-                content=ft.Text("✓ Datos actualizados"),
-                bgcolor=colors['success'],
-                duration=2,
-            )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()
+        snack = ft.SnackBar(
+            content=ft.Text("✓ Datos actualizados"),
+            bgcolor=colors['success'],
+            duration=2,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
 
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
@@ -269,7 +271,7 @@ class StockView(ft.Container):
                 existencias_map = self._get_existencias_map(producto_ids)
                 
                 if almacen:
-                    productos = [p for p in productos if existencias_map.get(p.id, {}).get(almacen, 0) > 0]
+                    productos = [p for p in productos if (existencias_map.get(p.id, {}).get(almacen) or 0) > 0]
                 
                 self._render_productos(productos, existencias_map)
             finally:
@@ -386,6 +388,7 @@ class StockView(ft.Container):
             self.update()
 
     def _show_producto_details(self, producto: Producto):
+        colors = _colors(self.page)
         db = next(get_db())
         try:
             movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(20).all()
@@ -394,7 +397,7 @@ class StockView(ft.Container):
                 is_entrada = m.tipo == "entrada"
                 icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
                 color = colors['success'] if is_entrada else colors['error']
-                peso_info = f"\n⚖️ Peso: {m.peso_total:.2f} kg" if getattr(m, 'peso_total', 0) > 0 else ""
+                peso_info = f"\n⚖️ Peso: {(m.peso_total or 0):.2f} kg" if (m.peso_total or 0) > 0 else ""
 
                 mov_list.controls.append(
                     ft.Container(

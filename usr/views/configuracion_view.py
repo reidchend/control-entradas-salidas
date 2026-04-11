@@ -206,6 +206,7 @@ class ConfiguracionView(ft.Container):
         )
 
     def _show_categoria_dialog(self, categoria=None):
+        colors = _colors(self.page)
         self.selected_image_path = None
         is_mobile = self.page.width < 600
         
@@ -344,6 +345,7 @@ class ConfiguracionView(ft.Container):
             dropdown.update()
 
     def _show_producto_dialog(self, producto=None):
+        colors = _colors(self.page)
         db = next(get_db())
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
