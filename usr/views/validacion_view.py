@@ -38,6 +38,7 @@ class ValidacionView(ft.Container):
         self.selected_entradas = set()
         self.entradas_data = {}
         
+    def did_mount(self):
         self._build_ui()
     
     def on_theme_change(self):

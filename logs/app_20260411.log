@@ -3,3 +3,4 @@
 [SQL: INSERT INTO movimientos (producto_id, factura_id, tipo, cantidad, cantidad_anterior, cantidad_nueva, peso_total, peso_registrado, foto_peso_url, registrado_por, observaciones, almacen, fecha_movimiento) VALUES (%s::INTEGER, %s::INTEGER, %s::VARCHAR, %s::FLOAT, %s::FLOAT, %s::FLOAT, %s::FLOAT, %s::FLOAT, %s::VARCHAR, %s::VARCHAR, %s::VARCHAR, %s::VARCHAR, %s::TIMESTAMP WITH TIME ZONE) RETURNING movimientos.id, movimientos.created_at]
 [parameters: (155, None, 'entrada', 1.0, 0.0, 0.0, 0.0, None, None, None, '', 'principal', datetime.datetime(2026, 4, 11, 1, 42, 15, 220250))]
 (Background on this error at: https://sqlalche.me/e/20/f405)
+2026-04-11 08:58:28 | usr.views.inventario_view | ERROR    | Error UI: InventarioView(18) Control must be added to the page first

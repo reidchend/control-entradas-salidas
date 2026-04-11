@@ -102,7 +102,8 @@ class HistorialFacturasView(ft.Container):
         self._fecha_especifica = None
         self.fecha_picker_btn = None
         self.fecha_seleccionada_txt = None
-
+        
+    def did_mount(self):
         self._build_ui()
 
     def on_theme_change(self):

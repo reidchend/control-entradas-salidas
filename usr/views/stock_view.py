@@ -39,9 +39,8 @@ class StockView(ft.Container):
         self.stock_bajo_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=colors['warning'])
         self.sin_stock_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=colors['error'])
 
-        self._build_ui()
-    
     def did_mount(self):
+        self._build_ui()
         if self.page and self.page.client_storage:
             self._load_categorias()
             self._load_productos()

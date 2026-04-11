@@ -54,10 +54,9 @@ class ConfiguracionView(ft.Container):
         self.test_result_text = ft.Text("", size=14, weight=ft.FontWeight.BOLD)
         
         colors = _colors(None)  # Default for __init__
-        
-        self._build_ui()
 
     def did_mount(self):
+        self._build_ui()
         if self.page:
             self.is_mobile = self.page.width < 768
             self.page.on_resize = self._on_resize

@@ -65,6 +65,7 @@ class RequisicionesView(ft.Container):
         self._vista_actual = "lista"  # lista | crear
         self.lista_productos_req = []
         
+    def did_mount(self):
         self._build_ui()
 
     def on_theme_change(self):
