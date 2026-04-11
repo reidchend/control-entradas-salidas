@@ -14,6 +14,7 @@ from .cache import (
 class SyncManager:
     def __init__(self, engine_getter):
         self._engine_getter = engine_getter
+        self._session_local_getter = None
         self.is_online = True
         self._on_connection_change = None
         self._retry_count = {}
@@ -24,6 +25,15 @@ class SyncManager:
     @property
     def engine(self):
         return self._engine_getter()
+    
+    def set_session_local_getter(self, session_getter):
+        """Configura el getter para sessionmaker - evita error de contexto"""
+        self._session_local_getter = session_getter
+    
+    def _get_session_maker(self):
+        if self._session_local_getter:
+            return self._session_local_getter()
+        return None
     
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos"""
@@ -48,8 +58,11 @@ class SyncManager:
         """Callback para cambios de conexión"""
         self._on_connection_change = callback
     
-    def sync_pending_changes(self, session_maker) -> bool:
+    def sync_pending_changes(self, session_getter=None) -> bool:
         """Sincroniza cambios pendientes con la BD"""
+        if session_getter is None:
+            session_getter = self._session_local_getter
+        
         if not self.check_connection():
             return False
         
@@ -72,6 +85,7 @@ class SyncManager:
                 continue
             
             try:
+                session_maker = session_getter()
                 with session_maker() as db:
                     if action == 'INSERT':
                         self._sync_insert(db, table, item['data'])
@@ -113,8 +127,11 @@ class SyncManager:
         stmt = text(f"DELETE FROM {table} WHERE id = :id")
         db.execute(stmt, {'id': record_id})
     
-    def download_from_server(self, tables: list, session_maker) -> dict:
+    def download_from_server(self, tables: list, session_getter=None) -> dict:
         """Descarga datos del servidor para las tablas especificadas"""
+        if session_getter is None:
+            session_getter = self._session_local_getter
+        
         if not self.check_connection():
             return {}
         
@@ -123,6 +140,7 @@ class SyncManager:
         
         for table in tables:
             try:
+                session_maker = session_getter()
                 with session_maker() as db:
                     query = text(f"SELECT * FROM {table}")
                     
@@ -150,15 +168,16 @@ class SyncManager:
         
         return results
     
-    def start_background_sync(self, session_maker, interval_seconds: int = 30):
+    def start_background_sync(self, session_getter, interval_seconds: int = 30):
         """Inicia sincronización en segundo plano"""
         if self._sync_thread and self._sync_thread.is_alive():
             return
         
+        self._session_local_getter = session_getter
         self._stop_event.clear()
         self._sync_thread = threading.Thread(
             target=self._background_sync_loop,
-            args=(session_maker, interval_seconds),
+            args=(interval_seconds,),
             daemon=True
         )
         self._sync_thread.start()
@@ -169,12 +188,12 @@ class SyncManager:
         if self._sync_thread:
             self._sync_thread.join(timeout=2)
     
-    def _background_sync_loop(self, session_maker, interval):
+    def _background_sync_loop(self, interval):
         while not self._stop_event.is_set():
-            self.sync_pending_changes(session_maker)
+            self.sync_pending_changes()
             
             if self.is_online:
-                self.download_from_server(["movimientos", "facturas", "productos"], session_maker)
+                self.download_from_server(["movimientos", "facturas", "productos"])
             
             self._stop_event.wait(interval)
     

@@ -412,8 +412,11 @@ async def main(page: ft.Page):
                 time.sleep(3)
                 try:
                     sync_manager.start_background_sync(get_session_local)
+                    print("[SYNC] Background sync started")
                 except Exception as e:
                     print(f"[SYNC] Background error: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             threading.Thread(target=delayed_sync, daemon=True).start()
         except Exception as e:
