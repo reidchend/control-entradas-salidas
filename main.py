@@ -316,6 +316,13 @@ async def main(page: ft.Page):
     page.clean()
     log_debug("page cleaned")
     
+    page.add(ft.Text("STARTING...", color=ft.Colors.WHITE))
+    page.update()
+    log_debug("FIRST TEXT ADDED")
+    await asyncio.sleep(0.05)
+    page.update()
+    log_debug("FIRST UPDATE DONE")
+    
     step_indicator = ft.Text("S0", size=14, color=ft.Colors.DEEP_PURPLE_300)
     status_log = ft.Text("Init...", size=14, color=ft.Colors.WHITE)
     debug_info = ft.Text("", size=10, color=ft.Colors.GREY)
