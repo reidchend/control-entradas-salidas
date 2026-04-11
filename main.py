@@ -328,10 +328,13 @@ async def main(page: ft.Page):
     page.clean()
     log_debug("page cleaned")
     
+    screen_info = ft.Text(f"W: {page.width}, H: {page.height}", size=14, color=ft.Colors.ORANGE)
+    
     loading_overlay = ft.Container(
         bgcolor=ft.Colors.BLACK,
         expand=True,
         content=ft.Column([
+            screen_info,
             ft.Text("STARTING...", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW),
             ft.Text("", size=16),
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
@@ -340,6 +343,7 @@ async def main(page: ft.Page):
     )
     page.add(loading_overlay)
     page.update()
+    log_debug(f"Screen: {page.width}x{page.height}")
     log_debug("LOADING OVERLAY ADDED")
     
     step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
