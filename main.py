@@ -1,5 +1,12 @@
 import flet as ft
 import traceback
+import sys
+import os
+
+
+def log_debug(msg):
+    """Log para debug que aparece en consola"""
+    print(f"[DEBUG] {msg}", flush=True)
 
 
 def get_theme_colors(page):
@@ -296,36 +303,64 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 
 
 async def main(page: ft.Page):
+    log_debug("main() started")
+    
     page.expand = True
     page.clean()
     
-    status_log = ft.Text("Iniciando...", color=ft.Colors.GREY)
+    status_log = ft.Text("Iniciando...", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+    step_indicator = ft.Text("Step: 0/5", size=12, color=ft.Colors.DEEP_PURPLE_200)
+    debug_info = ft.Text("", size=11, color=ft.Colors.BLUE_GREY_300, selectable=True)
+    
     loading_container = ft.Container(
         content=ft.Column([
-            ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_700),
-            ft.Text("Lycoris Control", size=22, weight=ft.FontWeight.BOLD),
-            status_log
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+            ft.Image(src="icon.png", width=80, height=80, fit="contain") if os.path.exists("icon.png") else ft.Icon(ft.Icons.INVENTORY_2, size=80, color=ft.Colors.DEEP_PURPLE_300),
+            ft.Text("Lycoris Control", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_400, width=40, height=40),
+            step_indicator,
+            status_log,
+            ft.Container(height=10),
+            debug_info,
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+        padding=20,
         expand=True
     )
     page.add(loading_container)
     page.update()
+    log_debug("Loading screen shown")
 
     try:
+        step_indicator.value = "Step: 1/5"
         status_log.value = "Cargando configuración..."
+        debug_info.value = "config.config.get_settings()"
         page.update()
+        log_debug("Loading config...")
         from config.config import get_settings
         settings = get_settings()
+        log_debug(f"Config loaded: {settings.FLET_APP_NAME}")
         
+        step_indicator.value = "Step: 2/5"
         status_log.value = "Conectando base de datos..."
+        debug_info.value = "usr.database.base.get_engine()"
         page.update()
+        log_debug("Connecting DB...")
         from usr.database.base import get_engine, get_session_local
         from usr.database.sync import init_sync_manager, get_sync_manager
         sync_manager = init_sync_manager(get_engine)
+        log_debug("DB connected")
         
-        status_log.value = "Cargando módulos..."
+        step_indicator.value = "Step: 3/5"
+        status_log.value = "Cargando módulos de vistas..."
+        debug_info.value = "usr.views imports (InventarioView, etc.)"
         page.update()
+        log_debug("Loading views...")
         from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+        log_debug("Views imported")
+        
+        step_indicator.value = "Step: 4/5"
+        status_log.value = "Creando vistas..."
+        debug_info.value = "InventarioView(), RequisicionesView()"
+        page.update()
         
         inventario_view = InventarioView()
         requisiciones_view = RequisicionesView()
@@ -357,17 +392,24 @@ async def main(page: ft.Page):
         except Exception as e:
             print(f"[SYNC] Error: {e}")
         
+        step_indicator.value = "Step: 5/5"
         status_log.value = "Cargando interfaz..."
+        debug_info.value = "app_instance.arrancar_interfaz()"
         page.update()
+        log_debug("Starting interface...")
         
         await app_instance.arrancar_interfaz(page, settings, vistas)
+        
+        status_log.value = "¡Listo! - App iniciada"
+        debug_info.value = "Todos los módulos cargados"
+        step_indicator.value = "COMPLETO"
+        page.update()
+        log_debug("DONE - App started successfully")
 
     except Exception as e:
         error_stack = traceback.format_exc()
-        print("=" * 50)
-        print("ERROR EN LA APLICACIÓN:")
-        print(error_stack)
-        print("=" * 50)
+        log_debug(f"ERROR: {e}")
+        log_debug(error_stack)
         
         mostrar_error_pantalla(
             page,
