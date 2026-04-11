@@ -1,22 +1,25 @@
 import flet as ft
+print(">>> FLET IMPORTED", flush=True)
 import traceback
 import sys
 import os
 import time
+import asyncio
+print(">>> ALL IMPORTS READY", flush=True)
 
 
 _debug_file = "/sdcard/Android/data/com.reidchend.control_entradas_salidas/files/debug.log"
 
 def log_debug(msg):
-    """Log para debug que aparece en archivo"""
+    """Log para debug en archivo"""
     ts = time.strftime("%H:%M:%S")
     line = f"[{ts}] {msg}\n"
     print(f"[DEBUG] {msg}", flush=True)
     try:
         with open(_debug_file, "a") as f:
             f.write(line)
-    except:
-        pass
+    except Exception as e:
+        print(f"[FILE ERROR] {e}", flush=True)
 
 
 def log_error(msg):
@@ -317,37 +320,28 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 
 
 async def main(page: ft.Page):
-    log_debug("main() started")
+    log_debug("=== main() ENTERED ===")
     
     page.expand = True
+    page.bgcolor = "#1A1A1A"
     page.clean()
+    log_debug("page cleaned")
     
-    status_log = ft.Text("Iniciando...", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
-    step_indicator = ft.Text("Step: 0/5", size=12, color=ft.Colors.DEEP_PURPLE_200)
-    debug_info = ft.Text("", size=11, color=ft.Colors.BLUE_GREY_300, selectable=True)
+    step_indicator = ft.Text("S0", size=14, color=ft.Colors.DEEP_PURPLE_300)
+    status_log = ft.Text("Init...", size=14, color=ft.Colors.WHITE)
+    debug_info = ft.Text("", size=10, color=ft.Colors.GREY)
     
-    loading_container = ft.Container(
-        bgcolor="#1A1A1A",
-        expand=True,
-        content=ft.Column([
-            ft.Container(height=100),
-            ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.ProgressRing(stroke_width=3),
-            step_indicator,
-            status_log,
-            debug_info,
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
-        padding=20
-    )
-    log_debug("Adding loading container to page...")
-    page.add(loading_container)
-    log_debug("Calling page.update()...")
+    loading = ft.Column([step_indicator, status_log, debug_info], spacing=5)
+    page.add(loading)
     page.update()
-    log_debug("page.update() DONE")
+    log_debug("INITIAL RENDER DONE")
+    
+    await asyncio.sleep(0.1)
+    page.update()
+    log_debug("AFTER SLEEP")
 
     try:
-        step_indicator.value = "Step: 1/5"
-        status_log.value = "Cargando configuración..."
+        step_indicator.value = "S1"
         debug_info.value = "config.config.get_settings()..."
         page.update()
         try:
