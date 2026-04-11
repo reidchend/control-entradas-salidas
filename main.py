@@ -51,9 +51,12 @@ class ControlEntradasSalidasApp:
 
         self._setup_theme()
         self._create_layout()
+        print(">>> LAYOUT CREATED")
         self._show_view(0)
+        print(">>> VIEW SHOWN")
         self._handle_resize()
         self.page.update()
+        print(">>> ALL DONE")
 
     def _setup_theme(self):
         self.page.theme = ft.Theme(color_scheme_seed=ft.Colors.DEEP_PURPLE_700, visual_density=ft.VisualDensity.COMFORTABLE, use_material3=True)
@@ -134,6 +137,7 @@ class ControlEntradasSalidasApp:
         self.page.open(self.bottom_sheet)
 
     def _show_view(self, index: int):
+        print(f">>> SHOW VIEW {index}")
         if self.current_view: 
             self.current_view.visible = False
         view = self.views[index]
