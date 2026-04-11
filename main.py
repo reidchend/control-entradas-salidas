@@ -285,17 +285,45 @@ async def main(page: ft.Page):
     page.expand = True
     
     # Configurar localización en español
-    if hasattr(page, 'locale_configuration'):
+    try:
         page.locale_configuration = ft.LocaleConfiguration(
-            supported_locales=[
-                ft.Locale("es", "ES"),
-                ft.Locale("en", "US"),
-            ],
+            supported_locales=[ft.Locale("es", "ES")],
             current_locale=ft.Locale("es", "ES"),
         )
+    except:
+        pass
+    
+    # Función para mostrar errores en pantalla
+    def mostrar_error(titulo, mensaje, detalles=""):
+        page.clean()
+        page.add(
+            ft.SafeArea(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(name=ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED_700, size=60),
+                        ft.Text(titulo, size=22, weight="bold", color=ft.Colors.RED_700),
+                        ft.Text(mensaje, size=14, color=ft.Colors.GREY_700),
+                        ft.Container(height=20),
+                        ft.ElevatedButton(
+                            "Reintentar",
+                            icon=ft.Icons.REFRESH,
+                            on_click=lambda _: main(page)
+                        ),
+                        ft.Container(height=20),
+                        ft.Divider(),
+                        ft.Text("Detalles técnicos:", size=12, weight="bold"),
+                        ft.Text(detalles, size=10, font_family="monospace", selectable=True),
+                    ], scroll=ft.ScrollMode.AUTO),
+                    padding=30,
+                    alignment=ft.alignment.top_center,
+                ),
+                expand=True,
+            )
+        )
+        page.update()
     
     # Pantalla de Carga Inicial
-    status_log = ft.Text("Verificando sistema...", color="grey")
+    status_log = ft.Text("Iniciando...", color="grey")
     loading_container = ft.Container(
         content=ft.Column([
             ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_700),
@@ -314,14 +342,14 @@ async def main(page: ft.Page):
         settings = get_settings()
         
         print("[SYNC] Inicializando sincronización...")
-        status_log.value = "Inicializando sincronización..."
+        status_log.value = "Conectando base de datos..."
         page.update()
         from usr.database.base import engine, SessionLocal
         from usr.database.sync import init_sync_manager, get_sync_manager
         sync_manager = init_sync_manager(engine)
         print(f"[SYNC] Sync initialized: {sync_manager}")
         
-        status_log.value = "Cargando Módulos..."
+        status_log.value = "Cargando módulos..."
         page.update()
         from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
         
@@ -341,41 +369,32 @@ async def main(page: ft.Page):
         app_instance = ControlEntradasSalidasApp()
         requisiciones_view.app_controller = app_instance
         
-        status_log.value = "Iniciando sync..."
+        status_log.value = "Iniciando..."
         page.update()
-        sync_manager.start_background_sync(SessionLocal)
-        print("[SYNC] Background sync started")
         
-        if sync_manager.check_connection():
-            print("[SYNC] Connection OK - downloading data...")
-            sync_manager.download_from_server(["categorias", "productos"], SessionLocal)
-        else:
-            print("[SYNC] No connection - working offline")
+        try:
+            sync_manager.start_background_sync(SessionLocal)
+            print("[SYNC] Background sync started")
+        except Exception as e:
+            print(f"[SYNC] Error: {e}")
+        
+        status_log.value = "Cargando interfaz..."
+        page.update()
         
         await app_instance.arrancar_interfaz(page, settings, vistas)
-        
+
     except Exception as e:
+        error_stack = traceback.format_exc()
         print("=" * 50)
         print("ERROR EN LA APLICACIÓN:")
-        print("=" * 50)
-        error_stack = traceback.format_exc()
         print(error_stack)
         print("=" * 50)
         
-        page.clean()
-        page.add(
-            ft.SafeArea(ft.Container(
-                content=ft.Column([
-                    ft.Icon(name="error_outline", color="red", size=60),
-                    ft.Text("ERROR CRÍTICO", size=24, weight="bold"),
-                    ft.Text(f"{e}", color="red", weight="bold"),
-                    ft.Divider(),
-                    ft.Text("Detalles técnicos:", size=12, color="grey"),
-                    ft.Text(error_stack, size=10, font_family="monospace")
-                ], scroll=ft.ScrollMode.ALWAYS), padding=20
-            ))
+        mostrar_error(
+            "Error al iniciar",
+            str(e),
+            error_stack
         )
-        page.update()
 
 if __name__ == "__main__":
     ft.app(target=main)
