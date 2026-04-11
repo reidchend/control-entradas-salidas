@@ -332,39 +332,66 @@ async def main(page: ft.Page):
     try:
         step_indicator.value = "Step: 1/5"
         status_log.value = "Cargando configuración..."
-        debug_info.value = "config.config.get_settings()"
+        debug_info.value = "config.config.get_settings()..."
         page.update()
-        log_debug("Loading config...")
-        from config.config import get_settings
-        settings = get_settings()
-        log_debug(f"Config loaded: {settings.FLET_APP_NAME}")
+        try:
+            from config.config import get_settings
+            settings = get_settings()
+            debug_info.value = f"OK: {settings.FLET_APP_NAME}"
+            page.update()
+            log_debug(f"Config loaded: {settings.FLET_APP_NAME}")
+        except Exception as e:
+            debug_info.value = f"ERROR: {str(e)[:50]}"
+            page.update()
+            raise
         
         step_indicator.value = "Step: 2/5"
         status_log.value = "Conectando base de datos..."
-        debug_info.value = "usr.database.base.get_engine()"
+        debug_info.value = "usr.database.base..."
         page.update()
-        log_debug("Connecting DB...")
-        from usr.database.base import get_engine, get_session_local
-        from usr.database.sync import init_sync_manager, get_sync_manager
-        sync_manager = init_sync_manager(get_engine)
-        log_debug("DB connected")
+        try:
+            from usr.database.base import get_engine, get_session_local
+            from usr.database.sync import init_sync_manager, get_sync_manager
+            sync_manager = init_sync_manager(get_engine)
+            debug_info.value = "DB connected OK"
+            page.update()
+            log_debug("DB connected")
+        except Exception as e:
+            debug_info.value = f"ERROR: {str(e)[:50]}"
+            page.update()
+            raise
         
         step_indicator.value = "Step: 3/5"
         status_log.value = "Cargando módulos de vistas..."
-        debug_info.value = "usr.views imports (InventarioView, etc.)"
+        debug_info.value = "usr.views..."
         page.update()
-        log_debug("Loading views...")
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-        log_debug("Views imported")
+        try:
+            from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+            debug_info.value = "Views imported OK"
+            page.update()
+            log_debug("Views imported")
+        except Exception as e:
+            debug_info.value = f"ERROR: {str(e)[:50]}"
+            page.update()
+            raise
         
         step_indicator.value = "Step: 4/5"
         status_log.value = "Creando vistas..."
-        debug_info.value = "InventarioView(), RequisicionesView()"
+        debug_info.value = "InventarioView()..."
         page.update()
         
-        inventario_view = InventarioView()
-        requisiciones_view = RequisicionesView()
-        requisiciones_view.inventario_view = inventario_view
+        try:
+            inventario_view = InventarioView()
+            debug_info.value = "RequisicionesView()..."
+            page.update()
+            requisiciones_view = RequisicionesView()
+            requisiciones_view.inventario_view = inventario_view
+            debug_info.value = "Vistas creadas OK"
+            page.update()
+        except Exception as e:
+            debug_info.value = f"ERROR: {str(e)[:60]}"
+            page.update()
+            raise
         
         vistas = {
             0: inventario_view,

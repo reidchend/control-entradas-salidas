@@ -14,16 +14,16 @@ from .cache import (
 class SyncManager:
     def __init__(self, engine_getter):
         self._engine_getter = engine_getter
-    
-    @property
-    def engine(self):
-        return self._engine_getter()
         self.is_online = True
         self._on_connection_change = None
         self._retry_count = {}
         self._max_retries = 3
         self._sync_thread = None
         self._stop_event = threading.Event()
+    
+    @property
+    def engine(self):
+        return self._engine_getter()
     
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos"""
