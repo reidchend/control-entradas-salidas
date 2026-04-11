@@ -328,18 +328,22 @@ async def main(page: ft.Page):
     page.clean()
     log_debug("page cleaned")
     
-    page.add(ft.Text("STARTING...", color=ft.Colors.WHITE))
+    page.add(ft.Container(
+        content=ft.Text("STARTING...", size=20, color=ft.Colors.WHITE),
+        alignment=ft.alignment.center,
+        expand=True
+    ))
     page.update()
     log_debug("FIRST TEXT ADDED")
     await asyncio.sleep(0.05)
     page.update()
     log_debug("FIRST UPDATE DONE")
     
-    step_indicator = ft.Text("S0", size=14, color=ft.Colors.DEEP_PURPLE_300)
-    status_log = ft.Text("Init...", size=14, color=ft.Colors.WHITE)
-    debug_info = ft.Text("", size=9, color=ft.Colors.GREY, selectable=True)
+    step_indicator = ft.Text("S0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
+    status_log = ft.Text("Init...", size=18, color=ft.Colors.WHITE)
+    debug_info = ft.Text("", size=12, color=ft.Colors.CYAN, selectable=True)
     
-    loading = ft.Column([step_indicator, status_log, debug_info], spacing=5)
+    loading = ft.Column([step_indicator, status_log, debug_info], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
     page.add(loading)
     page.update()
     log_debug("INITIAL RENDER DONE")
