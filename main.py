@@ -293,7 +293,7 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
             ft.Text(titulo, size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
             ft.Text(mensaje, size=14),
             ft.Container(height=20),
-            ft.ElevatedButton(
+            ft.Button(
                 "Reintentar",
                 on_click=lambda _: main(page)
             ),
@@ -312,7 +312,7 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
             ft.Text(detalles, size=10, font_family="monospace", selectable=True),
         ], scroll=ft.ScrollMode.AUTO),
         padding=30,
-        alignment=ft.alignment.top_center,
+        alignment="top_center",
     ))
     page.update()
 
@@ -356,7 +356,7 @@ async def main(page: ft.Page):
             expand=True,
             content=loading,
             padding=40,
-            alignment=ft.alignment.center
+            alignment="center"
         )
         page.add(loading_container)
         
@@ -469,14 +469,14 @@ async def main(page: ft.Page):
                 ft.Container(height=20),
                 ft.Text(error_msg, size=16, color=ft.Colors.WHITE, selectable=True),
                 ft.Container(height=30),
-                ft.ElevatedButton(
+                ft.Button(
                     "REINTENTAR",
                     on_click=lambda _: main(page),
                     bgcolor=ft.Colors.DEEP_PURPLE_700,
                     color=ft.Colors.WHITE
                 ),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.center,
+            alignment="center",
             padding=40
         ))
         page.update()
