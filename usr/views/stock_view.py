@@ -122,14 +122,14 @@ class StockView(ft.Container):
             label="Categoría",
             border_radius=12,
             border_color=colors['input_border'],
-            on_change=self._filter_productos,
+            on_select=self._filter_productos,
         )
 
         self.almacen_filter = ft.Dropdown(
             label="Almacén",
             border_radius=12,
             border_color=ft.Colors.TRANSPARENT,
-            on_change=self._filter_productos,
+            on_select=self._filter_productos,
             value=""
         )
 

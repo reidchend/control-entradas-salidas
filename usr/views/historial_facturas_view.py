@@ -73,7 +73,7 @@ class HistorialFacturasView(ft.Container):
             expand=True,
             border_radius=10,
             bgcolor=colors['card'],
-            on_change=self._apply_filters,
+            on_select=self._apply_filters,
         )
         self.estado_dropdown = ft.Dropdown(
             label="Estado",
@@ -87,7 +87,7 @@ class HistorialFacturasView(ft.Container):
                 ft.dropdown.Option("Anulada"),
             ],
             value="Todos",
-            on_change=self._apply_filters,
+            on_select=self._apply_filters,
         )
 
         # ── Tab 2: Entradas por Fecha ──────────────────────────
@@ -154,7 +154,7 @@ class HistorialFacturasView(ft.Container):
         tabs = ft.Tabs(
             selected_index=0,
             animation_duration=250,
-            on_change=self._on_tab_change,
+            on_select=self._on_tab_change,
             tabs=[
                 ft.Tab(
                     text="Facturas",
@@ -295,7 +295,7 @@ class HistorialFacturasView(ft.Container):
         date_picker = ft.DatePicker(
             first_date=datetime(2023, 1, 1).date(),
             last_date=datetime.today().date(),
-            on_change=on_date_select,
+            on_select=on_date_select,
         )
         
         self.page.overlay.append(date_picker)
