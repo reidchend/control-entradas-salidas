@@ -477,4 +477,9 @@ async def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    print(">>> RUNNING FT.APP", flush=True)
+    try:
+        ft.app(target=main)
+    except Exception as e:
+        print(f">>> FT.APP CRASHED: {e}", flush=True)
+        traceback.print_exc()
