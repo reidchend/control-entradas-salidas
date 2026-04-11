@@ -208,7 +208,7 @@ class StockView(ft.Container):
                     ft.ProgressRing(color=ft.Colors.BLUE_ACCENT_400),
                     ft.Text("Cargando productos...", size=14, color=ft.Colors.GREY_400),
                 ], horizontal_alignment="center", spacing=10),
-                alignment=ft.alignment.center,
+                alignment="center",
                 padding=50,
             )
         ]

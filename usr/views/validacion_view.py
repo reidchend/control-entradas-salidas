@@ -241,7 +241,7 @@ class ValidacionView(ft.Container):
                             ft.Text("Sin entradas pendientes", color=ft.Colors.GREY_400)
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=100),
-                        alignment=ft.alignment.center
+                        alignment="center"
                     )
                 )
             else:

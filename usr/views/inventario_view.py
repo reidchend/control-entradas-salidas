@@ -287,7 +287,7 @@ class InventarioView(ft.Container):
             padding=12,
             width=110,
             height=130,
-            alignment=ft.alignment.center,
+            alignment="center",
             border=ft.border.only(bottom=ft.BorderSide(3, cat_color)),
             animate=ft.Animation(350, ft.AnimationCurve.DECELERATE),
             animate_scale=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
@@ -297,7 +297,7 @@ class InventarioView(ft.Container):
                 controls=[
                     ft.Container(
                         content=ft.Text(inicial, size=20, weight="bold", color=ft.Colors.WHITE),
-                        alignment=ft.alignment.center,
+                        alignment="center",
                         width=40,
                         height=40,
                         bgcolor=cat_color,
@@ -358,7 +358,7 @@ class InventarioView(ft.Container):
             padding=12,
             width=110,
             height=130,
-            alignment=ft.alignment.center,
+            alignment="center",
             border=ft.border.only(bottom=ft.BorderSide(3, cat_color)),
             animate=ft.Animation(350, ft.AnimationCurve.DECELERATE),
             animate_scale=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
@@ -368,7 +368,7 @@ class InventarioView(ft.Container):
                 controls=[
                     ft.Container(
                         content=ft.Text(inicial, size=20, weight="bold", color=ft.Colors.WHITE),
-                        alignment=ft.alignment.center,
+                        alignment="center",
                         width=40,
                         height=40,
                         bgcolor=cat_color,

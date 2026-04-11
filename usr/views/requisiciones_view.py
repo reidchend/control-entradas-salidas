@@ -125,7 +125,7 @@ class RequisicionesView(ft.Container):
                             ft.Text("Crea una nueva para comenzar", size=12, color=colors['text_secondary']),
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=80),
-                        alignment=ft.alignment.top_center,
+                        alignment="top_center",
                     )
                 )
             else:
@@ -163,7 +163,7 @@ class RequisicionesView(ft.Container):
                         content=ft.Icon(ft.Icons.ASSIGNMENT_ROUNDED, size=24, color=colors['white']),
                         bgcolor=colors['accent'],
                         width=44, height=44, border_radius=10,
-                        alignment=ft.alignment.center,
+                        alignment="center",
                     ),
                     ft.Column([
                         ft.Text(f"#{req.numero}", weight="bold", size=16, color=colors['text_primary']),

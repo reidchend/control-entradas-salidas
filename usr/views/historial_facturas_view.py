@@ -400,7 +400,7 @@ class HistorialFacturasView(ft.Container):
                         ft.Text("Sin resultados", color=_c(self.page, 'GREY_400')),
                     ], horizontal_alignment="center"),
                     padding=ft.padding.only(top=80),
-                    alignment=ft.alignment.top_center,
+                    alignment="top_center",
                 )
             )
         else:
@@ -728,7 +728,7 @@ class HistorialFacturasView(ft.Container):
                             ft.Text("Sin entradas en este período", color=_c(self.page, 'GREY_400'), size=14),
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=60),
-                        alignment=ft.alignment.top_center,
+                        alignment="top_center",
                     )
                 )
             else:
