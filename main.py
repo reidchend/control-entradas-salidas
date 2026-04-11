@@ -318,11 +318,10 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 
 
 async def main(page: ft.Page):
+    print(">>> main() CALLED", flush=True)
+    log_debug("=== main() ENTERED ===")
+    
     try:
-        print(">>> main() CALLED", flush=True)
-        log_debug("=== main() ENTERED ===")
-        print(f">>> PAGE: w={page.width} h={page.height}", flush=True)
-        
         # ULTRA SIMPLE - Just one text
         w = page.width if page.width else 360
         h = page.height if page.height else 640
@@ -332,23 +331,19 @@ async def main(page: ft.Page):
         print(">>> FIRST TEXT ADDED", flush=True)
         
         await asyncio.sleep(2)
-        print(">>> AFTER SLEEP", flush=True)
         
         # Add screen info
         page.add(ft.Text(f"SIZE={page.width}x{page.height}", size=30, color=ft.Colors.GREEN))
         page.update()
-        print(">>> SECOND TEXT ADDED")
         
-# Continue loading the app normally
-    page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
-    page.update()
-    print(">>> LOADING APP")
-    
-    # Add a simple "NEXT" text to see if we get here
-    await asyncio.sleep(1)
-    page.add(ft.Text("S1 NEXT", size=30, color=ft.Colors.ORANGE))
-    page.update()
-    print(">>> S1 NEXT ADDED")
+        # Continue loading the app normally
+        page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
+        page.update()
+        
+        # Add a simple "NEXT" text to see if we get here
+        await asyncio.sleep(1)
+        page.add(ft.Text("S1 NEXT", size=30, color=ft.Colors.ORANGE))
+        page.update()
         
         # Now load the rest of the app
         step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
@@ -458,19 +453,33 @@ async def main(page: ft.Page):
         status_log.value = "DONE!"
         page.update()
         print(">>> APP STARTED")
+        
     except Exception as e:
-        error_msg = f"CRITICAL ERROR: {str(e)}"
+        error_msg = f"ERROR: {str(e)}"
         print(f">>> {error_msg}", flush=True)
         traceback.print_exc()
         
+        page.clean()
         page.add(ft.Container(
-            bgcolor=ft.Colors.RED,
-            content=ft.Text(error_msg, size=20, color=ft.Colors.WHITE),
-            padding=20
+            bgcolor=ft.Colors.BLACK,
+            expand=True,
+            content=ft.Column([
+                ft.Icon(ft.Icons.ERROR_OUTLINE, size=60, color=ft.Colors.RED),
+                ft.Text("Oops!", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
+                ft.Container(height=20),
+                ft.Text(error_msg, size=16, color=ft.Colors.WHITE, selectable=True),
+                ft.Container(height=30),
+                ft.ElevatedButton(
+                    "REINTENTAR",
+                    on_click=lambda _: main(page),
+                    bgcolor=ft.Colors.DEEP_PURPLE_700,
+                    color=ft.Colors.WHITE
+                ),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            padding=40
         ))
         page.update()
-        
-        time.sleep(10)
 
 
 if __name__ == "__main__":
@@ -480,3 +489,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f">>> FT.APP CRASHED: {e}", flush=True)
         traceback.print_exc()
+        
+        # Can't show GUI without page, so just print
+        print("="*40)
+        print("APP CRASHED BEFORE STARTING")
+        print(f"ERROR: {e}")
+        print("="*40)
