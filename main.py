@@ -318,135 +318,153 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 
 
 async def main(page: ft.Page):
-    print(">>> main() CALLED", flush=True)
-    log_debug("=== main() ENTERED ===")
-    print(f">>> PAGE: w={page.width} h={page.height}", flush=True)
-    
-    # ULTRA SIMPLE - Just one text
-    w = page.width if page.width else 360
-    h = page.height if page.height else 640
-    
-    page.add(ft.Text(f"HELLO w={w} h={h}", size=40, color=ft.Colors.RED))
-    page.update()
-    print(">>> FIRST TEXT ADDED", flush=True)
-    
-    await asyncio.sleep(1)
-    print(">>> AFTER SLEEP", flush=True)
-    
-    # Add screen info
-    page.add(ft.Text(f"SIZE={page.width}x{page.height}", size=30, color=ft.Colors.GREEN))
-    page.update()
-    print(">>> SECOND TEXT ADDED")
-    
-    # Continue loading the app normally
-    page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
-    page.update()
-    print(">>> LOADING APP")
-    
-    # Now load the rest of the app
-    step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
-    status_log = ft.Text("Config...", size=20, color=ft.Colors.WHITE)
-    debug_info = ft.Text("", size=14, color=ft.Colors.CYAN)
-    
-    loading = ft.Column([step_indicator, status_log, debug_info], spacing=15)
-    loading_container = ft.Container(
-        bgcolor=ft.Colors.BLACK,
-        expand=True,
-        content=loading,
-        padding=40,
-        alignment=ft.alignment.center
-    )
-    page.add(loading_container)
-    
-    step_indicator.value = "S1"
-    status_log.value = "Config..."
-    debug_info.value = "loading..."
-    page.update()
-    
     try:
-        from config.config import get_settings
-        settings = get_settings()
-        status_log.value = "OK"
+        print(">>> main() CALLED", flush=True)
+        log_debug("=== main() ENTERED ===")
+        print(f">>> PAGE: w={page.width} h={page.height}", flush=True)
+        
+        # ULTRA SIMPLE - Just one text
+        w = page.width if page.width else 360
+        h = page.height if page.height else 640
+        
+        page.add(ft.Text(f"HELLO w={w} h={h}", size=40, color=ft.Colors.RED))
         page.update()
+        print(">>> FIRST TEXT ADDED", flush=True)
+        
+        await asyncio.sleep(2)
+        print(">>> AFTER SLEEP", flush=True)
+        
+        # Add screen info
+        page.add(ft.Text(f"SIZE={page.width}x{page.height}", size=30, color=ft.Colors.GREEN))
+        page.update()
+        print(">>> SECOND TEXT ADDED")
+        
+        # Continue loading the app normally
+        page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
+        page.update()
+        print(">>> LOADING APP")
+        
+        # Now load the rest of the app
+        step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
+        status_log = ft.Text("Config...", size=20, color=ft.Colors.WHITE)
+        debug_info = ft.Text("", size=14, color=ft.Colors.CYAN)
+        
+        loading = ft.Column([step_indicator, status_log, debug_info], spacing=15)
+        loading_container = ft.Container(
+            bgcolor=ft.Colors.BLACK,
+            expand=True,
+            content=loading,
+            padding=40,
+            alignment=ft.alignment.center
+        )
+        page.add(loading_container)
+        
+        step_indicator.value = "S1"
+        status_log.value = "Config..."
+        debug_info.value = "loading..."
+        page.update()
+        
+        try:
+            from config.config import get_settings
+            settings = get_settings()
+            status_log.value = "OK"
+            page.update()
+        except Exception as e:
+            status_log.value = f"ERR cfg: {str(e)[:30]}"
+            debug_info.value = str(e)
+            page.update()
+            print(f">>> CONFIG ERROR: {e}")
+            await asyncio.sleep(5)
+            return
+        
+        step_indicator.value = "S2"
+        status_log.value = "DB..."
+        debug_info.value = "connecting..."
+        page.update()
+        
+        try:
+            from usr.database.base import get_engine, get_session_local
+            from usr.database.sync import init_sync_manager
+            sync_manager = init_sync_manager(get_engine)
+            status_log.value = "OK"
+            page.update()
+        except Exception as e:
+            status_log.value = f"ERR DB: {str(e)[:30]}"
+            debug_info.value = str(e)
+            page.update()
+            print(f">>> DB ERROR: {e}")
+            await asyncio.sleep(5)
+            return
+        
+        step_indicator.value = "S3"
+        status_log.value = "Views..."
+        debug_info.value = "loading..."
+        page.update()
+        
+        try:
+            from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+            status_log.value = "OK"
+            page.update()
+        except Exception as e:
+            status_log.value = f"ERR view: {str(e)[:30]}"
+            debug_info.value = str(e)
+            page.update()
+            print(f">>> VIEW ERROR: {e}")
+            await asyncio.sleep(5)
+            return
+        
+        step_indicator.value = "S4"
+        status_log.value = "Creating..."
+        page.update()
+        
+        try:
+            inventario_view = InventarioView()
+            requisiciones_view = RequisicionesView()
+            requisiciones_view.inventario_view = inventario_view
+            status_log.value = "OK"
+            page.update()
+        except Exception as e:
+            status_log.value = f"ERR make: {str(e)[:30]}"
+            debug_info.value = str(e)
+            page.update()
+            print(f">>> MAKE ERROR: {e}")
+            await asyncio.sleep(5)
+            return
+        
+        vistas = {
+            0: inventario_view,
+            1: ValidacionView(),
+            2: StockView(),
+            3: requisiciones_view,
+            4: HistorialFacturasView(),
+            5: ConfiguracionView(),
+        }
+        
+        app_instance = ControlEntradasSalidasApp()
+        requisiciones_view.app_controller = app_instance
+        
+        step_indicator.value = "S5"
+        status_log.value = "Starting UI..."
+        page.update()
+        
+        await app_instance.arrancar_interfaz(page, settings, vistas)
+        
+        status_log.value = "DONE!"
+        page.update()
+        print(">>> APP STARTED")
     except Exception as e:
-        status_log.value = f"ERR cfg: {str(e)[:30]}"
-        debug_info.value = str(e)
+        error_msg = f"CRITICAL ERROR: {str(e)}"
+        print(f">>> {error_msg}", flush=True)
+        traceback.print_exc()
+        
+        page.add(ft.Container(
+            bgcolor=ft.Colors.RED,
+            content=ft.Text(error_msg, size=20, color=ft.Colors.WHITE),
+            padding=20
+        ))
         page.update()
-        print(f">>> CONFIG ERROR: {e}")
-        return
-    
-    step_indicator.value = "S2"
-    status_log.value = "DB..."
-    debug_info.value = "connecting..."
-    page.update()
-    
-    try:
-        from usr.database.base import get_engine, get_session_local
-        from usr.database.sync import init_sync_manager
-        sync_manager = init_sync_manager(get_engine)
-        status_log.value = "OK"
-        page.update()
-    except Exception as e:
-        status_log.value = f"ERR DB: {str(e)[:30]}"
-        debug_info.value = str(e)
-        page.update()
-        print(f">>> DB ERROR: {e}")
-        return
-    
-    step_indicator.value = "S3"
-    status_log.value = "Views..."
-    debug_info.value = "loading..."
-    page.update()
-    
-    try:
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-        status_log.value = "OK"
-        page.update()
-    except Exception as e:
-        status_log.value = f"ERR view: {str(e)[:30]}"
-        debug_info.value = str(e)
-        page.update()
-        print(f">>> VIEW ERROR: {e}")
-        return
-    
-    step_indicator.value = "S4"
-    status_log.value = "Creating..."
-    page.update()
-    
-    try:
-        inventario_view = InventarioView()
-        requisiciones_view = RequisicionesView()
-        requisiciones_view.inventario_view = inventario_view
-        status_log.value = "OK"
-        page.update()
-    except Exception as e:
-        status_log.value = f"ERR make: {str(e)[:30]}"
-        debug_info.value = str(e)
-        page.update()
-        print(f">>> MAKE ERROR: {e}")
-        return
-    
-    vistas = {
-        0: inventario_view,
-        1: ValidacionView(),
-        2: StockView(),
-        3: requisiciones_view,
-        4: HistorialFacturasView(),
-        5: ConfiguracionView(),
-    }
-    
-    app_instance = ControlEntradasSalidasApp()
-    requisiciones_view.app_controller = app_instance
-    
-    step_indicator.value = "S5"
-    status_log.value = "Starting UI..."
-    page.update()
-    
-    await app_instance.arrancar_interfaz(page, settings, vistas)
-    
-    status_log.value = "DONE!"
-    page.update()
-    print(">>> APP STARTED")
+        
+        time.sleep(10)
 
 
 if __name__ == "__main__":
