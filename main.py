@@ -320,176 +320,122 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 async def main(page: ft.Page):
     print(">>> main() CALLED", flush=True)
     log_debug("=== main() ENTERED ===")
+    print(f">>> PAGE: w={page.width} h={page.height}", flush=True)
     
-    page.expand = True
-    page.bgcolor = "#1A1A1A"
-    page.padding = 0
-    page.spacing = 0
-    page.clean()
-    log_debug("page cleaned")
+    # ULTRA SIMPLE - Just one text
+    page.add(ft.Text("HELLO", size=50, color=ft.Colors.RED))
+    page.update()
+    print(">>> FIRST TEXT ADDED", flush=True)
     
-    screen_info = ft.Text(f"W: {page.width}, H: {page.height}", size=14, color=ft.Colors.ORANGE)
+    await asyncio.sleep(1)
+    print(">>> AFTER SLEEP", flush=True)
     
-    loading_overlay = ft.Container(
+    # Add screen info
+    page.add(ft.Text(f"SIZE={page.width}x{page.height}", size=30, color=ft.Colors.GREEN))
+    page.update()
+    print(">>> SECOND TEXT ADDED")
+    
+    # Continue loading the app normally
+    page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
+    page.update()
+    print(">>> LOADING APP")
+    
+    # Now load the rest of the app
+    step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
+    status_log = ft.Text("Config...", size=20, color=ft.Colors.WHITE)
+    debug_info = ft.Text("", size=14, color=ft.Colors.CYAN)
+    
+    loading = ft.Column([step_indicator, status_log, debug_info], spacing=15)
+    loading_container = ft.Container(
         bgcolor=ft.Colors.BLACK,
         expand=True,
-        content=ft.Column([
-            screen_info,
-            ft.Text("STARTING...", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW),
-            ft.Text("", size=16),
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+        content=loading,
         padding=40,
         alignment=ft.alignment.center
     )
-    page.add(loading_overlay)
+    page.add(loading_container)
+    
+    step_indicator.value = "S1"
+    status_log.value = "Config..."
+    debug_info.value = "loading..."
     page.update()
-    log_debug(f"Screen: {page.width}x{page.height}")
-    log_debug("LOADING OVERLAY ADDED")
     
-    step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
-    status_log = ft.Text("Init...", size=24, color=ft.Colors.WHITE)
-    debug_info = ft.Text("", size=14, color=ft.Colors.CYAN)
-    
-    loading = ft.Column([step_indicator, status_log, debug_info], spacing=15, alignment=ft.MainAxisAlignment.CENTER)
-    
-    loading_overlay.content = ft.Column([
-        ft.Text("CARGANDO...", size=36, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW),
-        loading,
-    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER)
-    page.update()
-    log_debug("LOADING UI UPDATED")
-    log_debug("INITIAL RENDER DONE")
-    
-    await asyncio.sleep(0.1)
-    page.update()
-    log_debug("AFTER SLEEP")
-
     try:
-        step_indicator.value = "S1"
-        debug_info.value = "config.config.get_settings()..."
+        from config.config import get_settings
+        settings = get_settings()
+        status_log.value = "OK"
         page.update()
-        try:
-            from config.config import get_settings
-            settings = get_settings()
-            debug_info.value = f"OK: {settings.FLET_APP_NAME}"
-            page.update()
-            log_debug(f"Config loaded: {settings.FLET_APP_NAME}")
-        except Exception as e:
-            debug_info.value = f"ERROR: {str(e)[:50]}"
-            page.update()
-            raise
-        
-        step_indicator.value = "Step: 2/5"
-        status_log.value = "Conectando base de datos..."
-        debug_info.value = "usr.database.base..."
-        page.update()
-        try:
-            from usr.database.base import get_engine, get_session_local
-            from usr.database.sync import init_sync_manager, get_sync_manager
-            sync_manager = init_sync_manager(get_engine)
-            debug_info.value = "DB connected OK"
-            page.update()
-            log_debug("DB connected")
-        except Exception as e:
-            debug_info.value = f"ERROR: {str(e)[:50]}"
-            page.update()
-            raise
-        
-        step_indicator.value = "Step: 3/5"
-        status_log.value = "Cargando módulos de vistas..."
-        debug_info.value = "from usr.views import..."
-        page.update()
-        log_debug("Step 3: importing views...")
-        try:
-            from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-            debug_info.value = "Views import OK"
-            page.update()
-            log_debug("Views imported OK")
-        except Exception as e:
-            debug_info.value = f"ERROR import: {str(e)[:80]}"
-            page.update()
-            log_error(f"Import error: {e}")
-            raise
-        
-        step_indicator.value = "Step: 4/5"
-        status_log.value = "Creando vistas..."
-        debug_info.value = "InventarioView()..."
-        page.update()
-        log_debug("Step 4: creating InventarioView...")
-        
-        try:
-            inventario_view = InventarioView()
-            log_debug("InventarioView created")
-            debug_info.value = "RequisicionesView()..."
-            page.update()
-            
-            log_debug("Creating RequisicionesView...")
-            requisiciones_view = RequisicionesView()
-            requisiciones_view.inventario_view = inventario_view
-            log_debug("RequisicionesView created")
-            
-            debug_info.value = "Vistas OK"
-            page.update()
-        except Exception as e:
-            debug_info.value = f"ERROR view: {str(e)[:60]}"
-            page.update()
-            log_error(f"View creation error: {e}")
-            raise
-        
-        vistas = {
-            0: inventario_view,
-            1: ValidacionView(),
-            2: StockView(),
-            3: requisiciones_view,
-            4: HistorialFacturasView(),
-            5: ConfiguracionView(),
-        }
-        
-        app_instance = ControlEntradasSalidasApp()
-        requisiciones_view.app_controller = app_instance
-        
-        try:
-            import threading
-            def delayed_sync():
-                import time
-                time.sleep(3)
-                try:
-                    sync_manager.start_background_sync(get_session_local)
-                    print("[SYNC] Background sync started")
-                except Exception as e:
-                    print(f"[SYNC] Background error: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            threading.Thread(target=delayed_sync, daemon=True).start()
-        except Exception as e:
-            print(f"[SYNC] Error: {e}")
-        
-        step_indicator.value = "Step: 5/5"
-        status_log.value = "Cargando interfaz..."
-        debug_info.value = "app_instance.arrancar_interfaz()"
-        page.update()
-        log_debug("Starting interface...")
-        
-        await app_instance.arrancar_interfaz(page, settings, vistas)
-        
-        status_log.value = "¡Listo! - App iniciada"
-        debug_info.value = "Todos los módulos cargados"
-        step_indicator.value = "COMPLETO"
-        page.update()
-        log_debug("DONE - App started successfully")
-
     except Exception as e:
-        error_stack = traceback.format_exc()
-        log_debug(f"ERROR: {e}")
-        log_debug(error_stack)
-        
-        mostrar_error_pantalla(
-            page,
-            "Error al iniciar",
-            str(e),
-            error_stack
-        )
+        status_log.value = f"ERROR: {str(e)[:30]}"
+        page.update()
+        raise
+    
+    step_indicator.value = "S2"
+    status_log.value = "DB..."
+    debug_info.value = "connecting..."
+    page.update()
+    
+    try:
+        from usr.database.base import get_engine, get_session_local
+        from usr.database.sync import init_sync_manager
+        sync_manager = init_sync_manager(get_engine)
+        status_log.value = "OK"
+        page.update()
+    except Exception as e:
+        status_log.value = f"ERROR: {str(e)[:30]}"
+        page.update()
+        raise
+    
+    step_indicator.value = "S3"
+    status_log.value = "Views..."
+    debug_info.value = "loading..."
+    page.update()
+    
+    try:
+        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+        status_log.value = "OK"
+        page.update()
+    except Exception as e:
+        status_log.value = f"ERROR: {str(e)[:30]}"
+        page.update()
+        raise
+    
+    step_indicator.value = "S4"
+    status_log.value = "Creating..."
+    page.update()
+    
+    try:
+        inventario_view = InventarioView()
+        requisiciones_view = RequisicionesView()
+        requisiciones_view.inventario_view = inventario_view
+        status_log.value = "OK"
+        page.update()
+    except Exception as e:
+        status_log.value = f"ERROR: {str(e)[:30]}"
+        page.update()
+        raise
+    
+    vistas = {
+        0: inventario_view,
+        1: ValidacionView(),
+        2: StockView(),
+        3: requisiciones_view,
+        4: HistorialFacturasView(),
+        5: ConfiguracionView(),
+    }
+    
+    app_instance = ControlEntradasSalidasApp()
+    requisiciones_view.app_controller = app_instance
+    
+    step_indicator.value = "S5"
+    status_log.value = "Starting UI..."
+    page.update()
+    
+    await app_instance.arrancar_interfaz(page, settings, vistas)
+    
+    status_log.value = "DONE!"
+    page.update()
+    print(">>> APP STARTED")
 
 
 if __name__ == "__main__":
