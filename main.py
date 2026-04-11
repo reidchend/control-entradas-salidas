@@ -141,9 +141,7 @@ class ControlEntradasSalidasApp:
         view = self.views[index]
         print(f">>> VIEW type: {type(view)}, content: {view.content is not None}, visible: {view.visible}")
         
-        if hasattr(view, 'build_ui_now'):
-            print(">>> calling build_ui_now()")
-            view.build_ui_now()
+        # Don't force build - let did_mount handle it
         
         if self.current_view: 
             self.current_view.visible = False

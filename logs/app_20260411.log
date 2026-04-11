@@ -4,3 +4,4 @@
 [parameters: (155, None, 'entrada', 1.0, 0.0, 0.0, 0.0, None, None, None, '', 'principal', datetime.datetime(2026, 4, 11, 1, 42, 15, 220250))]
 (Background on this error at: https://sqlalche.me/e/20/f405)
 2026-04-11 08:58:28 | usr.views.inventario_view | ERROR    | Error UI: InventarioView(18) Control must be added to the page first
+2026-04-11 09:21:53 | usr.views.inventario_view | ERROR    | Error UI: InventarioView(20) Control must be added to the page first

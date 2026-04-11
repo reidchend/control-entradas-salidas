@@ -97,12 +97,11 @@ class InventarioView(ft.Container):
         self._snack = None
         self._search_timer = None  # Para debounce de búsqueda
 
-    def did_mount(self):
-        print(">>> InventarioView did_mount")
         self._build_ui()
 
-    def build_ui_now(self):
-        self._build_ui()
+    def did_mount(self):
+        if self.page:
+            self._build_ui()
 
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
