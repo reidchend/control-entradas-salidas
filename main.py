@@ -174,72 +174,76 @@ async def main(page: ft.Page):
     print(">>> main() CALLED")
     
     try:
-        # Loading screen
-        logo = ft.Container(content=ft.Column([
-            ft.Icon(ft.Icons.INVENTORY_2, size=60, color=ft.Colors.DEEP_PURPLE_300),
-            ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Text("Control", size=16, color=ft.Colors.DEEP_PURPLE_200),
-        ], horizontal_alignment="center"), alignment="center")
-        
-        step_text = ft.Text("1/5", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
-        status_text = ft.Text("Cargando...", size=14, color=ft.Colors.GREY)
-        
-        loading = ft.Column([logo, ft.Container(height=30), ft.ProgressRing(stroke_width=3, color=ft.Colors.DEEP_PURPLE_400), step_text, status_text], horizontal_alignment="center", spacing=10)
-        
-        page.add(ft.Container(bgcolor="#121212", expand=True, content=loading, alignment="center", padding=40))
-        page.update()
-        
-        # Step 1: Config
-        step_text.value = "2/5"
-        status_text.value = "Configuración..."
-        page.update()
-        
-        from config.config import get_settings
-        settings = get_settings()
-        status_text.value = "✓ Lista"
-        
-        # Step 2: Database
-        step_text.value = "3/5"
-        status_text.value = "Base de datos..."
-        page.update()
-        
-        from usr.database.base import get_engine, get_session_local
-        from usr.database.sync import init_sync_manager
-        sync_manager = init_sync_manager(get_engine)
-        status_text.value = "✓ Conectado"
-        
-        # Step 3: Views import
-        step_text.value = "4/5"
-        status_text.value = "Módulos..."
-        page.update()
-        
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-        status_text.value = "✓ Cargado"
-        
-        # Step 4: Create views
-        step_text.value = "5/5"
-        status_text.value = "Creando..."
-        page.update()
-        
-        inventario_view = InventarioView()
-        requisiciones_view = RequisicionesView()
-        requisiciones_view.inventario_view = inventario_view
-        status_text.value = "✓ Creado"
-        
-        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
-        
-        app_instance = ControlEntradasSalidasApp()
-        requisiciones_view.app_controller = app_instance
-        
-        # Done
-        step_text.value = "Listo!"
-        status_text.value = "Iniciando..."
-        page.update()
-        
-        await app_instance.arrancar_interfaz(page, settings, vistas)
-        
-        print(">>> APP STARTED")
-        
+        try:
+            # Loading screen
+            logo = ft.Container(content=ft.Column([
+                ft.Icon(ft.Icons.INVENTORY_2, size=60, color=ft.Colors.DEEP_PURPLE_300),
+                ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("Control", size=16, color=ft.Colors.DEEP_PURPLE_200),
+            ], horizontal_alignment="center"), alignment="center")
+            
+            step_text = ft.Text("1/5", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+            status_text = ft.Text("Cargando...", size=14, color=ft.Colors.GREY)
+            
+            loading = ft.Column([logo, ft.Container(height=30), ft.ProgressRing(stroke_width=3, color=ft.Colors.DEEP_PURPLE_400), step_text, status_text], horizontal_alignment="center", spacing=10)
+            
+            page.add(ft.Container(bgcolor="#121212", expand=True, content=loading, alignment="center", padding=40))
+            page.update()
+            
+            # Step 1: Config
+            step_text.value = "2/5"
+            status_text.value = "Configuración..."
+            page.update()
+            
+            from config.config import get_settings
+            settings = get_settings()
+            status_text.value = "✓ Lista"
+            
+            # Step 2: Database
+            step_text.value = "3/5"
+            status_text.value = "Base de datos..."
+            page.update()
+            
+            from usr.database.base import get_engine, get_session_local
+            from usr.database.sync import init_sync_manager
+            sync_manager = init_sync_manager(get_engine)
+            status_text.value = "✓ Conectado"
+            
+            # Step 3: Views import
+            step_text.value = "4/5"
+            status_text.value = "Módulos..."
+            page.update()
+            
+            from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+            status_text.value = "✓ Cargado"
+            
+            # Step 4: Create views
+            step_text.value = "5/5"
+            status_text.value = "Creando..."
+            page.update()
+            
+            inventario_view = InventarioView()
+            requisiciones_view = RequisicionesView()
+            requisiciones_view.inventario_view = inventario_view
+            status_text.value = "✓ Creado"
+            
+            vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
+            
+            app_instance = ControlEntradasSalidasApp()
+            requisiciones_view.app_controller = app_instance
+            
+            # Done
+            step_text.value = "Listo!"
+            status_text.value = "Iniciando..."
+            page.update()
+            
+            await app_instance.arrancar_interfaz(page, settings, vistas)
+            
+            print(">>> APP STARTED")
+        except Exception as inner_e:
+            print(f">>> INNER ERROR: {inner_e}")
+            traceback.print_exc()
+            show_error(page, str(inner_e)[:100])
     except Exception as e:
         print(f">>> ERROR: {e}")
         traceback.print_exc()
