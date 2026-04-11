@@ -323,7 +323,10 @@ async def main(page: ft.Page):
     print(f">>> PAGE: w={page.width} h={page.height}", flush=True)
     
     # ULTRA SIMPLE - Just one text
-    page.add(ft.Text("HELLO", size=50, color=ft.Colors.RED))
+    w = page.width if page.width else 360
+    h = page.height if page.height else 640
+    
+    page.add(ft.Text(f"HELLO w={w} h={h}", size=40, color=ft.Colors.RED))
     page.update()
     print(">>> FIRST TEXT ADDED", flush=True)
     
@@ -366,9 +369,11 @@ async def main(page: ft.Page):
         status_log.value = "OK"
         page.update()
     except Exception as e:
-        status_log.value = f"ERROR: {str(e)[:30]}"
+        status_log.value = f"ERR cfg: {str(e)[:30]}"
+        debug_info.value = str(e)
         page.update()
-        raise
+        print(f">>> CONFIG ERROR: {e}")
+        return
     
     step_indicator.value = "S2"
     status_log.value = "DB..."
@@ -382,9 +387,11 @@ async def main(page: ft.Page):
         status_log.value = "OK"
         page.update()
     except Exception as e:
-        status_log.value = f"ERROR: {str(e)[:30]}"
+        status_log.value = f"ERR DB: {str(e)[:30]}"
+        debug_info.value = str(e)
         page.update()
-        raise
+        print(f">>> DB ERROR: {e}")
+        return
     
     step_indicator.value = "S3"
     status_log.value = "Views..."
@@ -396,9 +403,11 @@ async def main(page: ft.Page):
         status_log.value = "OK"
         page.update()
     except Exception as e:
-        status_log.value = f"ERROR: {str(e)[:30]}"
+        status_log.value = f"ERR view: {str(e)[:30]}"
+        debug_info.value = str(e)
         page.update()
-        raise
+        print(f">>> VIEW ERROR: {e}")
+        return
     
     step_indicator.value = "S4"
     status_log.value = "Creating..."
@@ -411,9 +420,11 @@ async def main(page: ft.Page):
         status_log.value = "OK"
         page.update()
     except Exception as e:
-        status_log.value = f"ERROR: {str(e)[:30]}"
+        status_log.value = f"ERR make: {str(e)[:30]}"
+        debug_info.value = str(e)
         page.update()
-        raise
+        print(f">>> MAKE ERROR: {e}")
+        return
     
     vistas = {
         0: inventario_view,
