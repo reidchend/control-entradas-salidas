@@ -8,22 +8,13 @@ import asyncio
 print(">>> ALL IMPORTS READY", flush=True)
 
 
-_debug_file = "/sdcard/Android/data/com.reidchend.control_entradas_salidas/files/debug.log"
-
 def log_debug(msg):
-    """Log para debug en archivo"""
+    """Log para debug"""
     ts = time.strftime("%H:%M:%S")
-    line = f"[{ts}] {msg}\n"
     print(f"[DEBUG] {msg}", flush=True)
-    try:
-        with open(_debug_file, "a") as f:
-            f.write(line)
-    except Exception as e:
-        print(f"[FILE ERROR] {e}", flush=True)
 
 
-def log_error(msg):
-    log_debug(f"ERROR: {msg}")
+
 
 
 def get_theme_colors(page):
