@@ -339,10 +339,16 @@ async def main(page: ft.Page):
         page.update()
         print(">>> SECOND TEXT ADDED")
         
-        # Continue loading the app normally
-        page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
-        page.update()
-        print(">>> LOADING APP")
+# Continue loading the app normally
+    page.add(ft.Text("LOADING APP...", size=24, color=ft.Colors.BLUE))
+    page.update()
+    print(">>> LOADING APP")
+    
+    # Add a simple "NEXT" text to see if we get here
+    await asyncio.sleep(1)
+    page.add(ft.Text("S1 NEXT", size=30, color=ft.Colors.ORANGE))
+    page.update()
+    print(">>> S1 NEXT ADDED")
         
         # Now load the rest of the app
         step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
