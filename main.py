@@ -9,12 +9,12 @@ import asyncio
 _debug_lines = []
 
 def log_debug(msg):
-    """Log para debug - accumulates in list and prints"""
+    """Log para debug"""
     ts = time.strftime("%H:%M:%S")
-    line = f"[{ts}] {msg}"
-    _debug_lines.append(line)
     print(f"[DEBUG] {msg}", flush=True)
-print(">>> ALL IMPORTS READY", flush=True)
+
+
+
 
 
 def log_debug(msg):
