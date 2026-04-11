@@ -73,7 +73,7 @@ class HistorialFacturasView(ft.Container):
             expand=True,
             border_radius=10,
             bgcolor=colors['card'],
-            on_select=self._apply_filters,
+            on_change=self._apply_filters,
         )
         self.estado_dropdown = ft.Dropdown(
             label="Estado",
