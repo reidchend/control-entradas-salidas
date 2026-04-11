@@ -284,6 +284,9 @@ class ControlEntradasSalidasApp:
 def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: str = ""):
     """Muestra pantalla de error con opción de reintentar"""
     page.clean()
+    
+    debug_lines_text = "\n".join(_debug_lines[-15:]) if _debug_lines else "No debug log"
+    
     page.add(ft.Container(
         content=ft.Column([
             ft.Icon(name=ft.Icons.ERROR, size=50, color=ft.Colors.RED),
@@ -295,6 +298,15 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
                 on_click=lambda _: main(page)
             ),
             ft.Container(height=20),
+            ft.Divider(),
+            ft.Text("Debug Log (últimos 15):", size=12, weight=ft.FontWeight.BOLD),
+            ft.Container(
+                content=ft.Text(debug_lines_text, size=9, font_family="monospace", selectable=True),
+                bgcolor=ft.Colors.BLACK12,
+                padding=10,
+                border_radius=5,
+                height=150,
+            ),
             ft.Divider(),
             ft.Text("Detalles técnicos:", size=12, weight=ft.FontWeight.BOLD),
             ft.Text(detalles, size=10, font_family="monospace", selectable=True),
@@ -325,7 +337,7 @@ async def main(page: ft.Page):
     
     step_indicator = ft.Text("S0", size=14, color=ft.Colors.DEEP_PURPLE_300)
     status_log = ft.Text("Init...", size=14, color=ft.Colors.WHITE)
-    debug_info = ft.Text("", size=10, color=ft.Colors.GREY)
+    debug_info = ft.Text("", size=9, color=ft.Colors.GREY, selectable=True)
     
     loading = ft.Column([step_indicator, status_log, debug_info], spacing=5)
     page.add(loading)
