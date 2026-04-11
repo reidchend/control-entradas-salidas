@@ -1,6 +1,6 @@
 import flet as ft
 import traceback
-import asyncio
+
 
 def get_theme_colors(page):
     """Retorna colores según el tema actual"""
@@ -21,7 +21,7 @@ def get_theme_colors(page):
         'orange_50': '#4A3D2D' if is_dark else '#FFF3E0',
     }
 
-# --- 1. CLASE DE INTERFAZ MODIFICADA ---
+
 class ControlEntradasSalidasApp:
     def __init__(self):
         self.page = None
@@ -41,14 +41,12 @@ class ControlEntradasSalidasApp:
         
         self.page.clean()
 
-        # Configuraciones iniciales
         try:
             import sys
             import os
             from pathlib import Path
 
             def get_abs_path(relative_path):
-                """Obtiene ruta absoluta para desarrollo y .exe"""
                 if hasattr(sys, '_MEIPASS'):
                     return os.path.join(sys._MEIPASS, relative_path)
                 return os.path.join(os.path.abspath("."), relative_path)
@@ -61,7 +59,6 @@ class ControlEntradasSalidasApp:
             self.page.title = self.settings.FLET_APP_NAME
         except Exception as e:
             print(f"Error configurando icono: {e}")
-            pass
             
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
@@ -70,7 +67,6 @@ class ControlEntradasSalidasApp:
 
         self._setup_theme()
         
-        # Crear layout y mostrar vista inicial
         self._create_layout()
         self._show_view(0)
         self._handle_resize()
@@ -121,7 +117,6 @@ class ControlEntradasSalidasApp:
              pass
 
     def _create_layout(self):
-        # Área de contenido - modo oscuro por defecto
         self.content_area = ft.Container(
             expand=True, 
             padding=0, 
@@ -129,7 +124,6 @@ class ControlEntradasSalidasApp:
             border_radius=ft.border_radius.only(top_left=20) if self.page.width >= 700 else 0
         )
 
-        # Botón de tema
         self.theme_toggle = ft.IconButton(
             icon=ft.Icons.LIGHT_MODE,
             tooltip="Modo Claro",
@@ -137,7 +131,6 @@ class ControlEntradasSalidasApp:
             icon_color=ft.Colors.AMBER,
         )
 
-        # BARRA LATERAL (Desktop/Tablet)
         self.navigation_rail = ft.NavigationRail(
             selected_index=0,
             extended=False,
@@ -156,7 +149,6 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # BARRA INFERIOR (Mobile) - Menos items + botón mehr
         self.navigation_bar = ft.NavigationBar(
             visible=False,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
@@ -169,7 +161,6 @@ class ControlEntradasSalidasApp:
             on_change=self._on_navigation_change,
         )
 
-        # DISEÑO PRINCIPAL CON SAFE AREA
         self._layout_row = ft.SafeArea(
             content=ft.Row(
                 [self.navigation_rail, self.content_area],
@@ -197,9 +188,8 @@ class ControlEntradasSalidasApp:
 
     def _on_navigation_change(self, e):
         index = int(e.control.selected_index)
-        is_mobile = self.page.width < 700
         
-        if is_mobile and index == 3:  # "Más" option solo en móvil
+        if self.page.width < 700 and index == 3:
             self._show_more_menu()
             self.navigation_bar.selected_index = self.current_view_index
             return
@@ -208,7 +198,6 @@ class ControlEntradasSalidasApp:
         self._show_view(index)
 
     def _show_more_menu(self):
-        """Muestra menú de más opciones"""
         def on_option_click(view_index):
             self._show_view(view_index)
             self.page.close(self.bottom_sheet)
@@ -266,7 +255,8 @@ class ControlEntradasSalidasApp:
         self.page.open(self.bottom_sheet)
 
     def _show_view(self, index: int):
-        if self.current_view: self.current_view.visible = False
+        if self.current_view: 
+            self.current_view.visible = False
         view = self.views[index]
         self.content_area.content = view
         view.visible = True
@@ -276,58 +266,44 @@ class ControlEntradasSalidasApp:
         view.bgcolor = '#1A1A1A' if self.page.theme_mode == ft.ThemeMode.DARK else '#F5F5F5'
         
         self.navigation_rail.selected_index = index
-        if self.page.navigation_bar: self.page.navigation_bar.selected_index = index
+        if self.page.navigation_bar: 
+            self.page.navigation_bar.selected_index = index
         self.page.update()
 
 
-# --- 2. MOTOR DE CARGA ASÍNCRONO ---
+def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: str = ""):
+    """Muestra pantalla de error con opción de reintentar"""
+    page.clean()
+    page.add(ft.Container(
+        content=ft.Column([
+            ft.Icon(name=ft.Icons.ERROR, size=50, color=ft.Colors.RED),
+            ft.Text(titulo, size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
+            ft.Text(mensaje, size=14),
+            ft.Container(height=20),
+            ft.ElevatedButton(
+                "Reintentar",
+                on_click=lambda _: main(page)
+            ),
+            ft.Container(height=20),
+            ft.Divider(),
+            ft.Text("Detalles técnicos:", size=12, weight=ft.FontWeight.BOLD),
+            ft.Text(detalles, size=10, font_family="monospace", selectable=True),
+        ], scroll=ft.ScrollMode.AUTO),
+        padding=30,
+        alignment=ft.alignment.top_center,
+    ))
+    page.update()
+
+
 async def main(page: ft.Page):
     page.expand = True
+    page.clean()
     
-    # Configurar localización en español
-    try:
-        page.locale_configuration = ft.LocaleConfiguration(
-            supported_locales=[ft.Locale("es", "ES")],
-            current_locale=ft.Locale("es", "ES"),
-        )
-    except:
-        pass
-    
-    # Función para mostrar errores en pantalla
-    def mostrar_error(titulo, mensaje, detalles=""):
-        page.clean()
-        page.add(
-            ft.SafeArea(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(name=ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED_700, size=60),
-                        ft.Text(titulo, size=22, weight="bold", color=ft.Colors.RED_700),
-                        ft.Text(mensaje, size=14, color=ft.Colors.GREY_700),
-                        ft.Container(height=20),
-                        ft.ElevatedButton(
-                            "Reintentar",
-                            icon=ft.Icons.REFRESH,
-                            on_click=lambda _: main(page)
-                        ),
-                        ft.Container(height=20),
-                        ft.Divider(),
-                        ft.Text("Detalles técnicos:", size=12, weight="bold"),
-                        ft.Text(detalles, size=10, font_family="monospace", selectable=True),
-                    ], scroll=ft.ScrollMode.AUTO),
-                    padding=30,
-                    alignment=ft.alignment.top_center,
-                ),
-                expand=True,
-            )
-        )
-        page.update()
-    
-    # Pantalla de Carga Inicial
-    status_log = ft.Text("Iniciando...", color="grey")
+    status_log = ft.Text("Iniciando...", color=ft.Colors.GREY)
     loading_container = ft.Container(
         content=ft.Column([
             ft.ProgressRing(color=ft.Colors.DEEP_PURPLE_700),
-            ft.Text("Lycoris Control", size=22, weight="bold"),
+            ft.Text("Lycoris Control", size=22, weight=ft.FontWeight.BOLD),
             status_log
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
         expand=True
@@ -336,18 +312,16 @@ async def main(page: ft.Page):
     page.update()
 
     try:
-        status_log.value = "Cargando Configuración..."
+        status_log.value = "Cargando configuración..."
         page.update()
         from config.config import get_settings
         settings = get_settings()
         
-        print("[SYNC] Inicializando sincronización...")
         status_log.value = "Conectando base de datos..."
         page.update()
-        from usr.database.base import engine, SessionLocal
+        from usr.database.base import get_engine, get_session_local
         from usr.database.sync import init_sync_manager, get_sync_manager
-        sync_manager = init_sync_manager(engine)
-        print(f"[SYNC] Sync initialized: {sync_manager}")
+        sync_manager = init_sync_manager(get_engine)
         
         status_log.value = "Cargando módulos..."
         page.update()
@@ -369,12 +343,17 @@ async def main(page: ft.Page):
         app_instance = ControlEntradasSalidasApp()
         requisiciones_view.app_controller = app_instance
         
-        status_log.value = "Iniciando..."
-        page.update()
-        
         try:
-            sync_manager.start_background_sync(SessionLocal)
-            print("[SYNC] Background sync started")
+            import threading
+            def delayed_sync():
+                import time
+                time.sleep(3)
+                try:
+                    sync_manager.start_background_sync(get_session_local)
+                except Exception as e:
+                    print(f"[SYNC] Background error: {e}")
+            
+            threading.Thread(target=delayed_sync, daemon=True).start()
         except Exception as e:
             print(f"[SYNC] Error: {e}")
         
@@ -390,11 +369,13 @@ async def main(page: ft.Page):
         print(error_stack)
         print("=" * 50)
         
-        mostrar_error(
+        mostrar_error_pantalla(
+            page,
             "Error al iniciar",
             str(e),
             error_stack
         )
+
 
 if __name__ == "__main__":
     ft.app(target=main)
