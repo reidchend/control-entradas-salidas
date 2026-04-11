@@ -90,8 +90,8 @@ jobs:
             --product "Lycoris Control" \
             --org "com.reidchend" \
             --android-adaptive-icon-background "#1A1A1A" \
-            --build-number 5 \
-            --build-version "1.0.4" \
+            --build-number 6 \
+            --build-version "1.0.5" \
             --no-rich-output 
         env:
           CI: true
