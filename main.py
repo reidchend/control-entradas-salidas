@@ -328,24 +328,32 @@ async def main(page: ft.Page):
     page.clean()
     log_debug("page cleaned")
     
-    page.add(ft.Container(
-        content=ft.Text("STARTING...", size=20, color=ft.Colors.WHITE),
-        alignment=ft.alignment.center,
-        expand=True
-    ))
+    loading_overlay = ft.Container(
+        bgcolor=ft.Colors.BLACK,
+        expand=True,
+        content=ft.Column([
+            ft.Text("STARTING...", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW),
+            ft.Text("", size=16),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+        padding=40,
+        alignment=ft.alignment.center
+    )
+    page.add(loading_overlay)
     page.update()
-    log_debug("FIRST TEXT ADDED")
-    await asyncio.sleep(0.05)
-    page.update()
-    log_debug("FIRST UPDATE DONE")
+    log_debug("LOADING OVERLAY ADDED")
     
-    step_indicator = ft.Text("S0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
-    status_log = ft.Text("Init...", size=18, color=ft.Colors.WHITE)
-    debug_info = ft.Text("", size=12, color=ft.Colors.CYAN, selectable=True)
+    step_indicator = ft.Text("S0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_200)
+    status_log = ft.Text("Init...", size=24, color=ft.Colors.WHITE)
+    debug_info = ft.Text("", size=14, color=ft.Colors.CYAN)
     
-    loading = ft.Column([step_indicator, status_log, debug_info], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
-    page.add(loading)
+    loading = ft.Column([step_indicator, status_log, debug_info], spacing=15, alignment=ft.MainAxisAlignment.CENTER)
+    
+    loading_overlay.content = ft.Column([
+        ft.Text("CARGANDO...", size=36, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW),
+        loading,
+    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER)
     page.update()
+    log_debug("LOADING UI UPDATED")
     log_debug("INITIAL RENDER DONE")
     
     await asyncio.sleep(0.1)
