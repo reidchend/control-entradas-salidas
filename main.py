@@ -66,23 +66,9 @@ class ControlEntradasSalidasApp:
         self.page.clean()
 
         try:
-            import sys
-            import os
-            from pathlib import Path
-
-            def get_abs_path(relative_path):
-                if hasattr(sys, '_MEIPASS'):
-                    return os.path.join(sys._MEIPASS, relative_path)
-                return os.path.join(os.path.abspath("."), relative_path)
-
-            icon_path_str = get_abs_path(self.settings.FLET_APP_ICON)
-            
-            if os.path.exists(icon_path_str):
-                self.page.window_icon = icon_path_str
-            
             self.page.title = self.settings.FLET_APP_NAME
         except Exception as e:
-            print(f"Error configurando icono: {e}")
+            print(f"Error title: {e}")
             
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
@@ -320,10 +306,13 @@ def mostrar_error_pantalla(page: ft.Page, titulo: str, mensaje: str, detalles: s
 
 
 async def main(page: ft.Page):
+    print(">>> main() CALLED", flush=True)
     log_debug("=== main() ENTERED ===")
     
     page.expand = True
     page.bgcolor = "#1A1A1A"
+    page.padding = 0
+    page.spacing = 0
     page.clean()
     log_debug("page cleaned")
     
