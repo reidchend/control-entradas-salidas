@@ -33,14 +33,15 @@ jobs:
 
       - name: Install Flet & Tools
         run: |
-          pip install flet-cli cookiecutter setuptools wheel
+          pip install flet==0.28.3 cookiecutter setuptools wheel
+          
 
       - name: Build APK
         run: |
-          # Aceptar licencias
+          # 1. Aceptar licencias de forma robusta
           yes | flutter doctor --android-licenses || true
 
-          # Inyectar Secretos
+          # 2. Inyectar Secretos
           cat << EOF > .env
           DB_TYPE=postgresql
           DB_HOST=${{ secrets.DB_HOST }}
@@ -54,9 +55,9 @@ jobs:
           mkdir -p config
           cp .env config/.env
           
-          # Requirements
+          # 3. Requirements limpios
           cat << EOF > requirements.txt
-          flet
+          flet==0.28.3
           supabase
           sqlalchemy
           greenlet
@@ -67,10 +68,8 @@ jobs:
           python-dotenv
           certifi
           EOF
-          
-          pip install -r requirements.txt
 
-          # Extensión Flet
+          # 1. Creamos el archivo de extensión de Flet (La llave maestra)
           cat << EOF > ext.yaml
           android:
             permissions:
@@ -81,23 +80,22 @@ jobs:
               appName: "Lycoris Control"
           EOF
 
-          # Google Services
+          # 2. Google Services en la raíz (Indispensable)
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
           
-          # Construcción
+          # 4. Construcción (Quitamos --project que a veces causa conflictos con --product)
           flet build apk \
-            --yes \
             --product "Lycoris Control" \
-            --org "com.reidchend" \
-            --android-adaptive-icon-background "#1A1A1A" \
-            --build-number 6 \
-            --build-version "1.0.5" \
+            --org "com.reidchend.lycoris" \
+            --build-number 4 \
+            --build-version "1.0.3" \
             --no-rich-output 
         env:
           CI: true
 
       - name: Rename APK
         run: |
+          # Usamos un comando más flexible por si genera varios APKs
           find build/apk -name "*.apk" -exec mv {} build/apk/LycorisControl.apk \;
 
       - name: Upload APK

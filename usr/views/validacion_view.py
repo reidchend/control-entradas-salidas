@@ -218,23 +218,32 @@ class ValidacionView(ft.Container):
 
         db = None
         try:
+            print("DEBUG: Entrando a _load_entradas_pendientes")
             self.entradas_list.controls = [ft.ProgressBar(color="blue")]
             self.update()
             db = next(get_db())
+            print("DEBUG: DB conectada")
             query = db.query(Movimiento).filter(
                 Movimiento.tipo == "entrada",
                 Movimiento.factura_id.is_(None)
             )
+            print("DEBUG: Query creada")
             
-            search_term = self.search_field.value.lower().strip() if self.search_field and self.search_field.value else ""
+            search_term = ""
+            if self.search_field and hasattr(self.search_field, 'value') and self.search_field.value:
+                search_term = self.search_field.value.lower().strip()
+            
+            print(f"DEBUG: Search term: {search_term}")
             if search_term:
                 query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search_term}%"))
             
             entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
+            print(f"DEBUG: Entradas encontradas: {len(entradas)}")
             self.entradas_data = {e.id: e for e in entradas}
             
             self.entradas_list.controls.clear()
             if not entradas:
+                print("DEBUG: Sin entradas")
                 self.entradas_list.controls.append(
                     ft.Container(
                         content=ft.Column([
@@ -246,13 +255,19 @@ class ValidacionView(ft.Container):
                     )
                 )
             else:
+                print("DEBUG: Construyendo tarjetas")
                 for ent in entradas:
-                    self.entradas_list.controls.append(self._create_entrada_card(ent))
+                    print(f"DEBUG: Creando tarjeta para {ent.id}")
+                    self.entradas_card = self._create_entrada_card(ent)
+                    self.entradas_list.controls.append(self.entradas_card)
             
             self._update_validate_button_state()
+            print("DEBUG: UI actualizada")
             if self.page and self.page.client_storage: self.page.update()
         except Exception as ex:
-            logger.error(f"Error cargando entradas: {ex}")
+            import traceback
+            print(f"DEBUG EXCEPTION: {ex}\n{traceback.format_exc()}")
+            logger.error(f"Error cargando entradas: {ex}\n{traceback.format_exc()}")
         finally:
             if db: db.close()
             self.is_loading = False

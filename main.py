@@ -3,7 +3,6 @@ print(">>> FLET IMPORTED", flush=True)
 
 import traceback
 import time
-import asyncio
 
 print(">>> ALL IMPORTS READY", flush=True)
 
@@ -27,7 +26,8 @@ def get_theme_colors(page):
 
 class ControlEntradasSalidasApp:
     def __init__(self):
-        self.page = None
+        # Type hints para que Pylance entienda el tipo de cada atributo
+        self.page: ft.Page = None
         self.navigation_rail = None
         self.navigation_bar = None
         self.content_area = None
@@ -59,21 +59,29 @@ class ControlEntradasSalidasApp:
         print(">>> ALL DONE")
 
     def _setup_theme(self):
+        # Validación de seguridad para evitar errores cuando self.page es None
+        if not self.page:
+            return
+
         self.page.theme = ft.Theme(color_scheme_seed=ft.Colors.DEEP_PURPLE_700, visual_density=ft.VisualDensity.COMFORTABLE, use_material3=True)
         self.page.bgcolor = '#1A1A1A'
     
     def _toggle_theme(self, e=None):
+        # Validación de seguridad
+        if not self.page:
+            return
+
         is_dark = self.page.theme_mode != ft.ThemeMode.DARK
         self.page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
         self.page.bgcolor = '#1A1A1A' if is_dark else '#F5F5F5'
-        if hasattr(self, 'content_area'):
+        if hasattr(self, 'content_area') and self.content_area:
             self.content_area.bgcolor = '#252525' if is_dark else '#FFFFFF'
         if self.current_view and hasattr(self.current_view, 'on_theme_change'):
             self.current_view.on_theme_change()
         self.page.update()
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=ft.BorderRadius.only(top_left=20) if self.page.width >= 700 else 0)
+        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=20)
 
         self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
@@ -99,11 +107,16 @@ class ControlEntradasSalidasApp:
             ], on_change=self._on_navigation_change,
         )
 
-        self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True, minimum_padding=ft.Padding.only(top=5))
+        self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
+        self.page.padding = 5
         self.page.add(self._layout_row)
 
     def _handle_resize(self):
         def on_resize(e):
+            # Validación de seguridad para evitar errores cuando self.page es None
+            if self.page is None:
+                return
+            
             if self.page.width < 700:
                 self.navigation_rail.visible = False
                 self.page.navigation_bar = self.navigation_bar
@@ -116,6 +129,10 @@ class ControlEntradasSalidasApp:
         on_resize(None)
 
     def _on_navigation_change(self, e):
+        # Validación de seguridad
+        if self.page is None:
+            return
+            
         index = int(e.control.selected_index)
         if self.page.width < 700 and index == 3:
             self._show_more_menu()
@@ -125,6 +142,10 @@ class ControlEntradasSalidasApp:
         self._show_view(index)
 
     def _show_more_menu(self):
+        # Validación de seguridad
+        if self.page is None:
+            return
+            
         opciones = [("assignment", "Requisiciones", 3), ("history", "Historial", 4), ("settings", "Ajustes", 5)]
         
         menu_content = ft.Column(spacing=0, controls=[
@@ -256,4 +277,4 @@ async def main(page: ft.Page):
 
 if __name__ == "__main__":
     print(">>> RUNNING")
-    ft.app(target=main)
+    ft.app(target=main, assets_dir="assets", view=ft.WEB_BROWSER, port=8555)
