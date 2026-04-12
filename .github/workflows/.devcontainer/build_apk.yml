@@ -87,8 +87,8 @@ jobs:
           flet build apk \
             --product "Lycoris Control" \
             --org "com.reidchend.lycoris" \
-            --build-number 4 \
-            --build-version "1.0.3" \
+            --build-number 6 \
+            --build-version "1.0.5" \
             --no-rich-output 
         env:
           CI: true
