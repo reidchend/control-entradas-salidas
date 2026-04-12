@@ -77,6 +77,8 @@ class StockView(ft.Container):
         self.bgcolor = colors['bg']
         try:
             self._build_ui()
+            if hasattr(self, 'list_container') and self.list_container:
+                self.list_container.bgcolor = colors['bg']
             self._load_categorias()
             self._load_productos()
         except:
@@ -148,13 +150,20 @@ class StockView(ft.Container):
             padding=ft.padding.only(left=16, right=16, bottom=80),
         )
 
+        self.list_container = ft.Container(
+            content=self.productos_list,
+            expand=True,
+            bgcolor=colors['bg'],
+        )
+
         self.content = ft.Column([
             header,
             self.summary_container,
             ft.Container(height=8),
             filters_section,
-            self.productos_list
+            self.list_container,
         ], spacing=0, expand=True)
+        self.content.bgcolor = colors['bg']
 
     def _build_stat_card(self, title, value_control, icon, color):
         colors = _colors(self.page)
@@ -197,22 +206,24 @@ class StockView(ft.Container):
     def _load_productos(self):
         if self.is_loading:
             return
-        
+
         self.is_loading = True
-        
-        # Show loading indicator
-        self.productos_list.controls = [
-            ft.Container(
+
+        colors = _colors(self.page)
+
+        # Mostrar spinner reemplazando el contenido del container — cubre todo el área con bgcolor correcto
+        if hasattr(self, 'list_container'):
+            self.list_container.content = ft.Container(
                 content=ft.Column([
-                    ft.ProgressRing(color=ft.Colors.BLUE_ACCENT_400),
-                    ft.Text("Cargando productos...", size=14, color=ft.Colors.GREY_400),
+                    ft.ProgressRing(color=colors['accent']),
+                    ft.Text("Cargando productos...", size=14, color=colors['text_secondary']),
                 ], horizontal_alignment="center", spacing=10),
-                alignment="center",
-                padding=50,
+                alignment=ft.alignment.center,
+                bgcolor=colors['bg'],
+                expand=True,
             )
-        ]
-        self.update()
-        
+            self.update()
+
         db = next(get_db())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(50).all()
@@ -277,15 +288,17 @@ class StockView(ft.Container):
                 db.close()
         except asyncio.CancelledError:
             pass
-        except Exception as ex:
-            print(f"Error búsqueda: {ex}")
 
     def _render_productos(self, productos, existencias_map=None):
         if existencias_map is None:
             existencias_map = {}
-        
+
         colors = _colors(self.page)
-        
+
+        # Restaurar el ListView en el container (reemplaza el spinner)
+        if hasattr(self, 'list_container') and self.list_container.content is not self.productos_list:
+            self.list_container.content = self.productos_list
+
         self.total_productos_text.value = str(len(productos))
         self.stock_bajo_text.value = str(sum(1 for p in productos if 0 < (p.stock_actual or 0) <= (p.stock_minimo or 0)))
         self.sin_stock_text.value = str(sum(1 for p in productos if (p.stock_actual or 0) <= 0))

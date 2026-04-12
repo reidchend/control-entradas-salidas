@@ -67,15 +67,18 @@ class InventarioView(ft.Container):
         self.productos_list = None
         self.active_dialog = None
         
-        # CAMBIO: Usamos un Column con un wrap para simular el grid
-        self.categorias_container = ft.Column(
-            scroll=ft.ScrollMode.AUTO,
+        self.categorias_grid = ft.GridView(
             expand=True,
+            runs_count=5,
+            max_extent=120,
+            child_aspect_ratio=0.8,
+            spacing=10,
+            run_spacing=10,
         )
 
         self.main_content_area = ft.Container(
-            content=self.categorias_container,
-            expand=True, 
+            content=self.categorias_grid,
+            expand=True,
         )
         
         self._vista_requisicion_activa = False
@@ -94,30 +97,43 @@ class InventarioView(ft.Container):
 
         self._build_ui()
 
-    def did_mount(self):
-        if self.page:
-            self._build_ui()
-
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
         if not self.page:
             return
-            
+
         colors = _get_safe_colors(self.page)
         self.bgcolor = colors['bg']
-        
+
         if hasattr(self, 'main_content_area'):
             self.main_content_area.bgcolor = colors['surface']
-        
-        if hasattr(self, 'search_field'):
+
+        if hasattr(self, 'search_field') and self.search_field:
             self.search_field.border_color = colors['input_border']
             self.search_field.focused_border_color = colors['accent']
-        
+
         if hasattr(self, 'header_container'):
             self._build_ui()
-        
-        if hasattr(self, 'categorias_grid'):
-            self.page.run_task(self._load_categorias, True)
+
+        # Redibujar cards desde caché usando los nuevos colores del tema,
+        # sin necesidad de ir a la BD
+        if hasattr(self, 'categorias_grid') and not self.categoria_seleccionada:
+            if self._categorias_cache:
+                # Determinar si el caché contiene objetos ORM o dicts
+                if isinstance(self._categorias_cache[0], dict):
+                    self.categorias_grid.controls = [
+                        self._create_categoria_card_from_dict(c)
+                        for c in self._categorias_cache
+                    ]
+                else:
+                    self.categorias_grid.controls = [
+                        self._create_categoria_card(c)
+                        for c in self._categorias_cache
+                    ]
+                self.categorias_grid.update()
+            else:
+                # Sin caché: carga desde BD como último recurso
+                self.page.run_task(self._load_categorias)
 
     def did_mount(self):
         """Se ejecuta cuando el control se añade a la página."""
@@ -199,56 +215,55 @@ class InventarioView(ft.Container):
     async def _load_categorias(self, force_refresh=False):
         if not self.page:
             return
-            
+
         db = None
         try:
             if CACHE_AVAILABLE and not force_refresh:
                 cached_cats = get_cache_any_age("categorias")
                 if cached_cats:
-                    self._render_categorias_grid(cached_cats)
+                    self.categorias_grid.controls = [
+                        self._create_categoria_card_from_dict(c) for c in cached_cats
+                    ]
+                    self.update()
                     return
 
             db = next(get_db())
-            categorias_objs = db.query(Categoria).all()
-            categorias_data = [
-                {"id": c.id, "nombre": c.nombre, "color": c.color}
-                for c in categorias_objs
-            ]
-            self._categorias_cache = categorias_data
+            categorias = db.query(Categoria).all()
+            self._categorias_cache = categorias
+
             if CACHE_AVAILABLE:
-                set_cache("categorias", categorias_data, ttl_seconds=86400)
-            
-            self._render_categorias_grid(categorias_data)
-            self.page.update()
+                cats_data = [
+                    {"id": c.id, "nombre": c.nombre, "color": c.color}
+                    for c in categorias
+                ]
+                set_cache("categorias", cats_data, ttl_seconds=86400)
+
+            if not categorias:
+                self.categorias_grid.controls = [ft.Text("No hay categorías")]
+            else:
+                self.categorias_grid.controls = [
+                    self._create_categoria_card(c) for c in categorias
+                ]
+
+            self.update()
+            if force_refresh and self.page:
+                snack = ft.SnackBar(
+                    content=ft.Text("✓ Datos actualizados desde BD"),
+                    bgcolor=ft.Colors.GREEN_700,
+                    duration=2,
+                )
+                self.page.overlay.append(snack)
+                snack.open = True
+                self.page.update()
+
         except Exception as e:
             logger.error(f"Error carga: {e}")
-            self.categorias_container.controls = [ft.Text(f"Error: {e}")]
-            self.page.update()
+            self.categorias_grid.controls = [ft.Text(f"Error: {e}")]
+            if self.page:
+                self.page.update()
         finally:
-            if db: db.close()
-
-    def _render_categorias_grid(self, data):
-        """Crea la rejilla usando ResponsiveRow en lugar de GridView"""
-        self.categorias_container.controls.clear()
-        
-        # Creamos filas de categorías
-        row = ft.ResponsiveRow(spacing=10, run_spacing=10)
-        
-        for i, cat_dict in enumerate(data):
-            card = self._create_categoria_card_from_dict(cat_dict)
-            # Definimos el tamaño: 6 columnas en móvil, 2 en desktop (aprox)
-            row.controls.append(
-                ft.Container(
-                    content=card,
-                    col={"xs": 6, "sm": 4, "md": 3, "lg": 2}
-                )
-            )
-            
-            # Para evitar que una sola fila sea infinita, podemos crear filas nuevas cada N elementos
-            # o simplemente dejar que ResponsiveRow haga el wrap (que es lo que hace).
-        
-        self.categorias_container.controls.append(row)
-        self.categorias_container.update()
+            if db:
+                db.close()
 
 
 
@@ -320,28 +335,61 @@ class InventarioView(ft.Container):
         card.update()
 
     def _create_categoria_card_from_dict(self, cat_dict):
-        """Versión BLINDADA para diagnosticar renderizado"""
-        nombre = cat_dict.get("nombre", "SIN NOMBRE")
-        cat_color = cat_dict.get("color", "#00FF00")
+        """Crea tarjeta de categoría desde diccionario (caché)"""
+        nombre = cat_dict.get("nombre", "")
+        cat_color = cat_dict.get("color") or _generar_color(nombre)
         inicial = nombre[0].upper() if nombre else "?"
-        
-        # Colores ultra-visibles
-        return ft.Container(
-            bgcolor=ft.Colors.YELLOW, # Fondo amarillo brillante
+
+        colors = _get_safe_colors(self.page)
+        card_bg = colors['card']
+        text_color = colors['text_primary']
+        text_secondary = colors['text_secondary']
+
+        card = ft.Container(
+            bgcolor=card_bg,
             border_radius=12,
-            padding=10,
+            padding=12,
             width=110,
             height=130,
-            content=ft.Column([
-                ft.Container(
-                    content=ft.Text(inicial, size=20, weight="bold", color=ft.Colors.BLACK),
-                    width=40, height=40, bgcolor=cat_color,
-                    border_radius=20, alignment="center",
-                ),
-                ft.Text(nombre.upper(), size=10, weight="bold", color=ft.Colors.BLACK, text_align="center"),
-                ft.Text("Ver más", size=8, color=ft.Colors.BLACK),
-            ], horizontal_alignment="center", spacing=5),
+            alignment=ft.alignment.center,
+            border=ft.border.only(bottom=ft.BorderSide(3, cat_color)),
+            animate=ft.Animation(350, ft.AnimationCurve.DECELERATE),
+            animate_scale=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+            content=ft.Column(
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                controls=[
+                    ft.Container(
+                        content=ft.Text(inicial, size=20, weight="bold", color=ft.Colors.WHITE),
+                        alignment=ft.alignment.center,
+                        width=40,
+                        height=40,
+                        bgcolor=cat_color,
+                        shape=ft.BoxShape.CIRCLE,
+                        shadow=ft.BoxShadow(
+                            blur_radius=8,
+                            color=ft.Colors.with_opacity(0.3, cat_color),
+                            offset=ft.Offset(0, 3)
+                        )
+                    ),
+                    ft.Container(height=8),
+                    ft.Text(
+                        str(nombre).upper(),
+                        size=10,
+                        weight="bold",
+                        color=text_color,
+                        text_align=ft.TextAlign.CENTER,
+                        max_lines=2,
+                        overflow=ft.TextOverflow.ELLIPSIS
+                    ),
+                    ft.Text("Ver más", size=9, color=text_secondary)
+                ]
+            )
         )
+        card.on_hover = lambda e: self._al_pasar_mouse(e, card, cat_color)
+        cat_obj = type('Categoria', (), cat_dict)()
+        card.on_click = lambda e: self.page.run_task(self._handle_category_click, card, cat_obj)
+        return card
 
     def _show_productos(self, categoria):
         self.categoria_seleccionada = categoria
@@ -393,7 +441,9 @@ class InventarioView(ft.Container):
             self.search_for_products.value = ""
         self.main_content_area.content = self.categorias_grid
         if self._categorias_cache:
-            self.categorias_grid.controls = [self._create_categoria_card(c) for c in self._categorias_cache]
+            self.categorias_grid.controls = [
+                self._create_categoria_card(c) for c in self._categorias_cache
+            ]
         if self.page: self.update()
 
     def _on_search_change(self, e=None):
@@ -431,7 +481,7 @@ class InventarioView(ft.Container):
                     colors = _get_safe_colors(self.page)
                     self.categorias_grid.controls = [ft.Text("Sin resultados", size=16, color=colors['text_secondary'])]
                 else:
-                    self.categorias_grid.controls = [self._create_categoria_card(c) for c in filtered]
+                    self.categorias_grid.controls = [self._create_categoria_card_from_dict(c) for c in filtered]
             
             if self.page:
                 self.update()
@@ -761,7 +811,10 @@ class InventarioView(ft.Container):
             try:
                 db = next(get_db())
                 prod = db.query(Producto).filter(Producto.id == producto_id).first()
-                user_id = self.page.session.get("user_id") or 1
+                try:
+                    user_id = str(self.page.session.get("user_id") or "sistema")
+                except Exception:
+                    user_id = "sistema"
                 
                 almacen_seleccionado = almacen or prod.almacen_predeterminado or "principal"
                 

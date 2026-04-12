@@ -1,13 +1,10 @@
 import flet as ft
-print(">>> FLET IMPORTED", flush=True)
-
 import traceback
-import time
-
-print(">>> ALL IMPORTS READY", flush=True)
 
 
 def log_debug(msg):
+    """Registra mensajes de debug con timestamp"""
+    import time
     ts = time.strftime("%H:%M:%S")
     print(f"[DEBUG] {msg}", flush=True)
 
@@ -51,12 +48,9 @@ class ControlEntradasSalidasApp:
 
         self._setup_theme()
         self._create_layout()
-        print(">>> LAYOUT CREATED")
         self._show_view(0)
-        print(">>> VIEW SHOWN")
         self._handle_resize()
         self.page.update()
-        print(">>> ALL DONE")
 
     def _setup_theme(self):
         # Validación de seguridad para evitar errores cuando self.page es None
@@ -74,10 +68,21 @@ class ControlEntradasSalidasApp:
         is_dark = self.page.theme_mode != ft.ThemeMode.DARK
         self.page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
         self.page.bgcolor = '#1A1A1A' if is_dark else '#F5F5F5'
+
         if hasattr(self, 'content_area') and self.content_area:
             self.content_area.bgcolor = '#252525' if is_dark else '#FFFFFF'
+
+        if hasattr(self, 'navigation_rail') and self.navigation_rail:
+            self.navigation_rail.bgcolor = '#1E1E1E' if is_dark else '#F3E5F5'
+
+        if hasattr(self, 'theme_toggle') and self.theme_toggle:
+            self.theme_toggle.icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
+            self.theme_toggle.icon_color = ft.Colors.AMBER if is_dark else ft.Colors.BLUE_GREY_700
+            self.theme_toggle.tooltip = "Modo Claro" if is_dark else "Modo Oscuro"
+
         if self.current_view and hasattr(self.current_view, 'on_theme_change'):
             self.current_view.on_theme_change()
+
         self.page.update()
 
     def _create_layout(self):
@@ -148,21 +153,40 @@ class ControlEntradasSalidasApp:
             
         opciones = [("assignment", "Requisiciones", 3), ("history", "Historial", 4), ("settings", "Ajustes", 5)]
         
+        is_dark = self.page.theme_mode == ft.ThemeMode.DARK
+        theme_icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
+        theme_label = "Modo Claro" if is_dark else "Modo Oscuro"
+
+        def on_toggle_theme(e):
+            self.page.close(self.bottom_sheet)
+            self._toggle_theme()
+
+        def on_nav(e, idx):
+            self.page.close(self.bottom_sheet)
+            self._show_view(idx)
+
         menu_content = ft.Column(spacing=0, controls=[
-            ft.Container(content=ft.Row([ft.Icon(ft.Icons.LIGHT_MODE if self.page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE, size=24), ft.Text("Modo Oscuro" if self.page.theme_mode == ft.ThemeMode.DARK else "Modo Claro", size=16)], spacing=15), padding=ft.padding.all(15), on_click=self._toggle_theme),
+            ft.Container(
+                content=ft.Row([ft.Icon(theme_icon, size=24), ft.Text(theme_label, size=16)], spacing=15),
+                padding=ft.padding.all(15),
+                on_click=on_toggle_theme,
+            ),
             ft.Divider(height=1, color='#3D3D3D'),
-            *[ft.Container(content=ft.Row([ft.Icon(icon, size=24), ft.Text(label, size=16)], spacing=15), padding=ft.padding.all(15), on_click=lambda _, i=idx: self._show_view(i)) for icon, label, idx in opciones]
+            *[
+                ft.Container(
+                    content=ft.Row([ft.Icon(icon, size=24), ft.Text(label, size=16)], spacing=15),
+                    padding=ft.padding.all(15),
+                    on_click=lambda e, i=idx: on_nav(e, i),
+                )
+                for icon, label, idx in opciones
+            ]
         ])
         
         self.bottom_sheet = ft.BottomSheet(content=ft.Container(content=menu_content, padding=ft.padding.only(bottom=20)), open=True)
         self.page.open(self.bottom_sheet)
 
     def _show_view(self, index: int):
-        print(f">>> SHOW VIEW {index}")
         view = self.views[index]
-        print(f">>> VIEW type: {type(view)}, content: {view.content is not None}, visible: {view.visible}")
-        
-        # Don't force build - let did_mount handle it
         
         if self.current_view: 
             self.current_view.visible = False
@@ -196,8 +220,6 @@ def show_error(page, msg):
 
 
 async def main(page: ft.Page):
-    print(">>> main() CALLED")
-    
     try:
         try:
             # Loading screen
@@ -263,18 +285,13 @@ async def main(page: ft.Page):
             page.update()
             
             await app_instance.arrancar_interfaz(page, settings, vistas)
-            
-            print(">>> APP STARTED")
         except Exception as inner_e:
-            print(f">>> INNER ERROR: {inner_e}")
             traceback.print_exc()
             show_error(page, str(inner_e)[:100])
     except Exception as e:
-        print(f">>> ERROR: {e}")
         traceback.print_exc()
         show_error(page, str(e)[:100])
 
 
 if __name__ == "__main__":
-    print(">>> RUNNING")
-    ft.app(target=main, assets_dir="assets", view=ft.WEB_BROWSER, port=8555)
+    ft.app(target=main)

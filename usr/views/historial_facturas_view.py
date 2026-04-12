@@ -103,9 +103,6 @@ class HistorialFacturasView(ft.Container):
         self.fecha_picker_btn = None
         self.fecha_seleccionada_txt = None
         
-    def did_mount(self):
-        self._build_ui()
-
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
         if not self.page:
@@ -171,6 +168,7 @@ class HistorialFacturasView(ft.Container):
         )
 
         self.content = ft.Column([header, tabs], expand=True, spacing=0)
+        self.content.bgcolor = colors['bg']
 
     # ─── TAB 1 ────────────────────────────────────────────────────
     def _build_facturas_tab(self):
@@ -187,7 +185,7 @@ class HistorialFacturasView(ft.Container):
             ft.Container(height=10),
             filtros,
             ft.Container(content=self.total_facturas_text, padding=ft.padding.only(left=22, top=8)),
-            ft.Container(content=self.facturas_list, expand=True),
+            ft.Container(content=self.facturas_list, expand=True, bgcolor=colors['bg']),
         ], expand=True, spacing=0)
 
     # ─── TAB 2 ────────────────────────────────────────────────────
@@ -268,7 +266,7 @@ class HistorialFacturasView(ft.Container):
             ft.Container(height=15),
             resumen_row,
             ft.Container(height=10),
-            ft.Container(content=self.entradas_list, expand=True),
+            ft.Container(content=self.entradas_list, expand=True, bgcolor=colors['bg']),
         ], expand=True, spacing=0)
 
     def _show_date_picker(self, e):
@@ -327,6 +325,7 @@ class HistorialFacturasView(ft.Container):
     #  CICLO DE VIDA
     # ══════════════════════════════════════════════════════════════
     def did_mount(self):
+        self._build_ui()
         self._load_facturas()
 
     def _on_tab_change(self, e):
@@ -365,7 +364,6 @@ class HistorialFacturasView(ft.Container):
             
             self._apply_filters()
         except Exception as e:
-            print(f"[HISTORIAL_FACTURAS] Error cargando facturas: {e}")
             cached = get_cache("server_facturas", max_age_seconds=86400)
             if cached:
                 self.facturas_data = cached
@@ -493,7 +491,6 @@ class HistorialFacturasView(ft.Container):
             )
             self._render_factura_detalle(factura, movimientos, is_cached=False)
         except Exception as e:
-            print(f"[HISTORIAL_FACTURAS] Error cargando detalle: {e}")
             self._show_error(f"No se pudo cargar el detalle: {e}")
         finally:
             if db: db.close()
@@ -772,7 +769,6 @@ class HistorialFacturasView(ft.Container):
             if self.page: self.page.update()
 
         except Exception as e:
-            print(f"[HISTORIAL_FACTURAS] Error cargando entradas por fecha: {e}")
             self._show_error(f"Error cargando entradas: {e}")
         finally:
             if db: db.close()
@@ -855,7 +851,6 @@ class HistorialFacturasView(ft.Container):
     #  UTILIDADES
     # ══════════════════════════════════════════════════════════════
     def _show_error(self, m):
-        print(f"[HISTORIAL_FACTURAS] ERROR: {m}")
         if self.page:
             colors = _colors(self.page)
             snack = ft.SnackBar(content=ft.Text(m, color=colors['white']), bgcolor=colors['error'])

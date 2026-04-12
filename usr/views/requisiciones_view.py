@@ -60,14 +60,11 @@ class RequisicionesView(ft.Container):
         self.detalles_temp = []
         self.active_dialog = None
         self.inventario_view = None
-        self.app_controller = None
+        self.app_controller: any = None
         
         self._vista_actual = "lista"  # lista | crear
         self.lista_productos_req = []
         
-    def did_mount(self):
-        self._build_ui()
-
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
         if not self.page:
@@ -100,21 +97,35 @@ class RequisicionesView(ft.Container):
             bgcolor=colors['surface'],
         )
         
+        # Corrección: Asegurar que el ListView esté dentro de algo que lo muestre
+        self.list_container = ft.Container(
+            content=self.requisiciones_list,
+            expand=True,
+            bgcolor=colors['bg'],
+        )
+
         self.content = ft.Column([
             header,
-            self.requisiciones_list,
+            self.list_container,
         ], expand=True, spacing=0)
+        self.content.bgcolor = colors['bg']
         
+        # Test: Añadir algo visible si la lista está vacía
+        self.requisiciones_list.controls.append(ft.Text("PRUEBA DE LISTA", color=ft.Colors.RED))
+        
+        self.update() 
         self._load_requisiciones()
-
     def did_mount(self):
-        self._load_requisiciones()
+        self._build_ui()
 
     def _load_requisiciones(self):
         db = next(get_db())
         try:
             reqs = db.query(Requisicion).order_by(Requisicion.fecha_creacion.desc()).all()
+            
+            # Limpiar y añadir algo fijo para probar renderizado
             self.requisiciones_list.controls.clear()
+            self.requisiciones_list.controls.append(ft.Container(content=ft.Text("PRUEBA DE DATOS", color=ft.Colors.WHITE), bgcolor=ft.Colors.BLUE, padding=20))
             
             if not reqs:
                 colors = _colors(self.page)
@@ -123,16 +134,18 @@ class RequisicionesView(ft.Container):
                         content=ft.Column([
                             ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=50, color=colors['text_hint']),
                             ft.Text("No hay requisiciones", color=colors['text_secondary']),
-                            ft.Text("Crea una nueva para comenzar", size=12, color=colors['text_secondary']),
                         ], horizontal_alignment="center"),
                         padding=ft.padding.only(top=80),
-                        alignment="top_center",
+                        alignment=ft.alignment.top_center,
                     )
                 )
             else:
                 for req in reqs:
                     self.requisiciones_list.controls.append(self._create_requisicion_card(req))
             
+            # Forzar actualización de todos los niveles
+            self.requisiciones_list.update()
+            self.list_container.update()
             if self.page:
                 self.page.update()
         except Exception as e:
@@ -141,63 +154,68 @@ class RequisicionesView(ft.Container):
             db.close()
 
     def _create_requisicion_card(self, req: Requisicion):
-        colors = _colors(self.page)
-        estado_colors_map = {
-            "pendiente": colors['warning'],
-            "completada": colors['success'],
-            "cancelada": colors['error'],
-        }
-        estado_color = estado_colors_map.get(req.estado, colors['text_secondary'])
+        # Colores explícitos para evitar fallos de renderizado
+        card_bg = '#2D2D2D'
+        text_primary = ft.Colors.WHITE
+        text_secondary = '#AAAAAA'
         
-        db = next(get_db())
+        estado_colors_map = {
+            "pendiente": '#FF9800',
+            "completada": '#4CAF50',
+            "cancelada": '#F44336',
+        }
+        estado_color = estado_colors_map.get(req.estado, text_secondary)
+        
+        # Obtener total de items de forma segura
+        total_items = 0
         try:
+            db = next(get_db())
             total_items = db.query(RequisicionDetalle).filter(
                 RequisicionDetalle.requisicion_id == req.id
             ).count()
-        finally:
             db.close()
+        except:
+            pass
         
-        card = ft.Container(
+        # Construcción simplificada de la tarjeta
+        return ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.ASSIGNMENT_ROUNDED, size=24, color=colors['white']),
-                        bgcolor=colors['accent'],
+                        content=ft.Icon(ft.Icons.ASSIGNMENT_ROUNDED, size=24, color=ft.Colors.WHITE),
+                        bgcolor=ft.Colors.DEEP_PURPLE_400,
                         width=44, height=44, border_radius=10,
-                        alignment="center",
+                        alignment=ft.alignment.center,
                     ),
                     ft.Column([
-                        ft.Text(f"#{req.numero}", weight="bold", size=16, color=colors['text_primary']),
-                        ft.Row([
-                            ft.Text(f"{req.origen} → {req.destino}", size=12, color=colors['text_secondary']),
-                        ], spacing=5),
-                    ], expand=True),
+                        ft.Text(f"#{req.numero}", weight="bold", size=16, color=text_primary),
+                        ft.Text(f"{req.origen} → {req.destino}", size=12, color=text_secondary),
+                    ], expand=True, spacing=0),
                     ft.Column([
                         ft.Container(
-                            content=ft.Text(req.estado.upper(), size=10, weight="bold", color=colors['white']),
+                            content=ft.Text(req.estado.upper(), size=10, weight="bold", color=ft.Colors.WHITE),
                             bgcolor=estado_color, padding=ft.padding.symmetric(horizontal=8, vertical=4),
                             border_radius=5,
                         ),
-                        ft.Text(f"{total_items} items", size=11, color=colors['text_secondary']),
+                        ft.Text(f"{total_items} items", size=11, color=text_secondary),
                     ], horizontal_alignment="center"),
                 ]),
-                ft.Divider(height=1, color=colors['border']),
+                ft.Divider(height=1, color='#3D3D3D'),
                 ft.Row([
                     ft.Text(f"Creada: {req.fecha_creacion.strftime('%d/%m/%Y %H:%M') if req.fecha_creacion else '-'}", 
-                            size=11, color=colors['text_secondary'], expand=True),
+                            size=11, color=text_secondary, expand=True),
                     ft.Row([
-                        ft.TextButton("Ver", on_click=lambda _, r=req: self._show_detalles(r)),
-                        ft.TextButton("Editar", on_click=lambda _, r=req: self._editar_requisicion(r)),
+                        ft.TextButton("Ver", on_click=lambda _: self._show_detalles(req)),
+                        ft.TextButton("Editar", on_click=lambda _: self._editar_requisicion(req)),
                     ], spacing=5),
                 ]),
             ], spacing=8),
             padding=15,
-            bgcolor=colors['card'],
+            bgcolor=card_bg,
             border_radius=12,
-            border=ft.border.all(1, _c(self.page, 'GREY_200')),
-            on_click=lambda _, r=req: self._show_detalles(r),
+            border=ft.border.all(1, '#3D3D3D'),
+            on_click=lambda _: self._show_detalles(req),
         )
-        return card
 
     def _show_crear_dialog(self):
         colors = _colors(self.page)

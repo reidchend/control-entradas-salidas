@@ -372,7 +372,6 @@ class ConfiguracionView(ft.Container):
                     else:
                         nuevo_codigo = "0001"
                 except Exception as ex:
-                    print(f"Error auto-generación: {ex}")
                     nuevo_codigo = "0001"
             else:
                 nuevo_codigo = producto.codigo
@@ -658,20 +657,17 @@ class ConfiguracionView(ft.Container):
             # Store for filtering
             self.categorias_cache = cats
             self.productos_cache = prods
-            
-            # ✅ Usar el método correcto según el dispositivo
-            if self.is_mobile:
-                print(f"📱 Modo MÓVIL activado (ancho: {self.page.width}px)")  # Debug
-                self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
-            else:
-                print(f"💻 Modo ESCRITORIO activado (ancho: {self.page.width}px)")  # Debug
-                self.lista_categorias.controls = self._create_categoria_grid(cats)
+             
+             # ✅ Usar el método correcto según el dispositivo
+             if self.is_mobile:
+                 self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
+             else:
+                 self.lista_categorias.controls = self._create_categoria_grid(cats)
             
             self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
             
             self.update()
         except Exception as e:
-            print(f"Error carga: {e}")
             self._show_error(f"Error al cargar datos: {str(e)}")
         finally:
             db.close()
@@ -901,7 +897,6 @@ class ConfiguracionView(ft.Container):
                     # Paso 4: Actualizar página para limpiar residuos visuales
                     self.page.update()
                 except Exception as ex:
-                    print(f"Error al cerrar diálogo: {ex}")
                     self.active_dialog = None
                     self.page.update()    
 

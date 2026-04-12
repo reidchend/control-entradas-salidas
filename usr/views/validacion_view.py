@@ -38,9 +38,6 @@ class ValidacionView(ft.Container):
         self.selected_entradas = set()
         self.entradas_data = {}
         
-    def did_mount(self):
-        self._build_ui()
-    
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
         if not self.page or not self.page.client_storage:
@@ -71,7 +68,8 @@ class ValidacionView(ft.Container):
         self._load_entradas_pendientes()
 
     def did_mount(self):
-        """Carga inicial"""
+        """Carga inicial: construye la UI y luego carga los datos"""
+        self._build_ui()
         if self.page and self.page.client_storage:
             self._load_entradas_pendientes()
     
@@ -218,32 +216,26 @@ class ValidacionView(ft.Container):
 
         db = None
         try:
-            print("DEBUG: Entrando a _load_entradas_pendientes")
             self.entradas_list.controls = [ft.ProgressBar(color="blue")]
             self.update()
             db = next(get_db())
-            print("DEBUG: DB conectada")
             query = db.query(Movimiento).filter(
                 Movimiento.tipo == "entrada",
                 Movimiento.factura_id.is_(None)
             )
-            print("DEBUG: Query creada")
             
             search_term = ""
             if self.search_field and hasattr(self.search_field, 'value') and self.search_field.value:
                 search_term = self.search_field.value.lower().strip()
             
-            print(f"DEBUG: Search term: {search_term}")
             if search_term:
                 query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search_term}%"))
             
             entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
-            print(f"DEBUG: Entradas encontradas: {len(entradas)}")
             self.entradas_data = {e.id: e for e in entradas}
             
             self.entradas_list.controls.clear()
             if not entradas:
-                print("DEBUG: Sin entradas")
                 self.entradas_list.controls.append(
                     ft.Container(
                         content=ft.Column([
@@ -255,18 +247,14 @@ class ValidacionView(ft.Container):
                     )
                 )
             else:
-                print("DEBUG: Construyendo tarjetas")
                 for ent in entradas:
-                    print(f"DEBUG: Creando tarjeta para {ent.id}")
                     self.entradas_card = self._create_entrada_card(ent)
                     self.entradas_list.controls.append(self.entradas_card)
             
             self._update_validate_button_state()
-            print("DEBUG: UI actualizada")
             if self.page and self.page.client_storage: self.page.update()
         except Exception as ex:
             import traceback
-            print(f"DEBUG EXCEPTION: {ex}\n{traceback.format_exc()}")
             logger.error(f"Error cargando entradas: {ex}\n{traceback.format_exc()}")
         finally:
             if db: db.close()
@@ -275,28 +263,27 @@ class ValidacionView(ft.Container):
                 self.update()
 
     def _toggle_entrada_selection(self, eid):
-        # Verificamos que la card exista en nuestro diccionario de referencias
         if eid not in self.cards_dict:
             return
 
         card, icon = self.cards_dict[eid]
+        colors = _colors(self.page)
 
         if eid in self.selected_entradas:
             # DESELECCIONAR
             self.selected_entradas.remove(eid)
-            card.bgcolor = ft.Colors.WHITE
-            card.border = ft.border.all(1, ft.Colors.GREY_200)
+            card.bgcolor = colors['card']
+            card.border = ft.border.all(1, colors['border'])
             icon.name = ft.Icons.RADIO_BUTTON_UNCHECKED_ROUNDED
-            icon.color = ft.Colors.GREY_300
+            icon.color = colors['text_hint']
         else:
             # SELECCIONAR
             self.selected_entradas.add(eid)
-            card.bgcolor = ft.Colors.BLUE_50
-            card.border = ft.border.all(2, ft.Colors.BLUE_600)
+            card.bgcolor = colors['card_hover']
+            card.border = ft.border.all(2, colors['accent'])
             icon.name = ft.Icons.CHECK_CIRCLE_ROUNDED
-            icon.color = ft.Colors.BLUE_600
-        
-        # Actualizamos solo los componentes afectados
+            icon.color = colors['accent']
+
         card.update()
         self._update_validate_button_state()
         self.validate_button.update()
