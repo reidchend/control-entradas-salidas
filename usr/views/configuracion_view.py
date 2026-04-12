@@ -659,9 +659,9 @@ class ConfiguracionView(ft.Container):
             self.productos_cache = prods
              
              # ✅ Usar el método correcto según el dispositivo
-             if self.is_mobile:
+            if self.is_mobile:
                  self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
-             else:
+            else:
                  self.lista_categorias.controls = self._create_categoria_grid(cats)
             
             self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
