@@ -332,6 +332,7 @@ class ConfiguracionView(ft.Container):
         self.page.update()
 
     def _update_color_preview(self, color, preview_row, dropdown=None):
+        colors = _colors(self.page)
         if dropdown:
             dropdown.value = color
         for ctrl in preview_row.controls:
