@@ -298,6 +298,9 @@ class HistorialFacturasView(ft.Container):
             first_date=datetime(2023, 1, 1).date(),
             last_date=datetime.today().date(),
             on_change=on_date_select,
+            help_text="Seleccionar fecha",
+            cancel_text="Cancelar",
+            confirm_text="Aceptar",
         )
         
         self.page.overlay.append(date_picker)

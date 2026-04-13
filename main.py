@@ -221,6 +221,11 @@ def show_error(page, msg):
 
 
 async def main(page: ft.Page):
+    page.locale_configuration = ft.LocaleConfiguration(
+        supported_locales=[ft.Locale("es")],
+        current_locale=ft.Locale("es"),
+    )
+    
     import locale
     try:
         try:
