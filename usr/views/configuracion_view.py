@@ -586,6 +586,7 @@ class ConfiguracionView(ft.Container):
             db.close()
 
     def _confirm_delete(self, objeto, tipo="producto"):
+        colors = _colors(self.page)
         color = colors['error'] if tipo == "producto" else "#ff9800"
         
         self.active_dialog = ft.AlertDialog(
@@ -923,6 +924,7 @@ class ConfiguracionView(ft.Container):
 
     def _show_message(self, m):
         self._remove_snackbar()
+        colors = _colors(self.page)
         self.active_snackbar = ft.SnackBar(
             content=ft.Row([
                 ft.Icon(ft.Icons.CHECK_CIRCLE, color=colors['white']),

@@ -289,6 +289,8 @@ class ValidacionView(ft.Container):
             self.clear_button.update()
 
     def _update_validate_button_state(self):
+        if not self.validate_button or not self.clear_button:
+            return
         count = len(self.selected_entradas)
         self.validate_button.text = f"Validar ({count})"
         self.validate_button.disabled = count == 0

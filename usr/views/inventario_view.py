@@ -810,7 +810,9 @@ class InventarioView(ft.Container):
                 db = next(get_db())
                 prod = db.query(Producto).filter(Producto.id == producto_id).first()
                 try:
-                    user_id = str(self.page.session.get("user_id") or "sistema")
+                    user_id = str(self.page.session.get("user_id")) if self.page else None
+                    if not user_id:
+                        user_id = "sistema"
                 except Exception:
                     user_id = "sistema"
                 

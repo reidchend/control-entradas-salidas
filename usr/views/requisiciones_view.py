@@ -390,6 +390,7 @@ class RequisicionesView(ft.Container):
                 
                 req = Requisicion(
                     numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    numero_secuencial=0,
                     origen=origen,
                     destino=destino,
                     estado="completada",
@@ -538,6 +539,7 @@ class RequisicionesView(ft.Container):
             return
 
     def _show_agregar_producto_dialog(self, productos_container):
+        colors = _colors(self.page)
         db = next(get_db())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(200).all()
@@ -660,6 +662,8 @@ class RequisicionesView(ft.Container):
         container.update()
 
     def _crear_item_producto_busqueda(self, producto):
+        colors = _colors(self.page)
+        
         def agregar():
             cantidad_input = ft.TextField(
                 label="Cantidad",
@@ -1297,6 +1301,7 @@ class RequisicionesView(ft.Container):
         try:
             req = Requisicion(
                 numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                numero_secuencial=0,
                 origen=origen,
                 destino=destino,
                 estado="pendiente",
