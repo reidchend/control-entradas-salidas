@@ -221,7 +221,18 @@ def show_error(page, msg):
 
 
 async def main(page: ft.Page):
+    import locale
     try:
+        try:
+            locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+        except:
+            try:
+                locale.setlocale(locale.LC_ALL, 'es_MX.UTF-8')
+            except:
+                try:
+                    locale.setlocale(locale.LC_ALL, 'spanish')
+                except:
+                    pass
         try:
             # Loading screen
             logo = ft.Container(content=ft.Column([

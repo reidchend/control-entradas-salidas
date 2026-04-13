@@ -286,7 +286,13 @@ class HistorialFacturasView(ft.Container):
             try:
                 locale.setlocale(locale.LC_ALL, 'spanish')
             except:
-                pass
+                try:
+                    locale.setlocale(locale.LC_ALL, 'es_MX.UTF-8')
+                except:
+                    try:
+                        locale.setlocale(locale.LC_ALL, '')
+                    except:
+                        pass
 
         date_picker = ft.DatePicker(
             first_date=datetime(2023, 1, 1).date(),
