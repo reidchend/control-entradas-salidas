@@ -463,7 +463,10 @@ class ConfiguracionView(ft.Container):
                         producto.id if producto else None, 
                         es_pesable_sw.value
                     )
+                    self._show_message("✅ Producto guardado correctamente")
                     self._close_dialog()
+                    if hasattr(self, '_load_data'):
+                        self._load_data()
                 except Exception as ex:
                     self._show_error(f"Error: {str(ex)}")
 
@@ -578,8 +581,7 @@ class ConfiguracionView(ft.Container):
                     p.es_pesable = es_p
                 db.add(p)
             db.commit()
-            self._load_data()
-            self._show_message("✅ Producto guardado correctamente")
+            return True
         except Exception as e:
             db.rollback()
             self._show_error(f"Error DB: {str(e)}")
