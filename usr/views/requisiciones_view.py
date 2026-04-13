@@ -265,7 +265,7 @@ class RequisicionesView(ft.Container):
             hint_text="Buscar producto...",
             prefix_icon=ft.Icons.SEARCH,
             border_radius=12,
-            on_change=lambda e: self._filtrar_productos_busqueda(e.control.value, resultados_container),
+            on_change=lambda e: self._filtrar_productos_busqueda(e.control.value, self._productos_cache, resultados_container),
         )
         
         resultados_container = ft.Column([], spacing=5)
