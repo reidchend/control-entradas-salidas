@@ -533,10 +533,7 @@ class RequisicionesView(ft.Container):
             self.page.update()
             return
         
-        if self.app_controller and self.inventario_view:
-            self.app_controller._show_view(0)
-            self.inventario_view._show_panel_requisicion(req)
-            return
+        self._show_crear_vista(requisicion=req)
 
     def _show_agregar_producto_dialog(self, productos_container):
         colors = _colors(self.page)
@@ -791,12 +788,20 @@ class RequisicionesView(ft.Container):
         finally:
             db.close()
 
-    def _show_crear_vista(self):
-        """Muestra la vista de crear requisición - optimizada para móvil"""
+    def _show_crear_vista(self, requisicion=None):
+        """Muestra la vista de crear/editar requisición"""
         colors = _colors(self.page)
         is_mobile = self.page.width < 700 if self.page else False
         self._vista_actual = "crear"
-        self.lista_productos_req = []
+        self._requisicion_editando = requisicion
+        
+        if requisicion:
+            self.lista_productos_req = [
+                {'producto_id': d.producto_id, 'nombre': d.ingrediente, 'cantidad': d.cantidad, 'unidad': d.unidad}
+                for d in requisicion.detalles
+            ]
+        else:
+            self.lista_productos_req = []
         
         db = next(get_db())
         almacenes = []
@@ -810,10 +815,13 @@ class RequisicionesView(ft.Container):
         finally:
             db.close()
         
+        origen_val = requisicion.origen if requisicion else "principal"
+        destino_val = requisicion.destino if requisicion else "restaurante"
+        
         origen_dropdown = ft.Dropdown(
             label="Desde",
             options=[ft.dropdown.Option(a, a.title()) for a in almacenes],
-            value="principal",
+            value=origen_val,
             border_radius=10,
             expand=True,
         )
@@ -823,7 +831,7 @@ class RequisicionesView(ft.Container):
         destino_dropdown = ft.Dropdown(
             label="Hacia",
             options=[ft.dropdown.Option(a, a.title()) for a in almacenes],
-            value="restaurante",
+            value=destino_val,
             border_radius=10,
             expand=True,
         )
@@ -852,6 +860,7 @@ class RequisicionesView(ft.Container):
             border_radius=10,
             multiline=True,
             min_lines=1,
+            value=requisicion.observaciones if requisicion else "",
         )
         
         buscador = ft.TextField(
@@ -885,18 +894,22 @@ class RequisicionesView(ft.Container):
             color="white",
         )
         
+        titulo = f"Editar Requisición" if requisicion else "Nueva Requisición"
+        btn_texto = "Actualizar" if requisicion else "Crear"
+        btn_color = colors['accent'] if requisicion else colors['success']
+        
         header = ft.Container(
             content=ft.Row([
                 ft.IconButton(
                     ft.Icons.ARROW_BACK,
                     on_click=lambda _: self._volver_lista(),
                 ),
-                ft.Text("Nueva Requisición", size=18, weight="bold", color=colors['text_primary']),
+                ft.Text(titulo, size=18, weight="bold", color=colors['text_primary']),
                 ft.Container(expand=True),
                 ft.ElevatedButton(
-                    "Crear",
+                    btn_texto,
                     on_click=lambda _: self._crear_requisicion_vista(origen_dropdown, destino_dropdown, observaciones_input),
-                    bgcolor=colors['success'],
+                    bgcolor=btn_color,
                     color="white",
                 ),
             ], spacing=10),
@@ -1299,41 +1312,66 @@ class RequisicionesView(ft.Container):
         
         db = next(get_db())
         try:
-            req = Requisicion(
-                numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                numero_secuencial=0,
-                origen=origen,
-                destino=destino,
-                estado="pendiente",
-                observaciones=observaciones.value or "",
-                creada_por=(self.page.session.get("user_id") or "Admin") if self.page else "Admin",
-            )
-            db.add(req)
-            db.flush()
+            req_editando = getattr(self, '_requisicion_editando', None)
             
-            for item in self.lista_productos_req:
-                detalle = RequisicionDetalle(
-                    requisicion_id=req.id,
-                    producto_id=item['producto_id'],
-                    ingrediente=item['nombre'],
-                    cantidad=item['cantidad'],
-                    unidad=item['unidad'],
+            if req_editando:
+                req_editando.origen = origen
+                req_editando.destino = destino
+                req_editando.observaciones = observaciones.value or ""
+                
+                for d in req_editando.detalles:
+                    db.delete(d)
+                db.flush()
+                
+                for item in self.lista_productos_req:
+                    detalle = RequisicionDetalle(
+                        requisicion_id=req_editando.id,
+                        producto_id=item['producto_id'],
+                        ingrediente=item['nombre'],
+                        cantidad=item['cantidad'],
+                        unidad=item['unidad'],
+                    )
+                    db.add(detalle)
+                
+                db.commit()
+                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición actualizada"), bgcolor=ft.Colors.GREEN_700)
+            else:
+                req = Requisicion(
+                    numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    numero_secuencial=0,
+                    origen=origen,
+                    destino=destino,
+                    estado="pendiente",
+                    observaciones=observaciones.value or "",
+                    created_by=(self.page.session.get("user_id") or "Admin") if self.page else "Admin",
                 )
-                db.add(detalle)
+                db.add(req)
+                db.flush()
+                
+                for item in self.lista_productos_req:
+                    detalle = RequisicionDetalle(
+                        requisicion_id=req.id,
+                        producto_id=item['producto_id'],
+                        ingrediente=item['nombre'],
+                        cantidad=item['cantidad'],
+                        unidad=item['unidad'],
+                    )
+                    db.add(detalle)
+                
+                db.commit()
+                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición creada: {origen} → {destino}"), bgcolor=ft.Colors.GREEN_700)
             
-            db.commit()
-            
-            snack = ft.SnackBar(content=ft.Text(f"✓ Requisición creada: {origen} → {destino}"), bgcolor=ft.Colors.GREEN_700)
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
             
             self.lista_productos_req = []
+            self._requisicion_editando = None
             self._volver_lista()
             
         except Exception as ex:
             db.rollback()
-            logger.error(f"Error creando requisición: {ex}")
+            logger.error(f"Error guardando requisición: {ex}")
             snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=ft.Colors.RED_700)
             self.page.overlay.append(snack)
             snack.open = True
