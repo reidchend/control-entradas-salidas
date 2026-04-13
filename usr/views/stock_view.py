@@ -5,15 +5,13 @@ from usr.models import Producto, Movimiento, Categoria, Existencia
 from datetime import datetime
 import logging
 from sqlalchemy import func
-from usr.theme import get_theme
+from usr.theme import get_theme, get_colors
 
 logger = logging.getLogger(__name__)
 
 
 def _colors(page):
-    if page and hasattr(page, 'theme_mode'):
-        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
-    return get_theme(True)
+    return get_colors(page)
 
 class StockView(ft.Container):
     def __init__(self):

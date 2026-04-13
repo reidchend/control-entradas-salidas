@@ -3,6 +3,14 @@ Constantes de colores para el tema de la aplicación
 """
 import flet as ft
 
+
+def get_colors(page):
+    """Helper para obtener colores según el tema de la página"""
+    if page and hasattr(page, 'theme_mode'):
+        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
+    return get_theme(True)
+
+
 def get_theme(is_dark: bool):
     """Retorna diccionario de colores según el tema"""
     if is_dark:

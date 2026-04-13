@@ -7,13 +7,11 @@ from usr.database.cache import get_cache
 from usr.models import Factura, Movimiento, Producto
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
-from usr.theme import get_theme
+from usr.theme import get_theme, get_colors
 
 
 def _colors(page):
-    if page and hasattr(page, 'theme_mode'):
-        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
-    return get_theme(True)
+    return get_colors(page)
 
 
 def _c(page, color_name):

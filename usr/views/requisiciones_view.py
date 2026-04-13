@@ -6,15 +6,13 @@ from datetime import datetime
 from usr.database.base import get_db
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
-from usr.theme import get_theme
+from usr.theme import get_theme, get_colors
 
 logger = logging.getLogger(__name__)
 
 
 def _colors(page):
-    if page and hasattr(page, 'theme_mode'):
-        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
-    return get_theme(True)
+    return get_colors(page)
 
 
 def _get_color(page, color_name):

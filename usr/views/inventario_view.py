@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from usr.database.base import get_db
 from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
-from usr.theme import get_theme
+from usr.theme import get_theme, get_colors
 from sqlalchemy import func
 import traceback
 
@@ -25,9 +25,7 @@ def _get_attr(obj, key, default=""):
 
 
 def _colors(page):
-    if page and hasattr(page, 'theme_mode'):
-        return get_theme(page.theme_mode == ft.ThemeMode.DARK)
-    return get_theme(True)
+    return get_colors(page)
 
 
 def _get_safe_colors(page):
