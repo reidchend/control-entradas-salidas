@@ -395,7 +395,7 @@ class RequisicionesView(ft.Container):
                     destino=destino,
                     estado="completada",
                     observaciones=observaciones_input.value or "",
-                    creada_por=self.page.session.get("user_id") or "Admin" if self.page else "Admin",
+                    creada_por=(self.page.session.get("user_id") or "Admin") if self.page else "Admin",
                 )
                 db.add(req)
                 db.flush()
@@ -1306,7 +1306,7 @@ class RequisicionesView(ft.Container):
                 destino=destino,
                 estado="pendiente",
                 observaciones=observaciones.value or "",
-                creada_por=self.page.session.get("user_id") or "Admin" if self.page else "Admin",
+                creada_por=(self.page.session.get("user_id") or "Admin") if self.page else "Admin",
             )
             db.add(req)
             db.flush()

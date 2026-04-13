@@ -358,7 +358,9 @@ class HistorialFacturasView(ft.Container):
             )
             
             from usr.database.cache import set_cache
-            set_cache("server_facturas", [dict(f.__dict__) for f in self.facturas_data], ttl_seconds=3600)
+            def serialize_factura(f):
+                return {k: v for k, v in f.__dict__.items() if not k.startswith('_')}
+            set_cache("server_facturas", [serialize_factura(f) for f in self.facturas_data], ttl_seconds=3600)
             
             self._apply_filters()
         except Exception as e:

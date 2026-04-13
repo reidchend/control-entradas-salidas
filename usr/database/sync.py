@@ -2,7 +2,6 @@
 Sincronización Bidireccional con SQLAlchemy - maneja conexión y offline para multi-dispositivo
 """
 import threading
-import socket
 from datetime import datetime
 from sqlalchemy import text
 from .cache import (
