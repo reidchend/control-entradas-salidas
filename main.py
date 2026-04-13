@@ -108,7 +108,7 @@ class ControlEntradasSalidasApp:
                 ft.NavigationBarDestination(icon="shopping_cart_outlined", label="Inventario"),
                 ft.NavigationBarDestination(icon="checklist_outlined", label="Validar"),
                 ft.NavigationBarDestination(icon="warehouse_outlined", label="Stock"),
-                ft.NavigationBarDestination(icon="local_shipping_outlined", label="Requisiciones"),
+                ft.NavigationBarDestination(icon="more_vert", label="Más"),
             ], on_change=self._on_navigation_change,
         )
 
@@ -141,6 +141,7 @@ class ControlEntradasSalidasApp:
         index = int(e.control.selected_index)
         if self.page.width < 700 and index == 3:
             self._show_more_menu()
+            self.navigation_bar.selected_index = self.current_view_index
             self.navigation_bar.selected_index = self.current_view_index
             return
         self.current_view_index = index
