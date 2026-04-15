@@ -66,6 +66,46 @@ class StockView(ft.Container):
         self.page.overlay.append(snack)
         snack.open = True
         self.page.update()
+    
+    def _on_sync_indicator_click(self, e=None):
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            pending = get_pending_movimientos_count()
+            status = sync_mgr.get_connection_status()
+            
+            if status.get('online'):
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
+                sync_mgr.force_sync_now()
+                self._load_categorias()
+                self._load_productos()
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
+            else:
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=3))
+        
+        self._update_connection_indicator()
+        self.page.update()
+    
+    def _update_connection_indicator(self):
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            status = sync_mgr.get_connection_status()
+            pending = get_pending_movimientos_count()
+            
+            if status.get('online'):
+                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
+                self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
+            else:
+                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
+                self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        else:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
+            self._connection_indicator.tooltip = "Sin conexión"
+        
+        self._connection_indicator.update()
 
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
@@ -84,12 +124,21 @@ class StockView(ft.Container):
 
     def _build_ui(self):
         colors = _colors(self.page)
+        
+        self._connection_indicator = ft.Container(
+            content=ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18),
+            tooltip="Conectado",
+            padding=5,
+            on_click=self._on_sync_indicator_click
+        )
+        
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
                     ft.Text("Gestión de Stock", size=24, weight=ft.FontWeight.BOLD, color=colors['text_primary']),
                     ft.Text("Control e inventario de productos y pesaje", size=14, color=colors['text_secondary']),
                 ], spacing=2, expand=True),
+                self._connection_indicator,
                 ft.IconButton(
                     icon=ft.Icons.REFRESH_ROUNDED,
                     icon_color=colors['text_secondary'],

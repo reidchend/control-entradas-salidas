@@ -90,8 +90,15 @@ class ControlEntradasSalidasApp:
 
         self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
+        self.connection_indicator = ft.Container(
+            content=ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=20),
+            tooltip="Conectado",
+            on_click=self._on_sync_click
+        )
+
         self.navigation_rail = ft.NavigationRail(
-            selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E', leading=self.theme_toggle,
+            selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E', 
+            leading=ft.Column([self.theme_toggle, self.connection_indicator], spacing=5, horizontal_alignment="center"),
             destinations=[
                 ft.NavigationRailDestination(icon="shopping_cart_outlined", selected_icon="shopping_cart", label="Inventario"),
                 ft.NavigationRailDestination(icon="checklist_outlined", selected_icon="checklist", label="Validación"),
@@ -186,6 +193,48 @@ class ControlEntradasSalidasApp:
         self.bottom_sheet = ft.BottomSheet(content=ft.Container(content=menu_content, padding=ft.padding.only(bottom=20)), open=True)
         self.page.open(self.bottom_sheet)
 
+    def _on_sync_click(self, e=None):
+        """Maneja el clic en el indicador de conexión - fuerza sync."""
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            pending = get_pending_movimientos_count()
+            status = sync_mgr.get_connection_status()
+            
+            if status.get('online'):
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
+                sync_mgr.force_sync_now()
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
+            else:
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=2))
+        
+        self._update_connection_indicator()
+        self.page.update()
+    
+    def _update_connection_indicator(self):
+        """Actualiza el indicador de conexión."""
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            status = sync_mgr.get_connection_status()
+            pending = get_pending_movimientos_count()
+            
+            if status.get('online'):
+                self.connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=20)
+                self.connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
+            else:
+                self.connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=20)
+                self.connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        else:
+            self.connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=20)
+            self.connection_indicator.tooltip = "Sin conexión"
+        
+        if self.page:
+            self.connection_indicator.update()
+            self.page.update()
+
     def _show_view(self, index: int):
         view = self.views[index]
         
@@ -268,13 +317,32 @@ async def main(page: ft.Page):
             status_text.value = "Base de datos..."
             page.update()
             
-            from usr.database.base import get_engine, get_session_local
+            from usr.database.base import get_engine, get_session_local, init_local_tables, check_connection
+            from usr.database.local_replica import LocalReplica
             from usr.database.sync import init_sync_manager
+            
+            init_local_tables()
+            
             sync_manager = init_sync_manager(get_engine)
+            sync_manager.set_session_local_getter(get_session_local)
             status_text.value = "✓ Conectado"
             
-            # Step 3: Views import
             step_text.value = "4/5"
+            status_text.value = "Sincronizando..."
+            page.update()
+            
+            if check_connection():
+                try:
+                    sync_manager.full_sync()
+                    status_text.value = "✓ Sincronizado"
+                except Exception as e:
+                    print(f"Error en sync inicial: {e}")
+                    status_text.value = "⚠️ Sin sync"
+            else:
+                status_text.value = "⚠️ Modo offline"
+            
+            # Step 3: Views import
+            step_text.value = "5/5"
             status_text.value = "Módulos..."
             page.update()
             

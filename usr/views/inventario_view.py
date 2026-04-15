@@ -4,7 +4,8 @@ import hashlib
 import threading
 from datetime import datetime
 from contextlib import contextmanager
-from usr.database.base import get_db
+from usr.database.base import get_db, is_online
+from usr.database.local_replica import LocalReplica
 from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
 from usr.theme import get_theme, get_colors
@@ -144,6 +145,14 @@ class InventarioView(ft.Container):
     def _build_ui(self):
         try:
             colors = _get_safe_colors(self.page)
+            
+            self._connection_indicator = ft.Container(
+                content=ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18),
+                tooltip="Conectado",
+                padding=5,
+                on_click=self._on_sync_indicator_click
+            )
+            
             self.header_container = ft.Container(
                 content=ft.Row([
                     ft.Column([
@@ -151,6 +160,7 @@ class InventarioView(ft.Container):
                         ft.Text("Gestión de existencias", size=12, color=colors['text_secondary']),
                     ], expand=True, spacing=0),
                     ft.Container(),
+                    self._connection_indicator,
                     ft.IconButton(
                         icon=ft.Icons.REFRESH_ROUNDED,
                         on_click=lambda _: self._on_refresh(),
@@ -209,59 +219,98 @@ class InventarioView(ft.Container):
         self.page.overlay.append(snack)
         snack.open = True
         self.page.update()
+    
+    def _on_sync_indicator_click(self, e=None):
+        """Maneja clic en el indicador de conexión."""
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            pending = get_pending_movimientos_count()
+            status = sync_mgr.get_connection_status()
+            
+            if status.get('online'):
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
+                sync_mgr.force_sync_now()
+                self._load_categorias(True)
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
+            else:
+                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=3))
+        
+        self._update_connection_indicator()
+        self.page.update()
+    
+    def _update_connection_indicator(self):
+        """Actualiza el indicador de conexión."""
+        from usr.database import get_sync_manager, get_pending_movimientos_count
+        
+        sync_mgr = get_sync_manager()
+        if sync_mgr:
+            status = sync_mgr.get_connection_status()
+            pending = get_pending_movimientos_count()
+            
+            if status.get('online'):
+                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
+                self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
+            else:
+                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
+                self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        else:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
+            self._connection_indicator.tooltip = "Sin conexión"
+        
+        self._connection_indicator.update()
 
     async def _load_categorias(self, force_refresh=False):
         if not self.page:
             return
 
-        db = None
         try:
-            if CACHE_AVAILABLE and not force_refresh:
-                cached_cats = get_cache_any_age("categorias")
-                if cached_cats:
-                    self.categorias_grid.controls = [
-                        self._create_categoria_card_from_dict(c) for c in cached_cats
-                    ]
-                    self.update()
-                    return
-
-            db = next(get_db())
-            categorias = db.query(Categoria).all()
-            self._categorias_cache = categorias
-
-            if CACHE_AVAILABLE:
-                cats_data = [
-                    {"id": c.id, "nombre": c.nombre, "color": c.color}
-                    for c in categorias
-                ]
-                set_cache("categorias", cats_data, ttl_seconds=86400)
-
-            if not categorias:
-                self.categorias_grid.controls = [ft.Text("No hay categorías")]
-            else:
+            local_categorias = LocalReplica.get_categorias()
+            if local_categorias:
+                self._categorias_cache = local_categorias
                 self.categorias_grid.controls = [
-                    self._create_categoria_card(c) for c in categorias
+                    self._create_categoria_card_from_dict(c) for c in local_categorias
                 ]
-
-            self.update()
-            if force_refresh and self.page:
-                snack = ft.SnackBar(
-                    content=ft.Text("✓ Datos actualizados desde BD"),
-                    bgcolor=ft.Colors.GREEN_700,
-                    duration=2,
-                )
-                self.page.overlay.append(snack)
-                snack.open = True
-                self.page.update()
-
+                self.update()
+            
+            if force_refresh or not local_categorias:
+                from usr.database.base import check_connection
+                if check_connection():
+                    db = next(get_db())
+                    try:
+                        categorias = db.query(Categoria).all()
+                        cats_data = [
+                            {"id": c.id, "nombre": c.nombre, "color": c.color,
+                             "descripcion": c.descripcion, "imagen": c.imagen,
+                             "activo": c.activo, "created_at": str(c.created_at) if c.created_at else None,
+                             "updated_at": str(c.updated_at) if c.updated_at else None}
+                            for c in categorias
+                        ]
+                        LocalReplica.save_categorias(cats_data)
+                        self._categorias_cache = cats_data
+                        self.categorias_grid.controls = [
+                            self._create_categoria_card_from_dict(c) for c in cats_data
+                        ]
+                        self.update()
+                        
+                        if self.page:
+                            snack = ft.SnackBar(
+                                content=ft.Text("✓ Datos actualizados desde servidor"),
+                                bgcolor=ft.Colors.GREEN_700,
+                                duration=2,
+                            )
+                            self.page.overlay.append(snack)
+                            snack.open = True
+                            self.page.update()
+                    finally:
+                        if db:
+                            db.close()
         except Exception as e:
-            logger.error(f"Error carga: {e}")
+            logger.error(f"Error carga categorías: {e}")
             self.categorias_grid.controls = [ft.Text(f"Error: {e}")]
             if self.page:
-                self.page.update()
-        finally:
-            if db:
-                db.close()
+                self.update()
 
 
 
@@ -489,72 +538,64 @@ class InventarioView(ft.Container):
 
     def _load_productos(self, search_term=""):
         if not self.categoria_seleccionada: return
-        db = None
+        
         try:
-            cat_id = self.categoria_seleccionada.id
+            cat_id = self.categoria_seleccionada.id if hasattr(self.categoria_seleccionada, 'id') else self.categoria_seleccionada.get('id')
             
-            # 1. Intentar cargar del caché primero
-            if CACHE_AVAILABLE:
-                cached_prods = get_cache_any_age(f"productos_cat_{cat_id}")
-                cached_exist = get_cache_any_age(f"existencias_cat_{cat_id}")
-                
-                if cached_prods:
-                    existencias_map = cached_exist or {}
-                    self._productos_cache = cached_prods
-                    self._existencias_cache = existencias_map
-                    if search_term:
-                        cached_prods = [p for p in cached_prods if search_term.lower() in p.get("nombre", "").lower()]
-                    
-                    items = [self._create_producto_item_from_dict(p, existencias_map.get(str(p.get("id")), {})) for p in cached_prods]
-                    self.productos_list.controls = items if items else [ft.Text("No hay productos")]
-                    if self.page: self.update()
-            
-            # 2. Cargar de la BD
-            db = next(get_db())
-            
-            productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).all()
-            
-            # Convertir a diccionarios inmediatamente para evitar DetachedInstanceError
-            self._productos_cache = [
-                {
-                    "id": p.id,
-                    "nombre": p.nombre,
-                    "unidad_medida": p.unidad_medida,
-                    "stock_minimo": p.stock_minimo,
-                    "es_pesable": getattr(p, 'es_pesable', False),
-                    "almacen_predeterminado": getattr(p, 'almacen_predeterminado', 'principal')
-                } for p in productos_raw
-            ]
-            
-            producto_ids = [p["id"] for p in self._productos_cache]
+            local_productos = LocalReplica.get_productos(cat_id)
+            local_existencias = LocalReplica.get_existencias()
             
             existencias_map = {}
-            if producto_ids:
-                existencias = db.query(Existencia.producto_id, Existencia.almacen, Existencia.cantidad).filter(
-                    Existencia.producto_id.in_(producto_ids)
-                ).all()
-                for e in existencias:
-                    if e.producto_id not in existencias_map:
-                        existencias_map[e.producto_id] = {}
-                    existencias_map[e.producto_id][e.almacen] = e.cantidad
+            for ext in local_existencias:
+                prod_id = ext.get('producto_id')
+                almacen = ext.get('almacen')
+                if prod_id not in existencias_map:
+                    existencias_map[prod_id] = {}
+                existencias_map[prod_id][almacen] = ext.get('cantidad', 0)
             
+            self._productos_cache = local_productos
             self._existencias_cache = existencias_map
             
-            # 3. Guardar en caché
-            if CACHE_AVAILABLE and self._productos_cache:
-                set_cache(f"productos_cat_{cat_id}", self._productos_cache, ttl_seconds=86400)
-                set_cache(f"existencias_cat_{cat_id}", existencias_map, ttl_seconds=3600)
-            
             if search_term:
-                self._productos_cache = [p for p in self._productos_cache if search_term.lower() in p.get("nombre", "").lower()]
+                local_productos = [p for p in local_productos if search_term.lower() in p.get("nombre", "").lower()]
             
-            items = [self._create_producto_item_from_dict(p, existencias_map.get(p["id"], {})) for p in self._productos_cache]
+            items = [self._create_producto_item_from_dict(p, existencias_map.get(p.get("id"), {})) for p in local_productos]
             self.productos_list.controls = items if items else [ft.Text("No hay productos")]
             if self.page: self.update()
+            
+            from usr.database.base import check_connection
+            if check_connection():
+                db = next(get_db())
+                try:
+                    productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).all()
+                    
+                    prod_data = [
+                        {"id": p.id, "nombre": p.nombre, "codigo": p.codigo,
+                         "descripcion": p.descripcion, "categoria_id": p.categoria_id,
+                         "es_pesable": p.es_pesable, "requiere_foto_peso": p.requiere_foto_peso,
+                         "peso_unitario": p.peso_unitario, "unidad_medida": p.unidad_medida,
+                         "stock_actual": p.stock_actual, "stock_minimo": p.stock_minimo,
+                         "activo": p.activo, "almacen_predeterminado": p.almacen_predeterminado,
+                         "created_at": str(p.created_at) if p.created_at else None,
+                         "updated_at": str(p.updated_at) if p.updated_at else None}
+                        for p in productos_raw
+                    ]
+                    LocalReplica.save_productos(prod_data)
+                    
+                    producto_ids = [p["id"] for p in prod_data]
+                    if producto_ids:
+                        existencias = db.query(Existencia).filter(Existencia.producto_id.in_(producto_ids)).all()
+                        ext_data = [
+                            {"id": e.id, "producto_id": e.producto_id, "almacen": e.almacen,
+                             "cantidad": e.cantidad, "unidad": e.unidad}
+                            for e in existencias
+                        ]
+                        LocalReplica.save_existencias(ext_data)
+                finally:
+                    if db:
+                        db.close()
         except Exception as e:
             logger.error(f"Error carga productos: {e}")
-        finally:
-            if db: db.close()
 
     def _create_producto_item(self, producto, stock_por_almacen=None):
         if stock_por_almacen is None:
@@ -796,84 +837,88 @@ class InventarioView(ft.Container):
             tabla.update()
 
     def _registrar_movimiento(self, tipo, cantidad, peso_total=0.0, almacen=None):
-        from usr.database.sync import get_sync_manager
-        from usr.database.cache import add_pending_sync
-        
-        sync = get_sync_manager()
-        has_connection = sync.check_connection() if sync else False
+        from usr.database.local_replica import LocalReplica
+        from usr.database.base import is_online, get_session_local
+        from config.config import get_settings
         
         producto_id = self.producto_seleccionado.id if hasattr(self.producto_seleccionado, 'id') else self.producto_seleccionado.get('id')
         
-        if has_connection:
-            db = None
-            try:
-                db = next(get_db())
-                prod = db.query(Producto).filter(Producto.id == producto_id).first()
-                try:
-                    user_id = str(self.page.session.get("user_id")) if self.page else None
-                    if not user_id:
-                        user_id = "sistema"
-                except Exception:
-                    user_id = "sistema"
-                
-                almacen_seleccionado = almacen or prod.almacen_predeterminado or "principal"
-                
-                existencia = db.query(Existencia).filter(
-                    Existencia.producto_id == prod.id,
-                    Existencia.almacen == almacen_seleccionado
-                ).first()
-                
-                cant_anterior = existencia.cantidad if existencia else 0
-                
-                if tipo == "entrada":
-                    cant_nueva = cant_anterior + cantidad
-                else:
-                    if cant_anterior < cantidad:
-                        self._show_error("Stock insuficiente"); return
-                    cant_nueva = cant_anterior - cantidad
-
-                if existencia:
-                    existencia.cantidad = cant_nueva
-                else:
-                    existencia = Existencia(
-                        producto_id=prod.id,
-                        almacen=almacen_seleccionado,
-                        cantidad=cant_nueva,
-                        unidad=prod.unidad_medida or "unidad"
-                    )
-                    db.add(existencia)
-
-                nuevo_mov = Movimiento(
-                    producto_id=prod.id, tipo=tipo, cantidad=cantidad,
-                    cantidad_anterior=cant_anterior, cantidad_nueva=cant_nueva,
-                    registrado_por=user_id, fecha_movimiento=datetime.now(), 
-                    peso_total=peso_total, almacen=almacen_seleccionado
-                )
-                db.add(nuevo_mov)
-                db.commit()
-                
-                self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad} {prod.unidad_medida}")
-                self._load_productos()
-            except Exception as e:
-                if db: db.rollback()
-                self._show_error(f"Error: {e}")
-            finally:
-                if db: db.close()
+        almacen_seleccionado = almacen or getattr(self.producto_seleccionado, 'almacen_predeterminado', 'principal') or 'principal'
+        
+        try:
+            user_id = str(self.page.session.get("user_id")) if self.page else None
+            if not user_id:
+                user_id = "sistema"
+        except Exception:
+            user_id = "sistema"
+        
+        existencia_actual = LocalReplica.get_existencias_by_producto_almacen(producto_id, almacen_seleccionado)
+        cant_anterior = existencia_actual.get('cantidad', 0) if existencia_actual else 0
+        
+        if tipo == "entrada":
+            cant_nueva = cant_anterior + cantidad
         else:
-            movimiento_data = {
-                "producto_id": producto_id,
-                "tipo": tipo,
-                "cantidad": cantidad,
-                "peso_total": peso_total,
-                "almacen": almacen or "principal",
-                "fecha_movimiento": datetime.now().isoformat(),
-                "observaciones": "",
-                "sincronizado": False
-            }
-            add_pending_sync("movimientos", 0, "INSERT", movimiento_data)
-            self._show_message("⚠️ Sin conexión. Movimiento guardado para sync.")
-            if hasattr(self, '_load_productos'):
-                self._load_productos()
+            if cant_anterior < cantidad:
+                self._show_error("Stock insuficiente"); return
+            cant_nueva = cant_anterior - cantidad
+        
+        movimiento_data = {
+            "producto_id": producto_id,
+            "tipo": tipo,
+            "cantidad": cantidad,
+            "cantidad_anterior": cant_anterior,
+            "cantidad_nueva": cant_nueva,
+            "peso_total": peso_total,
+            "almacen": almacen_seleccionado,
+            "registrado_por": user_id,
+            "observaciones": "",
+        }
+        
+        LocalReplica.save_movimiento(movimiento_data)
+        LocalReplica.update_existencia(producto_id, almacen_seleccionado, cant_nueva)
+        
+        sync_mgr = None
+        try:
+            from usr.database import get_sync_manager
+            sync_mgr = get_sync_manager()
+        except:
+            pass
+        
+        online = is_online() if sync_mgr is None else sync_mgr.check_connection()
+        
+        if online:
+            try:
+                session_maker = get_session_local()
+                from sqlalchemy import text
+                with session_maker() as db:
+                    cols = ", ".join(movimiento_data.keys())
+                    vals = ", ".join([f":{k}" for k in movimiento_data.keys()])
+                    sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
+                    db.execute(sql, movimiento_data)
+                    
+                    existing = db.query(Existencia).filter(
+                        Existencia.producto_id == producto_id,
+                        Existencia.almacen == almacen_seleccionado
+                    ).first()
+                    
+                    if existing:
+                        existing.cantidad = cant_nueva
+                    else:
+                        new_exist = Existencia(
+                            producto_id=producto_id,
+                            almacen=almacen_seleccionado,
+                            cantidad=cant_nueva,
+                            unidad="unidad"
+                        )
+                        db.add(new_exist)
+                    
+                    db.commit()
+                print("[SYNC] Movimiento syncado inmediatamente")
+            except Exception as e:
+                print(f"[SYNC] Error al syncar: {e}")
+        
+        self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad}")
+        self._load_productos()
 
     def _show_message(self, texto):
         if self.page:

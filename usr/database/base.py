@@ -4,7 +4,10 @@ from config.config import get_settings
 
 _base = None
 _engine = None
+_local_engine = None
 _session_local = None
+_local_session_local = None
+_is_online = True
 
 def get_base():
     global _base
@@ -12,12 +15,42 @@ def get_base():
         _base = declarative_base()
     return _base
 
-def get_engine():
-    global _engine
+def get_engine(force_online: bool = None):
+    """Obtiene el motor de base de datos. Intenta online por defecto, fallback a local."""
+    global _engine, _is_online
+    
+    if force_online is not None:
+        if force_online:
+            _is_online = True
+        else:
+            _is_online = False
+    
     if _engine is None:
         settings = get_settings()
-        _engine = create_engine(settings.DATABASE_URL, future=True, pool_pre_ping=True)
+        try:
+            _engine = create_engine(settings.DATABASE_URL, future=True, pool_pre_ping=True)
+            with _engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _is_online = True
+        except Exception as e:
+            print(f"[OFFLINE] No hay conexión a Supabase: {e}")
+            _engine = None
+            _is_online = False
+    
     return _engine
+
+def is_online() -> bool:
+    """Retorna True si hay conexión a la base de datos remota."""
+    global _is_online
+    return _is_online
+
+def get_local_engine():
+    """Obtiene el motor de la base de datos local SQLite."""
+    global _local_engine
+    if _local_engine is None:
+        settings = get_settings()
+        _local_engine = create_engine(settings.LOCAL_DATABASE_URL, future=True)
+    return _local_engine
 
 def get_session_local():
     global _session_local
@@ -25,19 +58,67 @@ def get_session_local():
         _session_local = sessionmaker(bind=get_engine(), autoflush=False, autocommit=False)
     return _session_local
 
-Base = get_base()
+def get_local_session():
+    """Obtiene sessionmaker para la base de datos local."""
+    global _local_session_local
+    if _local_session_local is None:
+        _local_session_local = sessionmaker(bind=get_local_engine(), autoflush=False, autocommit=False)
+    return _local_session_local
 
 def get_db():
+    """Generator que proporciona una sesión de base de datos."""
     db = get_session_local()()
     try:
         yield db
     finally:
         db.close()
 
-def engine_connection_test():
+def get_local_db():
+    """Generator que proporciona una sesión de base de datos local."""
+    db = get_local_session()()
     try:
-        with get_engine().connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return True
+        yield db
+    finally:
+        db.close()
+
+def engine_connection_test():
+    """Prueba la conexión a la base de datos remota."""
+    global _is_online
+    try:
+        engine = get_engine()
+        if engine:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _is_online = True
+            return True
     except:
-        return False
+        _is_online = False
+    return False
+
+def check_connection() -> bool:
+    """Verifica y actualiza el estado de conexión."""
+    global _is_online
+    try:
+        engine = get_engine()
+        if engine:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _is_online = True
+            return True
+    except:
+        _is_online = False
+    return False
+
+Base = get_base()
+
+def init_local_tables():
+    """Inicializa las tablas en la base de datos local."""
+    from .local_replica import LocalReplica
+    LocalReplica.create_tables()
+
+def get_connection_status() -> dict:
+    """Retorna el estado de conexión."""
+    return {
+        "online": is_online(),
+        "is_online": is_online()
+    }

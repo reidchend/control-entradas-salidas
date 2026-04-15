@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     DB_USER: str = os.getenv("DB_USER", "postgres")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     
+    # --- CONFIGURACIÓN LOCAL (OFFLINE) ---
+    LOCAL_DB_PATH: str = os.getenv("LOCAL_DB_PATH", "./lycoris_local.db")
+    DEVICE_ID: str = os.getenv("DEVICE_ID", "")
+    
     @property
     def DATABASE_URL(self) -> str:
         """Construye la URL de conexión a la base de datos de forma segura."""
@@ -49,6 +53,19 @@ class Settings(BaseSettings):
             )
         
         return f"postgresql+pg8000://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{final_port}/{self.DB_NAME}"
+    
+    @property
+    def LOCAL_DATABASE_URL(self) -> str:
+        """URL de la base de datos local SQLite para offline."""
+        return f"sqlite:///{self.LOCAL_DB_PATH}"
+    
+    @property
+    def DEVICE_IDENTIFIER(self) -> str:
+        """Identificador único del dispositivo."""
+        if self.DEVICE_ID:
+            return self.DEVICE_ID
+        import uuid
+        return f"device_{uuid.uuid4().hex[:8]}"
     
     # --- EL RESTO DE TUS VARIABLES ORIGINALES ---
     FLET_APP_NAME: str = os.getenv("FLET_APP_NAME", "Lycoris_Control")
