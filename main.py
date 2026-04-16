@@ -1,5 +1,11 @@
 import flet as ft
 import traceback
+import os
+import ssl
+import certifi
+
+# Esto le dice a Python exactamente dónde encontrar los certificados
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
 def log_debug(msg):

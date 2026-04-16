@@ -8,6 +8,8 @@ _local_engine = None
 _session_local = None
 _local_session_local = None
 _is_online = True
+_online_check_time = 0
+_ONLINE_CACHE_TTL = 10
 
 def get_base():
     global _base
@@ -44,13 +46,20 @@ def get_engine(force_online: bool = None):
     return _engine
 
 def is_online() -> bool:
-    """Retorna True si hay conexión a la base de datos remota. Re-verifica cada vez."""
-    global _is_online, _engine, _session_local
+    """Retorna True si hay conexión a la base de datos remota (con cache de 10 seg)."""
+    global _is_online, _engine, _session_local, _online_check_time
+    
+    import time
+    current_time = time.time()
+    
+    if current_time - _online_check_time < _ONLINE_CACHE_TTL:
+        return _is_online
     
     if _is_online and _engine:
         try:
             with _engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
+            _online_check_time = current_time
             return True
         except Exception as e:
             print(f"[OFFLINE] Conexión perdida: {e}")
@@ -58,9 +67,11 @@ def is_online() -> bool:
             _is_online = False
             _engine = None
             _session_local = None
+            _online_check_time = current_time
     elif _is_online and _engine is None:
         _is_online = False
     
+    _online_check_time = current_time
     return _is_online
 
 def get_local_engine():

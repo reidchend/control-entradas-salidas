@@ -157,23 +157,6 @@ def init_local_db():
     """)
     
     conn.commit()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pending_operations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            table_name TEXT NOT NULL,
-            operation TEXT NOT NULL,
-            record_id INTEGER,
-            data TEXT,
-            created_at TEXT NOT NULL,
-            retries INTEGER DEFAULT 0
-        )
-    """)
-    
-    conn.commit()
-    
-    _migrate_old_tables(conn)
-    
     conn.close()
 
 def _migrate_old_tables(conn):

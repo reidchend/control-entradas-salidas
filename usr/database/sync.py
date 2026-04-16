@@ -69,8 +69,14 @@ class SyncManager:
             return False
         
         try:
-            self._upload_pending_movimientos(session_maker)
-            self._download_all_from_server(session_maker)
+            uploaded = self._upload_pending_movimientos(session_maker)
+            
+            if uploaded > 0:
+                self._download_all_from_server(session_maker)
+            else:
+                print("[SYNC] No hay pendientes, descargando del servidor...")
+                self._download_all_from_server(session_maker)
+            
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
             print("[SYNC] Sincronización completa finalizada")
             return True
@@ -88,8 +94,6 @@ class SyncManager:
             return 0
         
         synced_count = 0
-        settings = get_settings()
-        device_id = settings.DEVICE_IDENTIFIER
         
         with session_maker() as db:
             for mov in pending_movimientos:
@@ -108,7 +112,6 @@ class SyncManager:
                         'observaciones': mov.get('observaciones'),
                         'almacen': mov.get('almacen'),
                         'fecha_movimiento': mov.get('fecha_movimiento'),
-                        'device_id': device_id
                     }
                     
                     columns = ", ".join(mov_data.keys())
@@ -175,8 +178,7 @@ class SyncManager:
                 except Exception as e:
                     print(f"[SYNC] Error descargando {table}: {e}")
         
-        LocalReplica.recalculate_existencias()
-        print("[SYNC] Existencias recalculadas desde movimientos")
+        print("[SYNC] Descarga completada")
         return True
     
     def start_background_sync(self, session_getter, interval_seconds: int = 30):
@@ -240,10 +242,6 @@ def save_movimiento_with_sync(movimiento_data: dict, update_local: bool = True) 
     from .local_replica import LocalReplica
     from .base import is_online, get_session_local
     
-    settings = get_settings()
-    device_id = settings.DEVICE_IDENTIFIER
-    
-    movimiento_data['device_id'] = device_id
     movimiento_data['fecha_movimiento'] = datetime.now().isoformat()
     movimiento_data['created_at'] = datetime.now().isoformat()
     movimiento_data['sincronizado'] = False

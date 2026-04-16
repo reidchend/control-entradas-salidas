@@ -64,8 +64,20 @@ class Settings(BaseSettings):
         """Identificador único del dispositivo."""
         if self.DEVICE_ID:
             return self.DEVICE_ID
+        
+        import os
         import uuid
-        return f"device_{uuid.uuid4().hex[:8]}"
+        device_file = os.path.join(os.path.dirname(__file__), '.device_id')
+        
+        if os.path.exists(device_file):
+            with open(device_file, 'r') as f:
+                return f.read().strip()
+        
+        new_id = f"device_{uuid.uuid4().hex[:8]}"
+        with open(device_file, 'w') as f:
+            f.write(new_id)
+        
+        return new_id
     
     # --- EL RESTO DE TUS VARIABLES ORIGINALES ---
     FLET_APP_NAME: str = os.getenv("FLET_APP_NAME", "Lycoris_Control")
