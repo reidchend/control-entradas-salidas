@@ -90,15 +90,9 @@ class ControlEntradasSalidasApp:
 
         self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
-        self.connection_indicator = ft.Container(
-            content=ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=20),
-            tooltip="Conectado",
-            on_click=self._on_sync_click
-        )
-
         self.navigation_rail = ft.NavigationRail(
             selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E', 
-            leading=ft.Column([self.theme_toggle, self.connection_indicator], spacing=5, horizontal_alignment="center"),
+            leading=self.theme_toggle,
             destinations=[
                 ft.NavigationRailDestination(icon="shopping_cart_outlined", selected_icon="shopping_cart", label="Inventario"),
                 ft.NavigationRailDestination(icon="checklist_outlined", selected_icon="checklist", label="Validación"),
@@ -192,49 +186,7 @@ class ControlEntradasSalidasApp:
         
         self.bottom_sheet = ft.BottomSheet(content=ft.Container(content=menu_content, padding=ft.padding.only(bottom=20)), open=True)
         self.page.open(self.bottom_sheet)
-
-    def _on_sync_click(self, e=None):
-        """Maneja el clic en el indicador de conexión - fuerza sync."""
-        from usr.database import get_sync_manager, get_pending_movimientos_count
-        
-        sync_mgr = get_sync_manager()
-        if sync_mgr:
-            pending = get_pending_movimientos_count()
-            status = sync_mgr.get_connection_status()
-            
-            if status.get('online'):
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
-                sync_mgr.force_sync_now()
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
-            else:
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=2))
-        
-        self._update_connection_indicator()
-        self.page.update()
     
-    def _update_connection_indicator(self):
-        """Actualiza el indicador de conexión."""
-        from usr.database import get_sync_manager, get_pending_movimientos_count
-        
-        sync_mgr = get_sync_manager()
-        if sync_mgr:
-            status = sync_mgr.get_connection_status()
-            pending = get_pending_movimientos_count()
-            
-            if status.get('online'):
-                self.connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=20)
-                self.connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
-            else:
-                self.connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=20)
-                self.connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
-        else:
-            self.connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=20)
-            self.connection_indicator.tooltip = "Sin conexión"
-        
-        if self.page:
-            self.connection_indicator.update()
-            self.page.update()
-
     def _show_view(self, index: int):
         view = self.views[index]
         
@@ -247,6 +199,14 @@ class ControlEntradasSalidasApp:
         self.navigation_rail.selected_index = index
         if self.page.navigation_bar: 
             self.page.navigation_bar.selected_index = index
+        
+        if hasattr(view, '_update_connection_indicator'):
+            try:
+                if hasattr(view, '_connection_indicator') and view._connection_indicator in self.page.controls:
+                    view._update_connection_indicator()
+            except:
+                pass
+        
         self.page.update()
 
 

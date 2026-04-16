@@ -1,0 +1,10 @@
+2026-04-16 14:59:07 | usr.views.validacion_view | ERROR    | Error cargando entradas: 'NoneType' object has no attribute 'strftime'
+Traceback (most recent call last):
+  File "/workspaces/control-entradas-salidas/usr/views/validacion_view.py", line 312, in _load_entradas_pendientes
+    self.entradas_card = self._create_entrada_card(ent)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspaces/control-entradas-salidas/usr/views/validacion_view.py", line 248, in _create_entrada_card
+    ft.Text(entrada.fecha_movimiento.strftime("%d/%m %H:%M"), size=11, color=colors['text_secondary']),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'strftime'
+

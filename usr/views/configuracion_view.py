@@ -51,6 +51,16 @@ class ConfiguracionView(ft.Container):
         self.lista_productos = ft.Column(expand=True, spacing=12, scroll=ft.ScrollMode.AUTO)
         self.test_result_text = ft.Text("", size=14, weight=ft.FontWeight.BOLD)
         
+        from usr.database import base
+        is_online = base.is_online()
+        
+        self.offline_status_indicator = ft.Text(
+            "🟢 ONLINE" if is_online else "📴 OFFLINE",
+            size=14,
+            color=ft.Colors.GREEN_400 if is_online else ft.Colors.RED_400,
+            weight=ft.FontWeight.BOLD,
+        )
+        
         colors = _colors(None)  # Default for __init__
 
     def did_mount(self):
@@ -1007,6 +1017,32 @@ class ConfiguracionView(ft.Container):
                                 border_radius=8,
                                 visible=False,
                             ),
+                            
+                            # --- NUEVA SECCIÓN: MODO OFFLINE ---
+                            ft.Divider(height=30, color=colors['border']),
+                            ft.Text(
+                                "Modo Offline", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Active el modo offline para usar la aplicación sin conexión a internet. Los datos se guardarán localmente y se sincronizarán al reconectar.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.Text("Estado:", size=14, color=colors['text_secondary']),
+                                self.offline_status_indicator,
+                            ], spacing=10),
+                            ft.Container(height=10),
+                            ft.ElevatedButton(
+                                "Cambiar Modo", 
+                                on_click=self._toggle_offline_mode,
+                                icon=ft.Icons.WIFI_OFF,
+                                bgcolor=colors['accent'],
+                                color=colors['white'],
+                            ),
                         ], spacing=15),
                         padding=25,
                     ),
@@ -1015,6 +1051,22 @@ class ConfiguracionView(ft.Container):
             padding=20,
             expand=True,
         )
+    
+    def _toggle_offline_mode(self, e=None):
+        from usr.database import base
+        current = base.is_online()
+        base._is_online = not current
+        
+        if current:
+            self.offline_status_indicator.value = "📴 FORZADO OFFLINE"
+            self.offline_status_indicator.color = ft.Colors.RED_400
+            self._show_message("⚠️ Modo offline forzado - Los datos se guardarán localmente")
+        else:
+            self.offline_status_indicator.value = "🟢 ONLINE"
+            self.offline_status_indicator.color = ft.Colors.GREEN_400
+            self._show_message("✓ Conexión normal restaurada")
+        
+        self.update()
 
     def _test_connection_action(self, e):
         db = None

@@ -137,10 +137,11 @@ class InventarioView(ft.Container):
     def did_mount(self):
         """Se ejecuta cuando el control se añade a la página."""
         if not self._is_initialized:
-            # Usamos run_task para que la carga de datos no bloquee el renderizado inicial
             if self.page:
                 self.page.run_task(self._load_categorias)
             self._is_initialized = True
+        
+        self._update_connection_indicator()
 
     def _build_ui(self):
         try:
@@ -193,9 +194,19 @@ class InventarioView(ft.Container):
             logger.error(f"Error UI: {e}")
 
     def _on_refresh(self):
-        """Refresca datos desde la BD directamente"""
+        """Refresca datos - hace sync solo si está online"""
         if not self.page:
             return
+        
+        from usr.database.base import is_online as base_is_online
+        from usr.database import get_sync_manager
+        
+        online = base_is_online()
+        
+        if online:
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                sync_mgr.force_sync_now()
         
         self.page.run_task(self._load_categorias, True)
         
@@ -220,46 +231,54 @@ class InventarioView(ft.Container):
         snack.open = True
         self.page.update()
     
-    def _on_sync_indicator_click(self, e=None):
-        """Maneja clic en el indicador de conexión."""
+    async def _on_sync_indicator_click(self, e=None):
+        """Solo actualiza el indicador visual"""
         from usr.database import get_sync_manager, get_pending_movimientos_count
         
         sync_mgr = get_sync_manager()
-        if sync_mgr:
-            pending = get_pending_movimientos_count()
-            status = sync_mgr.get_connection_status()
-            
-            if status.get('online'):
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
-                sync_mgr.force_sync_now()
-                self._load_categorias(True)
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
-            else:
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=3))
+        if not sync_mgr or not self.page:
+            return
         
         self._update_connection_indicator()
         self.page.update()
     
+    def _show_snack_bar(self, message, bgcolor):
+        """Muestra SnackBar."""
+        if not self.page:
+            return
+        snack = ft.SnackBar(
+            content=ft.Text(message, weight=ft.FontWeight.BOLD),
+            bgcolor=bgcolor,
+            duration=5,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
+    
     def _update_connection_indicator(self):
         """Actualiza el indicador de conexión."""
-        from usr.database import get_sync_manager, get_pending_movimientos_count
+        from usr.database import base, get_sync_manager, get_pending_movimientos_count
+        from usr.database.base import is_online as base_is_online
         
-        sync_mgr = get_sync_manager()
-        if sync_mgr:
-            status = sync_mgr.get_connection_status()
-            pending = get_pending_movimientos_count()
+        if not hasattr(self, '_connection_indicator'):
+            return
             
-            if status.get('online'):
-                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
-                self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
-            else:
-                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
-                self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        sync_mgr = get_sync_manager()
+        pending = get_pending_movimientos_count()
+        
+        online = base_is_online()
+        
+        if online:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
+            self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
         else:
             self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
-            self._connection_indicator.tooltip = "Sin conexión"
+            self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
         
-        self._connection_indicator.update()
+        try:
+            self._connection_indicator.update()
+        except:
+            pass
 
     async def _load_categorias(self, force_refresh=False):
         if not self.page:
@@ -279,7 +298,7 @@ class InventarioView(ft.Container):
                 if check_connection():
                     db = next(get_db())
                     try:
-                        categorias = db.query(Categoria).all()
+                        categorias = db.query(Categoria).order_by(Categoria.nombre).all()
                         cats_data = [
                             {"id": c.id, "nombre": c.nombre, "color": c.color,
                              "descripcion": c.descripcion, "imagen": c.imagen,
@@ -489,7 +508,7 @@ class InventarioView(ft.Container):
         self.main_content_area.content = self.categorias_grid
         if self._categorias_cache:
             self.categorias_grid.controls = [
-                self._create_categoria_card(c) for c in self._categorias_cache
+                self._create_categoria_card_from_dict(c) for c in self._categorias_cache
             ]
         if self.page: self.update()
 
@@ -567,7 +586,7 @@ class InventarioView(ft.Container):
             if check_connection():
                 db = next(get_db())
                 try:
-                    productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).all()
+                    productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).order_by(Producto.nombre).all()
                     
                     prod_data = [
                         {"id": p.id, "nombre": p.nombre, "codigo": p.codigo,

@@ -343,51 +343,93 @@ class HistorialFacturasView(ft.Container):
     def did_mount(self):
         self._build_ui()
         self._load_facturas()
+        
+        self._update_connection_indicator()
 
     def _on_tab_change(self, e):
         if e.control.selected_index == 1:
             self._load_entradas_por_fecha()
 
     def _on_refresh(self, e):
+        from usr.database.base import is_online as base_is_online
+        from usr.database import get_sync_manager
+        
+        online = base_is_online()
+        
+        if online:
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                sync_mgr.force_sync_now()
+        
+        if self.page:
+            snack = ft.SnackBar(
+                content=ft.Text("🔄 Actualizando..."),
+                bgcolor=ft.Colors.BLUE_600,
+                duration=1,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
+        
         self._load_facturas()
         self._load_entradas_por_fecha()
+        
+        if self.page:
+            snack = ft.SnackBar(
+                content=ft.Text("✓ Datos actualizados"),
+                bgcolor=ft.Colors.GREEN_700,
+                duration=2,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self.page.update()
     
-    def _on_sync_indicator_click(self, e=None):
-        from usr.database import get_sync_manager, get_pending_movimientos_count
+    async def _on_sync_indicator_click(self, e=None):
+        """Solo actualiza el indicador visual"""
+        from usr.database import get_sync_manager
         
         sync_mgr = get_sync_manager()
-        if sync_mgr:
-            pending = get_pending_movimientos_count()
-            status = sync_mgr.get_connection_status()
-            
-            if status.get('online'):
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text(f"Sincronizando... {pending} cambios pendientes"), duration=2))
-                sync_mgr.force_sync_now()
-                self._load_facturas()
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("✓ Sincronización completada"), bgcolor=ft.Colors.GREEN_700, duration=2))
-            else:
-                self.page.show_snack_bar(ft.SnackBar(content=ft.Text("⚠️ Sin conexión - cambios guardados localmente"), bgcolor=ft.Colors.ORANGE_700, duration=3))
+        if not sync_mgr or not self.page:
+            return
         
         self._update_connection_indicator()
         self.page.update()
     
+    def _show_snack_bar(self, message, bgcolor):
+        """Muestra SnackBar."""
+        if not self.page:
+            return
+        snack = ft.SnackBar(
+            content=ft.Text(message, weight=ft.FontWeight.BOLD),
+            bgcolor=bgcolor,
+            duration=5,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
+    
     def _update_connection_indicator(self):
         from usr.database import get_sync_manager, get_pending_movimientos_count
+        from usr.database.base import is_online as base_is_online
         
-        sync_mgr = get_sync_manager()
-        if sync_mgr:
-            status = sync_mgr.get_connection_status()
-            pending = get_pending_movimientos_count()
-            
-            if status.get('online'):
-                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
-                self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
-            else:
-                self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
-                self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        if not hasattr(self, '_connection_indicator'):
+            return
+        
+        pending = get_pending_movimientos_count()
+        
+        online = base_is_online()
+        
+        if online:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
+            self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
         else:
             self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
-            self._connection_indicator.tooltip = "Sin conexión"
+            self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        
+        try:
+            self._connection_indicator.update()
+        except:
+            pass
         
         self._connection_indicator.update()
 
