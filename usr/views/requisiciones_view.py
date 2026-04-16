@@ -3,7 +3,7 @@ warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
 import flet as ft
 from datetime import datetime
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
 from usr.theme import get_theme, get_colors
@@ -117,7 +117,7 @@ class RequisicionesView(ft.Container):
         self._build_ui()
 
     def _load_requisiciones(self):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             reqs = db.query(Requisicion).order_by(Requisicion.fecha_creacion.desc()).all()
             
@@ -167,7 +167,7 @@ class RequisicionesView(ft.Container):
         # Obtener total de items de forma segura
         total_items = 0
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             total_items = db.query(RequisicionDetalle).filter(
                 RequisicionDetalle.requisicion_id == req.id
             ).count()
@@ -220,7 +220,7 @@ class RequisicionesView(ft.Container):
         is_mobile = self.page.width < 700 if self.page else False
         self.detalles_temp = []
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             almacenes = db.query(Existencia.almacen).distinct().all()
             opciones_almacen = [a[0] for a in almacenes]
@@ -356,7 +356,7 @@ class RequisicionesView(ft.Container):
                 self.page.update()
                 return
             
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 detalles = []
                 origen = origen_dropdown.value or "principal"
@@ -537,7 +537,7 @@ class RequisicionesView(ft.Container):
 
     def _show_agregar_producto_dialog(self, productos_container):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(200).all()
         finally:
@@ -722,7 +722,7 @@ class RequisicionesView(ft.Container):
             return
         
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             detalles = db.query(RequisicionDetalle).filter(
                 RequisicionDetalle.requisicion_id == req.id
@@ -803,7 +803,7 @@ class RequisicionesView(ft.Container):
         else:
             self.lista_productos_req = []
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         almacenes = []
         try:
             almacenes_result = db.query(Existencia.almacen).distinct().all()
@@ -1037,7 +1037,7 @@ class RequisicionesView(ft.Container):
         self._buscar_productos_buscador("", resultados)
 
     def _buscar_productos_buscador(self, texto, container):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             query = db.query(Producto).filter(Producto.activo == True)
             if texto:
@@ -1088,7 +1088,7 @@ class RequisicionesView(ft.Container):
             )
         
         container.update()
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             query = db.query(Producto).filter(Producto.activo == True)
             if texto:
@@ -1144,7 +1144,7 @@ class RequisicionesView(ft.Container):
         almacen_origen = getattr(self, '_origen_dropdown', None)
         origen = almacen_origen.value if almacen_origen else "principal"
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         disponible = 0
         try:
             exist = db.query(Existencia).filter(
@@ -1310,7 +1310,7 @@ class RequisicionesView(ft.Container):
         origen = origen_dropdown.value or "principal"
         destino = destino_dropdown.value or "restaurante"
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             req_editando = getattr(self, '_requisicion_editando', None)
             

@@ -1,5 +1,5 @@
 import flet as ft
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
 from sqlalchemy import text
@@ -354,7 +354,7 @@ class ConfiguracionView(ft.Container):
 
     def _show_producto_dialog(self, producto=None):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             if not categorias:
@@ -536,7 +536,7 @@ class ConfiguracionView(ft.Container):
             db.close()
 
     def _save_categoria(self, nombre, descripcion, color, activo, cat_id):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             if cat_id:
                 cat = db.query(Categoria).get(cat_id)
@@ -558,7 +558,7 @@ class ConfiguracionView(ft.Container):
             db.close()
 
     def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             if p_id:
                 p = db.query(Producto).get(p_id)
@@ -636,7 +636,7 @@ class ConfiguracionView(ft.Container):
         self.page.update()
 
     def _delete_logic(self, objeto, tipo):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             if tipo == "producto":
                 item = db.query(Producto).get(objeto.id)
@@ -656,7 +656,7 @@ class ConfiguracionView(ft.Container):
 
     def _load_data(self):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             # ✅ Detectar modo móvil ANTES de cargar datos
             self.is_mobile = self.page.width < 768 if self.page else False
@@ -1071,7 +1071,7 @@ class ConfiguracionView(ft.Container):
     def _test_connection_action(self, e):
         db = None
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             db.execute(text("SELECT 1"))
             self.test_result_text.value = "✅ Conexión exitosa - Base de datos operativa"
             self.test_result_text.color = "#2E7D32"

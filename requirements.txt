@@ -3,5 +3,6 @@ python-dotenv
 pydantic-settings
 Pg8000
 sqlalchemy
-supabase
 flet-webview
+Pillow
+ flet[desktop]

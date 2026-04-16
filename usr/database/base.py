@@ -28,7 +28,11 @@ def get_engine(force_online: bool = None):
     if _engine is None:
         settings = get_settings()
         try:
-            _engine = create_engine(settings.DATABASE_URL, future=True, pool_pre_ping=True)
+            _engine = create_engine(
+                settings.DATABASE_URL, 
+                future=True, 
+                pool_timeout=3
+            )
             with _engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             _is_online = True
@@ -40,8 +44,23 @@ def get_engine(force_online: bool = None):
     return _engine
 
 def is_online() -> bool:
-    """Retorna True si hay conexión a la base de datos remota."""
-    global _is_online
+    """Retorna True si hay conexión a la base de datos remota. Re-verifica cada vez."""
+    global _is_online, _engine, _session_local
+    
+    if _is_online and _engine:
+        try:
+            with _engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return True
+        except Exception as e:
+            print(f"[OFFLINE] Conexión perdida: {e}")
+            _engine.dispose()
+            _is_online = False
+            _engine = None
+            _session_local = None
+    elif _is_online and _engine is None:
+        _is_online = False
+    
     return _is_online
 
 def get_local_engine():
@@ -80,6 +99,28 @@ def get_local_db():
         yield db
     finally:
         db.close()
+
+def get_db_adaptive():
+    """Generator que proporciona una sesión según el estado de conexión.
+    Si está online usa Supabase, si está offline usa SQLite local."""
+    global _is_online
+    
+    online = is_online()
+    
+    if online:
+        db = get_session_local()()
+        try:
+            yield db
+        finally:
+            db.close()
+    else:
+        from .local_replica import init_local_db
+        init_local_db()
+        db = get_local_session()()
+        try:
+            yield db
+        finally:
+            db.close()
 
 def engine_connection_test():
     """Prueba la conexión a la base de datos remota."""

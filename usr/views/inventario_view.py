@@ -4,7 +4,7 @@ import hashlib
 import threading
 from datetime import datetime
 from contextlib import contextmanager
-from usr.database.base import get_db, is_online
+from usr.database.base import get_db, get_db_adaptive, is_online
 from usr.database.local_replica import LocalReplica
 from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
@@ -47,7 +47,7 @@ logger = get_logger(__name__)
 @contextmanager
 def _safe_db():
     """Manejador seguro para sesiones de base de datos"""
-    db = next(get_db())
+    db = next(get_db_adaptive())
     try:
         yield db
     finally:
@@ -142,6 +142,22 @@ class InventarioView(ft.Container):
             self._is_initialized = True
         
         self._update_connection_indicator()
+        
+        import threading
+        import time
+        
+        def check_connection_loop():
+            while True:
+                time.sleep(10)
+                if hasattr(self, 'page') and self.page:
+                    self._update_connection_indicator()
+                    try:
+                        self.page.update()
+                    except:
+                        pass
+        
+        self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
+        self._connection_thread.start()
 
     def _build_ui(self):
         try:
@@ -296,7 +312,7 @@ class InventarioView(ft.Container):
             if force_refresh or not local_categorias:
                 from usr.database.base import check_connection
                 if check_connection():
-                    db = next(get_db())
+                    db = next(get_db_adaptive())
                     try:
                         categorias = db.query(Categoria).order_by(Categoria.nombre).all()
                         cats_data = [
@@ -584,7 +600,7 @@ class InventarioView(ft.Container):
             
             from usr.database.base import check_connection
             if check_connection():
-                db = next(get_db())
+                db = next(get_db_adaptive())
                 try:
                     productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).order_by(Producto.nombre).all()
                     
@@ -684,7 +700,7 @@ class InventarioView(ft.Container):
         )
 
     def _get_almacenes(self):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             almacenes = db.query(Existencia.almacen).distinct().all()
             opciones = [a[0] for a in almacenes]
@@ -700,7 +716,7 @@ class InventarioView(ft.Container):
         
         almacen_default = _get_attr(producto, 'almacen_predeterminado', 'principal')
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             producto_id = _get_attr(producto, 'id')
             existencias = db.query(Existencia).filter(Existencia.producto_id == producto_id).all()
@@ -891,6 +907,7 @@ class InventarioView(ft.Container):
             "almacen": almacen_seleccionado,
             "registrado_por": user_id,
             "observaciones": "",
+            "fecha_movimiento": datetime.now().isoformat(),
         }
         
         LocalReplica.save_movimiento(movimiento_data)

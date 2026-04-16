@@ -1,7 +1,7 @@
 import flet as ft
 import locale
 from datetime import datetime, timedelta, date
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
 from usr.database.sync import get_sync_manager
 from usr.database.cache import get_cache
 from usr.models import Factura, Movimiento, Producto
@@ -345,6 +345,22 @@ class HistorialFacturasView(ft.Container):
         self._load_facturas()
         
         self._update_connection_indicator()
+        
+        import threading
+        import time
+        
+        def check_connection_loop():
+            while True:
+                time.sleep(10)
+                if hasattr(self, 'page') and self.page:
+                    self._update_connection_indicator()
+                    try:
+                        self.page.update()
+                    except:
+                        pass
+        
+        self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
+        self._connection_thread.start()
 
     def _on_tab_change(self, e):
         if e.control.selected_index == 1:
@@ -449,7 +465,7 @@ class HistorialFacturasView(ft.Container):
         
         db = None
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             self.facturas_data = (
                 db.query(Factura)
                 .order_by(Factura.fecha_factura.desc())
@@ -581,7 +597,7 @@ class HistorialFacturasView(ft.Container):
 
         db = None
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             movimientos = (
                 db.query(Movimiento)
                 .options(joinedload(Movimiento.producto))
@@ -789,7 +805,7 @@ class HistorialFacturasView(ft.Container):
         db = None
         try:
             if not cached_mode:
-                db = next(get_db())
+                db = next(get_db_adaptive())
                 entradas = (
                     db.query(Movimiento)
                     .options(joinedload(Movimiento.producto))

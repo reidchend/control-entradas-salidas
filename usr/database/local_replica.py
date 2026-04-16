@@ -18,13 +18,13 @@ def get_local_conn():
     return conn
 
 def init_local_db():
-    """Inicializa la base de datos local con todas las tablas."""
+    """Inicializa la base de datos local con todas las tablas.
+    Usa los mismos nombres de tabla que SQLAlchemy para compatibilidad."""
     conn = get_local_conn()
     cursor = conn.cursor()
     
-    # Tabla de categorías
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_categorias (
+        CREATE TABLE IF NOT EXISTS categorias (
             id INTEGER PRIMARY KEY,
             nombre TEXT NOT NULL,
             descripcion TEXT,
@@ -36,9 +36,8 @@ def init_local_db():
         )
     """)
     
-    # Tabla de productos
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_productos (
+        CREATE TABLE IF NOT EXISTS productos (
             id INTEGER PRIMARY KEY,
             nombre TEXT NOT NULL,
             codigo TEXT UNIQUE,
@@ -53,26 +52,22 @@ def init_local_db():
             activo INTEGER DEFAULT 1,
             created_at TEXT,
             updated_at TEXT,
-            almacen_predeterminado TEXT DEFAULT 'principal',
-            FOREIGN KEY (categoria_id) REFERENCES local_categorias(id)
+            almacen_predeterminado TEXT DEFAULT 'principal'
         )
     """)
     
-    # Tabla de existencias (stock por producto/almacén)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_existencias (
+        CREATE TABLE IF NOT EXISTS existencias (
             id INTEGER PRIMARY KEY,
             producto_id INTEGER NOT NULL,
             almacen TEXT NOT NULL,
             cantidad REAL DEFAULT 0,
-            unidad TEXT DEFAULT 'unidad',
-            FOREIGN KEY (producto_id) REFERENCES local_productos(id)
+            unidad TEXT DEFAULT 'unidad'
         )
     """)
     
-    # Tabla de movimientos con device_id para tracking
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_movimientos (
+        CREATE TABLE IF NOT EXISTS movimientos (
             id INTEGER PRIMARY KEY,
             producto_id INTEGER NOT NULL,
             factura_id INTEGER,
@@ -89,15 +84,12 @@ def init_local_db():
             fecha_movimiento TEXT,
             created_at TEXT,
             device_id TEXT,
-            sincronizado INTEGER DEFAULT 0,
-            FOREIGN KEY (producto_id) REFERENCES local_productos(id),
-            FOREIGN KEY (factura_id) REFERENCES local_facturas(id)
+            sincronizado INTEGER DEFAULT 0
         )
     """)
     
-    # Tabla de facturas
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_facturas (
+        CREATE TABLE IF NOT EXISTS facturas (
             id INTEGER PRIMARY KEY,
             numero_factura TEXT NOT NULL UNIQUE,
             proveedor TEXT,
@@ -115,9 +107,8 @@ def init_local_db():
         )
     """)
     
-    # Tabla de requisiciones
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_requisiciones (
+        CREATE TABLE IF NOT EXISTS requisiciones (
             id INTEGER PRIMARY KEY,
             numero TEXT NOT NULL UNIQUE,
             numero_secuencial INTEGER NOT NULL,
@@ -133,22 +124,18 @@ def init_local_db():
         )
     """)
     
-    # Tabla de detalles de requisición
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS local_requisicion_detalles (
+        CREATE TABLE IF NOT EXISTS requisicion_detalles (
             id INTEGER PRIMARY KEY,
             requisicion_id INTEGER NOT NULL,
             producto_id INTEGER,
             ingrediente TEXT NOT NULL,
             cantidad REAL NOT NULL,
             unidad TEXT DEFAULT 'unidad',
-            cantidad_surtida REAL DEFAULT 0,
-            FOREIGN KEY (requisicion_id) REFERENCES local_requisiciones(id),
-            FOREIGN KEY (producto_id) REFERENCES local_productos(id)
+            cantidad_surtida REAL DEFAULT 0
         )
     """)
     
-    # Tabla de metadatos de sincronización
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sync_metadata (
             key TEXT PRIMARY KEY,
@@ -157,7 +144,6 @@ def init_local_db():
         )
     """)
     
-    # Tabla de cola de operaciones pendientes
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pending_operations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,7 +157,52 @@ def init_local_db():
     """)
     
     conn.commit()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pending_operations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            record_id INTEGER,
+            data TEXT,
+            created_at TEXT NOT NULL,
+            retries INTEGER DEFAULT 0
+        )
+    """)
+    
+    conn.commit()
+    
+    _migrate_old_tables(conn)
+    
     conn.close()
+
+def _migrate_old_tables(conn):
+    """Migra datos de tablas old (local_*) a tablas nuevas si existen datos en old."""
+    cursor = conn.cursor()
+    
+    tables_map = [
+        ('local_categorias', 'categorias'),
+        ('local_productos', 'productos'),
+        ('local_existencias', 'existencias'),
+        ('local_movimientos', 'movimientos'),
+        ('local_facturas', 'facturas'),
+        ('local_requisiciones', 'requisiciones'),
+    ]
+    
+    for old_table, new_table in tables_map:
+        try:
+            cursor.execute(f"SELECT COUNT(*) FROM {old_table}")
+            old_count = cursor.fetchone()[0]
+            cursor.execute(f"SELECT COUNT(*) FROM {new_table}")
+            new_count = cursor.fetchone()[0]
+            
+            if old_count > 0 and new_count == 0:
+                cursor.execute(f"INSERT OR IGNORE INTO {new_table} SELECT * FROM {old_table}")
+                print(f"[MIGRATE] {old_table} -> {new_table}: {cursor.rowcount} registros")
+        except Exception as e:
+            pass
+    
+    conn.commit()
 
 class LocalReplica:
     """Clase para manejar la réplica local de datos."""
@@ -189,11 +220,11 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM local_categorias")
+        cursor.execute("DELETE FROM categorias")
         
         for cat in categorias:
             cursor.execute("""
-                INSERT OR REPLACE INTO local_categorias 
+                INSERT OR REPLACE INTO categorias 
                 (id, nombre, descripcion, imagen, color, activo, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -212,7 +243,7 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM local_categorias WHERE activo = 1 ORDER BY nombre")
+        cursor.execute("SELECT * FROM categorias WHERE activo = 1 ORDER BY nombre")
         rows = cursor.fetchall()
         conn.close()
         
@@ -226,11 +257,11 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM local_productos")
+        cursor.execute("DELETE FROM productos")
         
         for prod in productos:
             cursor.execute("""
-                INSERT OR REPLACE INTO local_productos 
+                INSERT OR REPLACE INTO productos 
                 (id, nombre, codigo, descripcion, categoria_id, es_pesable, 
                  requiere_foto_peso, peso_unitario, unidad_medida, stock_actual, 
                  stock_minimo, activo, created_at, updated_at, almacen_predeterminado)
@@ -258,11 +289,11 @@ class LocalReplica:
         
         if categoria_id:
             cursor.execute(
-                "SELECT * FROM local_productos WHERE activo = 1 AND categoria_id = ? ORDER BY nombre",
+                "SELECT * FROM productos WHERE activo = 1 AND categoria_id = ? ORDER BY nombre",
                 (categoria_id,)
             )
         else:
-            cursor.execute("SELECT * FROM local_productos WHERE activo = 1 ORDER BY nombre")
+            cursor.execute("SELECT * FROM productos WHERE activo = 1 ORDER BY nombre")
         
         rows = cursor.fetchall()
         conn.close()
@@ -275,7 +306,7 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM local_productos WHERE id = ?", (producto_id,))
+        cursor.execute("SELECT * FROM productos WHERE id = ?", (producto_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -292,7 +323,7 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM local_existencias")
+        cursor.execute("DELETE FROM existencias")
         
         for ext in existencias:
             almacen = ext.get('almacen')
@@ -300,7 +331,7 @@ class LocalReplica:
                 continue
                 
             cursor.execute("""
-                INSERT OR REPLACE INTO local_existencias 
+                INSERT OR REPLACE INTO existencias 
                 (id, producto_id, almacen, cantidad, unidad)
                 VALUES (?, ?, ?, ?, ?)
             """, (
@@ -319,11 +350,11 @@ class LocalReplica:
         
         if producto_id:
             cursor.execute(
-                "SELECT * FROM local_existencias WHERE producto_id = ?",
+                "SELECT * FROM existencias WHERE producto_id = ?",
                 (producto_id,)
             )
         else:
-            cursor.execute("SELECT * FROM local_existencias")
+            cursor.execute("SELECT * FROM existencias")
         
         rows = cursor.fetchall()
         conn.close()
@@ -337,7 +368,7 @@ class LocalReplica:
         cursor = conn.cursor()
         
         cursor.execute(
-            "SELECT * FROM local_existencias WHERE producto_id = ? AND almacen = ?",
+            "SELECT * FROM existencias WHERE producto_id = ? AND almacen = ?",
             (producto_id, almacen)
         )
         row = cursor.fetchone()
@@ -352,9 +383,9 @@ class LocalReplica:
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT OR REPLACE INTO local_existencias (producto_id, almacen, cantidad, unidad)
+            INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
             VALUES (?, ?, ?, 
-                (SELECT unidad FROM local_existencias WHERE producto_id = ? AND almacen = ? LIMIT 1)
+                (SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ? LIMIT 1)
             )
         """, (producto_id, almacen, cantidad, producto_id, almacen))
         
@@ -373,7 +404,7 @@ class LocalReplica:
         device_id = settings.DEVICE_IDENTIFIER
         
         cursor.execute("""
-            INSERT INTO local_movimientos 
+            INSERT INTO movimientos 
             (producto_id, factura_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
              peso_total, peso_registrado, foto_peso_url, registrado_por, observaciones,
              almacen, fecha_movimiento, created_at, device_id, sincronizado)
@@ -403,12 +434,12 @@ class LocalReplica:
         
         if producto_id:
             cursor.execute(
-                "SELECT * FROM local_movimientos WHERE producto_id = ? ORDER BY fecha_movimiento DESC LIMIT ?",
+                "SELECT * FROM movimientos WHERE producto_id = ? ORDER BY fecha_movimiento DESC LIMIT ?",
                 (producto_id, limit)
             )
         else:
             cursor.execute(
-                "SELECT * FROM local_movimientos ORDER BY fecha_movimiento DESC LIMIT ?",
+                "SELECT * FROM movimientos ORDER BY fecha_movimiento DESC LIMIT ?",
                 (limit,)
             )
         
@@ -424,7 +455,7 @@ class LocalReplica:
         cursor = conn.cursor()
         
         cursor.execute(
-            "SELECT * FROM local_movimientos WHERE sincronizado = 0 ORDER BY created_at"
+            "SELECT * FROM movimientos WHERE sincronizado = 0 ORDER BY created_at"
         )
         rows = cursor.fetchall()
         conn.close()
@@ -438,7 +469,7 @@ class LocalReplica:
         cursor = conn.cursor()
         
         cursor.execute(
-            "UPDATE local_movimientos SET sincronizado = 1 WHERE id = ?",
+            "UPDATE movimientos SET sincronizado = 1 WHERE id = ?",
             (movimiento_id,)
         )
         
@@ -453,6 +484,8 @@ class LocalReplica:
             
         conn = get_local_conn()
         cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM movimientos WHERE sincronizado = 1")
         
         valid_keys = ['id', 'producto_id', 'factura_id', 'tipo', 'cantidad', 
                       'cantidad_anterior', 'cantidad_nueva', 'peso_total', 
@@ -470,7 +503,7 @@ class LocalReplica:
             columns = ','.join(valid_keys) + ',sincronizado'
             
             cursor.execute(f"""
-                INSERT OR REPLACE INTO local_movimientos ({columns})
+                INSERT OR REPLACE INTO movimientos ({columns})
                 VALUES ({placeholders})
             """, values)
         
@@ -485,11 +518,11 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM local_facturas")
+        cursor.execute("DELETE FROM facturas")
         
         for fac in facturas:
             cursor.execute("""
-                INSERT OR REPLACE INTO local_facturas 
+                INSERT OR REPLACE INTO facturas 
                 (id, numero_factura, proveedor, fecha_factura, fecha_recepcion,
                  total_bruto, total_impuestos, total_neto, estado, observaciones,
                  validada_por, fecha_validacion, created_at, updated_at)
@@ -515,11 +548,11 @@ class LocalReplica:
         
         if estado:
             cursor.execute(
-                "SELECT * FROM local_facturas WHERE estado = ? ORDER BY fecha_factura DESC",
+                "SELECT * FROM facturas WHERE estado = ? ORDER BY fecha_factura DESC",
                 (estado,)
             )
         else:
-            cursor.execute("SELECT * FROM local_facturas ORDER BY fecha_factura DESC")
+            cursor.execute("SELECT * FROM facturas ORDER BY fecha_factura DESC")
         
         rows = cursor.fetchall()
         conn.close()
@@ -536,8 +569,8 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM local_requisiciones")
-        cursor.execute("DELETE FROM local_requisicion_detalles")
+        cursor.execute("DELETE FROM requisiciones")
+        cursor.execute("DELETE FROM requisicion_detalles")
         
         for req in requisiciones:
             numero_sec = req.get('numero_secuencial')
@@ -545,7 +578,7 @@ class LocalReplica:
                 numero_sec = 0
             
             cursor.execute("""
-                INSERT OR REPLACE INTO local_requisiciones 
+                INSERT OR REPLACE INTO requisiciones 
                 (id, numero, numero_secuencial, origen, destino, estado,
                  observaciones, creada_por, procesada_por, fecha_procesamiento,
                  fecha_creacion, actualizada)
@@ -561,7 +594,7 @@ class LocalReplica:
             if 'detalles' in req:
                 for det in req.get('detalles', []):
                     cursor.execute("""
-                        INSERT OR REPLACE INTO local_requisicion_detalles 
+                        INSERT OR REPLACE INTO requisicion_detalles 
                         (id, requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
@@ -579,7 +612,7 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM local_requisiciones ORDER BY fecha_creacion DESC")
+        cursor.execute("SELECT * FROM requisiciones ORDER BY fecha_creacion DESC")
         rows = cursor.fetchall()
         conn.close()
         
@@ -595,13 +628,13 @@ class LocalReplica:
         
         cursor.execute("""
             SELECT producto_id, almacen, tipo, SUM(cantidad) as total
-            FROM local_movimientos
+            FROM movimientos
             GROUP BY producto_id, almacen, tipo
         """)
         
         movimientos_agrupados = cursor.fetchall()
         
-        cursor.execute("DELETE FROM local_existencias")
+        cursor.execute("DELETE FROM existencias")
         
         stock_por_producto_almacen = {}
         
@@ -626,9 +659,9 @@ class LocalReplica:
         for (producto_id, almacen), cantidad in stock_por_producto_almacen.items():
             if producto_id and almacen and cantidad is not None:
                 cursor.execute("""
-                    INSERT OR REPLACE INTO local_existencias (producto_id, almacen, cantidad, unidad)
+                    INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
                     VALUES (?, ?, ?, 
-                        (SELECT unidad_medida FROM local_productos WHERE id = ? LIMIT 1)
+                        (SELECT unidad_medida FROM productos WHERE id = ? LIMIT 1)
                     )
                 """, (producto_id, almacen, cantidad, producto_id))
         

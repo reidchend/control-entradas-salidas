@@ -1,6 +1,6 @@
 import flet as ft
 from datetime import datetime
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
 from usr.models import Movimiento, Factura,Producto, Categoria, Existencia
 from usr.logger import get_logger
 from usr.theme import get_theme, get_colors
@@ -74,6 +74,8 @@ class ValidacionView(ft.Container):
                 sync_mgr = get_sync_manager()
                 if sync_mgr:
                     sync_mgr.force_sync_now()
+                    self._load_entradas_pendientes()
+                    return
             
             snack = ft.SnackBar(
                 content=ft.Text("🔄 Actualizando..."),
@@ -108,31 +110,26 @@ class ValidacionView(ft.Container):
         self.page.overlay.append(snack)
         snack.open = True
         self.page.update()
-    
-    def _update_connection_indicator(self):
-        from usr.database import get_sync_manager, get_pending_movimientos_count
-        from usr.database.base import is_online as base_is_online
         
+    def _update_connection_indicator(self):
+        """Actualiza el indicador de conexión según el estado."""
+        from usr.database.base import is_online
         if not hasattr(self, '_connection_indicator'):
             return
         
-        pending = get_pending_movimientos_count()
-        
-        online = base_is_online()
-        
-        if online:
-            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
-            self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
-        else:
-            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
-            self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
-        
         try:
-            self._connection_indicator.update()
+            online = is_online()
+            icon = ft.Icons.WIFI if online else ft.Icons.WIFI_OFF
+            color = ft.Colors.GREEN_400 if online else ft.Colors.RED_400
+            tooltip = "Conectado" if online else "Sin conexión"
+            
+            self._connection_indicator.content = ft.Icon(icon, color=color, size=18)
+            self._connection_indicator.tooltip = tooltip
+            
+            if self.page and self._connection_indicator.page:
+                self._connection_indicator.update()
         except:
             pass
-        
-        self._connection_indicator.update()
 
     def did_mount(self):
         """Carga inicial: construye la UI y luego carga los datos"""
@@ -141,6 +138,22 @@ class ValidacionView(ft.Container):
             self._load_entradas_pendientes()
         
         self._update_connection_indicator()
+        
+        import threading
+        import time
+        
+        def check_connection_loop():
+            while True:
+                time.sleep(10)
+                if hasattr(self, 'page') and self.page:
+                    self._update_connection_indicator()
+                    try:
+                        self.page.update()
+                    except:
+                        pass
+        
+        self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
+        self._connection_thread.start()
     
     def _build_ui(self):
         colors = _colors(self.page)
@@ -301,7 +314,7 @@ class ValidacionView(ft.Container):
         try:
             self.entradas_list.controls = [ft.ProgressBar(color="blue")]
             self.update()
-            db = next(get_db())
+            db = next(get_db_adaptive())
             query = db.query(Movimiento).filter(
                 Movimiento.tipo == "entrada",
                 Movimiento.factura_id.is_(None)
@@ -393,7 +406,7 @@ class ValidacionView(ft.Container):
         
         def on_confirmar(e):
             self._close_dialog()
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 almacen = getattr(entrada, 'almacen', 'principal') or 'principal'
                 
@@ -487,7 +500,7 @@ class ValidacionView(ft.Container):
         self.page.update()
 
     def _process_validation(self, ref_factura):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             nueva_fac = Factura(
                 numero_factura=ref_factura if ref_factura else f"V-REF-{datetime.now().strftime('%H%M%S')}",

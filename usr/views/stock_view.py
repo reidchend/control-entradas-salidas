@@ -1,6 +1,6 @@
 import flet as ft
 import asyncio
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
 from usr.models import Producto, Movimiento, Categoria, Existencia
 from datetime import datetime
 import logging
@@ -42,6 +42,24 @@ class StockView(ft.Container):
         if self.page and self.page.client_storage:
             self._load_categorias()
             self._load_productos()
+        
+        self._update_connection_indicator()
+        
+        import threading
+        import time
+        
+        def check_connection_loop():
+            while True:
+                time.sleep(10)
+                if hasattr(self, 'page') and self.page:
+                    self._update_connection_indicator()
+                    try:
+                        self.page.update()
+                    except:
+                        pass
+        
+        self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
+        self._connection_thread.start()
 
     def _on_refresh(self):
         if not self.page:
@@ -248,7 +266,7 @@ class StockView(ft.Container):
         )
 
     def _load_categorias(self):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             self.categoria_filter.options = [ft.dropdown.Option("", "Todas")]
@@ -285,7 +303,7 @@ class StockView(ft.Container):
             )
             self.update()
 
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(50).all()
             
@@ -301,7 +319,7 @@ class StockView(ft.Container):
         if not producto_ids:
             return {}
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         existencias_map = {}
         try:
             existencias = db.query(Existencia.producto_id, Existencia.almacen, Existencia.cantidad).filter(Existencia.producto_id.in_(producto_ids)).all()
@@ -326,7 +344,7 @@ class StockView(ft.Container):
             categoria = self.categoria_filter.value if self.categoria_filter.value else ""
             almacen = self.almacen_filter.value if self.almacen_filter.value else ""
             
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 query = db.query(Producto).filter(Producto.activo == True)
                 
@@ -369,7 +387,7 @@ class StockView(ft.Container):
         if not productos:
             self.productos_list.controls.append(ft.Text("No se encontraron productos", color=colors['text_secondary'], text_align="center"))
         else:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 for p in productos:
                     stock_por_almacen = existencias_map.get(p.id, {})
@@ -462,7 +480,7 @@ class StockView(ft.Container):
 
     def _show_producto_details(self, producto: Producto):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(20).all()
             mov_list = ft.ListView(height=400, spacing=8)
