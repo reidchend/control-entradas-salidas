@@ -283,14 +283,14 @@ async def main(page: ft.Page):
             status_text.value = "Base de datos..."
             page.update()
             
-            from usr.database.base import get_engine, get_session_local, init_local_tables, check_connection
+            from usr.database.base import get_engine, get_session, init_local_tables, check_connection
             from usr.database.local_replica import LocalReplica
             from usr.database.sync import init_sync_manager
             
             init_local_tables()
             
             sync_manager = init_sync_manager(get_engine)
-            sync_manager.set_session_local_getter(get_session_local)
+            sync_manager.set_session_local_getter(get_session)
             status_text.value = "✓ Conectado"
             
             step_text.value = "4/5"
