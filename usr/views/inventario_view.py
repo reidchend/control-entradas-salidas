@@ -927,10 +927,12 @@ class InventarioView(ft.Container):
                 session_maker = get_session_local()
                 from sqlalchemy import text
                 with session_maker() as db:
-                    cols = ", ".join(movimiento_data.keys())
-                    vals = ", ".join([f":{k}" for k in movimiento_data.keys()])
+                    mov_clean = {k: v for k, v in movimiento_data.items() 
+                               if k not in ('sincronizado', 'created_at')}
+                    cols = ", ".join(mov_clean.keys())
+                    vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                     sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                    db.execute(sql, movimiento_data)
+                    db.execute(sql, mov_clean)
                     
                     existing = db.query(Existencia).filter(
                         Existencia.producto_id == producto_id,
@@ -949,6 +951,11 @@ class InventarioView(ft.Container):
                         db.add(new_exist)
                     
                     db.commit()
+                    
+                    local_id = movimiento_data.get('id')
+                    if local_id:
+                        LocalReplica.mark_movimiento_sincronizado(local_id)
+                        
                 print("[SYNC] Movimiento syncado inmediatamente")
             except Exception as e:
                 print(f"[SYNC] Error al syncar: {e}")

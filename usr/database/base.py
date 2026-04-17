@@ -148,18 +148,8 @@ def engine_connection_test():
     return False
 
 def check_connection() -> bool:
-    """Verifica y actualiza el estado de conexión."""
-    global _is_online
-    try:
-        engine = get_engine()
-        if engine:
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            _is_online = True
-            return True
-    except:
-        _is_online = False
-    return False
+    """Verifica y actualiza el estado de conexión usando caché."""
+    return is_online()
 
 Base = get_base()
 

@@ -365,12 +365,15 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
+        cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?", 
+                     (producto_id, almacen))
+        result = cursor.fetchone()
+        unidad = result['unidad'] if result and result['unidad'] else 'unidad'
+        
         cursor.execute("""
             INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
-            VALUES (?, ?, ?, 
-                (SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ? LIMIT 1)
-            )
-        """, (producto_id, almacen, cantidad, producto_id, almacen))
+            VALUES (?, ?, ?, ?)
+        """, (producto_id, almacen, cantidad, unidad))
         
         conn.commit()
         conn.close()

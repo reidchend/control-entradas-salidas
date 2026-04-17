@@ -254,10 +254,12 @@ def save_movimiento_with_sync(movimiento_data: dict, update_local: bool = True) 
         try:
             session_maker = get_session_local()
             with session_maker() as db:
-                cols = ", ".join(movimiento_data.keys())
-                vals = ", ".join([f":{k}" for k in movimiento_data.keys()])
+                mov_clean = {k: v for k, v in movimiento_data.items() 
+                           if k not in ('sincronizado', 'created_at')}
+                cols = ", ".join(mov_clean.keys())
+                vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                 sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                db.execute(sql, movimiento_data)
+                db.execute(sql, mov_clean)
                 db.commit()
                 LocalReplica.mark_movimiento_sincronizado(local_id)
                 print("[OFFLINE] Movimiento sincronizado inmediatamente")
