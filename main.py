@@ -254,7 +254,7 @@ async def main(page: ft.Page):
                 except:
                     pass
         try:
-            # Loading screen
+# Loading screen
             logo = ft.Container(content=ft.Column([
                 ft.Icon(ft.Icons.INVENTORY_2, size=60, color=ft.Colors.DEEP_PURPLE_300),
                 ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
@@ -267,7 +267,16 @@ async def main(page: ft.Page):
             loading = ft.Column([logo, ft.Container(height=30), ft.ProgressRing(stroke_width=3, color=ft.Colors.DEEP_PURPLE_400), step_text, status_text], horizontal_alignment="center", spacing=10)
             
             page.add(ft.Container(bgcolor="#121212", expand=True, content=loading, alignment="center", padding=40))
-            await page.update_async()
+            page.update()
+            
+            # Small delay to ensure loading screen renders
+            import asyncio
+            await asyncio.sleep(0.5)
+            
+            # Step 1: Config
+            step_text.value = "2/5"
+            status_text.value = "Configuracion..."
+            page.update()
             
             # Small delay to ensure loading screen renders
             import asyncio
@@ -276,17 +285,17 @@ async def main(page: ft.Page):
             # Step 1: Config
             step_text.value = "2/5"
             status_text.value = "Configuración..."
-            await page.update_async()
+            page.update()
             
             from config.config import get_settings
             settings = get_settings()
             status_text.value = "✓ Lista"
-            await page.update_async()
+            page.update()
             
             # Step 2: Database
             step_text.value = "3/5"
             status_text.value = "Base de datos..."
-            await page.update_async()
+            page.update()
             
             from usr.database.base import get_engine, get_session, init_local_tables, check_connection
             from usr.database.local_replica import LocalReplica
@@ -300,7 +309,7 @@ async def main(page: ft.Page):
             
             step_text.value = "4/5"
             status_text.value = "Sincronizando..."
-            await page.update_async()
+            page.update()
             
             if check_connection():
                 try:
@@ -315,14 +324,14 @@ async def main(page: ft.Page):
             # Step 3: Views import
             step_text.value = "5/5"
             status_text.value = "Modulos..."
-            await page.update_async()
+            page.update()
             
             from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
             status_text.value = "✓ Cargado"
             
             # Step 4: Create views
             status_text.value = "Creando..."
-            await page.update_async()
+            page.update()
             
             inventario_view = InventarioView()
             requisiciones_view = RequisicionesView()
@@ -337,7 +346,7 @@ async def main(page: ft.Page):
             # Done
             step_text.value = "Listo!"
             status_text.value = "Iniciando..."
-            await page.update_async()
+            page.update()
             
             await app_instance.arrancar_interfaz(page, settings, vistas)
         except Exception as inner_e:
