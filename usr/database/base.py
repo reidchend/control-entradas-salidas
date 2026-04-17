@@ -44,6 +44,23 @@ def get_db_adaptive():
     """Alias de get_db() - siempre usa SQLite local."""
     return get_db()
 
+# Alias de compatibilidad para código existente
+def get_engine():
+    """Alias de get_local_engine() para compatibilidad."""
+    return get_local_engine()
+
+def get_session_local():
+    """Alias de get_session() para compatibilidad."""
+    return get_session()
+
+def get_local_session():
+    """Alias de get_session() para compatibilidad."""
+    return get_session()
+
+def get_local_db():
+    """Alias de get_session() para compatibilidad."""
+    return get_session()
+
 def check_connection() -> bool:
     """Verifica si hay conexión a internet (solo para indicador visual).
     No bloquea operaciones - SQLite siempre está disponible."""
