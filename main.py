@@ -321,7 +321,6 @@ async def main(page: ft.Page):
             status_text.value = "✓ Cargado"
             
             # Step 4: Create views
-            step_text.value = "5/5"
             status_text.value = "Creando..."
             await page.update_async()
             
