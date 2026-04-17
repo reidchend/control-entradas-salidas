@@ -181,8 +181,8 @@ class SyncManager:
         print("[SYNC] Descarga completada")
         return True
     
-    def start_background_sync(self, session_getter, interval_seconds: int = 30):
-        """Inicia sincronización en segundo plano."""
+    def start_background_sync(self, session_getter, interval_seconds: int = 20):
+        """Inicia sincronización en segundo plano cada interval_seconds."""
         if self._sync_thread and self._sync_thread.is_alive():
             return
         
@@ -195,7 +195,7 @@ class SyncManager:
             daemon=True
         )
         self._sync_thread.start()
-        print("[SYNC] Sync en segundo plano iniciado")
+        print(f"[SYNC] Sync en segundo plano iniciado (intervalo: {interval_seconds}s)")
     
     def stop_background_sync(self):
         self._stop_event.set()
@@ -205,14 +205,65 @@ class SyncManager:
         print("[SYNC] Sync en segundo plano detenido")
     
     def _background_sync_loop(self, interval):
+        """Loop de sync en background."""
         while not self._stop_event.is_set():
             try:
                 if self.check_connection():
-                    self.full_sync()
+                    self._process_sync_queue()
             except Exception as e:
                 print(f"[SYNC] Error en loop: {e}")
             
             self._stop_event.wait(interval)
+    
+    def _process_sync_queue(self):
+        """Procesa la cola de sync - sube pendientes y descarga cambios."""
+        from .sync_queue import get_sync_queue
+        from .local_replica import LocalReplica
+        
+        queue = get_sync_queue()
+        
+        pending = queue.get_pending()
+        
+        if pending:
+            session_maker = self._get_session_maker()
+            if session_maker:
+                uploaded = self._upload_pending_queue(session_maker, pending)
+                print(f"[SYNC] {uploaded} operaciones subidas")
+        
+        LocalReplica.recalculate_existencias()
+        queue.set_last_sync(datetime.now().isoformat())
+        print("[SYNC] Ciclo de sync completado")
+    
+    def _upload_pending_queue(self, session_maker, pending_items) -> int:
+        """Sube elementos de la cola a Supabase."""
+        from .sync_queue import get_sync_queue
+        
+        queue = get_sync_queue()
+        uploaded = 0
+        
+        with session_maker() as db:
+            for item in pending_items:
+                try:
+                    data = eval(item['data'])
+                    table = item['table_name']
+                    operation = item['operation']
+                    
+                    if table == 'movimientos' and operation == 'insert':
+                        mov_clean = {k: v for k, v in data.items() 
+                                   if k not in ('sincronizado', 'created_at')}
+                        cols = ", ".join(mov_clean.keys())
+                        vals = ", ".join([f":{k}" for k in mov_clean.keys()])
+                        sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
+                        db.execute(sql, mov_clean)
+                        db.commit()
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        
+                except Exception as e:
+                    queue.mark_failed(item['id'], str(e))
+                    print(f"[SYNC] Error subiendo {table}: {e}")
+        
+        return uploaded
     
     def get_connection_status(self) -> dict:
         """Estado de conexión y sincronización."""

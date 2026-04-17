@@ -383,6 +383,8 @@ class LocalReplica:
     @staticmethod
     def save_movimiento(movimiento: Dict) -> int:
         """Guarda un movimiento en la BD local."""
+        from .sync_queue import get_sync_queue
+        
         conn = get_local_conn()
         cursor = conn.cursor()
         
@@ -394,7 +396,7 @@ class LocalReplica:
             (producto_id, factura_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
              peso_total, peso_registrado, foto_peso_url, registrado_por, observaciones,
              almacen, fecha_movimiento, created_at, device_id, sincronizado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
             movimiento.get('producto_id'), movimiento.get('factura_id'),
             movimiento.get('tipo'), movimiento.get('cantidad'),
@@ -409,6 +411,10 @@ class LocalReplica:
         last_id = cursor.lastrowid
         conn.commit()
         conn.close()
+        
+        movimiento['id'] = last_id
+        queue = get_sync_queue()
+        queue.add_pending('movimientos', 'insert', movimiento)
         
         return last_id
     
