@@ -267,21 +267,26 @@ async def main(page: ft.Page):
             loading = ft.Column([logo, ft.Container(height=30), ft.ProgressRing(stroke_width=3, color=ft.Colors.DEEP_PURPLE_400), step_text, status_text], horizontal_alignment="center", spacing=10)
             
             page.add(ft.Container(bgcolor="#121212", expand=True, content=loading, alignment="center", padding=40))
-            page.update()
+            await page.update_async()
+            
+            # Small delay to ensure loading screen renders
+            import asyncio
+            await asyncio.sleep(0.5)
             
             # Step 1: Config
             step_text.value = "2/5"
             status_text.value = "Configuración..."
-            page.update()
+            await page.update_async()
             
             from config.config import get_settings
             settings = get_settings()
             status_text.value = "✓ Lista"
+            await page.update_async()
             
             # Step 2: Database
             step_text.value = "3/5"
             status_text.value = "Base de datos..."
-            page.update()
+            await page.update_async()
             
             from usr.database.base import get_engine, get_session, init_local_tables, check_connection
             from usr.database.local_replica import LocalReplica
@@ -295,7 +300,7 @@ async def main(page: ft.Page):
             
             step_text.value = "4/5"
             status_text.value = "Sincronizando..."
-            page.update()
+            await page.update_async()
             
             if check_connection():
                 try:
@@ -303,14 +308,14 @@ async def main(page: ft.Page):
                     status_text.value = "✓ Sincronizado"
                 except Exception as e:
                     print(f"Error en sync inicial: {e}")
-                    status_text.value = "⚠️ Sin sync"
+                    status_text.value = " Sin sync"
             else:
-                status_text.value = "⚠️ Modo offline"
+                status_text.value = " Modo offline"
             
             # Step 3: Views import
             step_text.value = "5/5"
-            status_text.value = "Módulos..."
-            page.update()
+            status_text.value = "Modulos..."
+            await page.update_async()
             
             from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
             status_text.value = "✓ Cargado"
@@ -318,7 +323,7 @@ async def main(page: ft.Page):
             # Step 4: Create views
             step_text.value = "5/5"
             status_text.value = "Creando..."
-            page.update()
+            await page.update_async()
             
             inventario_view = InventarioView()
             requisiciones_view = RequisicionesView()
@@ -333,7 +338,7 @@ async def main(page: ft.Page):
             # Done
             step_text.value = "Listo!"
             status_text.value = "Iniciando..."
-            page.update()
+            await page.update_async()
             
             await app_instance.arrancar_interfaz(page, settings, vistas)
         except Exception as inner_e:
