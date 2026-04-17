@@ -20,6 +20,7 @@ def get_local_conn():
 def init_local_db():
     """Inicializa la base de datos local con todas las tablas.
     Usa los mismos nombres de tabla que SQLAlchemy para compatibilidad."""
+    print("[DEBUG] init_local_db() llamado")
     conn = get_local_conn()
     cursor = conn.cursor()
     
@@ -193,6 +194,9 @@ class LocalReplica:
     @staticmethod
     def create_tables():
         """Crea todas las tablas locales."""
+        import traceback
+        print("[DEBUG] create_tables() llamado")
+        traceback.print_stack()
         init_local_db()
     
     # ==================== CATEGORÍAS ====================
@@ -237,6 +241,8 @@ class LocalReplica:
     @staticmethod
     def save_productos(productos: List[Dict]) -> None:
         """Guarda productos en la base de datos local."""
+        print(f"[DEBUG] save_productos: {len(productos)}")
+        
         conn = get_local_conn()
         cursor = conn.cursor()
         
@@ -267,6 +273,14 @@ class LocalReplica:
     @staticmethod
     def get_productos(categoria_id: int = None) -> List[Dict]:
         """Obtiene productos de la BD local."""
+        import sqlite3
+        conn3 = sqlite3.connect(LOCAL_DB_PATH)
+        cur3 = conn3.cursor()
+        cur3.execute('SELECT COUNT(*) FROM productos')
+        total = cur3.fetchone()[0]
+        conn3.close()
+        print(f"[DEBUG get_productos] cat={categoria_id}, total={total}")
+        
         conn = get_local_conn()
         cursor = conn.cursor()
         

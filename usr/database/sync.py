@@ -31,6 +31,13 @@ class SyncManager:
             return self._session_local_getter()
         return None
     
+    def _get_remote_session_maker(self):
+        from sqlalchemy import create_engine
+        from config.config import get_settings
+        settings = get_settings()
+        engine = create_engine(settings.DATABASE_URL)
+        return engine.connect
+    
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos remota."""
         try:
@@ -150,33 +157,44 @@ class SyncManager:
             return {k: serialize_value(v) for k, v in row_dict.items()}
         
         tables_to_sync = [
-            'categorias', 'productos', 'existencias', 
-            'movimientos', 'facturas', 'requisiciones'
+            ('categorias', 'categorias'), 
+            ('productos', 'productos'), 
+            ('existencias', 'existencias'), 
+            ('movimientos', 'movimientos'), 
+            ('facturas', 'facturas'), 
+            ('requisiciones', 'requisiciones')
         ]
         
-        with session_maker() as db:
-            for table in tables_to_sync:
+        from sqlalchemy import create_engine
+        from config.config import get_settings
+        settings = get_settings()
+        remote_engine = create_engine(settings.DATABASE_URL)
+        
+        with remote_engine.connect() as conn:
+            for local_table, server_table in tables_to_sync:
                 try:
-                    result = db.execute(text(f"SELECT * FROM {table}"))
+                    result = conn.execute(text(f"SELECT * FROM {server_table}"))
                     rows = result.fetchall()
                     data = [dict_to_serializable(dict(row._mapping)) for row in rows]
                     
-                    if table == 'categorias':
+                    if local_table == 'categorias':
                         LocalReplica.save_categorias(data)
-                    elif table == 'productos':
+                    elif local_table == 'productos':
                         LocalReplica.save_productos(data)
-                    elif table == 'existencias':
+                    elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
-                    elif table == 'movimientos':
+                    elif local_table == 'movimientos':
                         LocalReplica.save_movimientos(data)
-                    elif table == 'facturas':
+                    elif local_table == 'facturas':
                         LocalReplica.save_facturas(data)
-                    elif table == 'requisiciones':
+                    elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
                     
-                    print(f"[SYNC] {len(data)} registros de {table} descargados")
+                    print(f"[SYNC] {len(data)} {local_table} baixats")
                 except Exception as e:
-                    print(f"[SYNC] Error descargando {table}: {e}")
+                    print(f"[SYNC] Error descargando {local_table}: {e}")
+        
+        remote_engine.dispose()
         
         print("[SYNC] Descarga completada")
         return True

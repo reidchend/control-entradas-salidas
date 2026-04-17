@@ -302,6 +302,7 @@ class InventarioView(ft.Container):
 
         try:
             local_categorias = LocalReplica.get_categorias()
+            
             if local_categorias:
                 self._categorias_cache = local_categorias
                 self.categorias_grid.controls = [
@@ -578,6 +579,8 @@ class InventarioView(ft.Container):
             cat_id = self.categoria_seleccionada.id if hasattr(self.categoria_seleccionada, 'id') else self.categoria_seleccionada.get('id')
             
             local_productos = LocalReplica.get_productos(cat_id)
+            local_existencias = LocalReplica.get_existencias()
+            
             local_existencias = LocalReplica.get_existencias()
             
             existencias_map = {}

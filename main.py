@@ -3,6 +3,7 @@ import traceback
 import os
 import ssl
 import certifi
+import glob
 
 # Esto le dice a Python exactamente dónde encontrar los certificados
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -236,6 +237,9 @@ def show_error(page, msg):
 
 
 async def main(page: ft.Page):
+    page.assets_allow_override = True
+    page.favicon = "favicon.png"
+    page.window_icon = "icono.ico"
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),
@@ -254,38 +258,38 @@ async def main(page: ft.Page):
                 except:
                     pass
         try:
-# Loading screen
-            logo = ft.Container(content=ft.Column([
-                ft.Icon(ft.Icons.INVENTORY_2, size=60, color=ft.Colors.DEEP_PURPLE_300),
+            page.bgcolor = "#121212"
+            page.update()
+            
+            logo = ft.Column([
+                ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
                 ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Text("Control", size=16, color=ft.Colors.DEEP_PURPLE_200),
-            ], horizontal_alignment="center"), alignment="center")
+                ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
+            ], horizontal_alignment="center", spacing=10)
             
-            step_text = ft.Text("1/5", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
-            status_text = ft.Text("Cargando...", size=14, color=ft.Colors.GREY)
+            progress = ft.ProgressRing(width=60, height=60, stroke_width=5, color="#BB86FC", bgcolor="#2D2D2D")
+            step_text = ft.Text("Cargando...", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+            status_text = ft.Text("Inicializando...", size=14, color="#9E9E9E")
             
-            loading = ft.Column([logo, ft.Container(height=30), ft.ProgressRing(stroke_width=3, color=ft.Colors.DEEP_PURPLE_400), step_text, status_text], horizontal_alignment="center", spacing=10)
+            loading = ft.Container(
+                content=ft.Column([logo, ft.Container(height=40), progress, ft.Container(height=20), step_text, status_text], horizontal_alignment="center", spacing=0),
+                alignment=ft.alignment.center,
+                expand=True,
+                bgcolor="#121212"
+            )
             
-            page.add(ft.Container(bgcolor="#121212", expand=True, content=loading, alignment="center", padding=40))
+            page.add(loading)
             page.update()
             
-            # Small delay to ensure loading screen renders
+            # Delay para mostrar pantalla de carga
             import asyncio
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2)
             
             # Step 1: Config
             step_text.value = "2/5"
-            status_text.value = "Configuracion..."
+            status_text.value = "Configurando..."
             page.update()
-            
-            # Small delay to ensure loading screen renders
-            import asyncio
-            await asyncio.sleep(0.5)
-            
-            # Step 1: Config
-            step_text.value = "2/5"
-            status_text.value = "Configuración..."
-            page.update()
+            await asyncio.sleep(0.3)
             
             from config.config import get_settings
             settings = get_settings()
@@ -358,4 +362,4 @@ async def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main, assets_dir="assets")
