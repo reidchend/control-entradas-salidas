@@ -382,8 +382,9 @@ class LocalReplica:
     
     @staticmethod
     def save_movimiento(movimiento: Dict) -> int:
-        """Guarda un movimiento en la BD local."""
+        """Guarda un movimiento en la BD local e intenta sincronizar inmediatamente."""
         from .sync_queue import get_sync_queue
+        from .base import check_connection
         
         conn = get_local_conn()
         cursor = conn.cursor()
@@ -413,6 +414,34 @@ class LocalReplica:
         conn.close()
         
         movimiento['id'] = last_id
+        
+        if check_connection():
+            try:
+                from sqlalchemy import text
+                from .base import get_session
+                
+                session_maker = get_session()
+                mov_clean = {k: v for k, v in movimiento.items() 
+                           if k not in ('sincronizado', 'created_at')}
+                
+                with session_maker() as db:
+                    cols = ", ".join(mov_clean.keys())
+                    vals = ", ".join([f":{k}" for k in mov_clean.keys()])
+                    sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
+                    db.execute(sql, mov_clean)
+                    db.commit()
+                    print(f"[SYNC] Movimiento {last_id} subido inmediatamente")
+                    
+                    conn = get_local_conn()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE movimientos SET sincronizado = 1 WHERE id = ?", (last_id,))
+                    conn.commit()
+                    conn.close()
+                    
+                    return last_id
+            except Exception as e:
+                print(f"[SYNC] Error sync inmediato: {e}, guardando en cola")
+        
         queue = get_sync_queue()
         queue.add_pending('movimientos', 'insert', movimiento)
         
