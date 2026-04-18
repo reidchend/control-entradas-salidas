@@ -198,12 +198,19 @@ class LocalReplica:
     # ==================== CATEGORÍAS ====================
     
     @staticmethod
-    def save_categorias(categorias: List[Dict]) -> None:
-        """Guarda categorías en la base de datos local."""
+    def clear_categorias() -> None:
+        """Elimina todas las categorías de la BD local."""
         conn = get_local_conn()
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM categorias")
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def save_categorias(categorias: List[Dict]) -> None:
+        """Guarda categorías en la base de datos local (upsert, no borra)."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
         
         for cat in categorias:
             cursor.execute("""
@@ -235,8 +242,17 @@ class LocalReplica:
     # ==================== PRODUCTOS ====================
     
     @staticmethod
+    def clear_productos() -> None:
+        """Elimina todos los productos de la BD local."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM productos")
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
     def save_productos(productos: List[Dict]) -> None:
-        """Guarda productos en la base de datos local (upsert)."""
+        """Guarda productos en la base de datos local (upsert, no borra)."""
         conn = get_local_conn()
         cursor = conn.cursor()
         

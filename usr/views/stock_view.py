@@ -1,7 +1,7 @@
 import flet as ft
 import asyncio
 from usr.database.base import get_db, get_db_adaptive
-from usr.models import Producto, Movimiento, Categoria, Existencia
+from usr.models import Producto, Movimiento, Categoria, Existencia, Factura
 from datetime import datetime
 import logging
 from sqlalchemy import func
@@ -488,18 +488,62 @@ class StockView(ft.Container):
                 is_entrada = m.tipo == "entrada"
                 icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
                 color = colors['success'] if is_entrada else colors['error']
-                peso_info = f"\n⚖️ Peso: {(m.peso_total or 0):.2f} kg" if (m.peso_total or 0) > 0 else ""
-
+                peso_info = f" | ⚖️ {(m.peso_total or 0):.2f} kg" if (m.peso_total or 0) > 0 else ""
+                
+                # Número de factura si existe (sin fondo, del mismo tamaño que el tipo)
+                factura_texto = ""
+                if m.factura_id:
+                    factura = db.query(Factura).filter(Factura.id == m.factura_id).first()
+                    if factura:
+                        factura_texto = f" - 📄 {factura.numero_factura}"
+                
+                # Contenedor Principal (Más flexible que ListTile)
                 mov_list.controls.append(
                     ft.Container(
-                        content=ft.ListTile(
-                            leading=ft.Icon(icon, color=color, size=28),
-                            title=ft.Text(f"{m.tipo.upper()}: {int(m.cantidad)} unidades", weight="bold"),
-                            subtitle=ft.Text(f"{m.fecha_movimiento.strftime('%d/%m/%Y %H:%M')}{peso_info}", size=12),
-                            trailing=ft.Text(f"{'+' if is_entrada else '-'}{int(m.cantidad)}", color=color, weight="bold"),
+                        content=ft.Row(
+                            [
+                                # Icono
+                                ft.Container(
+                                    content=ft.Icon(icon, color=color, size=24),
+                                    padding=ft.padding.only(right=10)
+                                ),
+                                # Contenido central (Tipo, cantidad y factura)
+                                ft.Column(
+                                    [
+                                        ft.Row([
+                                            ft.Text(f"{m.tipo.upper()}{factura_texto}", weight="bold", size=14, selectable=True),
+                                        ], alignment=ft.MainAxisAlignment.START, spacing=2),
+                                        ft.Text(
+                                            f"{int(m.cantidad)} unidades", 
+                                            size=12, 
+                                            color="#9E9E9E",
+                                            selectable=True
+                                        ),
+                                        ft.Text(
+                                            f"{m.fecha_movimiento.strftime('%d/%m/%Y %H:%M')}{peso_info}", 
+                                            size=11, 
+                                            color="#757575",
+                                            selectable=True
+                                        ),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.START,
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                                # Cantidad (Alineado a la derecha)
+                                ft.Text(
+                                    f"{'+' if is_entrada else '-'}{int(m.cantidad)}", 
+                                    color=color, 
+                                    weight="bold",
+                                    size=16
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         bgcolor=colors['bg'],
+                        padding=15,
                         border_radius=10,
+                        margin=ft.margin.only(bottom=8),
                     )
                 )
 
@@ -520,3 +564,37 @@ class StockView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             self.page.update()
+    
+    def _show_factura_details(self, factura: Factura):
+        """Muestra los detalles de la factura en un dialog."""
+        colors = _colors(self.page)
+        
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"📄 Factura: {factura.numero_factura}"),
+            content=ft.Column([
+                ft.Divider(),
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Proveedor", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(factura.proveedor or "N/A", weight="bold"),
+                    ], spacing=2, expand=1),
+                    ft.Column([
+                        ft.Text("Fecha Factura", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(factura.fecha_factura or "N/A", weight="bold"),
+                    ], spacing=2, expand=1),
+                ], spacing=20),
+                ft.Divider(),
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Total Neto", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(f"${factura.total_neto:,.2f}" if factura.total_neto else "$0.00", weight="bold", size=16),
+                    ], spacing=2),
+                ]),
+                ft.Divider(),
+                ft.Text(f"Estado: {factura.estado}", weight="bold", color=colors.get('success', '#4CAF50')),
+            ], tight=True),
+            actions=[ft.TextButton("Cerrar", on_click=self._close_dialog)],
+        )
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
+        self.page.update()

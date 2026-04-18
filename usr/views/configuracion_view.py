@@ -337,12 +337,10 @@ class ConfiguracionView(ft.Container):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             # ✅ fullscreen ELIMINADO
-        )
-        
+)
+         
         self._add_to_overlay(self.active_dialog)
-        self.active_dialog.open = True
-        self.page.update()
-
+    
     def _update_color_preview(self, color, preview_row, dropdown=None):
         colors = _colors(self.page)
         if dropdown:
@@ -531,9 +529,7 @@ class ConfiguracionView(ft.Container):
                 # ✅ fullscreen ELIMINADO
             )
             
-            self.active_dialog.open = True
             self._add_to_overlay(self.active_dialog)
-            self.page.update()
         finally:
             db.close()
 
@@ -569,6 +565,7 @@ class ConfiguracionView(ft.Container):
         
         self._show_message("✅ Categoría guardada")
         
+        self._close_dialog()
         self._load_data()
 
     def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
@@ -611,6 +608,7 @@ class ConfiguracionView(ft.Container):
         
         self._show_message("✅ Guardado")
         
+        self._close_dialog()
         self._load_data()
         return True
 
@@ -645,12 +643,10 @@ class ConfiguracionView(ft.Container):
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
-        )
+)
         
         self._add_to_overlay(self.active_dialog)
-        self.active_dialog.open = True
-        self.page.update()
-
+    
     def _delete_logic(self, objeto, tipo):
         from datetime import datetime
         from usr.database.sync_queue import get_sync_queue
@@ -970,29 +966,34 @@ class ConfiguracionView(ft.Container):
         )
 
     def _close_dialog(self, e=None):
-        # 1. Cerrar con referencia guardada
-        if self.active_dialog:
-            self.active_dialog.open = False
-            self.page.update()
+        if not self.page:
+            return
         
-        # 2. Cerrar TODOS los diálogos en overlay
-        for control in self.page.overlay:
-            if hasattr(control, "open"):
+        # Cerrar todos los AlertDialog en overlay
+        for control in self.page.overlay[:]:
+            if isinstance(control, ft.AlertDialog):
                 control.open = False
         
-        # 3. Actualizar para que el cliente vea el cierre
+        # También cerrar active_dialog si existe
+        if self.active_dialog:
+            self.active_dialog.open = False
+        
+        # Actualizar la página
         self.page.update()
         
-        # 4. Limpiar después
-        self.page.overlay.clear()
-        self.active_dialog = None
-        
-        # 5. Actualización final
-        self.page.update()    
+        # Limpiar referencia
+        self.active_dialog = None    
 
     def _add_to_overlay(self, control):
-        if self.page and control not in self.page.overlay:
-            self.page.overlay.append(control)
+        if self.page:
+            if isinstance(control, ft.AlertDialog):
+                control.open = True
+                if control not in self.page.overlay:
+                    self.page.overlay.append(control)
+            else:
+                if control not in self.page.overlay:
+                    self.page.overlay.append(control)
+            self.page.update()
 
     def _remove_from_overlay(self, control):
         if self.page and control in self.page.overlay:

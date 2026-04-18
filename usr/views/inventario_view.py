@@ -896,7 +896,7 @@ class InventarioView(ft.Container):
         if online:
             try:
                 # Usar conexión directa a Supabase
-                from sqlalchemy import create_engine
+                from sqlalchemy import create_engine, text
                 from config.config import get_settings
                 settings = get_settings()
                 remote_engine = create_engine(settings.DATABASE_URL)

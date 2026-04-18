@@ -178,8 +178,10 @@ class SyncManager:
                     data = [dict_to_serializable(dict(row._mapping)) for row in rows]
                     
                     if local_table == 'categorias':
+                        LocalReplica.clear_categorias()
                         LocalReplica.save_categorias(data)
                     elif local_table == 'productos':
+                        LocalReplica.clear_productos()
                         LocalReplica.save_productos(data)
                     elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
@@ -330,8 +332,10 @@ class SyncManager:
                         has_codigo = 'codigo' in data and data.get('codigo')
                         has_id = 'id' in data and data.get('id')
                         
+                        vals = None  # Inicializar
+                        
                         if has_codigo:
-                            prod_data = {
+                            vals = {
                                 'nombre': data.get('nombre'),
                                 'codigo': data.get('codigo'),
                                 'descripcion': data.get('descripcion', ''),
@@ -349,14 +353,14 @@ class SyncManager:
                             
                             # Upsert por código
                             check_sql = text("SELECT id FROM productos WHERE codigo = :codigo")
-                            existing = conn.execute(check_sql, {'codigo': prod_data['codigo']}).fetchone()
+                            existing = conn.execute(check_sql, {'codigo': vals['codigo']}).fetchone()
                             
                             if existing:
-                                set_cols = ", ".join([f"{k} = :{k}" for k in prod_data.keys()])
+                                set_cols = ", ".join([f"{k} = :{k}" for k in vals.keys()])
                                 sql = text(f"UPDATE productos SET {set_cols} WHERE codigo = :codigo")
                             else:
-                                cols_str = ", ".join(prod_data.keys())
-                                placeholders = ", ".join([f":{k}" for k in prod_data.keys()])
+                                cols_str = ", ".join(vals.keys())
+                                placeholders = ", ".join([f":{k}" for k in vals.keys()])
                                 sql = text(f"INSERT INTO productos ({cols_str}) VALUES ({placeholders})")
                         elif has_id:
                             # Update por ID (ej: desactivar)
