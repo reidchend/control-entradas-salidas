@@ -20,7 +20,6 @@ def get_local_conn():
 def init_local_db():
     """Inicializa la base de datos local con todas las tablas.
     Usa los mismos nombres de tabla que SQLAlchemy para compatibilidad."""
-    print("[DEBUG] init_local_db() llamado")
     conn = get_local_conn()
     cursor = conn.cursor()
     
@@ -194,9 +193,6 @@ class LocalReplica:
     @staticmethod
     def create_tables():
         """Crea todas las tablas locales."""
-        import traceback
-        print("[DEBUG] create_tables() llamado")
-        traceback.print_stack()
         init_local_db()
     
     # ==================== CATEGORÍAS ====================
@@ -240,13 +236,9 @@ class LocalReplica:
     
     @staticmethod
     def save_productos(productos: List[Dict]) -> None:
-        """Guarda productos en la base de datos local."""
-        print(f"[DEBUG] save_productos: {len(productos)}")
-        
+        """Guarda productos en la base de datos local (upsert)."""
         conn = get_local_conn()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM productos")
         
         for prod in productos:
             cursor.execute("""
@@ -273,14 +265,6 @@ class LocalReplica:
     @staticmethod
     def get_productos(categoria_id: int = None) -> List[Dict]:
         """Obtiene productos de la BD local."""
-        import sqlite3
-        conn3 = sqlite3.connect(LOCAL_DB_PATH)
-        cur3 = conn3.cursor()
-        cur3.execute('SELECT COUNT(*) FROM productos')
-        total = cur3.fetchone()[0]
-        conn3.close()
-        print(f"[DEBUG get_productos] cat={categoria_id}, total={total}")
-        
         conn = get_local_conn()
         cursor = conn.cursor()
         
@@ -411,7 +395,7 @@ class LocalReplica:
             (producto_id, factura_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
              peso_total, peso_registrado, foto_peso_url, registrado_por, observaciones,
              almacen, fecha_movimiento, created_at, device_id, sincronizado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             movimiento.get('producto_id'), movimiento.get('factura_id'),
             movimiento.get('tipo'), movimiento.get('cantidad'),
@@ -420,7 +404,7 @@ class LocalReplica:
             movimiento.get('foto_peso_url'), movimiento.get('registrado_por'),
             movimiento.get('observaciones'), movimiento.get('almacen'),
             movimiento.get('fecha_movimiento'), datetime.now().isoformat(),
-            device_id
+            device_id, 0
         ))
         
         last_id = cursor.lastrowid

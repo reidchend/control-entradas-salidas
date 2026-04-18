@@ -600,38 +600,6 @@ class InventarioView(ft.Container):
             items = [self._create_producto_item_from_dict(p, existencias_map.get(p.get("id"), {})) for p in local_productos]
             self.productos_list.controls = items if items else [ft.Text("No hay productos")]
             if self.page: self.update()
-            
-            from usr.database.base import check_connection
-            if check_connection():
-                db = next(get_db_adaptive())
-                try:
-                    productos_raw = db.query(Producto).filter(Producto.categoria_id == cat_id).order_by(Producto.nombre).all()
-                    
-                    prod_data = [
-                        {"id": p.id, "nombre": p.nombre, "codigo": p.codigo,
-                         "descripcion": p.descripcion, "categoria_id": p.categoria_id,
-                         "es_pesable": p.es_pesable, "requiere_foto_peso": p.requiere_foto_peso,
-                         "peso_unitario": p.peso_unitario, "unidad_medida": p.unidad_medida,
-                         "stock_actual": p.stock_actual, "stock_minimo": p.stock_minimo,
-                         "activo": p.activo, "almacen_predeterminado": p.almacen_predeterminado,
-                         "created_at": str(p.created_at) if p.created_at else None,
-                         "updated_at": str(p.updated_at) if p.updated_at else None}
-                        for p in productos_raw
-                    ]
-                    LocalReplica.save_productos(prod_data)
-                    
-                    producto_ids = [p["id"] for p in prod_data]
-                    if producto_ids:
-                        existencias = db.query(Existencia).filter(Existencia.producto_id.in_(producto_ids)).all()
-                        ext_data = [
-                            {"id": e.id, "producto_id": e.producto_id, "almacen": e.almacen,
-                             "cantidad": e.cantidad, "unidad": e.unidad}
-                            for e in existencias
-                        ]
-                        LocalReplica.save_existencias(ext_data)
-                finally:
-                    if db:
-                        db.close()
         except Exception as e:
             logger.error(f"Error carga productos: {e}")
 
@@ -927,41 +895,68 @@ class InventarioView(ft.Container):
         
         if online:
             try:
-                session_maker = get_session_local()
-                from sqlalchemy import text
-                with session_maker() as db:
+                # Usar conexión directa a Supabase
+                from sqlalchemy import create_engine
+                from config.config import get_settings
+                settings = get_settings()
+                remote_engine = create_engine(settings.DATABASE_URL)
+                
+                with remote_engine.connect() as conn:
                     mov_clean = {k: v for k, v in movimiento_data.items() 
                                if k not in ('sincronizado', 'created_at')}
+                    # Quitar el ID local para que Supabase genere uno nuevo
+                    mov_clean.pop('id', None)
+                    
                     cols = ", ".join(mov_clean.keys())
                     vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                     sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                    db.execute(sql, mov_clean)
+                    conn.execute(sql, mov_clean)
+                    conn.commit()
                     
-                    existing = db.query(Existencia).filter(
-                        Existencia.producto_id == producto_id,
-                        Existencia.almacen == almacen_seleccionado
-                    ).first()
+                    # Actualizar existencia en Supabase
+                    exist_sql = text("""
+                        INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
+                        VALUES (:producto_id, :almacen, :cantidad, 'unidad')
+                        ON CONFLICT (producto_id, almacen) 
+                        DO UPDATE SET cantidad = :cantidad
+                    """)
+                    conn.execute(exist_sql, {
+                        'producto_id': producto_id,
+                        'almacen': almacen_seleccionado,
+                        'cantidad': cant_nueva
+                    })
+                    conn.commit()
+                
+                remote_engine.dispose()
+                
+                local_id = movimiento_data.get('id')
+                if local_id:
+                    LocalReplica.mark_movimiento_sincronizado(local_id)
                     
-                    if existing:
-                        existing.cantidad = cant_nueva
-                    else:
-                        new_exist = Existencia(
-                            producto_id=producto_id,
-                            almacen=almacen_seleccionado,
-                            cantidad=cant_nueva,
-                            unidad="unidad"
-                        )
-                        db.add(new_exist)
-                    
-                    db.commit()
-                    
-                    local_id = movimiento_data.get('id')
-                    if local_id:
-                        LocalReplica.mark_movimiento_sincronizado(local_id)
-                        
                 print("[SYNC] Movimiento syncado inmediatamente")
             except Exception as e:
                 print(f"[SYNC] Error al syncar: {e}")
+                # Guardar en cola de sync
+                from usr.database.sync_queue import get_sync_queue
+                try:
+                    queue = get_sync_queue()
+                    queue.add_pending('movimientos', 'insert', movimiento_data)
+                    # Intentar sync inmediato
+                    from usr.database.sync import get_sync_manager
+                    mgr = get_sync_manager()
+                    if mgr and mgr.check_connection():
+                        import threading
+                        threading.Thread(target=mgr._process_sync_queue, daemon=True).start()
+                except:
+                    pass
+        else:
+            # Offline: agregar a cola
+            try:
+                from usr.database.sync_queue import get_sync_queue
+                queue = get_sync_queue()
+                queue.add_pending('movimientos', 'insert', movimiento_data)
+            except:
+                pass
         
         self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad}")
         self._load_productos()

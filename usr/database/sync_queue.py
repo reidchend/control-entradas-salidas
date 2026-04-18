@@ -5,6 +5,7 @@ Maneja la cola de operaciones pendientes de subir a Supabase.
 import sqlite3
 import threading
 import time
+import json
 from datetime import datetime
 from typing import List, Dict, Optional
 from config.config import get_settings
@@ -75,7 +76,7 @@ class SyncQueue:
         """, (
             table_name,
             operation,
-            str(data),
+            json.dumps(data),  # Usar JSON en lugar de str
             datetime.now().isoformat()
         ))
         

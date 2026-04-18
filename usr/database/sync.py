@@ -238,44 +238,157 @@ class SyncManager:
         from .sync_queue import get_sync_queue
         from .local_replica import LocalReplica
         
+        # Verificar conexión antes de procesar
+        if not self.check_connection():
+            print("[SYNC] Sin conexión, saltando procesamiento de cola")
+            return
+        
         queue = get_sync_queue()
         
         pending = queue.get_pending()
         
         if pending:
-            session_maker = self._get_session_maker()
-            if session_maker:
-                uploaded = self._upload_pending_queue(session_maker, pending)
-                print(f"[SYNC] {uploaded} operaciones subidas")
+            # Usar conexión a Supabase para subir datos
+            from sqlalchemy import create_engine
+            from config.config import get_settings
+            settings = get_settings()
+            remote_engine = create_engine(settings.DATABASE_URL)
+            
+            try:
+                uploaded = self._upload_to_remote(remote_engine, pending)
+                print(f"[SYNC] {uploaded} operaciones subidas a Supabase")
+            except Exception as e:
+                print(f"[SYNC] Error al subir a Supabase: {e}")
+            finally:
+                remote_engine.dispose()
         
         LocalReplica.recalculate_existencias()
         queue.set_last_sync(datetime.now().isoformat())
         print("[SYNC] Ciclo de sync completado")
     
-    def _upload_pending_queue(self, session_maker, pending_items) -> int:
-        """Sube elementos de la cola a Supabase."""
+    def _upload_to_remote(self, remote_engine, pending_items) -> int:
+        """Sube elementos de la cola a Supabase usando SQL directo."""
+        import json
         from .sync_queue import get_sync_queue
         
         queue = get_sync_queue()
         uploaded = 0
         
-        with session_maker() as db:
+        with remote_engine.connect() as conn:
             for item in pending_items:
+                table = None
                 try:
-                    data = eval(item['data'])
+                    data = json.loads(item['data'])
                     table = item['table_name']
                     operation = item['operation']
                     
-                    if table == 'movimientos' and operation == 'insert':
-                        mov_clean = {k: v for k, v in data.items() 
-                                   if k not in ('sincronizado', 'created_at')}
-                        cols = ", ".join(mov_clean.keys())
-                        vals = ", ".join([f":{k}" for k in mov_clean.keys()])
-                        sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                        db.execute(sql, mov_clean)
-                        db.commit()
+                    if table == 'categorias':
+                        # Determinar si es insert o update
+                        has_nombre = 'nombre' in data and data.get('nombre')
+                        has_id = 'id' in data and data.get('id')
+                        
+                        if has_nombre:
+                            cols = ['nombre', 'descripcion', 'color', 'activo', 'updated_at']
+                            vals = {
+                                'nombre': data.get('nombre'),
+                                'descripcion': data.get('descripcion', ''),
+                                'color': data.get('color', '#888888'),
+                                'activo': data.get('activo', 1),
+                                'updated_at': data.get('updated_at')
+                            }
+                            
+                            # Upsert por nombre
+                            check_sql = text("SELECT id FROM categorias WHERE nombre = :nombre")
+                            existing = conn.execute(check_sql, {'nombre': vals['nombre']}).fetchone()
+                            
+                            if existing:
+                                set_cols = ", ".join([f"{k} = :{k}" for k in vals.keys()])
+                                sql = text(f"UPDATE categorias SET {set_cols} WHERE nombre = :nombre")
+                            else:
+                                cols_str = ", ".join(vals.keys())
+                                placeholders = ", ".join([f":{k}" for k in vals.keys()])
+                                sql = text(f"INSERT INTO categorias ({cols_str}) VALUES ({placeholders})")
+                        elif has_id:
+                            # Update por ID (ej: desactivar)
+                            vals = {
+                                'id': data.get('id'),
+                                'activo': data.get('activo', 0),
+                                'updated_at': data.get('updated_at')
+                            }
+                            sql = text("UPDATE categorias SET activo = :activo, updated_at = :updated_at WHERE id = :id")
+                        else:
+                            continue
+                        
+                        conn.execute(sql, vals)
+                        conn.commit()
                         queue.mark_completed(item['id'])
                         uploaded += 1
+                        print(f"[SYNC] Categoría sincronizada")
+                        
+                    elif table == 'productos':
+                        # Determinar si es insert o update
+                        has_codigo = 'codigo' in data and data.get('codigo')
+                        has_id = 'id' in data and data.get('id')
+                        
+                        if has_codigo:
+                            prod_data = {
+                                'nombre': data.get('nombre'),
+                                'codigo': data.get('codigo'),
+                                'descripcion': data.get('descripcion', ''),
+                                'categoria_id': int(data.get('categoria_id')) if data.get('categoria_id') else None,
+                                'es_pesable': data.get('es_pesable', 0),
+                                'requiere_foto_peso': data.get('requiere_foto_peso', 0),
+                                'peso_unitario': float(data.get('peso_unitario', 0)),
+                                'unidad_medida': data.get('unidad_medida', 'unidad'),
+                                'stock_actual': float(data.get('stock_actual', 0)),
+                                'stock_minimo': float(data.get('stock_minimo', 0)),
+                                'activo': data.get('activo', 1),
+                                'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
+                                'updated_at': data.get('updated_at')
+                            }
+                            
+                            # Upsert por código
+                            check_sql = text("SELECT id FROM productos WHERE codigo = :codigo")
+                            existing = conn.execute(check_sql, {'codigo': prod_data['codigo']}).fetchone()
+                            
+                            if existing:
+                                set_cols = ", ".join([f"{k} = :{k}" for k in prod_data.keys()])
+                                sql = text(f"UPDATE productos SET {set_cols} WHERE codigo = :codigo")
+                            else:
+                                cols_str = ", ".join(prod_data.keys())
+                                placeholders = ", ".join([f":{k}" for k in prod_data.keys()])
+                                sql = text(f"INSERT INTO productos ({cols_str}) VALUES ({placeholders})")
+                        elif has_id:
+                            # Update por ID (ej: desactivar)
+                            vals = {
+                                'id': data.get('id'),
+                                'activo': data.get('activo', 0),
+                                'updated_at': data.get('updated_at')
+                            }
+                            sql = text("UPDATE productos SET activo = :activo, updated_at = :updated_at WHERE id = :id")
+                        else:
+                            continue
+                        
+                        conn.execute(sql, vals)
+                        conn.commit()
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        print(f"[SYNC] Producto sincronizado")
+                        
+                    elif table == 'movimientos' and operation == 'insert':
+                        mov_data = {k: v for k, v in data.items() 
+                                   if k not in ('sincronizado', 'created_at')}
+                        # Quitar ID local para que Supabase genere uno nuevo
+                        mov_data.pop('id', None)
+                        
+                        cols = ", ".join(mov_data.keys())
+                        vals = ", ".join([f":{k}" for k in mov_data.keys()])
+                        sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
+                        conn.execute(sql, mov_data)
+                        conn.commit()
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        print(f"[SYNC] Movimiento sincronizado")
                         
                 except Exception as e:
                     queue.mark_failed(item['id'], str(e))

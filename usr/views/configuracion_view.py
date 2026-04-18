@@ -1,9 +1,11 @@
 import flet as ft
-from usr.database.base import get_db, get_db_adaptive
+from usr.database.base import get_db, get_db_adaptive, check_connection
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
 from sqlalchemy import text
 from usr.theme import get_theme, get_colors
+from usr.database.local_replica import LocalReplica
+from datetime import datetime
 
 
 def _colors(page):
@@ -529,74 +531,88 @@ class ConfiguracionView(ft.Container):
                 # ✅ fullscreen ELIMINADO
             )
             
-            self._add_to_overlay(self.active_dialog)
             self.active_dialog.open = True
+            self._add_to_overlay(self.active_dialog)
             self.page.update()
         finally:
             db.close()
 
     def _save_categoria(self, nombre, descripcion, color, activo, cat_id):
-        db = next(get_db_adaptive())
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        # 1. Preparar data con tipos correctos
+        cat_data = {
+            "nombre": str(nombre),
+            "descripcion": str(descripcion) if descripcion else "",
+            "color": str(color),
+            "activo": 1 if activo else 0,
+            "updated_at": datetime.now().isoformat()
+        }
+        if cat_id:
+            cat_data["id"] = cat_id
+        
+        # 2. Guardar local en SQLite (siempre)
         try:
-            if cat_id:
-                cat = db.query(Categoria).get(cat_id)
-                if cat:
-                    cat.nombre = nombre
-                    cat.descripcion = descripcion
-                    cat.color = color
-                    cat.activo = activo
-            else:
-                cat = Categoria(nombre=nombre, descripcion=descripcion, color=color, activo=activo)
-                db.add(cat)
-            db.commit()
-            self._load_data()
-            self._show_message("✅ Categoría guardada correctamente")
+            LocalReplica.save_categorias([cat_data])
         except Exception as e:
-            db.rollback()
-            self._show_error(f"Error DB: {str(e)}")
-        finally:
-            db.close()
+            print(f"❌ Error SQLite: {e}")
+        
+        # 3. Agregar a la cola de sync (se procesará cuando haya internet)
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('categorias', 'insert', cat_data)
+            # Intentar sync inmediato si hay conexión
+            self._trigger_sync()
+        except:
+            pass
+        
+        self._show_message("✅ Categoría guardada")
+        
+        self._load_data()
 
     def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
-        db = next(get_db_adaptive())
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        # 1. Preparar data con tipos correctos para Postgres
+        prod_data = {
+            "nombre": str(n),
+            "codigo": str(c),
+            "descripcion": str(d) if d else "",
+            "categoria_id": int(cat_id) if cat_id else None,
+            "requiere_foto_peso": 1 if rf else 0,
+            "peso_unitario": float(pu) if pu else 0.0,
+            "stock_minimo": float(sm) if sm else 0.0,
+            "stock_actual": 0,
+            "unidad_medida": str(u) if u else "unidad",
+            "activo": 1 if a else 0,
+            "es_pesable": 1 if es_p else 0,
+            "almacen_predeterminado": "principal",
+            "updated_at": datetime.now().isoformat()
+        }
+        if p_id:
+            prod_data["id"] = p_id
+        
+        # 2. Guardar local en SQLite (siempre)
         try:
-            if p_id:
-                p = db.query(Producto).get(p_id)
-                if p:
-                    p.nombre = n
-                    p.codigo = c
-                    p.descripcion = d
-                    p.categoria_id = cat_id
-                    p.requiere_foto_peso = rf
-                    p.peso_unitario = pu
-                    p.unidad_medida = u
-                    p.stock_minimo = sm
-                    p.activo = a
-                    if hasattr(p, 'es_pesable'):
-                        p.es_pesable = es_p
-            else:
-                p = Producto(
-                    nombre=n, 
-                    codigo=c, 
-                    descripcion=d, 
-                    categoria_id=cat_id, 
-                    requiere_foto_peso=rf, 
-                    peso_unitario=pu, 
-                    unidad_medida=u, 
-                    stock_minimo=sm, 
-                    stock_actual=0, 
-                    activo=a
-                )
-                if hasattr(p, 'es_pesable'):
-                    p.es_pesable = es_p
-                db.add(p)
-            db.commit()
-            return True
+            LocalReplica.save_productos([prod_data])
         except Exception as e:
-            db.rollback()
-            self._show_error(f"Error DB: {str(e)}")
-        finally:
-            db.close()
+            print(f"❌ Error SQLite: {e}")
+        
+        # 3. Agregar a la cola de sync (se procesará cuando haya internet)
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('productos', 'insert', prod_data)
+            # Intentar sync inmediato si hay conexión
+            self._trigger_sync()
+        except:
+            pass
+        
+        self._show_message("✅ Guardado")
+        
+        self._load_data()
+        return True
 
     def _confirm_delete(self, objeto, tipo="producto"):
         colors = _colors(self.page)
@@ -636,6 +652,10 @@ class ConfiguracionView(ft.Container):
         self.page.update()
 
     def _delete_logic(self, objeto, tipo):
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        from usr.database.local_replica import LocalReplica
+        
         db = next(get_db_adaptive())
         try:
             if tipo == "producto":
@@ -643,11 +663,68 @@ class ConfiguracionView(ft.Container):
             else:
                 item = db.query(Categoria).get(objeto.id)
             
-            if item:
+            if tipo == "producto":
                 item.activo = False
                 db.commit()
-                self._show_message(f"✅ {tipo.capitalize()} desactivado correctamente")
-                self._load_data()
+                
+                # Guardar en local
+                LocalReplica.save_productos([{
+                    'id': item.id,
+                    'nombre': item.nombre,
+                    'codigo': item.codigo,
+                    'descripcion': item.descripcion,
+                    'categoria_id': item.categoria_id,
+                    'es_pesable': item.es_pesable,
+                    'requiere_foto_peso': item.requiere_foto_peso,
+                    'peso_unitario': item.peso_unitario,
+                    'unidad_medida': item.unidad_medida,
+                    'stock_actual': item.stock_actual,
+                    'stock_minimo': item.stock_minimo,
+                    'activo': 0,
+                    'updated_at': datetime.now().isoformat(),
+                    'almacen_predeterminado': item.almacen_predeterminado
+                }])
+                
+                # Agregar a cola de sync
+                try:
+                    queue = get_sync_queue()
+                    queue.add_pending('productos', 'update', {
+                        'id': item.id,
+                        'activo': 0,
+                        'updated_at': datetime.now().isoformat()
+                    })
+                    self._trigger_sync()
+                except:
+                    pass
+                    
+            else:  # categoria
+                item.activo = False
+                db.commit()
+                
+                # Guardar en local
+                LocalReplica.save_categorias([{
+                    'id': item.id,
+                    'nombre': item.nombre,
+                    'descripcion': item.descripcion,
+                    'color': item.color,
+                    'activo': 0,
+                    'updated_at': datetime.now().isoformat()
+                }])
+                
+                # Agregar a cola de sync
+                try:
+                    queue = get_sync_queue()
+                    queue.add_pending('categorias', 'update', {
+                        'id': item.id,
+                        'activo': 0,
+                        'updated_at': datetime.now().isoformat()
+                    })
+                    self._trigger_sync()
+                except:
+                    pass
+            
+            self._show_message(f"✅ {tipo.capitalize()} desactivado correctamente")
+            self._load_data()
             self._close_dialog()
         except Exception as e:
             self._show_error(f"Error: {str(e)}")
@@ -893,24 +970,25 @@ class ConfiguracionView(ft.Container):
         )
 
     def _close_dialog(self, e=None):
-            if self.active_dialog:
-                try:
-                    # Paso 1: Cerrar visualmente el diálogo
-                    self.active_dialog.open = False
-                    self.page.update()
-                    
-                    # Paso 2: Eliminar del overlay
-                    if self.active_dialog in self.page.overlay:
-                        self.page.overlay.remove(self.active_dialog)
-                    
-                    # Paso 3: Limpiar referencia
-                    self.active_dialog = None
-                    
-                    # Paso 4: Actualizar página para limpiar residuos visuales
-                    self.page.update()
-                except Exception as ex:
-                    self.active_dialog = None
-                    self.page.update()    
+        # 1. Cerrar con referencia guardada
+        if self.active_dialog:
+            self.active_dialog.open = False
+            self.page.update()
+        
+        # 2. Cerrar TODOS los diálogos en overlay
+        for control in self.page.overlay:
+            if hasattr(control, "open"):
+                control.open = False
+        
+        # 3. Actualizar para que el cliente vea el cierre
+        self.page.update()
+        
+        # 4. Limpiar después
+        self.page.overlay.clear()
+        self.active_dialog = None
+        
+        # 5. Actualización final
+        self.page.update()    
 
     def _add_to_overlay(self, control):
         if self.page and control not in self.page.overlay:
@@ -1109,3 +1187,16 @@ class ConfiguracionView(ft.Container):
                 
         except Exception as ex:
             self._show_error(f"Error al activar notificaciones: {str(ex)}")
+
+    def _trigger_sync(self):
+        """Intenta sincronizar inmediatamente si hay conexión."""
+        try:
+            from usr.database.sync import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if sync_mgr and sync_mgr.check_connection():
+                import threading
+                thread = threading.Thread(target=sync_mgr._process_sync_queue, daemon=True)
+                thread.start()
+                print("[SYNC] Sync inmediato activado")
+        except Exception as e:
+            print(f"[SYNC] Error al activar sync inmediato: {e}")

@@ -46,7 +46,7 @@ class ControlEntradasSalidasApp:
         self.settings = settings
         self.views = vistas_cargadas
         
-        self.page.clean()
+        #self.page.clean()
         self.page.title = self.settings.FLET_APP_NAME
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
@@ -121,6 +121,7 @@ class ControlEntradasSalidasApp:
         )
 
         self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
+        self.page.clean()
         self.page.padding = 5
         self.page.add(self._layout_row)
 
@@ -283,19 +284,20 @@ async def main(page: ft.Page):
             
             # Delay para mostrar pantalla de carga
             import asyncio
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
             
             # Step 1: Config
             step_text.value = "2/5"
             status_text.value = "Configurando..."
             page.update()
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
             
             from config.config import get_settings
             settings = get_settings()
             status_text.value = "✓ Lista"
             page.update()
             
+            await asyncio.sleep(0.5)
             # Step 2: Database
             step_text.value = "3/5"
             status_text.value = "Base de datos..."
@@ -310,14 +312,16 @@ async def main(page: ft.Page):
             sync_manager = init_sync_manager(get_engine)
             sync_manager.set_session_local_getter(get_session)
             status_text.value = "✓ Conectado"
-            
+
+            await asyncio.sleep(0.5)
             step_text.value = "4/5"
             status_text.value = "Sincronizando..."
             page.update()
             
             if check_connection():
                 try:
-                    sync_manager.full_sync()
+                    # CORRECCIÓN 3: Ejecutar sync en hilo separado para no bloquear UI
+                    await asyncio.to_thread(sync_manager.full_sync)
                     status_text.value = "✓ Sincronizado"
                 except Exception as e:
                     print(f"Error en sync inicial: {e}")
@@ -325,32 +329,45 @@ async def main(page: ft.Page):
             else:
                 status_text.value = " Modo offline"
             
+            await asyncio.sleep(0.5)
             # Step 3: Views import
             step_text.value = "5/5"
             status_text.value = "Modulos..."
             page.update()
             
+            await asyncio.sleep(0.5)
             from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
             status_text.value = "✓ Cargado"
-            
+            page.update()
+
             # Step 4: Create views
+            await asyncio.sleep(0.5)
             status_text.value = "Creando..."
+            
             page.update()
             
+            await asyncio.sleep(0.5)
             inventario_view = InventarioView()
             requisiciones_view = RequisicionesView()
             requisiciones_view.inventario_view = inventario_view
-            status_text.value = "✓ Creado"
-            
+
             vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
             
             app_instance = ControlEntradasSalidasApp()
             requisiciones_view.app_controller = app_instance
+            status_text.value = "✓ Creado"
             
+            page.update()
+            await asyncio.sleep(0.5)
             # Done
             step_text.value = "Listo!"
-            status_text.value = "Iniciando..."
             page.update()
+            await asyncio.sleep(0.5)
+
+            status_text.value = "Iniciando..."
+            
+            page.update()
+            await asyncio.sleep(0.5)
             
             await app_instance.arrancar_interfaz(page, settings, vistas)
         except Exception as inner_e:
