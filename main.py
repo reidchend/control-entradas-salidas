@@ -260,6 +260,25 @@ async def main(page: ft.Page):
                     pass
         try:
             page.bgcolor = "#121212"
+            
+            import os
+            from usr.database.conn import set_db_path
+            
+            # Determina el path según la plataforma
+            try:
+                db_dir = page.app_data_dir if hasattr(page, 'app_data_dir') and page.app_data_dir else None
+            except:
+                db_dir = None
+            
+            if not db_dir:
+                db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
+            
+            db_path = os.path.join(db_dir, "lycoris_local.db")
+            set_db_path(db_path)
+            
+            from usr.database.local_replica import ensure_local_db
+            ensure_local_db()
+            
             page.update()
             
             logo = ft.Column([
@@ -308,6 +327,30 @@ async def main(page: ft.Page):
             from usr.database.sync import init_sync_manager
             
             init_local_tables()
+            
+            from usr.views.login_view import LoginView
+            
+            usuario = LocalReplica.get_usuario_dispositivo()
+            
+            if usuario is None:
+                page.clean()
+                login_view = LoginView(modo="registro")
+                page.add(login_view)
+                page.update()
+                return
+            elif usuario.get("pin_hash"):
+                page.clean()
+                login_view = LoginView(modo="pin")
+                page.add(login_view)
+                page.update()
+                return
+            else:
+                page.session.set("username", usuario.get("nombre", "Operador"))
+            
+            if page.session.get("username"):
+                status_text.value = f"✓ Hola, {page.session.get('username')}"
+            else:
+                status_text.value = f"✓ Hola, {page.session.get('username', 'Usuario')}"
             
             sync_manager = init_sync_manager(get_engine)
             sync_manager.set_session_local_getter(get_session)

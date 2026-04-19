@@ -4,3 +4,9 @@ config/*.json
 .env
 __pycache__/
 build/
+*.db
+*.db-shm
+*.db-wal
+logs/
+.control_entradas_cache/
+config/.device_id

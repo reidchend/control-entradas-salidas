@@ -2,20 +2,9 @@
 Réplica local SQLite para trabajo offline.
 Almacena una copia de los datos de Supabase para acceso offline.
 """
-import sqlite3
-import json
-import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from config.config import get_settings
-
-LOCAL_DB_PATH = get_settings().LOCAL_DB_PATH
-
-def get_local_conn():
-    """Obtiene conexión a la base de datos local."""
-    conn = sqlite3.connect(LOCAL_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+from usr.database.conn import get_local_conn
 
 def init_local_db():
     """Inicializa la base de datos local con todas las tablas.
@@ -153,6 +142,15 @@ def init_local_db():
             data TEXT,
             created_at TEXT NOT NULL,
             retries INTEGER DEFAULT 0
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dispositivo_usuario (
+            id          INTEGER PRIMARY KEY,
+            nombre      TEXT    NOT NULL,
+            pin_hash    TEXT,
+            configurado_en TEXT NOT NULL
         )
     """)
     
@@ -827,4 +825,74 @@ class LocalReplica:
         
         return row['count'] if row else 0
 
-init_local_db()
+    @staticmethod
+    def get_usuario_dispositivo() -> dict | None:
+        """Devuelve el usuario registrado en este dispositivo, o None."""
+        import hashlib
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    @staticmethod
+    def registrar_usuario_dispositivo(
+        nombre: str,
+        pin: str | None = None
+    ) -> None:
+        """Registra el usuario de este dispositivo (solo una vez)."""
+        import hashlib
+        pin_hash = None
+        if pin and pin.strip():
+            pin_hash = hashlib.sha256(
+                pin.strip().encode()
+            ).hexdigest()
+
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM dispositivo_usuario")
+        cursor.execute(
+            """INSERT INTO dispositivo_usuario
+               (nombre, pin_hash, configurado_en)
+               VALUES (?, ?, ?)""",
+            (nombre.strip(), pin_hash,
+             datetime.now().isoformat())
+        )
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def verificar_pin(pin: str) -> bool:
+        """Verifica el PIN del usuario actual."""
+        import hashlib
+        usuario = LocalReplica.get_usuario_dispositivo()
+        if not usuario:
+            return False
+        if usuario["pin_hash"] is None:
+            return True
+        pin_hash = hashlib.sha256(
+            pin.strip().encode()
+        ).hexdigest()
+        return pin_hash == usuario["pin_hash"]
+
+    @staticmethod
+    def eliminar_usuario_dispositivo() -> None:
+        """Resetea el usuario (para cambio de operador)."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM dispositivo_usuario")
+        conn.commit()
+        conn.close()
+
+def ensure_local_db():
+    """Asegura que la BD local existe. Llamar después de set_db_path()."""
+    from usr.logger import get_logger
+    logger = get_logger("local_replica")
+    try:
+        logger.info("Inicializando base de datos local...")
+        init_local_db()
+        logger.info("Base de datos local inicializada")
+    except Exception as e:
+        logger.error(f"Error al inicializar BD: {e}")
+        raise

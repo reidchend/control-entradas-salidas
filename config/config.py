@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     
     # --- CONFIGURACIÓN LOCAL (OFFLINE) ---
-    LOCAL_DB_PATH: str = os.getenv("LOCAL_DB_PATH", "./lycoris_local.db")
+    LOCAL_DB_PATH: str = os.getenv("LOCAL_DB_PATH", "")
     DEVICE_ID: str = os.getenv("DEVICE_ID", "")
     
     @property
@@ -56,8 +56,11 @@ class Settings(BaseSettings):
     
     @property
     def LOCAL_DATABASE_URL(self) -> str:
-        """URL de la base de datos local SQLite para offline."""
-        return f"sqlite:///{self.LOCAL_DB_PATH}"
+        from usr.database.conn import get_db_path
+        try:
+            return f"sqlite:///{get_db_path()}"
+        except RuntimeError:
+            return "sqlite:///lycoris_local.db"
     
     @property
     def DEVICE_IDENTIFIER(self) -> str:

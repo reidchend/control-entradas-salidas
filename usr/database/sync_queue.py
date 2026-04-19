@@ -2,21 +2,12 @@
 Cola de sincronización para trabajo offline-first.
 Maneja la cola de operaciones pendientes de subir a Supabase.
 """
-import sqlite3
 import threading
 import time
 import json
 from datetime import datetime
 from typing import List, Dict, Optional
-from config.config import get_settings
-
-LOCAL_DB_PATH = get_settings().LOCAL_DB_PATH
-
-def get_local_conn():
-    """Obtiene conexión a la base de datos local."""
-    conn = sqlite3.connect(LOCAL_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+from usr.database.conn import get_local_conn
 
 class SyncQueue:
     """Maneja la cola de sincronización."""

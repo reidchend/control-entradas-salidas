@@ -1122,6 +1122,27 @@ class ConfiguracionView(ft.Container):
                                 bgcolor=colors['accent'],
                                 color=colors['white'],
                             ),
+                            
+                            ft.Divider(height=30, color=colors['border']),
+                            
+                            ft.Text(
+                                "Gestion de Operador", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Cambie el operador registrado en este dispositivo.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.Container(height=10),
+                            ft.ElevatedButton(
+                                "Cambiar operador de este dispositivo", 
+                                on_click=self._on_cambiar_operador,
+                                icon=ft.Icons.PERSON_OUTLINED,
+                                bgcolor=ft.Colors.ORANGE_600,
+                                color=ft.Colors.WHITE,
+                            ),
                         ], spacing=15),
                         padding=25,
                     ),
@@ -1130,6 +1151,62 @@ class ConfiguracionView(ft.Container):
             padding=20,
             expand=True,
         )
+    
+    def _on_cambiar_operador(self, e):
+        from usr.database.local_replica import LocalReplica
+        
+        usuario = LocalReplica.get_usuario_dispositivo()
+        
+        if usuario and usuario.get("pin_hash"):
+            self.pin_verify_input = ft.TextField(
+                label="PIN actual",
+                password=True,
+                max_length=4,
+                keyboard_type=ft.KeyboardType.NUMBER
+            )
+            
+            self.verify_dialog = ft.AlertDialog(
+                title=ft.Text("Verificar PIN"),
+                content=ft.Column([
+                    ft.Text("Ingrese su PIN actual para continuar"),
+                    self.pin_verify_input,
+                ], tight=True),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=self._close_dialog),
+                    ft.ElevatedButton("Verificar", on_click=self._on_verificar_pin_cambio, bgcolor=ft.Colors.DEEP_PURPLE_600, color=ft.Colors.WHITE),
+                ]
+            )
+            self.page.overlay.append(self.verify_dialog)
+            self.verify_dialog.open = True
+            self.page.update()
+        else:
+            self._confirmar_cambio()
+    
+    def _on_verificar_pin_cambio(self, e):
+        from usr.database.local_replica import LocalReplica
+        
+        if not self.pin_verify_input.value:
+            return
+        if LocalReplica.verificar_pin(self.pin_verify_input.value):
+            self._confirmar_cambio()
+        else:
+            self._show_message("PIN incorrecto")
+    
+    def _confirmar_cambio(self):
+        from usr.database.local_replica import LocalReplica
+        from main import main as restart_main
+        
+        self._close_dialog()
+        LocalReplica.eliminar_usuario_dispositivo()
+        self._show_message("Recargando...")
+        self.page.run_task(restart_main, self.page)
+    
+    def _close_dialog(self, e=None):
+        if hasattr(self, 'page') and self.page and self.page.overlay:
+            for d in self.page.overlay.copy():
+                if hasattr(d, 'open'):
+                    d.open = False
+            self.page.update()
     
     def _toggle_offline_mode(self, e=None):
         from usr.database import base

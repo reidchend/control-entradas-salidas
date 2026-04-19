@@ -1,1 +1,20 @@
 2026-04-19 15:27:34 | usr.views.validacion_view | ERROR    | Error cargando entradas: 'ValidacionView' object has no attribute '_colors'
+2026-04-19 16:55:23 | usr.views.login_view | INFO     | Operador registrado: Reidchend
+2026-04-19 16:57:03 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 16:58:37 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 16:58:48 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 17:05:19 | usr.views.login_view | INFO     | Operador registrado: Reidchend
+2026-04-19 17:08:16 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 17:08:16 | usr.views.login_view | ERROR    | Error al cargar app: 'ControlEntradasSalidasApp' object has no attribute '_build_add_commands'
+2026-04-19 17:16:35 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 17:16:35 | usr.views.inventario_view | ERROR    | Error carga categorías: (sqlite3.OperationalError) no such table: categorias
+[SQL: SELECT categorias.id AS categorias_id, categorias.nombre AS categorias_nombre, categorias.descripcion AS categorias_descripcion, categorias.imagen AS categorias_imagen, categorias.color AS categorias_color, categorias.activo AS categorias_activo, categorias.created_at AS categorias_created_at, categorias.updated_at AS categorias_updated_at 
+FROM categorias ORDER BY categorias.nombre]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-04-19 17:18:02 | usr.views.login_view | INFO     | Usuario desbloqueado: Reidchend
+2026-04-19 17:18:02 | usr.views.inventario_view | ERROR    | Error carga categorías: (sqlite3.OperationalError) no such table: categorias
+[SQL: SELECT categorias.id AS categorias_id, categorias.nombre AS categorias_nombre, categorias.descripcion AS categorias_descripcion, categorias.imagen AS categorias_imagen, categorias.color AS categorias_color, categorias.activo AS categorias_activo, categorias.created_at AS categorias_created_at, categorias.updated_at AS categorias_updated_at 
+FROM categorias ORDER BY categorias.nombre]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-04-19 17:19:09 | local_replica | INFO     | Inicializando base de datos local...
+2026-04-19 17:19:09 | local_replica | INFO     | Base de datos local inicializada

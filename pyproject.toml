@@ -2,6 +2,15 @@
 product = "Lycoris Control"
 org = "com.reidchend"
 android.adaptive_icon_background = "#1A1A1A"
+exclude = [
+    "*.db",
+    "*.db-shm",
+    "*.db-wal",
+    ".control_entradas_cache/",
+    "logs/",
+    "lycoris_local.db",
+    "control_entradas_salidas.db",
+]
 
 [project]
 name = "lycoris-control"
