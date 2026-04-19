@@ -465,7 +465,6 @@ class InventarioView(ft.Container):
                         max_lines=2,
                         overflow=ft.TextOverflow.ELLIPSIS
                     ),
-                    ft.Text("Ver más", size=9, color=text_secondary)
                 ]
             )
         )
@@ -700,20 +699,60 @@ class InventarioView(ft.Container):
             db.close()
         
         colors = _get_safe_colors(self.page)
-        cant_input = ft.TextField(
-            label="Cantidad (Bultos/Unidades)",
+        
+        def calcular_peso_total():
+            try:
+                cant_und = int(float(cant_x_unidad_input.value or 0))
+                peso_x_und = float(peso_x_unidad_input.value.replace(',', '.') or 0)
+                total = cant_und * peso_x_und
+                peso_total_display.value = f"{total:.3f} kg"
+                peso_total_display.update()
+            except:
+                peso_total_display.value = "0.000 kg"
+        
+        cant_x_unidad_input = ft.TextField(
+            label="Cantidad (unidades)",
             value="1", 
             keyboard_type=ft.KeyboardType.NUMBER, 
             autofocus=True,
             border_radius=10,
             text_size=16,
             border_color=colors['input_border'],
+            on_change=lambda _: calcular_peso_total() if es_pesable else None,
         )
         
-        peso_input = ft.TextField(
-            label="Peso Total (Kg)", 
-            hint_text="0.000", 
+        peso_x_unidad_input = ft.TextField(
+            label="Peso por unidad (kg)",
+            value="0.100", 
             keyboard_type=ft.KeyboardType.NUMBER, 
+            border_radius=10,
+            text_size=16,
+            border_color=colors['input_border'],
+            on_change=lambda _: calcular_peso_total() if es_pesable else None,
+        )
+        
+        peso_total_display = ft.Text(
+            "0.000 kg",
+            size=16,
+            weight=ft.FontWeight.BOLD,
+            color=colors['accent'],
+        )
+        
+        peso_total_container = ft.Container(
+            content=ft.Column([
+                ft.Text("Peso total:", size=12, color=colors['text_secondary']),
+                peso_total_display,
+            ], tight=True),
+            padding=10,
+            bgcolor=colors['card_hover'],
+            border_radius=10,
+        )
+        
+        cant_input_normal = ft.TextField(
+            label="Cantidad (Bultos/Unidades)",
+            value="1", 
+            keyboard_type=ft.KeyboardType.NUMBER, 
+            autofocus=True,
             border_radius=10,
             text_size=16,
             border_color=colors['input_border'],
@@ -743,51 +782,79 @@ class InventarioView(ft.Container):
         )
 
         def al_confirmar(e):
-            try:
-                valor = cant_input.value.replace(",", "").replace(" ", "")
-                cantidad = int(float(valor))
-                if cantidad <= 0: raise ValueError()
-            except (ValueError, AttributeError):
-                cant_input.error_text = "Número entero mayor a 0"; cant_input.update(); return
-
-            peso_valor = 0.0
             if es_pesable:
                 try:
-                    peso_valor = float(peso_input.value.replace(',', '.'))
-                    if peso_valor <= 0: raise ValueError()
+                    cant_und = int(float(cant_x_unidad_input.value.replace(",", "").replace(" ", "")))
+                    if cant_und <= 0: raise ValueError()
+                except (ValueError, AttributeError):
+                    cant_x_unidad_input.error_text = "Número mayor a 0"; cant_x_unidad_input.update(); return
+
+                try:
+                    peso_x_und = float(peso_x_unidad_input.value.replace(',', '.'))
+                    if peso_x_und <= 0: raise ValueError()
                 except ValueError:
-                    peso_input.error_text = "Ingrese un peso válido"; peso_input.update(); return
+                    peso_x_unidad_input.error_text = "Peso válido mayor a 0"; peso_x_unidad_input.update(); return
+
+                peso_total = cant_und * peso_x_und
+                cantidad_a_guardar = 0
+            else:
+                try:
+                    cantidad_a_guardar = int(float(cant_input_normal.value.replace(",", "").replace(" ", "")))
+                    if cantidad_a_guardar <= 0: raise ValueError()
+                except (ValueError, AttributeError):
+                    cant_input_normal.error_text = "Número entero mayor a 0"; cant_input_normal.update(); return
+                peso_total = 0.0
 
             almacen = almacen_dropdown.value or "principal"
             self._close_dialog()
-            self._registrar_movimiento(tipo, cantidad, peso_total=peso_valor, almacen=almacen)
+            self._registrar_movimiento(tipo, cantidad_a_guardar, peso_total=peso_total, almacen=almacen)
 
         tipo_color = colors['success'] if tipo == "entrada" else colors['error']
         tipo_icon = "📥" if tipo == "entrada" else "📤"
         
+        if es_pesable:
+            dialog_content = ft.Column([
+                ft.Container(
+                    content=ft.Text(producto.nombre, weight="bold", size=15, color=colors['text_primary']),
+                    padding=5,
+                    bgcolor=colors['card_hover'],
+                    border_radius=8,
+                    width=float('inf'),
+                ),
+                ft.Container(height=8),
+                stock_info,
+                ft.Container(height=8),
+                ft.ResponsiveRow([
+                    ft.Column([almacen_dropdown], col={"xs": 12, "md": 6}),
+                    ft.Column([cant_x_unidad_input], col={"xs": 12, "md": 6}),
+                ], spacing=10),
+                ft.Container(height=5),
+                ft.ResponsiveRow([
+                    ft.Column([peso_x_unidad_input], col={"xs": 12, "md": 6}),
+                    ft.Column([peso_total_container], col={"xs": 12, "md": 6}),
+                ], spacing=10),
+            ], tight=True, spacing=5)
+        else:
+            dialog_content = ft.Column([
+                ft.Container(
+                    content=ft.Text(producto.nombre, weight="bold", size=15, color=colors['text_primary']),
+                    padding=5,
+                    bgcolor=colors['card_hover'],
+                    border_radius=8,
+                    width=float('inf'),
+                ),
+                ft.Container(height=8),
+                stock_info,
+                ft.Container(height=8),
+                ft.ResponsiveRow([
+                    ft.Column([almacen_dropdown], col={"xs": 12, "md": 6}),
+                    ft.Column([cant_input_normal], col={"xs": 12, "md": 6}),
+                ], spacing=10),
+            ], tight=True, spacing=5)
+        
         self.active_dialog = ft.AlertDialog(
             title=ft.Text(f"{tipo_icon} Registrar {tipo.capitalize()}", weight="bold", size=18, color=colors['text_primary']),
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Container(
-                        content=ft.Text(producto.nombre, weight="bold", size=15, color=colors['text_primary']),
-                        padding=5,
-                        bgcolor=colors['card_hover'],
-                        border_radius=8,
-                        width=float('inf'),
-                    ),
-                    ft.Container(height=8),
-                    stock_info,
-                    ft.Container(height=8),
-                    ft.ResponsiveRow([
-                        ft.Column([almacen_dropdown], col={"xs": 12, "md": 6}),
-                        ft.Column([cant_input], col={"xs": 12, "md": 6}),
-                    ], spacing=10),
-                    ft.Container(height=5),
-                    peso_input if es_pesable else ft.Container(),
-                ], tight=True, spacing=5),
-                width=350,
-            ),
+            content=ft.Container(content=dialog_content, width=350),
             actions=[
                 ft.TextButton("Cancelar", on_click=self._close_dialog, style=ft.ButtonStyle(color=colors['text_secondary'])),
                 ft.ElevatedButton(
@@ -861,12 +928,21 @@ class InventarioView(ft.Container):
         existencia_actual = LocalReplica.get_existencias_by_producto_almacen(producto_id, almacen_seleccionado)
         cant_anterior = existencia_actual.get('cantidad', 0) if existencia_actual else 0
         
-        if tipo == "entrada":
-            cant_nueva = cant_anterior + cantidad
+        es_pesable = _get_attr(self.producto_seleccionado, 'es_pesable', False)
+        
+        if es_pesable and peso_total > 0:
+            cantidad_a_mover = peso_total
+            unidad = 'kg'
         else:
-            if cant_anterior < cantidad:
+            cantidad_a_mover = cantidad
+            unidad = _get_attr(self.producto_seleccionado, 'unidad_medida', 'unidad')
+        
+        if tipo == "entrada":
+            cant_nueva = cant_anterior + cantidad_a_mover
+        else:
+            if cant_anterior < cantidad_a_mover:
                 self._show_error("Stock insuficiente"); return
-            cant_nueva = cant_anterior - cantidad
+            cant_nueva = cant_anterior - cantidad_a_mover
         
         movimiento_data = {
             "producto_id": producto_id,
@@ -881,8 +957,10 @@ class InventarioView(ft.Container):
             "fecha_movimiento": datetime.now().isoformat(),
         }
         
-        LocalReplica.save_movimiento(movimiento_data)
-        LocalReplica.update_existencia(producto_id, almacen_seleccionado, cant_nueva)
+        LocalReplica.save_movimiento(movimiento_data, skip_sync=True)
+        LocalReplica.update_existencia(producto_id, almacen_seleccionado, cant_nueva, unidad)
+        
+        local_id = movimiento_data.get('id')
         
         sync_mgr = None
         try:
@@ -895,7 +973,6 @@ class InventarioView(ft.Container):
         
         if online:
             try:
-                # Usar conexión directa a Supabase
                 from sqlalchemy import create_engine, text
                 from config.config import get_settings
                 settings = get_settings()
@@ -904,7 +981,6 @@ class InventarioView(ft.Container):
                 with remote_engine.connect() as conn:
                     mov_clean = {k: v for k, v in movimiento_data.items() 
                                if k not in ('sincronizado', 'created_at')}
-                    # Quitar el ID local para que Supabase genere uno nuevo
                     mov_clean.pop('id', None)
                     
                     cols = ", ".join(mov_clean.keys())
@@ -913,44 +989,34 @@ class InventarioView(ft.Container):
                     conn.execute(sql, mov_clean)
                     conn.commit()
                     
-                    # Actualizar existencia en Supabase
                     exist_sql = text("""
                         INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
-                        VALUES (:producto_id, :almacen, :cantidad, 'unidad')
+                        VALUES (:producto_id, :almacen, :cantidad, :unidad)
                         ON CONFLICT (producto_id, almacen) 
-                        DO UPDATE SET cantidad = :cantidad
+                        DO UPDATE SET cantidad = :cantidad, unidad = :unidad
                     """)
                     conn.execute(exist_sql, {
                         'producto_id': producto_id,
                         'almacen': almacen_seleccionado,
-                        'cantidad': cant_nueva
+                        'cantidad': cant_nueva,
+                        'unidad': unidad
                     })
                     conn.commit()
                 
                 remote_engine.dispose()
                 
-                local_id = movimiento_data.get('id')
                 if local_id:
                     LocalReplica.mark_movimiento_sincronizado(local_id)
                     
                 print("[SYNC] Movimiento syncado inmediatamente")
+                sync_exito = True
             except Exception as e:
                 print(f"[SYNC] Error al syncar: {e}")
-                # Guardar en cola de sync
-                from usr.database.sync_queue import get_sync_queue
-                try:
-                    queue = get_sync_queue()
-                    queue.add_pending('movimientos', 'insert', movimiento_data)
-                    # Intentar sync inmediato
-                    from usr.database.sync import get_sync_manager
-                    mgr = get_sync_manager()
-                    if mgr and mgr.check_connection():
-                        import threading
-                        threading.Thread(target=mgr._process_sync_queue, daemon=True).start()
-                except:
-                    pass
+                sync_exito = False
         else:
-            # Offline: agregar a cola
+            sync_exito = False
+        
+        if not sync_exito:
             try:
                 from usr.database.sync_queue import get_sync_queue
                 queue = get_sync_queue()

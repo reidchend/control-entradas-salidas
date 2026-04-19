@@ -488,7 +488,16 @@ class StockView(ft.Container):
                 is_entrada = m.tipo == "entrada"
                 icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
                 color = colors['success'] if is_entrada else colors['error']
-                peso_info = f" | ⚖️ {(m.peso_total or 0):.2f} kg" if (m.peso_total or 0) > 0 else ""
+                
+                es_pesable = producto.es_pesable if producto else False
+                unidad_prod = producto.unidad_medida if producto else 'unidad'
+                
+                if es_pesable and (m.peso_total or 0) > 0:
+                    cantidad_display = f"{(m.peso_total or 0):.3f} kg"
+                    cantidad_valor = m.peso_total or 0
+                else:
+                    cantidad_display = f"{int(m.cantidad)} {unidad_prod}"
+                    cantidad_valor = m.cantidad
                 
                 # Número de factura si existe (sin fondo, del mismo tamaño que el tipo)
                 factura_texto = ""
@@ -514,13 +523,13 @@ class StockView(ft.Container):
                                             ft.Text(f"{m.tipo.upper()}{factura_texto}", weight="bold", size=14, selectable=True),
                                         ], alignment=ft.MainAxisAlignment.START, spacing=2),
                                         ft.Text(
-                                            f"{int(m.cantidad)} unidades", 
+                                            cantidad_display, 
                                             size=12, 
                                             color="#9E9E9E",
                                             selectable=True
                                         ),
                                         ft.Text(
-                                            f"{m.fecha_movimiento.strftime('%d/%m/%Y %H:%M')}{peso_info}", 
+                                            m.fecha_movimiento.strftime('%d/%m/%Y %H:%M'), 
                                             size=11, 
                                             color="#757575",
                                             selectable=True
@@ -532,7 +541,7 @@ class StockView(ft.Container):
                                 ),
                                 # Cantidad (Alineado a la derecha)
                                 ft.Text(
-                                    f"{'+' if is_entrada else '-'}{int(m.cantidad)}", 
+                                    f"{'+' if is_entrada else '-'}{cantidad_valor:.3f}" if es_pesable and (m.peso_total or 0) > 0 else f"{'+' if is_entrada else '-'}{int(cantidad_valor)}", 
                                     color=color, 
                                     weight="bold",
                                     size=16

@@ -393,6 +393,16 @@ class SyncManager:
                         queue.mark_completed(item['id'])
                         uploaded += 1
                         print(f"[SYNC] Movimiento sincronizado")
+                    
+                    elif table == 'movimientos' and operation == 'delete':
+                        # Eliminar movimiento por ID
+                        mov_id = data.get('id')
+                        if mov_id:
+                            conn.execute(text("DELETE FROM movimientos WHERE id = :id"), {"id": mov_id})
+                            conn.commit()
+                            queue.mark_completed(item['id'])
+                            uploaded += 1
+                            print(f"[SYNC] Movimiento eliminado en Supabase")
                         
                 except Exception as e:
                     queue.mark_failed(item['id'], str(e))

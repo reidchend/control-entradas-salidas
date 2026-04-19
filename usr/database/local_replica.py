@@ -374,15 +374,16 @@ class LocalReplica:
         return dict(row) if row else None
     
     @staticmethod
-    def update_existencia(producto_id: int, almacen: str, cantidad: float) -> None:
+    def update_existencia(producto_id: int, almacen: str, cantidad: float, unidad: str = None) -> None:
         """Actualiza o crea existencia."""
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?", 
-                     (producto_id, almacen))
-        result = cursor.fetchone()
-        unidad = result['unidad'] if result and result['unidad'] else 'unidad'
+        if unidad is None:
+            cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?", 
+                         (producto_id, almacen))
+            result = cursor.fetchone()
+            unidad = result['unidad'] if result and result['unidad'] else 'unidad'
         
         cursor.execute("""
             INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
@@ -395,8 +396,8 @@ class LocalReplica:
     # ==================== MOVIMIENTOS ====================
     
     @staticmethod
-    def save_movimiento(movimiento: Dict) -> int:
-        """Guarda un movimiento en la BD local e intenta sincronizar inmediatamente."""
+    def save_movimiento(movimiento: Dict, skip_sync: bool = False) -> int:
+        """Guarda un movimiento en la BD local."""
         from .sync_queue import get_sync_queue
         from .base import check_connection
         
@@ -429,6 +430,9 @@ class LocalReplica:
         
         movimiento['id'] = last_id
         
+        if skip_sync:
+            return last_id
+        
         if check_connection():
             try:
                 from sqlalchemy import text
@@ -436,7 +440,7 @@ class LocalReplica:
                 
                 session_maker = get_session()
                 mov_clean = {k: v for k, v in movimiento.items() 
-                           if k not in ('sincronizado', 'created_at')}
+                           if k not in ('sincronizado', 'created_at', 'id')}
                 
                 with session_maker() as db:
                     cols = ", ".join(mov_clean.keys())
@@ -513,7 +517,7 @@ class LocalReplica:
     
     @staticmethod
     def save_movimientos(movimientos: List[Dict]) -> None:
-        """Guarda múltiples movimientos (para sync desde servidor)."""
+        """Guarda múltiples movimientos (para sync desde servidor) con deduplicación."""
         if not movimientos:
             return
             
@@ -528,9 +532,33 @@ class LocalReplica:
                       'observaciones', 'almacen', 'fecha_movimiento', 
                       'created_at', 'device_id']
         
+        inserted_ids = set()
+        
         for mov in movimientos:
+            mov_id = mov.get('id')
+            producto_id = mov.get('producto_id')
+            tipo = mov.get('tipo')
+            cantidad = mov.get('cantidad')
+            fecha = mov.get('fecha_movimiento')
+            
+            if not all([producto_id, tipo]):
+                continue
+            
+            key = (producto_id, tipo, cantidad, fecha)
+            if key in inserted_ids:
+                continue
+            
+            cursor.execute("""
+                SELECT id FROM movimientos 
+                WHERE producto_id = ? AND tipo = ? AND cantidad = ? AND fecha_movimiento = ?
+            """, (producto_id, tipo, cantidad, fecha))
+            existing = cursor.fetchone()
+            
+            if existing:
+                continue
+            
             values = [mov.get(k) for k in valid_keys]
-            values.append(1)  # sincronizado = 1
+            values.append(1)
             
             placeholders = ','.join(['?' for _ in valid_keys])
             placeholders += ',?'
@@ -538,9 +566,11 @@ class LocalReplica:
             columns = ','.join(valid_keys) + ',sincronizado'
             
             cursor.execute(f"""
-                INSERT OR REPLACE INTO movimientos ({columns})
+                INSERT INTO movimientos ({columns})
                 VALUES ({placeholders})
             """, values)
+            
+            inserted_ids.add(key)
         
         conn.commit()
         conn.close()
@@ -662,7 +692,7 @@ class LocalReplica:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT producto_id, almacen, tipo, SUM(cantidad) as total
+            SELECT producto_id, almacen, tipo, SUM(cantidad) as total_cantidad, SUM(peso_total) as total_peso
             FROM movimientos
             GROUP BY producto_id, almacen, tipo
         """)
@@ -677,28 +707,37 @@ class LocalReplica:
             producto_id = mov['producto_id']
             almacen = mov['almacen']
             tipo = mov['tipo']
-            total = mov['total'] or 0
+            total_cantidad = mov['total_cantidad'] or 0
+            total_peso = mov['total_peso'] or 0
             
             if not producto_id or not almacen:
                 continue
             
+            cursor.execute("SELECT es_pesable, unidad_medida FROM productos WHERE id = ?", (producto_id,))
+            prod_row = cursor.fetchone()
+            es_pesable = prod_row['es_pesable'] if prod_row else 0
+            unidad = prod_row['unidad_medida'] if prod_row else 'unidad'
+            
+            if es_pesable:
+                cantidad = total_peso
+            else:
+                cantidad = total_cantidad
+            
             key = (producto_id, almacen)
             if key not in stock_por_producto_almacen:
-                stock_por_producto_almacen[key] = 0
+                stock_por_producto_almacen[key] = {'cantidad': 0, 'unidad': unidad}
             
             if tipo == 'entrada':
-                stock_por_producto_almacen[key] += total
+                stock_por_producto_almacen[key]['cantidad'] += cantidad
             elif tipo == 'salida':
-                stock_por_producto_almacen[key] -= total
+                stock_por_producto_almacen[key]['cantidad'] -= cantidad
         
-        for (producto_id, almacen), cantidad in stock_por_producto_almacen.items():
-            if producto_id and almacen and cantidad is not None:
+        for (producto_id, almacen), data in stock_por_producto_almacen.items():
+            if producto_id and almacen and data['cantidad'] is not None:
                 cursor.execute("""
                     INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
-                    VALUES (?, ?, ?, 
-                        (SELECT unidad_medida FROM productos WHERE id = ? LIMIT 1)
-                    )
-                """, (producto_id, almacen, cantidad, producto_id))
+                    VALUES (?, ?, ?, ?)
+                """, (producto_id, almacen, data['cantidad'], data['unidad']))
         
         conn.commit()
         conn.close()
