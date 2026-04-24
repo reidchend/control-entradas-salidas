@@ -412,15 +412,15 @@ class SyncManager:
     
     def get_connection_status(self) -> dict:
         """Estado de conexión y sincronización."""
-        from .local_replica import LocalReplica, get_local_conn
+        from .sync_queue import get_pending_sync, get_last_sync
         
-        pending_count = LocalReplica.get_pending_count()
-        last_sync = LocalReplica.get_last_sync("full_sync")
+        pending = get_pending_sync(limit=100)
+        last = get_last_sync("full_sync")
         
         return {
             "online": self.is_online,
-            "pending_count": pending_count,
-            "last_sync": last_sync,
+            "pending_count": len(pending),
+            "last_sync": last,
             "background_enabled": self._background_sync_enabled
         }
     

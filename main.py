@@ -4,6 +4,12 @@ import os
 import ssl
 import certifi
 import glob
+import warnings
+
+# Deshabilitar warning de asyncio "Task was destroyed"
+os.environ['PYTHONASYNCIODEBUG'] = '0'  # Deshabilitar debug de asyncio
+warnings.filterwarnings("ignore", category=ResourceWarning)
+warnings.filterwarnings("ignore", message=".*Task.*destroyed.*")
 
 # Esto le dice a Python exactamente dónde encontrar los certificados
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -330,23 +336,29 @@ async def main(page: ft.Page):
             
             from usr.views.login_view import LoginView
             
+            setup_done = asyncio.Event()
+            
+            async def after_login():
+                setup_done.set()
+            
             usuario = LocalReplica.get_usuario_dispositivo()
             
             if usuario is None:
                 page.clean()
-                login_view = LoginView(modo="registro")
+                login_view = LoginView(modo="registro", on_success=after_login)
                 page.add(login_view)
                 page.update()
-                return
+                await setup_done.wait()
             elif usuario.get("pin_hash"):
                 page.clean()
-                login_view = LoginView(modo="pin")
+                login_view = LoginView(modo="pin", on_success=after_login)
                 page.add(login_view)
                 page.update()
-                return
+                await setup_done.wait()
             else:
                 page.session.set("username", usuario.get("nombre", "Operador"))
             
+            # Continuar carga normal después de login
             if page.session.get("username"):
                 status_text.value = f"✓ Hola, {page.session.get('username')}"
             else:
@@ -363,8 +375,10 @@ async def main(page: ft.Page):
             
             if check_connection():
                 try:
-                    # CORRECCIÓN 3: Ejecutar sync en hilo separado para no bloquear UI
-                    await asyncio.to_thread(sync_manager.full_sync)
+                    from concurrent.futures import ThreadPoolExecutor
+                    loop = asyncio.get_event_loop()
+                    with ThreadPoolExecutor() as pool:
+                        await loop.run_in_executor(pool, sync_manager.full_sync)
                     status_text.value = "✓ Sincronizado"
                 except Exception as e:
                     print(f"Error en sync inicial: {e}")

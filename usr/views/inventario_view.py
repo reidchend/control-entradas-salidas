@@ -700,56 +700,64 @@ class InventarioView(ft.Container):
         
         colors = _get_safe_colors(self.page)
         
-        def calcular_peso_total():
+        def calcular_desde_unidades(e):
             try:
-                cant_und = int(float(cant_x_unidad_input.value or 0))
-                peso_x_und = float(peso_x_unidad_input.value.replace(',', '.') or 0)
-                total = cant_und * peso_x_und
-                peso_total_display.value = f"{total:.3f} kg"
-                peso_total_display.update()
+                cant = float(cant_x_unidad_input.value or 0)
+                peso_u = float(peso_x_unidad_input.value.replace(',', '.') or 0)
+                peso_total_input.value = f"{cant * peso_u:.3f}"
+                peso_total_input.update()
             except:
-                peso_total_display.value = "0.000 kg"
+                peso_total_input.value = "0.000"
+                peso_total_input.update()
+        
+        def calcular_desde_total(e):
+            try:
+                total = float(peso_total_input.value.replace(',', '.') or 0)
+                cant = float(cant_x_unidad_input.value or 1)
+                if cant > 0:
+                    peso_x_unidad_input.value = f"{total / cant:.3f}"
+                    peso_x_unidad_input.update()
+            except:
+                pass
         
         cant_x_unidad_input = ft.TextField(
-            label="Cantidad (unidades)",
+            label="Und.",
             value="1", 
             keyboard_type=ft.KeyboardType.NUMBER, 
             autofocus=True,
             border_radius=10,
-            text_size=16,
+            text_size=14,
             border_color=colors['input_border'],
-            on_change=lambda _: calcular_peso_total() if es_pesable else None,
+            width=100,
+            on_change=calcular_desde_unidades if es_pesable else None,
         )
         
         peso_x_unidad_input = ft.TextField(
-            label="Peso por unidad (kg)",
+            label="Kg/unidad",
             value="0.100", 
             keyboard_type=ft.KeyboardType.NUMBER, 
             border_radius=10,
-            text_size=16,
+            text_size=14,
             border_color=colors['input_border'],
-            on_change=lambda _: calcular_peso_total() if es_pesable else None,
+            width=100,
+            on_change=calcular_desde_unidades if es_pesable else None,
         )
         
-        peso_total_display = ft.Text(
-            "0.000 kg",
-            size=16,
-            weight=ft.FontWeight.BOLD,
-            color=colors['accent'],
-        )
-        
-        peso_total_container = ft.Container(
-            content=ft.Column([
-                ft.Text("Peso total:", size=12, color=colors['text_secondary']),
-                peso_total_display,
-            ], tight=True),
-            padding=10,
-            bgcolor=colors['card_hover'],
+        peso_total_input = ft.TextField(
+            label="Peso Total",
+            value="0.000", 
+            keyboard_type=ft.KeyboardType.NUMBER, 
             border_radius=10,
+            text_size=14,
+            border_color=colors['input_border'],
+            width=120,
+            suffix_text="kg",
+            focused_border_color=colors['accent'],
+            on_change=calcular_desde_total if es_pesable else None,
         )
         
         cant_input_normal = ft.TextField(
-            label="Cantidad (Bultos/Unidades)",
+            label="Cantidad",
             value="1", 
             keyboard_type=ft.KeyboardType.NUMBER, 
             autofocus=True,
@@ -790,12 +798,11 @@ class InventarioView(ft.Container):
                     cant_x_unidad_input.error_text = "Número mayor a 0"; cant_x_unidad_input.update(); return
 
                 try:
-                    peso_x_und = float(peso_x_unidad_input.value.replace(',', '.'))
-                    if peso_x_und <= 0: raise ValueError()
+                    peso_total = float(peso_total_input.value.replace(',', '.'))
+                    if peso_total < 0: raise ValueError()
                 except ValueError:
-                    peso_x_unidad_input.error_text = "Peso válido mayor a 0"; peso_x_unidad_input.update(); return
+                    peso_total_input.error_text = "Peso válido mayor a 0"; peso_total_input.update(); return
 
-                peso_total = cant_und * peso_x_und
                 cantidad_a_guardar = 0
             else:
                 try:
@@ -812,6 +819,8 @@ class InventarioView(ft.Container):
         tipo_color = colors['success'] if tipo == "entrada" else colors['error']
         tipo_icon = "📥" if tipo == "entrada" else "📤"
         
+        is_mobile = self.page.width < 600 if self.page else False
+        
         if es_pesable:
             dialog_content = ft.Column([
                 ft.Container(
@@ -825,13 +834,13 @@ class InventarioView(ft.Container):
                 stock_info,
                 ft.Container(height=8),
                 ft.ResponsiveRow([
-                    ft.Column([almacen_dropdown], col={"xs": 12, "md": 6}),
-                    ft.Column([cant_x_unidad_input], col={"xs": 12, "md": 6}),
+                    ft.Column([almacen_dropdown], col={"xs": 12, "sm": 6}),
+                    ft.Column([cant_x_unidad_input], col={"xs": 12, "sm": 6}),
                 ], spacing=10),
                 ft.Container(height=5),
                 ft.ResponsiveRow([
-                    ft.Column([peso_x_unidad_input], col={"xs": 12, "md": 6}),
-                    ft.Column([peso_total_container], col={"xs": 12, "md": 6}),
+                    ft.Column([peso_x_unidad_input], col={"xs": 12, "sm": 6}),
+                    ft.Column([peso_total_input], col={"xs": 12, "sm": 6}),
                 ], spacing=10),
             ], tight=True, spacing=5)
         else:
@@ -847,14 +856,27 @@ class InventarioView(ft.Container):
                 stock_info,
                 ft.Container(height=8),
                 ft.ResponsiveRow([
-                    ft.Column([almacen_dropdown], col={"xs": 12, "md": 6}),
-                    ft.Column([cant_input_normal], col={"xs": 12, "md": 6}),
+                    ft.Column([almacen_dropdown], col={"xs": 12, "sm": 6}),
+                    ft.Column([cant_input_normal], col={"xs": 12, "sm": 6}),
                 ], spacing=10),
             ], tight=True, spacing=5)
         
+        dialog_width = max(400, int(self.page.width * 0.4)) if self.page else 400
+        
+        scrollable_content = ft.ListView(
+            [dialog_content],
+            auto_scroll=True,
+        )
+        
+        content_container = ft.Container(
+            content=scrollable_content,
+            width=dialog_width,
+            height=min(350, int(self.page.height * 0.45)) if self.page else 350,
+        )
+        
         self.active_dialog = ft.AlertDialog(
-            title=ft.Text(f"{tipo_icon} Registrar {tipo.capitalize()}", weight="bold", size=18, color=colors['text_primary']),
-            content=ft.Container(content=dialog_content, width=350),
+            title=ft.Text(f"{tipo_icon} {tipo.capitalize()}", weight="bold", size=18, color=colors['text_primary']),
+            content=content_container,
             actions=[
                 ft.TextButton("Cancelar", on_click=self._close_dialog, style=ft.ButtonStyle(color=colors['text_secondary'])),
                 ft.ElevatedButton(
@@ -862,8 +884,25 @@ class InventarioView(ft.Container):
                     bgcolor=tipo_color, color="white"
                 ),
             ],
-            actions_alignment="end",
+            actions_alignment="space-between",
         )
+        
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"{tipo_icon} {tipo.capitalize()}", weight="bold", size=18, color=colors['text_primary']),
+            content=ft.Container(
+                content=scrollable_content,
+                width=dialog_width,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=self._close_dialog, style=ft.ButtonStyle(color=colors['text_secondary'])),
+                ft.ElevatedButton(
+                    "Confirmar", on_click=al_confirmar,
+                    bgcolor=tipo_color, color="white"
+                ),
+            ],
+            actions_alignment="space-between",
+        )
+        
         self.page.overlay.clear()
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True

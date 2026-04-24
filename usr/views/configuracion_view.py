@@ -73,16 +73,13 @@ class ConfiguracionView(ft.Container):
             self._load_data()
 
     def on_theme_change(self):
-        """Se llama cuando cambia el tema"""
+        """Se llama cuando cambia el tema - solo actualizar colores, no reconstruir UI"""
         if not self.page:
             return
         colors = _colors(self.page)
         self.bgcolor = colors['bg']
-        try:
-            self._build_ui()
-            self._load_data()
-        except:
-            pass
+        # NO llamar _build_ui() - solo actualizar colores existentes
+        self.update()
 
     def _on_resize(self, e):
         self.is_mobile = self.page.width < 768
@@ -726,37 +723,34 @@ class ConfiguracionView(ft.Container):
             self._show_error(f"Error: {str(e)}")
         finally:
             db.close()
-
+    
     def _load_data(self):
         colors = _colors(self.page)
-        db = next(get_db_adaptive())
+        self.is_mobile = self.page.width < 768 if self.page else False
+        
         try:
-            # ✅ Detectar modo móvil ANTES de cargar datos
-            self.is_mobile = self.page.width < 768 if self.page else False
-            
+            db = next(get_db_adaptive())
             cats = db.query(Categoria).filter(Categoria.activo == True).all()
             prods = db.query(Producto).filter(Producto.activo == True).options(
                 joinedload(Producto.categoria)
             ).all()
             
-            # Store for filtering
             self.categorias_cache = cats
             self.productos_cache = prods
-             
-             # ✅ Usar el método correcto según el dispositivo
+            
             if self.is_mobile:
-                 self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
+                self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
             else:
-                 self.lista_categorias.controls = self._create_categoria_grid(cats)
+                self.lista_categorias.controls = self._create_categoria_grid(cats)
             
             self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
-            
             self.update()
+            db.close()
         except Exception as e:
             self._show_error(f"Error al cargar datos: {str(e)}")
-        finally:
-            db.close()
-
+            if db:
+                db.close()
+    
     def _filter_categorias(self, e=None):
         if not hasattr(self, 'categorias_cache'):
             return

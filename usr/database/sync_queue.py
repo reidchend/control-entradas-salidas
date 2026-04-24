@@ -1,13 +1,16 @@
 """
-Cola de sincronización para trabajo offline-first.
-Maneja la cola de operaciones pendientes de subir a Supabase.
+Cola de sincronización unificada para trabajo offline-first.
+Maneja:
+- Cola de operaciones pendientes de subir a Supabase
+- Metadatos de última sincronización por tabla
+- Cache de productos y categorías localmente
 """
 import threading
 import time
 import json
 from datetime import datetime
 from typing import List, Dict, Optional
-from usr.database.conn import get_local_conn
+from usr.database.conn import get_local_conn, get_cache_conn
 
 class SyncQueue:
     """Maneja la cola de sincronización."""
@@ -222,3 +225,136 @@ class SyncQueue:
 def get_sync_queue() -> SyncQueue:
     """Obtiene instancia singleton de SyncQueue."""
     return SyncQueue()
+
+
+def init_sync_storage():
+    """Inicializa storage unificado de sincronización."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_pending (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            record_id INTEGER,
+            data TEXT,
+            created_at TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            last_error TEXT,
+            retries INTEGER DEFAULT 0
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            synced_at TEXT
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+
+
+def add_pending_sync(table_name: str, operation: str, record_id: int = None, data: dict = None):
+    """Agrega operación pendiente de sincronización (unificada)."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        INSERT INTO sync_pending (table_name, operation, record_id, data, created_at, status)
+        VALUES (?, ?, ?, ?, ?, 'pending')
+    """, (
+        table_name,
+        operation,
+        record_id,
+        json.dumps(data, default=str) if data else None,
+        datetime.now().isoformat()
+    ))
+    
+    conn.commit()
+    conn.close()
+
+
+def get_pending_sync(limit: int = 50) -> List[Dict]:
+    """Obtiene operaciones pendientes de sync."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT * FROM sync_pending 
+        WHERE status = 'pending' 
+        ORDER BY created_at 
+        LIMIT ?
+    """, (limit,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [dict(row) for row in rows]
+
+
+def mark_sync_complete(ids: List[int]) -> None:
+    """Marca operaciones como completadas."""
+    if not ids:
+        return
+    
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    placeholders = ','.join('?' * len(ids))
+    cursor.execute(f"UPDATE sync_pending SET status = 'completed' WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    conn.close()
+
+
+def clear_pending_sync(ids: List[int]) -> None:
+    """Elimina operaciones sincronizadas."""
+    if not ids:
+        return
+    
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    placeholders = ','.join('?' * len(ids))
+    cursor.execute(f"DELETE FROM sync_pending WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    conn.close()
+
+
+def clear_all_pending_sync():
+    """Elimina todas las operaciones pendientes."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM sync_pending")
+    conn.commit()
+    conn.close()
+
+
+def set_last_sync(key: str, timestamp: str = None) -> None:
+    """Guarda timestamp de última sincronización."""
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO sync_metadata (key, synced_at) VALUES (?, ?)",
+        (key, timestamp)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_last_sync(key: str) -> Optional[str]:
+    """Obtiene timestamp de última sincronización."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT synced_at FROM sync_metadata WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    return row['synced_at'] if row else None
+
+
+init_sync_storage()

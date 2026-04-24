@@ -17,6 +17,7 @@ class LoginView(ft.Container):
         self.on_success_callback = on_success
         self.modo = modo
         
+        # Campos de texto - usar on_submit con función async directamente
         self.nombre_input = ft.TextField(
             label="Nombre del operador",
             width=300,
@@ -26,6 +27,8 @@ class LoginView(ft.Container):
             label_style=ft.TextStyle(color=DARK_THEME['text_secondary']),
             hint_style=ft.TextStyle(color=DARK_THEME['text_hint']),
             text_style=ft.TextStyle(color=DARK_THEME['input_text']),
+            on_submit=self._on_submit,
+            autofocus=True,
         )
         self.pin_input = ft.TextField(
             label="PIN de 4 digitos",
@@ -38,6 +41,7 @@ class LoginView(ft.Container):
             label_style=ft.TextStyle(color=DARK_THEME['text_secondary']),
             hint_style=ft.TextStyle(color=DARK_THEME['text_hint']),
             text_style=ft.TextStyle(color=DARK_THEME['input_text']),
+            on_submit=self._on_submit,
         )
         self.confirm_pin_input = ft.TextField(
             label="Confirmar PIN",
@@ -51,8 +55,13 @@ class LoginView(ft.Container):
             label_style=ft.TextStyle(color=DARK_THEME['text_secondary']),
             hint_style=ft.TextStyle(color=DARK_THEME['text_hint']),
             text_style=ft.TextStyle(color=DARK_THEME['input_text']),
+            on_submit=self._on_submit,
         )
         self.error_text = ft.Text("", color=DARK_THEME['error'], size=12, visible=False, selectable=True)
+        
+        # Backward-compatible wrapper placeholders if needed later
+        
+        self._submit_wrapper = lambda _: self.page.run_task(lambda: self._on_submit(None))
         
         self._build_ui()
     
@@ -104,6 +113,12 @@ class LoginView(ft.Container):
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
     
     async def _on_submit(self, e):
+        # Si el campo que recibe el submit es nombre y estamos en modo registro, mover al PIN
+        if (hasattr(e, 'control') and e.control == self.nombre_input and 
+            self.modo == "registro" and self.pin_input.visible):
+            self.pin_input.focus()
+            return
+        
         if self.modo == "registro":
             nombre = self.nombre_input.value
             pin = self.pin_input.value
@@ -142,10 +157,13 @@ class LoginView(ft.Container):
                 self._show_error("PIN incorrecto")
     
     async def _omitir_pin(self, e):
-        nombre = self.nombre_input.value or "Operador"
+        nombre = self.nombre_input.value
+        if not nombre or not nombre.strip():
+            self._show_error("Ingrese el nombre del operador")
+            return
         
         try:
-            LocalReplica.registrar_usuario_dispositivo(nombre, None)
+            LocalReplica.registrar_usuario_dispositivo(nombre.strip(), None)
             logger.info(f"Operador registrado sin PIN: {nombre}")
             await self._go_to_main(nombre)
         except Exception as ex:
@@ -156,6 +174,12 @@ class LoginView(ft.Container):
             if self.page:
                 self.page.session.set("username", nombre)
                 self.page.clean()
+                
+                # Configurar path de BD primero
+                import os
+                from usr.database.conn import set_db_path, get_db_path
+                db_path = os.path.expanduser("~/.lycoris/lycoris_local.db")
+                set_db_path(db_path)
                 
                 # Asegurar que la BD local existe
                 from usr.database.local_replica import ensure_local_db
@@ -171,20 +195,31 @@ class LoginView(ft.Container):
                 )
                 from main import ControlEntradasSalidasApp
                 
-                settings = get_settings()
-                settings.LOCAL_DB_PATH = ""
+                # Resetear el engine para que use el path correcto
+                from usr.database import base
+                base._local_engine = None
+                base._local_session_local = None
                 
-                # Inicializar tablas SQLAlchemy local
+                # Inicializar tablas SQLAlchemy
                 init_local_tables()
                 
                 # Sincronizar datos de Supabase
                 sync_manager = init_sync_manager(get_engine)
                 sync_manager.set_session_local_getter(get_session)
                 
+                settings = get_settings()
+                
                 if check_connection():
                     try:
                         import asyncio
-                        await asyncio.to_thread(sync_manager.full_sync)
+                        from concurrent.futures import ThreadPoolExecutor
+                        loop = asyncio.get_event_loop()
+                        
+                        def run_sync():
+                            return sync_manager.full_sync()
+                        
+                        with ThreadPoolExecutor() as pool:
+                            await loop.run_in_executor(pool, run_sync)
                         logger.info("Sync completado desde login")
                     except Exception as sync_err:
                         logger.error(f"Error en sync: {sync_err}")

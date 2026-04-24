@@ -119,6 +119,7 @@ class ValidacionView(ft.Container):
             border_color=colors['input_border'],
             focused_border_color=colors['accent'],
             height=45,
+            expand=1,
             on_change=lambda _: self._load_entradas_pendientes()
         )
         
@@ -139,11 +140,12 @@ class ValidacionView(ft.Container):
         )
         
         controls_section = ft.Container(
-            content=ft.Row([
-                self.search_field, 
-                ft.Column([
-                    ft.Row([self.validate_button, self.clear_button], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                ], spacing=10)
+            content=ft.Column([
+                self.search_field,
+                ft.Row(
+                    [self.validate_button, self.clear_button], 
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                )
             ], spacing=10),
             padding=ft.padding.symmetric(horizontal=20, vertical=10),
         )

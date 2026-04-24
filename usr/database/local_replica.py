@@ -5,6 +5,14 @@ Almacena una copia de los datos de Supabase para acceso offline.
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from usr.database.conn import get_local_conn
+from config.config import get_settings
+
+from usr.database.sync_queue import (
+    set_last_sync as _sync_set_last_sync,
+    get_last_sync as _sync_get_last_sync,
+    add_pending_sync,
+    get_pending_sync,
+)
 
 def init_local_db():
     """Inicializa la base de datos local con todas las tablas.
@@ -740,36 +748,14 @@ class LocalReplica:
         conn.commit()
         conn.close()
     
-    # ==================== METADATOS DE SYNC ====================
+# ==================== METADATOS DE SYNC ====================
+    # Delegamos en sync_queue.py para mantener un solo source of truth
     
-    @staticmethod
     def set_last_sync(key: str, timestamp: str = None) -> None:
-        """Guarda el timestamp del último sync."""
-        if timestamp is None:
-            timestamp = datetime.now().isoformat()
-        
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO sync_metadata (key, value, updated_at)
-            VALUES (?, ?, ?)
-        """, (key, timestamp, datetime.now().isoformat()))
-        
-        conn.commit()
-        conn.close()
-    
-    @staticmethod
+        _sync_set_last_sync(key, timestamp)
+
     def get_last_sync(key: str) -> Optional[str]:
-        """Obtiene el timestamp del último sync."""
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT value FROM sync_metadata WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        return row['value'] if row else None
+        return _sync_get_last_sync(key)
     
     # ==================== OPERACIONES PENDIENTES ====================
     
@@ -835,47 +821,42 @@ class LocalReplica:
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
-
+    
     @staticmethod
-    def registrar_usuario_dispositivo(
-        nombre: str,
-        pin: str | None = None
-    ) -> None:
+    def registrar_usuario_dispositivo(nombre: str, pin: str | None = None) -> None:
         """Registra el usuario de este dispositivo (solo una vez)."""
         import hashlib
         pin_hash = None
         if pin and pin.strip():
-            pin_hash = hashlib.sha256(
-                pin.strip().encode()
-            ).hexdigest()
-
+            pin_hash = hashlib.sha256(pin.strip().encode()).hexdigest()
+        
         conn = get_local_conn()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM dispositivo_usuario")
         cursor.execute(
-            """INSERT INTO dispositivo_usuario
-               (nombre, pin_hash, configurado_en)
-               VALUES (?, ?, ?)""",
-            (nombre.strip(), pin_hash,
-             datetime.now().isoformat())
+            "INSERT INTO dispositivo_usuario (nombre, pin_hash, configurado_en) VALUES (?, ?, ?)",
+            (nombre.strip(), pin_hash, datetime.now().isoformat())
         )
         conn.commit()
         conn.close()
-
+    
     @staticmethod
     def verificar_pin(pin: str) -> bool:
-        """Verifica el PIN del usuario actual."""
+        """Verifica el PIN del usuario."""
         import hashlib
-        usuario = LocalReplica.get_usuario_dispositivo()
-        if not usuario:
+        if not pin:
             return False
-        if usuario["pin_hash"] is None:
-            return True
-        pin_hash = hashlib.sha256(
-            pin.strip().encode()
-        ).hexdigest()
-        return pin_hash == usuario["pin_hash"]
-
+        
+        pin_hash = hashlib.sha256(pin.encode()).hexdigest()
+        
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT pin_hash FROM dispositivo_usuario LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        
+        return row and row['pin_hash'] == pin_hash
+    
     @staticmethod
     def eliminar_usuario_dispositivo() -> None:
         """Resetea el usuario (para cambio de operador)."""
