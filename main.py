@@ -17,15 +17,6 @@ warnings.filterwarnings("ignore", message=".*Task.*destroyed.*")
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
-def resource_path(relative_path: str) -> str:
-    """Obtiene ruta absoluta de recursos, compatible con PyInstaller y desarrollo."""
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-
 def mostrar_error_critico(page: ft.Page, error_completo: str):
     """Pantalla de error profesional para APK - permite copiar error y reintentar"""
     page.clean()
@@ -56,7 +47,7 @@ def mostrar_error_critico(page: ft.Page, error_completo: str):
             content=ft.Column([
                 ft.Icon(ft.Icons.REPORT_PROBLEM_ROUNDED, color=ft.Colors.RED_400, size=50),
                 ft.Text("Error de Inicio", size=24, weight=ft.FontWeight.BOLD),
-                ft.Text("La aplicación no pudo arrancar correctamente.", textAlign=ft.TextAlign.CENTER),
+                ft.Text("La aplicación no pudo arrancar correctamente.", text_align=ft.TextAlign.CENTER),
                 ft.Divider(color=ft.Colors.RED_900),
                 ft.Container(content=error_container, height=300),
                 ft.ElevatedButton(
@@ -306,8 +297,8 @@ def show_error(page, msg):
 
 async def main(page: ft.Page):
     page.assets_allow_override = True
-    page.favicon = resource_path("assets/favicon.png")
-    page.window_icon = resource_path("assets/icono.ico")
+    page.favicon = "assets/favicon.png"
+    page.window_icon = "assets/icono.ico"
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),
@@ -327,32 +318,11 @@ async def main(page: ft.Page):
                     pass
         try:
             page.bgcolor = "#121212"
-            
-            import os
-            from usr.database.conn import set_db_path
-            
-            # Determina el path según la plataforma
-            try:
-                db_dir = page.app_data_dir if hasattr(page, 'app_data_dir') and page.app_data_dir else None
-            except:
-                db_dir = None
-            
-            if not db_dir:
-                db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
-            
-            # Guardar para uso en errores
-            page.session.set("_db_dir", db_dir)
-            
-            db_path = os.path.join(db_dir, "lycoris_local.db")
-            await asyncio.to_thread(set_db_path, db_path)
-            
-            from usr.database.local_replica import ensure_local_db
-            await asyncio.to_thread(ensure_local_db)
-            
             page.update()
             
+            # MOSTRAR LOGO PRIMERO - antes de cualquier operación de BD
             logo = ft.Column([
-                ft.Image(src=resource_path("assets/icono.png"), width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
+                ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo", color=ft.Colors.RED)),
                 ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
             ], horizontal_alignment="center", spacing=10)
@@ -372,7 +342,7 @@ async def main(page: ft.Page):
             page.update()
             await asyncio.sleep(0.5)
             
-            # Step 2: Configuración
+            # Ahora sí, operaciones de BD
             step_text.value = "2/5"
             status_text.value = "Configurando..."
             page.update()
@@ -393,18 +363,43 @@ async def main(page: ft.Page):
             page.update()
             
             await asyncio.sleep(0.5)
-            # Step 2: Database
+            # Step 3: Database
             step_text.value = "3/5"
             status_text.value = "Base de datos..."
             page.update()
             
-            from usr.database.base import get_engine, get_session, init_local_tables, check_connection
-            from usr.database.local_replica import LocalReplica
-            from usr.database.sync import init_sync_manager
+            import os
             
-            await asyncio.to_thread(init_local_tables)
+            # Determina el path según la plataforma
+            db_dir = None
+            try:
+                if hasattr(page, 'app_data_dir'):
+                    db_dir = page.app_data_dir
+            except Exception:
+                pass
             
-            await asyncio.sleep(0.1)
+            if not db_dir:
+                db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
+            
+            # Crear directorio si no existe
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+            except Exception:
+                pass
+            
+            # Guardar para uso en errores
+            try:
+                page.session.set("_db_dir", db_dir)
+            except Exception:
+                pass
+            
+            from usr.database.conn import set_db_path
+            db_path = os.path.join(db_dir, "lycoris_local.db")
+            await asyncio.to_thread(set_db_path, db_path)
+            
+            from usr.database.local_replica import ensure_local_db, LocalReplica
+            await asyncio.to_thread(ensure_local_db)
+            
             from usr.views.login_view import LoginView
             await asyncio.sleep(0.1)
             
