@@ -17,8 +17,34 @@ warnings.filterwarnings("ignore", message=".*Task.*destroyed.*")
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
+def resource_path(relative_path: str) -> str:
+    """Obtiene ruta absoluta de recursos, compatible con PyInstaller y desarrollo."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.abspath(relative_path)
+
+
+def log_debug(msg):
+    """Registra mensajes de debug con timestamp"""
+    import time
+    ts = time.strftime("%H:%M:%S")
+    print(f"[DEBUG] {msg}", flush=True)
+
+
+def get_theme_colors(page):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
+    return {
+        'bg': '#121212' if is_dark else '#F5F5F5',
+        'surface': '#1E1E1E' if is_dark else '#FFFFFF',
+        'surface_container': '#2D2D2D' if is_dark else '#FAFAFA',
+        'text_primary': '#FFFFFF' if is_dark else '#1A1A1A',
+        'text_secondary': '#B0B0B0' if is_dark else '#666666',
+        'accent': '#BB86FC' if is_dark else '#6200EE',
+    }
+
+
 def mostrar_error_critico(page: ft.Page, error_completo: str):
-    """Pantalla de error profesional para APK - permite copiar error y reintentar"""
+    """Pantalla de error profesional compatible con versiones 0.2x de Flet."""
     page.clean()
     page.bgcolor = "#1a0000"
     
@@ -51,39 +77,21 @@ def mostrar_error_critico(page: ft.Page, error_completo: str):
                 ft.Divider(color=ft.Colors.RED_900),
                 ft.Container(content=error_container, height=300),
                 ft.ElevatedButton(
-                    "Copiar Error",
+                    "Copiar Error al Portapapeles",
                     icon=ft.Icons.COPY,
                     on_click=lambda _: page.set_clipboard(error_completo)
                 ),
                 ft.Container(height=10),
                 ft.ElevatedButton(
-                    "Reintentar",
+                    "Reintentar Inicio",
                     bgcolor=ft.Colors.RED_700,
-                    on_click=lambda _: page.launch_url(".")  # Recarga la página
+                    color=ft.Colors.WHITE,
+                    on_click=lambda _: page.go("/") 
                 )
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
     )
     page.update()
-
-
-def log_debug(msg):
-    """Registra mensajes de debug con timestamp"""
-    import time
-    ts = time.strftime("%H:%M:%S")
-    print(f"[DEBUG] {msg}", flush=True)
-
-
-def get_theme_colors(page):
-    is_dark = page.theme_mode == ft.ThemeMode.DARK
-    return {
-        'bg': '#121212' if is_dark else '#F5F5F5',
-        'surface': '#1E1E1E' if is_dark else '#FFFFFF',
-        'surface_container': '#2D2D2D' if is_dark else '#FAFAFA',
-        'text_primary': '#FFFFFF' if is_dark else '#1A1A1A',
-        'text_secondary': '#B0B0B0' if is_dark else '#666666',
-        'accent': '#BB86FC' if is_dark else '#6200EE',
-    }
 
 
 class ControlEntradasSalidasApp:
@@ -104,7 +112,6 @@ class ControlEntradasSalidasApp:
         self.settings = settings
         self.views = vistas_cargadas
         
-        #self.page.clean()
         self.page.title = self.settings.FLET_APP_NAME
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
@@ -113,20 +120,19 @@ class ControlEntradasSalidasApp:
 
         self._setup_theme()
         self._create_layout()
+        self._handle_responsive_layout(self.page.width)
         self._show_view(0)
-        self._handle_resize()
+        
+        self.page.on_resized = self._on_page_resized
         self.page.update()
 
     def _setup_theme(self):
-        # Validación de seguridad para evitar errores cuando self.page es None
         if not self.page:
             return
-
         self.page.theme = ft.Theme(color_scheme_seed=ft.Colors.DEEP_PURPLE_700, visual_density=ft.VisualDensity.COMFORTABLE, use_material3=True)
         self.page.bgcolor = '#1A1A1A'
     
     def _toggle_theme(self, e=None):
-        # Validación de seguridad
         if not self.page:
             return
 
@@ -151,7 +157,7 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=20)
+        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=0)
 
         self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
@@ -159,22 +165,22 @@ class ControlEntradasSalidasApp:
             selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E', 
             leading=self.theme_toggle,
             destinations=[
-                ft.NavigationRailDestination(icon="shopping_cart_outlined", selected_icon="shopping_cart", label="Inventario"),
-                ft.NavigationRailDestination(icon="checklist_outlined", selected_icon="checklist", label="Validación"),
-                ft.NavigationRailDestination(icon="warehouse_outlined", selected_icon="warehouse", label="Stock"),
-                ft.NavigationRailDestination(icon="local_shipping_outlined", selected_icon="local_shipping", label="Requisiciones"),
-                ft.NavigationRailDestination(icon="history_outlined", selected_icon="history", label="Historial"),
-                ft.NavigationRailDestination(icon="settings_outlined", selected_icon="settings", label="Ajustes"),
+                ft.NavigationRailDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, selected_icon=ft.Icons.SHOPPING_CART, label="Inventario"),
+                ft.NavigationRailDestination(icon=ft.Icons.CHECKLIST_OUTLINED, selected_icon=ft.Icons.CHECKLIST, label="Validación"),
+                ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Stock"),
+                ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Requisiciones"),
+                ft.NavigationRailDestination(icon=ft.Icons.HISTORY_OUTLINED, selected_icon=ft.Icons.HISTORY, label="Historial"),
+                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS_OUTLINED, selected_icon=ft.Icons.SETTINGS, label="Ajustes"),
             ], on_change=self._on_navigation_change,
         )
 
         self.navigation_bar = ft.NavigationBar(
             visible=False, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             destinations=[
-                ft.NavigationBarDestination(icon="shopping_cart_outlined", label="Inventario"),
-                ft.NavigationBarDestination(icon="checklist_outlined", label="Validar"),
-                ft.NavigationBarDestination(icon="warehouse_outlined", label="Stock"),
-                ft.NavigationBarDestination(icon="more_vert", label="Más"),
+                ft.NavigationBarDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, label="Inventario"),
+                ft.NavigationBarDestination(icon=ft.Icons.CHECKLIST_OUTLINED, label="Validar"),
+                ft.NavigationBarDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, label="Stock"),
+                ft.NavigationBarDestination(icon=ft.Icons.MORE_VERT, label="Más"),
             ], on_change=self._on_navigation_change,
         )
 
@@ -183,39 +189,35 @@ class ControlEntradasSalidasApp:
         self.page.padding = 5
         self.page.add(self._layout_row)
 
-    def _handle_resize(self):
-        def on_resize(e):
-            # Validación de seguridad para evitar errores cuando self.page es None
-            if self.page is None:
-                return
-            
-            if self.page.width < 700:
-                self.navigation_rail.visible = False
-                self.page.navigation_bar = self.navigation_bar
-                self.page.navigation_bar.visible = True
-            else:
-                self.navigation_rail.visible = True
-                self.page.navigation_bar = None
-            self.page.update()
-        self.page.on_resized = on_resize
-        on_resize(None)
+    def _on_page_resized(self, e):
+        self._handle_responsive_layout(float(e.width))
+        self.page.update()
+
+    def _handle_responsive_layout(self, width):
+        if width < 700:
+            self.navigation_rail.visible = False
+            self.page.navigation_bar = self.navigation_bar
+            self.navigation_bar.visible = True
+            self.content_area.border_radius = 0
+        else:
+            self.navigation_rail.visible = True
+            self.page.navigation_bar = None
+            self.navigation_bar.visible = False
+            self.content_area.border_radius = ft.border_radius.only(top_left=20)
 
     def _on_navigation_change(self, e):
-        # Validación de seguridad
         if self.page is None:
             return
             
         index = int(e.control.selected_index)
-        if self.page.width < 700 and index == 3:
+        if isinstance(e.control, ft.NavigationBar) and index == 3:
             self._show_more_menu()
-            self.navigation_bar.selected_index = self.current_view_index
-            self.navigation_bar.selected_index = self.current_view_index
             return
+            
         self.current_view_index = index
         self._show_view(index)
 
     def _show_more_menu(self):
-        # Validación de seguridad
         if self.page is None:
             return
             
@@ -254,18 +256,25 @@ class ControlEntradasSalidasApp:
         self.page.open(self.bottom_sheet)
     
     def _show_view(self, index: int):
+        if not self.views or index not in self.views: return
         view = self.views[index]
         
         if self.current_view: 
             self.current_view.visible = False
+            
         self.content_area.content = view
         view.visible = True
         self.current_view = view
         self.current_view_index = index
-        self.navigation_rail.selected_index = index
-        if self.page.navigation_bar: 
-            self.page.navigation_bar.selected_index = index
         
+        self.navigation_rail.selected_index = index
+        if self.navigation_bar:
+            if index < 3:
+                self.navigation_bar.selected_index = index
+            else:
+                self.navigation_bar.selected_index = 3 
+        
+        # LOGICA RESTAURADA: Actualizar indicador de conexión si existe en la vista
         if hasattr(view, '_update_connection_indicator'):
             try:
                 if hasattr(view, '_connection_indicator') and view._connection_indicator in self.page.controls:
@@ -276,243 +285,203 @@ class ControlEntradasSalidasApp:
         self.page.update()
 
 
-def show_error(page, msg):
-    page.clean()
-    page.add(ft.Container(
-        bgcolor="#121212", expand=True,
-        content=ft.Column([
-            ft.Container(height=40),
-            ft.Icon(ft.Icons.ERROR_OUTLINE, size=80, color=ft.Colors.RED_400),
-            ft.Container(height=20),
-            ft.Text("Algo salió mal!", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Container(height=10),
-            ft.Container(content=ft.Text(msg[:100], size=13, color=ft.Colors.RED_200, selectable=True), padding=15, bgcolor="#1E1E1E", border_radius=10),
-            ft.Container(height=30),
-            ft.Button("REINTENTAR", on_click=lambda _: main(page), bgcolor=ft.Colors.DEEP_PURPLE_600, color=ft.Colors.WHITE, height=45),
-        ], horizontal_alignment="center", spacing=0),
-        alignment="center", padding=30
-    ))
-    page.update()
-
-
 async def main(page: ft.Page):
+    # Identidad visual
+    page.title = "Lycoris Control"
+    page.window_icon = resource_path("assets/icono.ico")
+    page.favicon = resource_path("assets/favicon.png")
     page.assets_allow_override = True
-    page.favicon = "assets/favicon.png"
-    page.window_icon = "assets/icono.ico"
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),
     )
     
+    # LOGICA RESTAURADA: Configuración regional del sistema operativo
     import locale
     try:
+        locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+    except:
         try:
-            locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+            locale.setlocale(locale.LC_ALL, 'es_MX.UTF-8')
         except:
             try:
-                locale.setlocale(locale.LC_ALL, 'es_MX.UTF-8')
-            except:
-                try:
-                    locale.setlocale(locale.LC_ALL, 'spanish')
-                except:
-                    pass
-        try:
-            page.bgcolor = "#121212"
-            page.update()
-            
-            # MOSTRAR LOGO PRIMERO - antes de cualquier operación de BD
-            logo = ft.Column([
-                ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo", color=ft.Colors.RED)),
-                ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
-            ], horizontal_alignment="center", spacing=10)
-            
-            progress = ft.ProgressRing(width=60, height=60, stroke_width=5, color="#BB86FC", bgcolor="#2D2D2D")
-            step_text = ft.Text("Cargando...", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
-            status_text = ft.Text("Inicializando...", size=14, color="#9E9E9E")
-            
-            loading = ft.Container(
-                content=ft.Column([logo, ft.Container(height=40), progress, ft.Container(height=20), step_text, status_text], horizontal_alignment="center", spacing=0),
-                alignment=ft.alignment.center,
-                expand=True,
-                bgcolor="#121212"
-            )
-            
-            page.add(loading)
-            page.update()
-            await asyncio.sleep(0.5)
-            
-            # Ahora sí, operaciones de BD
-            step_text.value = "2/5"
-            status_text.value = "Configurando..."
-            page.update()
-            await asyncio.sleep(0.5)
-            
-            from config.config import get_settings
-            settings = get_settings()
-            status_text.value = "✓ Lista"
-            page.update()
-            step_text.value = "2/5"
-            status_text.value = "Configurando..."
-            page.update()
-            await asyncio.sleep(0.5)
-            
-            from config.config import get_settings
-            settings = get_settings()
-            status_text.value = "✓ Lista"
-            page.update()
-            
-            await asyncio.sleep(0.5)
-            # Step 3: Database
-            step_text.value = "3/5"
-            status_text.value = "Base de datos..."
-            page.update()
-            
-            import os
-            
-            # Determina el path según la plataforma
-            db_dir = None
-            try:
-                if hasattr(page, 'app_data_dir'):
-                    db_dir = page.app_data_dir
-            except Exception:
-                pass
-            
-            if not db_dir:
-                db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
-            
-            # Crear directorio si no existe
-            try:
-                os.makedirs(db_dir, exist_ok=True)
-            except Exception:
-                pass
-            
-            # Guardar para uso en errores
-            try:
-                page.session.set("_db_dir", db_dir)
-            except Exception:
-                pass
-            
-            from usr.database.conn import set_db_path
-            db_path = os.path.join(db_dir, "lycoris_local.db")
-            await asyncio.to_thread(set_db_path, db_path)
-            
-            from usr.database.local_replica import ensure_local_db, LocalReplica
-            await asyncio.to_thread(ensure_local_db)
-            
-            from usr.views.login_view import LoginView
-            await asyncio.sleep(0.1)
-            
-            setup_done = asyncio.Event()
-            
-            async def after_login():
-                setup_done.set()
-            
-            usuario = await asyncio.to_thread(LocalReplica.get_usuario_dispositivo)
-            
-            if usuario is None:
-                page.clean()
-                login_view = LoginView(modo="registro", on_success=after_login)
-                page.add(login_view)
-                page.update()
-                await setup_done.wait()
-            elif usuario.get("pin_hash"):
-                page.clean()
-                login_view = LoginView(modo="pin", on_success=after_login)
-                page.add(login_view)
-                page.update()
-                await setup_done.wait()
-            else:
-                page.session.set("username", usuario.get("nombre", "Operador"))
-            
-            # Continuar carga normal después de login
-            if page.session.get("username"):
-                status_text.value = f"✓ Hola, {page.session.get('username')}"
-            else:
-                status_text.value = f"✓ Hola, {page.session.get('username', 'Usuario')}"
-            
-            sync_manager = init_sync_manager(get_engine)
-            sync_manager.set_session_local_getter(get_session)
-            status_text.value = "✓ Conectado"
-
-            await asyncio.sleep(0.5)
-            step_text.value = "4/5"
-            status_text.value = "Sincronizando..."
-            page.update()
-            
-            if check_connection():
-                try:
-                    from concurrent.futures import ThreadPoolExecutor
-                    loop = asyncio.get_event_loop()
-                    with ThreadPoolExecutor() as pool:
-                        await loop.run_in_executor(pool, sync_manager.full_sync)
-                    status_text.value = "✓ Sincronizado"
-                except Exception as e:
-                    print(f"Error en sync inicial: {e}")
-                    status_text.value = " Sin sync"
-            else:
-                status_text.value = " Modo offline"
-            
-            await asyncio.sleep(0.5)
-            # Step 3: Views import
-            step_text.value = "5/5"
-            status_text.value = "Modulos..."
-            page.update()
-            
-            await asyncio.sleep(0.5)
-            from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
-            status_text.value = "✓ Cargado"
-            page.update()
-
-            # Step 4: Create views
-            await asyncio.sleep(0.5)
-            status_text.value = "Creando..."
-            
-            page.update()
-            
-            await asyncio.sleep(0.5)
-            inventario_view = InventarioView()
-            requisiciones_view = RequisicionesView()
-            requisiciones_view.inventario_view = inventario_view
-
-            vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
-            
-            app_instance = ControlEntradasSalidasApp()
-            requisiciones_view.app_controller = app_instance
-            status_text.value = "✓ Creado"
-            
-            page.update()
-            await asyncio.sleep(0.5)
-            # Done
-            step_text.value = "Listo!"
-            page.update()
-            await asyncio.sleep(0.5)
-
-            status_text.value = "Iniciando..."
-            
-            page.update()
-            await asyncio.sleep(0.5)
-            
-            await app_instance.arrancar_interfaz(page, settings, vistas)
-        except Exception as inner_e:
-            error_log = traceback.format_exc()
-            print(error_log)
-            
-            # Guardar log a archivo
-            db_dir = page.session.get("_db_dir") or "."
-            try:
-                log_path = os.path.join(db_dir, "error_log.txt")
-                with open(log_path, "w") as f:
-                    f.write(error_log)
+                locale.setlocale(locale.LC_ALL, 'spanish')
             except:
                 pass
-            
-            mostrar_error_critico(page, error_log)
-    except Exception as e:
-        error_log = traceback.format_exc()
-        traceback.print_exc()
+
+    try:
+        page.bgcolor = "#121212"
+        page.update()
         
-        # Guardar log a archivo
+        # LOGICA RESTAURADA: Determina el path según la plataforma como en el original
+        import os
+        from usr.database.conn import set_db_path
+        
+        try:
+            db_dir = page.app_data_dir if hasattr(page, 'app_data_dir') and page.app_data_dir else None
+        except:
+            db_dir = None
+        
+        if not db_dir:
+            db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
+        
+        page.session.set("_db_dir", db_dir)
+        db_path = os.path.join(db_dir, "lycoris_local.db")
+        await asyncio.to_thread(set_db_path, db_path)
+        
+        from usr.database.local_replica import ensure_local_db
+        await asyncio.to_thread(ensure_local_db)
+
+        # LOGICA RESTAURADA: Interfaz de carga original
+        logo = ft.Column([
+            ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
+            ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
+        ], horizontal_alignment="center", spacing=10)
+        
+        progress = ft.ProgressRing(width=60, height=60, stroke_width=5, color="#BB86FC", bgcolor="#2D2D2D")
+        step_text = ft.Text("Cargando...", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+        status_text = ft.Text("Inicializando...", size=14, color="#9E9E9E")
+        
+        loading = ft.Container(
+            content=ft.Column([logo, ft.Container(height=40), progress, ft.Container(height=20), step_text, status_text], horizontal_alignment="center", spacing=0),
+            alignment=ft.alignment.center,
+            expand=True,
+            bgcolor="#121212"
+        )
+        
+        page.add(loading)
+        page.update()
+        
+        # Delay original para mostrar pantalla de carga
+        await asyncio.sleep(0.5)
+        
+        # Step 1: Config
+        step_text.value = "2/5"
+        status_text.value = "Configurando..."
+        page.update()
+        await asyncio.sleep(0.5)
+        
+        from config.config import get_settings
+        settings = get_settings()
+        status_text.value = "✓ Lista"
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        
+        # Step 2: Database
+        step_text.value = "3/5"
+        status_text.value = "Base de datos..."
+        page.update()
+        
+        from usr.database.base import get_engine, get_session, init_local_tables, check_connection
+        from usr.database.local_replica import LocalReplica
+        from usr.database.sync import init_sync_manager
+        
+        await asyncio.to_thread(init_local_tables)
+        
+        from usr.views.login_view import LoginView
+        setup_done = asyncio.Event()
+        
+        async def after_login():
+            setup_done.set()
+        
+        usuario = await asyncio.to_thread(LocalReplica.get_usuario_dispositivo)
+        
+        if usuario is None:
+            page.clean()
+            login_view = LoginView(modo="registro", on_success=after_login)
+            page.add(login_view)
+            page.update()
+            await setup_done.wait()
+        elif usuario.get("pin_hash"):
+            page.clean()
+            login_view = LoginView(modo="pin", on_success=after_login)
+            page.add(login_view)
+            page.update()
+            await setup_done.wait()
+        else:
+            page.session.set("username", usuario.get("nombre", "Operador"))
+        
+        # Restaurar pantalla de carga tras login exitoso
+        page.clean()
+        page.add(loading)
+        if page.session.get("username"):
+            status_text.value = f"✓ Hola, {page.session.get('username')}"
+        else:
+            status_text.value = f"✓ Hola, {page.session.get('username', 'Usuario')}"
+        page.update()
+        await asyncio.sleep(0.5)
+        
+        # Inicializando manager para sincronización
+        sync_manager = init_sync_manager(get_engine)
+        sync_manager.set_session_local_getter(get_session)
+        status_text.value = "✓ Conectado"
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        
+        # Step 4: Sincronizando (original paso 4)
+        step_text.value = "4/5"
+        status_text.value = "Sincronizando..."
+        page.update()
+        
+        if check_connection():
+            try:
+                # Utilizamos loop asíncrono puro como lo habías propuesto pero de forma segura
+                await asyncio.to_thread(sync_manager.full_sync)
+                status_text.value = "✓ Sincronizado"
+            except Exception as e:
+                print(f"Error en sync inicial: {e}")
+                status_text.value = " Sin sync"
+        else:
+            status_text.value = " Modo offline"
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        
+        # Step 5: Views import
+        step_text.value = "5/5"
+        status_text.value = "Modulos..."
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+        status_text.value = "✓ Cargado"
+        page.update()
+
+        # Step Create views
+        await asyncio.sleep(0.5)
+        status_text.value = "Creando..."
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        inventario_view = InventarioView()
+        requisiciones_view = RequisicionesView()
+        requisiciones_view.inventario_view = inventario_view
+
+        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
+        
+        app_instance = ControlEntradasSalidasApp()
+        requisiciones_view.app_controller = app_instance
+        status_text.value = "✓ Creado"
+        page.update()
+        
+        await asyncio.sleep(0.5)
+        
+        # Done
+        step_text.value = "Listo!"
+        page.update()
+        await asyncio.sleep(0.5)
+
+        status_text.value = "Iniciando..."
+        page.update()
+        await asyncio.sleep(0.5)
+        
+        await app_instance.arrancar_interfaz(page, settings, vistas)
+        
+    except Exception as inner_e:
+        error_log = traceback.format_exc()
         db_dir = page.session.get("_db_dir") or "."
         try:
             log_path = os.path.join(db_dir, "error_log.txt")
@@ -520,12 +489,7 @@ async def main(page: ft.Page):
                 f.write(error_log)
         except:
             pass
-        
-        try:
-            mostrar_error_critico(page, error_log)
-        except:
-            print("ERROR CRÍTICO:", error_log)
-
+        mostrar_error_critico(page, error_log)
 
 if __name__ == "__main__":
     ft.app(target=main, assets_dir="assets")
