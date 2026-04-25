@@ -18,24 +18,10 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
 def resource_path(relative_path: str) -> str:
-    """Obtiene ruta absoluta de recursos, compatible con PyInstaller y desarrollo."""
-    # Si estamos en el .exe de PyInstaller
+    """Obtiene ruta absoluta de recursos para PyInstaller y desarrollo."""
     if hasattr(sys, '_MEIPASS'):
-        meipass = sys._MEIPASS
-        path = os.path.join(meipass, relative_path)
-        if os.path.exists(path):
-            return path
-        # En Windows, PyInstaller puede usar paths diferentes
-        return os.path.join(os.path.dirname(sys.executable), relative_path)
-    
-    # En desarrollo, buscar desde el directorio del script
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(base_dir, relative_path)
-    if os.path.exists(path):
-        return path
-    
-    # Último fallback: directorio actual
-    return os.path.abspath(relative_path)
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
 def log_debug(msg):
@@ -300,26 +286,11 @@ class ControlEntradasSalidasApp:
 
 
 async def main(page: ft.Page):
-    # Identidad visual
     page.title = "Lycoris Control"
     
-    exe_dir = os.path.dirname(sys.executable)
-    
-    # En PyInstaller .exe, usar icono del propio ejecutable
-    if hasattr(sys, '_MEIPASS'):
-        icono_path = os.path.join(exe_dir, "assets", "icono.ico")
-        favicon_path = os.path.join(exe_dir, "assets", "favicon.png")
-        
-        if not os.path.exists(icono_path):
-            icono_path = os.path.join(sys._MEIPASS, "assets", "icono.ico")
-        if not os.path.exists(favicon_path):
-            favicon_path = os.path.join(sys._MEIPASS, "assets", "favicon.png")
-    else:
-        icono_path = "assets/icono.ico"
-        favicon_path = "assets/favicon.png"
-    
-    page.window_icon = icono_path
-    page.favicon = favicon_path
+    # Flet busca assets relativos a la carpeta definida en ft.app()
+    page.favicon = "favicon.png"
+    page.window_icon = "icono.ico"
     page.assets_allow_override = True
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
@@ -381,7 +352,7 @@ async def main(page: ft.Page):
 
         # LOGICA RESTAURADA: Interfaz de carga original
         logo = ft.Column([
-            ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
+            ft.Image(src="icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
             ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
         ], horizontal_alignment="center", spacing=10)
@@ -538,4 +509,4 @@ async def main(page: ft.Page):
         mostrar_error_critico(page, error_log)
 
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.app(target=main, assets_dir=resource_path("assets"))
