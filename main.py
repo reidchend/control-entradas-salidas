@@ -288,10 +288,27 @@ class ControlEntradasSalidasApp:
 async def main(page: ft.Page):
     page.title = "Lycoris Control"
     
-    # Flet busca assets relativos a la carpeta definida en ft.app()
+    # Favicon relativo para Flet
     page.favicon = "favicon.png"
-    page.window_icon = "icono.ico"
     page.assets_allow_override = True
+    
+    # Icono de ventana - usar page.window.icon en Windows
+    import platform
+    if platform.system() == "Windows":
+        try:
+            icon_path = resource_path("assets/icono.ico")
+            page.window.icon = icon_path
+        except Exception:
+            pass
+    
+    # Icono de ventana - usar page.window.icon
+    import platform
+    if platform.system() == "Windows":
+        try:
+            icon_path = resource_path("assets/icono.ico")
+            page.window.icon = icon_path
+        except Exception:
+            pass
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),
@@ -433,7 +450,17 @@ async def main(page: ft.Page):
         # Inicializando manager para sincronización
         sync_manager = init_sync_manager(get_engine)
         sync_manager.set_session_local_getter(get_session)
-        status_text.value = "✓ Conectado"
+        
+        # Iniciar sync automático cada 10 segundos
+        is_online = check_connection()
+        print(f"[MAIN] check_connection(): {is_online}")
+        
+        if is_online:
+            sync_manager.start_background_sync(get_session, interval_seconds=10)
+            status_text.value = "✓ Conectado"
+        else:
+            status_text.value = " Modo offline"
+        
         page.update()
         
         await asyncio.sleep(0.5)
@@ -478,6 +505,17 @@ async def main(page: ft.Page):
         requisiciones_view.inventario_view = inventario_view
 
         vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
+        
+        # Registrar callback para notificar vistas cuando termina sync
+        def on_sync_done():
+            for vista in vistas.values():
+                if hasattr(vista, 'on_sync_complete'):
+                    try:
+                        vista.on_sync_complete()
+                    except Exception as e:
+                        print(f"[SYNC] Error notificando vista: {e}")
+        
+        sync_manager.set_sync_complete_callback(on_sync_done)
         
         app_instance = ControlEntradasSalidasApp()
         requisiciones_view.app_controller = app_instance

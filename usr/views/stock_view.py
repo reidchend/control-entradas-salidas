@@ -45,6 +45,10 @@ class StockView(ft.Container):
         
         self._update_connection_indicator()
         
+        # Registrar callback para sync automático
+        from usr.database.sync_callbacks import register_sync_callback
+        register_sync_callback(self._on_sync_complete)
+        
         import threading
         import time
         
@@ -60,6 +64,15 @@ class StockView(ft.Container):
         
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
         self._connection_thread.start()
+    
+    def _on_sync_complete(self):
+        """Callback que se ejecuta después de cada sync automático."""
+        if hasattr(self, 'page') and self.page and self.visible:
+            self.page.run_task(self._load_productos)
+    
+    def on_sync_complete(self):
+        """Alias para compatibilidad con SyncManager callback."""
+        self._on_sync_complete()
 
     def _on_refresh(self):
         if not self.page:

@@ -68,6 +68,10 @@ class ValidacionView(ft.Container):
         
         self._update_connection_indicator()
         
+        # Registrar callback para sync automático
+        from usr.database.sync_callbacks import register_sync_callback
+        register_sync_callback(self._on_sync_complete)
+        
         import threading
         import time
         
@@ -83,6 +87,20 @@ class ValidacionView(ft.Container):
         
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
         self._connection_thread.start()
+    
+    def will_unmount(self):
+        """Se ejecuta cuando el control se移除 de la página."""
+        from usr.database.sync_callbacks import unregister_sync_callback
+        unregister_sync_callback(self._on_sync_complete)
+    
+    def _on_sync_complete(self):
+        """Callback que se ejecuta después de cada sync automático."""
+        if hasattr(self, 'page') and self.page and self.visible:
+            self.page.run_task(self._load_entradas_pendientes)
+    
+    def on_sync_complete(self):
+        """Alias para compatibilidad con SyncManager callback."""
+        self._on_sync_complete()
 
     def _build_ui(self):
         colors = _colors(self.page)
@@ -104,7 +122,7 @@ class ValidacionView(ft.Container):
                     self._connection_indicator,
                     ft.IconButton(
                         ft.Icons.REFRESH_ROUNDED,
-                        on_click=lambda _: self._load_entradas_pendientes(),
+                        on_click=lambda _: self._on_refresh(),
                         icon_color=colors['text_secondary'],
                     )
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -194,10 +212,34 @@ class ValidacionView(ft.Container):
         self.validate_button.update()
         self.clear_button.update()
 
-    def _clear_selection(self):
-        self.selected_entradas.clear()
-        self._update_validate_button_state()
+    def _on_refresh(self):
+        """Refresca datos - hace sync solo si está online"""
+        if not self.page:
+            return
+        
+        online = is_online()
+        
+        if online:
+            from usr.database import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                sync_mgr.force_sync_now()
+        
         self._load_entradas_pendientes()
+        
+        if self.page and self.page.overlay is not None:
+            self.page.overlay.clear()
+        if self.page:
+            snack = ft.SnackBar(
+                content=ft.Text("🔄 Actualizando..."),
+                bgcolor=ft.Colors.BLUE_600,
+                duration=1,
+            )
+            self.page.snack_bar = snack
+            self.page.update()
+
+    def _load_entradas_pendientes(self):
+            self.page.update()
 
     def _load_entradas_pendientes(self):
         if self.is_loading:

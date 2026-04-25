@@ -3,6 +3,7 @@ import locale
 from datetime import datetime, timedelta, date
 from usr.database.base import get_db, get_db_adaptive
 from usr.database.sync import get_sync_manager
+from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.database.cache import get_cache
 from usr.models import Factura, Movimiento, Producto
 from sqlalchemy.orm import joinedload
@@ -244,6 +245,20 @@ class HistorialFacturasView(ft.Container):
         
         t = threading.Thread(target=check_conn, daemon=True)
         t.start()
+        
+        # Registrar callback para sync automático
+        register_sync_callback(self._on_sync_complete)
+    
+    def will_unmount(self):
+        unregister_sync_callback(self._on_sync_complete)
+    
+    def _on_sync_complete(self):
+        if hasattr(self, 'page') and self.page and self.visible:
+            self.page.run_task(self._load_facturas)
+            self.page.run_task(self._load_entradas_por_fecha)
+    
+    def on_sync_complete(self):
+        self._on_sync_complete()
 
     def _on_tab_change(self, e):
         if e.control.selected_index == 1:

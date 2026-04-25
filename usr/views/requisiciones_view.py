@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 import flet as ft
 from datetime import datetime
 from usr.database.base import get_db, get_db_adaptive
+from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
 from usr.theme import get_theme, get_colors
@@ -115,6 +116,18 @@ class RequisicionesView(ft.Container):
         self._load_requisiciones()
     def did_mount(self):
         self._build_ui()
+        register_sync_callback(self._on_sync_complete)
+    
+    def will_unmount(self):
+        unregister_sync_callback(self._on_sync_complete)
+    
+    def _on_sync_complete(self):
+        if hasattr(self, 'page') and self.page and self.visible:
+            if self._vista_actual == "lista":
+                self.page.run_task(self._load_requisiciones)
+    
+    def on_sync_complete(self):
+        self._on_sync_complete()
 
     def _load_requisiciones(self):
         db = next(get_db_adaptive())

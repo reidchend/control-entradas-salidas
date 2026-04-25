@@ -18,6 +18,37 @@ class SyncManager:
         self._sync_thread = None
         self._stop_event = threading.Event()
         self._background_sync_enabled = False
+        self._on_sync_complete_callbacks = []
+        self._on_sync_complete = None  # Callback simple para sync completo
+    
+    @property
+    def engine(self):
+        return self._engine_getter()
+    
+    def set_session_local_getter(self, session_getter):
+        self._session_local_getter = session_getter
+    
+    def set_sync_complete_callback(self, callback):
+        """Registra función a llamar cada vez que termina un sync."""
+        self._on_sync_complete = callback
+    
+    def add_sync_callback(self, callback):
+        """Registra un callback que se ejecuta cuando termina un sync."""
+        if callback not in self._on_sync_complete_callbacks:
+            self._on_sync_complete_callbacks.append(callback)
+    
+    def remove_sync_callback(self, callback):
+        """Elimina un callback registrado."""
+        if callback in self._on_sync_complete_callbacks:
+            self._on_sync_complete_callbacks.remove(callback)
+    
+    def _notify_sync_complete(self):
+        """Notifica a todos los callbacks registrados."""
+        for callback in self._on_sync_complete_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                print(f"[SYNC] Error en callback: {e}")
         
     @property
     def engine(self):
@@ -70,69 +101,83 @@ class SyncManager:
         
         print("[SYNC] Iniciando sincronización completa...")
         
-        session_maker = self._get_session_maker()
-        if not session_maker:
-            print("[SYNC] No hay session maker configurado")
-            return False
-        
         try:
-            uploaded = self._upload_pending_movimientos(session_maker)
+            # Subir pendientes a Supabase (usar remote session)
+            remote_session = self._get_remote_session_maker()
+            uploaded = self._upload_pending_movimientos(remote_session)
             
+            # Descargar del servidor
+            local_session = self._get_session_maker()
             if uploaded > 0:
-                self._download_all_from_server(session_maker)
+                self._download_all_from_server(local_session)
             else:
                 print("[SYNC] No hay pendientes, descargando del servidor...")
-                self._download_all_from_server(session_maker)
+                self._download_all_from_server(local_session)
             
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
             print("[SYNC] Sincronización completa finalizada")
+            
+            # Notificar callback
+            if self._on_sync_complete:
+                try:
+                    self._on_sync_complete()
+                except Exception as e:
+                    print(f"[SYNC] Error en callback: {e}")
+            
             return True
         except Exception as e:
             print(f"[SYNC] Error en sincronización: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _upload_pending_movimientos(self, session_maker) -> int:
-        """Sube los movimientos pendientes al servidor."""
         from .local_replica import LocalReplica
-        
+        from sqlalchemy import create_engine
+        from config.config import get_settings
+
         pending_movimientos = LocalReplica.get_movimientos_pendientes()
         if not pending_movimientos:
             print("[SYNC] No hay movimientos pendientes")
             return 0
-        
+
+        # Crear engine REMOTO (Supabase), igual que _download_all_from_server
+        settings = get_settings()
+        remote_engine = create_engine(settings.DATABASE_URL)
         synced_count = 0
-        
-        with session_maker() as db:
-            for mov in pending_movimientos:
-                try:
-                    mov_data = {
-                        'producto_id': mov.get('producto_id'),
-                        'factura_id': mov.get('factura_id'),
-                        'tipo': mov.get('tipo'),
-                        'cantidad': mov.get('cantidad'),
-                        'cantidad_anterior': mov.get('cantidad_anterior', 0),
-                        'cantidad_nueva': mov.get('cantidad_nueva', 0),
-                        'peso_total': mov.get('peso_total', 0),
-                        'peso_registrado': mov.get('peso_registrado'),
-                        'foto_peso_url': mov.get('foto_peso_url'),
-                        'registrado_por': mov.get('registrado_por'),
-                        'observaciones': mov.get('observaciones'),
-                        'almacen': mov.get('almacen'),
-                        'fecha_movimiento': mov.get('fecha_movimiento'),
-                    }
-                    
-                    columns = ", ".join(mov_data.keys())
-                    placeholders = ", ".join([f":{k}" for k in mov_data.keys()])
-                    stmt = text(f"INSERT INTO movimientos ({columns}) VALUES ({placeholders})")
-                    db.execute(stmt, mov_data)
-                    db.commit()
-                    
-                    LocalReplica.mark_movimiento_sincronizado(mov.get('id'))
-                    synced_count += 1
-                    print(f"[SYNC] Movimiento {mov.get('id')} syncado")
-                except Exception as e:
-                    print(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
-        
+
+        try:
+            with remote_engine.connect() as conn:
+                for mov in pending_movimientos:
+                    try:
+                        mov_data = {
+                            'producto_id': mov.get('producto_id'),
+                            'factura_id': mov.get('factura_id'),
+                            'tipo': mov.get('tipo'),
+                            'cantidad': mov.get('cantidad'),
+                            'cantidad_anterior': mov.get('cantidad_anterior', 0),
+                            'cantidad_nueva': mov.get('cantidad_nueva', 0),
+                            'peso_total': mov.get('peso_total', 0),
+                            'peso_registrado': mov.get('peso_registrado'),
+                            'foto_peso_url': mov.get('foto_peso_url'),
+                            'registrado_por': mov.get('registrado_por'),
+                            'observaciones': mov.get('observaciones'),
+                            'almacen': mov.get('almacen'),
+                            'fecha_movimiento': mov.get('fecha_movimiento'),
+                        }
+                        columns = ", ".join(mov_data.keys())
+                        placeholders = ", ".join([f":{k}" for k in mov_data.keys()])
+                        stmt = text(f"INSERT INTO movimientos ({columns}) VALUES ({placeholders})")
+                        conn.execute(stmt, mov_data)
+                        conn.commit()
+                        LocalReplica.mark_movimiento_sincronizado(mov.get('id'))
+                        synced_count += 1
+                        print(f"[SYNC] Movimiento {mov.get('id')} subido a Supabase")
+                    except Exception as e:
+                        print(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
+        finally:
+            remote_engine.dispose()
+
         print(f"[SYNC] {synced_count} movimientos subidos al servidor")
         return synced_count
     
@@ -203,7 +248,9 @@ class SyncManager:
     
     def start_background_sync(self, session_getter, interval_seconds: int = 20):
         """Inicia sincronización en segundo plano cada interval_seconds."""
+        print(f"[SYNC] start_background_sync() llamado con interval={interval_seconds}s")
         if self._sync_thread and self._sync_thread.is_alive():
+            print("[SYNC] Hilo ya está corriendo, no se inicia nuevo")
             return
         
         self._session_local_getter = session_getter
@@ -226,10 +273,17 @@ class SyncManager:
     
     def _background_sync_loop(self, interval):
         """Loop de sync en background."""
+        from .sync_callbacks import notify_sync_complete as notify_global
+        
         while not self._stop_event.is_set():
             try:
                 if self.check_connection():
+                    # Subir pendientes
                     self._process_sync_queue()
+                    # Descargar cambios del servidor
+                    self._download_all_from_server(self._get_session_maker())
+                    self._notify_sync_complete()
+                    notify_global()
             except Exception as e:
                 print(f"[SYNC] Error en loop: {e}")
             
@@ -412,10 +466,10 @@ class SyncManager:
     
     def get_connection_status(self) -> dict:
         """Estado de conexión y sincronización."""
-        from .sync_queue import get_pending_sync, get_last_sync
+        from .sync_queue import SyncQueue
         
-        pending = get_pending_sync(limit=100)
-        last = get_last_sync("full_sync")
+        pending = SyncQueue.get_pending(limit=100)
+        last = SyncQueue.get_last_sync("full_sync")
         
         return {
             "online": self.is_online,

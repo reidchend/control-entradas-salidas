@@ -8,10 +8,7 @@ from usr.database.conn import get_local_conn
 from config.config import get_settings
 
 from usr.database.sync_queue import (
-    set_last_sync as _sync_set_last_sync,
-    get_last_sync as _sync_get_last_sync,
-    add_pending_sync,
-    get_pending_sync,
+    SyncQueue,
 )
 
 def init_local_db():
@@ -405,7 +402,7 @@ class LocalReplica:
     def save_movimiento(movimiento: Dict, skip_sync: bool = False) -> int:
         """Guarda un movimiento en la BD local."""
         from .sync_queue import get_sync_queue
-        from .base import check_connection
+        from .sync import get_sync_manager
         
         conn = get_local_conn()
         cursor = conn.cursor()
@@ -439,7 +436,8 @@ class LocalReplica:
         if skip_sync:
             return last_id
         
-        if check_connection():
+        sync_mgr = get_sync_manager()
+        if sync_mgr and sync_mgr.check_connection():
             try:
                 from sqlalchemy import text
                 from .base import get_session
@@ -530,15 +528,11 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM movimientos WHERE sincronizado = 1")
-        
         valid_keys = ['id', 'producto_id', 'factura_id', 'tipo', 'cantidad', 
                       'cantidad_anterior', 'cantidad_nueva', 'peso_total', 
                       'peso_registrado', 'foto_peso_url', 'registrado_por', 
                       'observaciones', 'almacen', 'fecha_movimiento', 
                       'created_at', 'device_id']
-        
-        inserted_ids = set()
         
         for mov in movimientos:
             mov_id = mov.get('id')
@@ -550,19 +544,6 @@ class LocalReplica:
             if not all([producto_id, tipo]):
                 continue
             
-            key = (producto_id, tipo, cantidad, fecha)
-            if key in inserted_ids:
-                continue
-            
-            cursor.execute("""
-                SELECT id FROM movimientos 
-                WHERE producto_id = ? AND tipo = ? AND cantidad = ? AND fecha_movimiento = ?
-            """, (producto_id, tipo, cantidad, fecha))
-            existing = cursor.fetchone()
-            
-            if existing:
-                continue
-            
             values = [mov.get(k) for k in valid_keys]
             values.append(1)
             
@@ -572,11 +553,9 @@ class LocalReplica:
             columns = ','.join(valid_keys) + ',sincronizado'
             
             cursor.execute(f"""
-                INSERT INTO movimientos ({columns})
+                INSERT OR IGNORE INTO movimientos ({columns})
                 VALUES ({placeholders})
             """, values)
-            
-            inserted_ids.add(key)
         
         conn.commit()
         conn.close()
@@ -716,8 +695,10 @@ class LocalReplica:
             total_cantidad = mov['total_cantidad'] or 0
             total_peso = mov['total_peso'] or 0
             
-            if not producto_id or not almacen:
+            if not producto_id:
                 continue
+            if not almacen:
+                almacen = 'principal'
             
             cursor.execute("SELECT es_pesable, unidad_medida FROM productos WHERE id = ?", (producto_id,))
             prod_row = cursor.fetchone()
@@ -752,10 +733,10 @@ class LocalReplica:
     # Delegamos en sync_queue.py para mantener un solo source of truth
     
     def set_last_sync(key: str, timestamp: str = None) -> None:
-        _sync_set_last_sync(key, timestamp)
+        SyncQueue.set_last_sync(key, timestamp)
 
     def get_last_sync(key: str) -> Optional[str]:
-        return _sync_get_last_sync(key)
+        return SyncQueue.get_last_sync(key)
     
     # ==================== OPERACIONES PENDIENTES ====================
     
