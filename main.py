@@ -5,6 +5,8 @@ import ssl
 import certifi
 import glob
 import warnings
+import asyncio
+import sys
 
 # Deshabilitar warning de asyncio "Task was destroyed"
 os.environ['PYTHONASYNCIODEBUG'] = '0'  # Deshabilitar debug de asyncio
@@ -13,6 +15,65 @@ warnings.filterwarnings("ignore", message=".*Task.*destroyed.*")
 
 # Esto le dice a Python exactamente dónde encontrar los certificados
 os.environ['SSL_CERT_FILE'] = certifi.where()
+
+
+def resource_path(relative_path: str) -> str:
+    """Obtiene ruta absoluta de recursos, compatible con PyInstaller y desarrollo."""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+def mostrar_error_critico(page: ft.Page, error_completo: str):
+    """Pantalla de error profesional para APK - permite copiar error y reintentar"""
+    page.clean()
+    page.bgcolor = "#1a0000"
+    
+    error_container = ft.Column(
+        scroll=ft.ScrollMode.ALWAYS,
+        expand=True,
+        controls=[
+            ft.Text("DETALLES TÉCNICOS:", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_200),
+            ft.Container(
+                content=ft.Text(
+                    error_completo,
+                    size=11,
+                    font_family="monospace",
+                    color=ft.Colors.RED_100,
+                ),
+                padding=10,
+                bgcolor="#330000",
+                border_radius=5,
+            ),
+        ]
+    )
+
+    page.add(
+        ft.Container(
+            padding=20,
+            content=ft.Column([
+                ft.Icon(ft.Icons.REPORT_PROBLEM_ROUNDED, color=ft.Colors.RED_400, size=50),
+                ft.Text("Error de Inicio", size=24, weight=ft.FontWeight.BOLD),
+                ft.Text("La aplicación no pudo arrancar correctamente.", textAlign=ft.TextAlign.CENTER),
+                ft.Divider(color=ft.Colors.RED_900),
+                ft.Container(content=error_container, height=300),
+                ft.ElevatedButton(
+                    "Copiar Error",
+                    icon=ft.Icons.COPY,
+                    on_click=lambda _: page.set_clipboard(error_completo)
+                ),
+                ft.Container(height=10),
+                ft.ElevatedButton(
+                    "Reintentar",
+                    bgcolor=ft.Colors.RED_700,
+                    on_click=lambda _: page.launch_url(".")  # Recarga la página
+                )
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        )
+    )
+    page.update()
 
 
 def log_debug(msg):
@@ -245,8 +306,8 @@ def show_error(page, msg):
 
 async def main(page: ft.Page):
     page.assets_allow_override = True
-    page.favicon = "favicon.png"
-    page.window_icon = "icono.ico"
+    page.favicon = resource_path("assets/favicon.png")
+    page.window_icon = resource_path("assets/icono.ico")
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),
@@ -279,16 +340,19 @@ async def main(page: ft.Page):
             if not db_dir:
                 db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
             
+            # Guardar para uso en errores
+            page.session.set("_db_dir", db_dir)
+            
             db_path = os.path.join(db_dir, "lycoris_local.db")
-            set_db_path(db_path)
+            await asyncio.to_thread(set_db_path, db_path)
             
             from usr.database.local_replica import ensure_local_db
-            ensure_local_db()
+            await asyncio.to_thread(ensure_local_db)
             
             page.update()
             
             logo = ft.Column([
-                ft.Image(src="/icono.png", width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
+                ft.Image(src=resource_path("assets/icono.png"), width=120, height=120, fit=ft.ImageFit.CONTAIN, error_content=ft.Text("Logo no encontrado", color=ft.Colors.RED)),
                 ft.Text("Lycoris", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Text("Control de Entradas y Salidas", size=16, color="#9E9E9E"),
             ], horizontal_alignment="center", spacing=10)
@@ -306,12 +370,18 @@ async def main(page: ft.Page):
             
             page.add(loading)
             page.update()
-            
-            # Delay para mostrar pantalla de carga
-            import asyncio
             await asyncio.sleep(0.5)
             
-            # Step 1: Config
+            # Step 2: Configuración
+            step_text.value = "2/5"
+            status_text.value = "Configurando..."
+            page.update()
+            await asyncio.sleep(0.5)
+            
+            from config.config import get_settings
+            settings = get_settings()
+            status_text.value = "✓ Lista"
+            page.update()
             step_text.value = "2/5"
             status_text.value = "Configurando..."
             page.update()
@@ -332,16 +402,18 @@ async def main(page: ft.Page):
             from usr.database.local_replica import LocalReplica
             from usr.database.sync import init_sync_manager
             
-            init_local_tables()
+            await asyncio.to_thread(init_local_tables)
             
+            await asyncio.sleep(0.1)
             from usr.views.login_view import LoginView
+            await asyncio.sleep(0.1)
             
             setup_done = asyncio.Event()
             
             async def after_login():
                 setup_done.set()
             
-            usuario = LocalReplica.get_usuario_dispositivo()
+            usuario = await asyncio.to_thread(LocalReplica.get_usuario_dispositivo)
             
             if usuario is None:
                 page.clean()
@@ -428,11 +500,36 @@ async def main(page: ft.Page):
             
             await app_instance.arrancar_interfaz(page, settings, vistas)
         except Exception as inner_e:
-            traceback.print_exc()
-            show_error(page, str(inner_e)[:100])
+            error_log = traceback.format_exc()
+            print(error_log)
+            
+            # Guardar log a archivo
+            db_dir = page.session.get("_db_dir") or "."
+            try:
+                log_path = os.path.join(db_dir, "error_log.txt")
+                with open(log_path, "w") as f:
+                    f.write(error_log)
+            except:
+                pass
+            
+            mostrar_error_critico(page, error_log)
     except Exception as e:
+        error_log = traceback.format_exc()
         traceback.print_exc()
-        show_error(page, str(e)[:100])
+        
+        # Guardar log a archivo
+        db_dir = page.session.get("_db_dir") or "."
+        try:
+            log_path = os.path.join(db_dir, "error_log.txt")
+            with open(log_path, "w") as f:
+                f.write(error_log)
+        except:
+            pass
+        
+        try:
+            mostrar_error_critico(page, error_log)
+        except:
+            print("ERROR CRÍTICO:", error_log)
 
 
 if __name__ == "__main__":
