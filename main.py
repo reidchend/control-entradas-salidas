@@ -303,17 +303,20 @@ async def main(page: ft.Page):
     # Identidad visual
     page.title = "Lycoris Control"
     
-    # Debug - siempre mostrar
-    icono_path = resource_path("assets/icono.ico")
-    favicon_path = resource_path("assets/favicon.png")
-    meipass = getattr(sys, '_MEIPASS', 'NO_PYINSTALLER')
-    import io, sys
-    sys.stdout = sys.__stdout__
-    print(f"[DEBUG PyInstaller] _MEIPASS: {meipass}")
-    print(f"[DEBUG] Icono path: {icono_path}")
-    print(f"[DEBUG] Icono existe: {os.path.exists(icono_path)}")
-    print(f"[DEBUG] Favicon path: {favicon_path}")
-    print(f"[DEBUG] Favicon existe: {os.path.exists(favicon_path)}")
+    exe_dir = os.path.dirname(sys.executable)
+    
+    # En PyInstaller .exe, usar icono del propio ejecutable
+    if hasattr(sys, '_MEIPASS'):
+        icono_path = os.path.join(exe_dir, "assets", "icono.ico")
+        favicon_path = os.path.join(exe_dir, "assets", "favicon.png")
+        
+        if not os.path.exists(icono_path):
+            icono_path = os.path.join(sys._MEIPASS, "assets", "icono.ico")
+        if not os.path.exists(favicon_path):
+            favicon_path = os.path.join(sys._MEIPASS, "assets", "favicon.png")
+    else:
+        icono_path = "assets/icono.ico"
+        favicon_path = "assets/favicon.png"
     
     page.window_icon = icono_path
     page.favicon = favicon_path
@@ -341,7 +344,6 @@ async def main(page: ft.Page):
         page.update()
         
         # LOGICA RESTAURADA: Determina el path según la plataforma
-        import os
         from usr.database.conn import set_db_path, get_db_path
         
         # Intentar usar app_data_dir primero (Android tiene permisos)
