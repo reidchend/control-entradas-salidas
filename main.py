@@ -19,8 +19,22 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 
 def resource_path(relative_path: str) -> str:
     """Obtiene ruta absoluta de recursos, compatible con PyInstaller y desarrollo."""
+    # Si estamos en el .exe de PyInstaller
     if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
+        meipass = sys._MEIPASS
+        path = os.path.join(meipass, relative_path)
+        if os.path.exists(path):
+            return path
+        # En Windows, PyInstaller puede usar paths diferentes
+        return os.path.join(os.path.dirname(sys.executable), relative_path)
+    
+    # En desarrollo, buscar desde el directorio del script
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(base_dir, relative_path)
+    if os.path.exists(path):
+        return path
+    
+    # Último fallback: directorio actual
     return os.path.abspath(relative_path)
 
 
@@ -288,8 +302,21 @@ class ControlEntradasSalidasApp:
 async def main(page: ft.Page):
     # Identidad visual
     page.title = "Lycoris Control"
-    page.window_icon = resource_path("assets/icono.ico")
-    page.favicon = resource_path("assets/favicon.png")
+    
+    # Debug - siempre mostrar
+    icono_path = resource_path("assets/icono.ico")
+    favicon_path = resource_path("assets/favicon.png")
+    meipass = getattr(sys, '_MEIPASS', 'NO_PYINSTALLER')
+    import io, sys
+    sys.stdout = sys.__stdout__
+    print(f"[DEBUG PyInstaller] _MEIPASS: {meipass}")
+    print(f"[DEBUG] Icono path: {icono_path}")
+    print(f"[DEBUG] Icono existe: {os.path.exists(icono_path)}")
+    print(f"[DEBUG] Favicon path: {favicon_path}")
+    print(f"[DEBUG] Favicon existe: {os.path.exists(favicon_path)}")
+    
+    page.window_icon = icono_path
+    page.favicon = favicon_path
     page.assets_allow_override = True
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
@@ -313,24 +340,42 @@ async def main(page: ft.Page):
         page.bgcolor = "#121212"
         page.update()
         
-        # LOGICA RESTAURADA: Determina el path según la plataforma como en el original
+        # LOGICA RESTAURADA: Determina el path según la plataforma
         import os
-        from usr.database.conn import set_db_path
+        from usr.database.conn import set_db_path, get_db_path
         
+        # Intentar usar app_data_dir primero (Android tiene permisos)
+        db_dir = None
         try:
-            db_dir = page.app_data_dir if hasattr(page, 'app_data_dir') and page.app_data_dir else None
+            if hasattr(page, 'app_data_dir') and page.app_data_dir:
+                db_dir = page.app_data_dir
         except:
-            db_dir = None
+            pass
         
+        # Si no funciona, usar directorio actual (siempre escribible)
         if not db_dir:
-            db_dir = os.path.join(os.path.expanduser("~"), ".lycoris")
+            db_dir = "."
         
         page.session.set("_db_dir", db_dir)
         db_path = os.path.join(db_dir, "lycoris_local.db")
-        await asyncio.to_thread(set_db_path, db_path)
         
+        # Inicializar BD
         from usr.database.local_replica import ensure_local_db
-        await asyncio.to_thread(ensure_local_db)
+        
+        try:
+            set_db_path(db_path)
+        except Exception as e:
+            print(f"[WARN] Error set_db_path: {e}")
+            # Intentar con directorio actual
+            try:
+                set_db_path("lycoris_local.db")
+            except Exception as e2:
+                print(f"[WARN] Error set_db_path fallback: {e2}")
+        
+        try:
+            ensure_local_db()
+        except Exception as e:
+            print(f"[WARN] Error ensure_local_db: {e}")
 
         # LOGICA RESTAURADA: Interfaz de carga original
         logo = ft.Column([
@@ -378,8 +423,7 @@ async def main(page: ft.Page):
         from usr.database.local_replica import LocalReplica
         from usr.database.sync import init_sync_manager
         
-        await asyncio.to_thread(init_local_tables)
-        
+        await asyncio.sleep(0.1)
         from usr.views.login_view import LoginView
         setup_done = asyncio.Event()
         
