@@ -440,27 +440,34 @@ class LocalReplica:
         if sync_mgr and sync_mgr.check_connection():
             try:
                 from sqlalchemy import text
-                from .base import get_session
+                from sqlalchemy import create_engine
+                from config.config import get_settings
                 
-                session_maker = get_session()
+                settings = get_settings()
+                remote_engine = create_engine(settings.DATABASE_URL)
+                
                 mov_clean = {k: v for k, v in movimiento.items() 
                            if k not in ('sincronizado', 'created_at', 'id')}
                 
-                with session_maker() as db:
+                with remote_engine.connect() as conn:
                     cols = ", ".join(mov_clean.keys())
                     vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                     sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                    db.execute(sql, mov_clean)
-                    db.commit()
+                    conn.execute(sql, mov_clean)
+                    conn.commit()
                     print(f"[SYNC] Movimiento {last_id} subido inmediatamente")
                     
-                    conn = get_local_conn()
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE movimientos SET sincronizado = 1 WHERE id = ?", (last_id,))
-                    conn.commit()
                     conn.close()
-                    
-                    return last_id
+                
+                remote_engine.dispose()
+                
+                conn = get_local_conn()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE movimientos SET sincronizado = 1 WHERE id = ?", (last_id,))
+                conn.commit()
+                conn.close()
+                
+                return last_id
             except Exception as e:
                 print(f"[SYNC] Error sync inmediato: {e}, guardando en cola")
         
@@ -733,10 +740,10 @@ class LocalReplica:
     # Delegamos en sync_queue.py para mantener un solo source of truth
     
     def set_last_sync(key: str, timestamp: str = None) -> None:
-        SyncQueue.set_last_sync(key, timestamp)
+        SyncQueue.set_last_sync(timestamp or datetime.now().isoformat())
 
     def get_last_sync(key: str) -> Optional[str]:
-        return SyncQueue.get_last_sync(key)
+        return SyncQueue.get_last_sync()
     
     # ==================== OPERACIONES PENDIENTES ====================
     

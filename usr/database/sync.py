@@ -49,13 +49,6 @@ class SyncManager:
                 callback()
             except Exception as e:
                 print(f"[SYNC] Error en callback: {e}")
-        
-    @property
-    def engine(self):
-        return self._engine_getter()
-    
-    def set_session_local_getter(self, session_getter):
-        self._session_local_getter = session_getter
     
     def _get_session_maker(self):
         if self._session_local_getter:
@@ -63,11 +56,13 @@ class SyncManager:
         return None
     
     def _get_remote_session_maker(self):
+        engine = self._create_remote_engine()
+        return engine.connect
+    
+    def _create_remote_engine(self):
         from sqlalchemy import create_engine
         from config.config import get_settings
-        settings = get_settings()
-        engine = create_engine(settings.DATABASE_URL)
-        return engine.connect
+        return create_engine(get_settings().DATABASE_URL)
     
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos remota."""
@@ -124,6 +119,13 @@ class SyncManager:
                 except Exception as e:
                     print(f"[SYNC] Error en callback: {e}")
             
+            # Notificar también al sistema global de vistas
+            try:
+                from .sync_callbacks import notify_sync_complete as notify_global
+                notify_global()
+            except Exception as e:
+                print(f"[SYNC] Error en notify_global: {e}")
+            
             return True
         except Exception as e:
             print(f"[SYNC] Error en sincronización: {e}")
@@ -143,7 +145,7 @@ class SyncManager:
 
         # Crear engine REMOTO (Supabase), igual que _download_all_from_server
         settings = get_settings()
-        remote_engine = create_engine(settings.DATABASE_URL)
+        remote_engine = self._create_remote_engine()
         synced_count = 0
 
         try:
@@ -213,7 +215,7 @@ class SyncManager:
         from sqlalchemy import create_engine
         from config.config import get_settings
         settings = get_settings()
-        remote_engine = create_engine(settings.DATABASE_URL)
+        remote_engine = self._create_remote_engine()
         
         with remote_engine.connect() as conn:
             for local_table, server_table in tables_to_sync:
@@ -278,7 +280,9 @@ class SyncManager:
         while not self._stop_event.is_set():
             try:
                 if self.check_connection():
-                    # Subir pendientes
+                    # Subir movimientos pendientes (sincronizado=0)
+                    self._upload_pending_movimientos(self._get_session_maker())
+                    # Subir pendientes de la cola
                     self._process_sync_queue()
                     # Descargar cambios del servidor
                     self._download_all_from_server(self._get_session_maker())
@@ -308,7 +312,7 @@ class SyncManager:
             from sqlalchemy import create_engine
             from config.config import get_settings
             settings = get_settings()
-            remote_engine = create_engine(settings.DATABASE_URL)
+            remote_engine = self._create_remote_engine()
             
             try:
                 uploaded = self._upload_to_remote(remote_engine, pending)
