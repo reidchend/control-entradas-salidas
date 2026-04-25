@@ -456,8 +456,6 @@ class LocalReplica:
                     conn.execute(sql, mov_clean)
                     conn.commit()
                     print(f"[SYNC] Movimiento {last_id} subido inmediatamente")
-                    
-                    conn.close()
                 
                 remote_engine.dispose()
                 

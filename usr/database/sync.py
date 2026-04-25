@@ -99,7 +99,7 @@ class SyncManager:
         try:
             # Subir pendientes a Supabase (usar remote session)
             remote_session = self._get_remote_session_maker()
-            uploaded = self._upload_pending_movimientos(remote_session)
+            uploaded = self._upload_pending_movimientos()
             
             # Descargar del servidor
             local_session = self._get_session_maker()
@@ -133,7 +133,7 @@ class SyncManager:
             traceback.print_exc()
             return False
     
-    def _upload_pending_movimientos(self, session_maker) -> int:
+    def _upload_pending_movimientos(self) -> int:
         from .local_replica import LocalReplica
         from sqlalchemy import create_engine
         from config.config import get_settings
@@ -281,7 +281,7 @@ class SyncManager:
             try:
                 if self.check_connection():
                     # Subir movimientos pendientes (sincronizado=0)
-                    self._upload_pending_movimientos(self._get_session_maker())
+                    self._upload_pending_movimientos()
                     # Subir pendientes de la cola
                     self._process_sync_queue()
                     # Descargar cambios del servidor
@@ -473,7 +473,7 @@ class SyncManager:
         from .sync_queue import SyncQueue
         
         pending = SyncQueue.get_pending(limit=100)
-        last = SyncQueue.get_last_sync("full_sync")
+        last = SyncQueue.get_last_sync()
         
         return {
             "online": self.is_online,
