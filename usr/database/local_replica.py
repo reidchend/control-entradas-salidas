@@ -408,6 +408,24 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
+        # Verificar duplicado antes de guardar
+        producto_id = movimiento.get('producto_id')
+        tipo = movimiento.get('tipo')
+        cantidad = movimiento.get('cantidad')
+        fecha = movimiento.get('fecha_movimiento')
+        
+        cursor.execute("""
+            SELECT id FROM movimientos 
+            WHERE producto_id = ? AND tipo = ? AND cantidad = ? 
+            AND fecha_movimiento >= datetime(?) - 5
+        """, (producto_id, tipo, cantidad, fecha))
+        
+        existing = cursor.fetchone()
+        if existing:
+            conn.close()
+            print(f"[SYNC] Movimiento duplicado ignorado: {existing[0]}")
+            return existing[0]
+        
         settings = get_settings()
         device_id = settings.DEVICE_IDENTIFIER
         
@@ -538,16 +556,26 @@ class LocalReplica:
                       'observaciones', 'almacen', 'fecha_movimiento', 
                       'created_at', 'device_id']
         
+        inserted_count = 0
+        updated_count = 0
+        
         for mov in movimientos:
             mov_id = mov.get('id')
             producto_id = mov.get('producto_id')
             tipo = mov.get('tipo')
             cantidad = mov.get('cantidad')
             fecha = mov.get('fecha_movimiento')
+            factura_id = mov.get('factura_id')
             
-            if not all([producto_id, tipo]):
+            # Verificar si producto_id y tipo son válidos (no None)
+            if producto_id is None or tipo is None:
                 continue
             
+            # También verificar cantidad
+            if cantidad is None:
+                continue
+            
+            # Insertar nuevo solo si no existe
             values = [mov.get(k) for k in valid_keys]
             values.append(1)
             
@@ -560,9 +588,12 @@ class LocalReplica:
                 INSERT OR IGNORE INTO movimientos ({columns})
                 VALUES ({placeholders})
             """, values)
+            inserted_count += 1
         
         conn.commit()
         conn.close()
+        
+        print(f"[SYNC] Movimientos guardados: {inserted_count} nuevos, {updated_count} actualizados")
     
     # ==================== FACTURAS ====================
     
@@ -571,8 +602,6 @@ class LocalReplica:
         """Guarda facturas en la base de datos local."""
         conn = get_local_conn()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM facturas")
         
         for fac in facturas:
             cursor.execute("""
@@ -622,9 +651,6 @@ class LocalReplica:
             
         conn = get_local_conn()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM requisiciones")
-        cursor.execute("DELETE FROM requisicion_detalles")
         
         for req in requisiciones:
             numero_sec = req.get('numero_secuencial')

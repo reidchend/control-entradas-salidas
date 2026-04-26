@@ -117,8 +117,12 @@ class RequisicionesView(ft.Container):
         self.update() 
         self._load_requisiciones()
     def did_mount(self):
-        self._build_ui()
-        register_sync_callback(self._on_sync_complete)
+        try:
+            self._build_ui()
+            register_sync_callback(self._on_sync_complete)
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al montar vista de requisiciones", e, "requisiciones_view.did_mount")
     
     def will_unmount(self):
         unregister_sync_callback(self._on_sync_complete)

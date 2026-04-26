@@ -1,7 +1,8 @@
 import flet as ft
+import asyncio
 import traceback
 from datetime import datetime
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, or_
 from usr.database.base import get_db, get_db_adaptive, is_online
 from usr.models import Movimiento, Factura,Producto, Categoria, Existencia
 from usr.logger import get_logger
@@ -97,7 +98,9 @@ class ValidacionView(ft.Container):
     def _on_sync_complete(self):
         """Callback que se ejecuta después de cada sync automático."""
         if hasattr(self, 'page') and self.page and self.visible:
-            self.page.run_task(self._load_entradas_pendientes)
+            async def _reload():
+                await asyncio.to_thread(self._load_entradas_pendientes)
+            self.page.run_task(_reload)
     
     def on_sync_complete(self):
         """Alias para compatibilidad con SyncManager callback."""
@@ -238,14 +241,11 @@ class ValidacionView(ft.Container):
             )
             self.page.snack_bar = snack
             self.page.update()
-
-    def _load_entradas_pendientes(self):
-            self.page.update()
-
+    
     def _load_entradas_pendientes(self):
         if self.is_loading:
             return
-
+        
         self.is_loading = True
 
         db = None
@@ -266,6 +266,15 @@ class ValidacionView(ft.Container):
                 query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search_term}%"))
             
             entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
+            
+            # Debug - ver todos los movimientos en la DB
+            print(f"[DEBUG] Entradas encontradas en query: {len(entradas)}")
+            all_movs = db.query(Movimiento).filter(Movimiento.tipo == "entrada").all()
+            print(f"[DEBUG] Total movimientos tipo=entrada en DB: {len(all_movs)}")
+            
+            for e in entradas[:5]:
+                print(f"  - id={e.id}, prod={e.producto_id}, cant={e.cantidad}, factura_id={e.factura_id}")
+            
             self.entradas_data = {e.id: e for e in entradas}
             
             self.entradas_list.controls.clear()

@@ -562,8 +562,9 @@ class ConfiguracionView(ft.Container):
             queue.add_pending('categorias', 'insert', cat_data)
             # Intentar sync inmediato si hay conexión
             self._trigger_sync()
-        except:
-            pass
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al agregar categoría a cola de sync", e, "configuracion_view._on_guardar_categoria")
         
         self._show_message("✅ Categoría guardada")
         
@@ -718,8 +719,9 @@ class ConfiguracionView(ft.Container):
                         'updated_at': datetime.now().isoformat()
                     })
                     self._trigger_sync()
-                except:
-                    pass
+                except Exception as e:
+                    from usr.error_handler import show_error
+                    show_error("Error al actualizar categoría en cola de sync", e, "configuracion_view._on_toggle_categoria")
             
             self._show_message(f"✅ {tipo.capitalize()} desactivado correctamente")
             self._load_data()

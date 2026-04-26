@@ -17,12 +17,15 @@ def unregister_sync_callback(callback: Callable):
 
 def notify_sync_complete():
     """Notifica a todos los callbacks registrados."""
-    print(f"[SYNC CB] Notificando a {len(_sync_callbacks)} callbacks")
+    import traceback
+    if _sync_callbacks:  # Solo loguear si hay callbacks
+        print(f"[SYNC CB] Notificando a {len(_sync_callbacks)} callbacks")
     for callback in _sync_callbacks:
         try:
             callback()
         except Exception as e:
             print(f"[SYNC CB] Error en callback: {e}")
+            traceback.print_exc()
 
 def clear_all_callbacks():
     """Limpia todos los callbacks registrados."""

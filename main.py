@@ -449,12 +449,11 @@ async def main(page: ft.Page):
         sync_manager = init_sync_manager(get_engine)
         sync_manager.set_session_local_getter(get_session)
         
-        # Iniciar sync automático cada 10 segundos
+        # NO iniciar background sync aquí - se hace después de registrar callbacks
         is_online = check_connection()
         print(f"[MAIN] check_connection(): {is_online}")
         
         if is_online:
-            sync_manager.start_background_sync(get_session, interval_seconds=10)
             status_text.value = "✓ Conectado"
         else:
             status_text.value = " Modo offline"
@@ -514,6 +513,10 @@ async def main(page: ft.Page):
                         print(f"[SYNC] Error notificando vista: {e}")
         
         sync_manager.set_sync_complete_callback(on_sync_done)
+        
+        # LUEGO iniciar background sync (después de vistas y callbacks)
+        if is_online:
+            sync_manager.start_background_sync(get_session, interval_seconds=10)
         
         app_instance = ControlEntradasSalidasApp()
         requisiciones_view.app_controller = app_instance

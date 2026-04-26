@@ -496,8 +496,8 @@ def save_movimiento_with_sync(movimiento_data: dict, update_local: bool = True) 
     Retorna True si se guardó localmente.
     """
     from datetime import datetime
+    from sqlalchemy import text
     from .local_replica import LocalReplica
-    from .base import is_online, get_session_local
     
     movimiento_data['fecha_movimiento'] = datetime.now().isoformat()
     movimiento_data['created_at'] = datetime.now().isoformat()
@@ -509,20 +509,26 @@ def save_movimiento_with_sync(movimiento_data: dict, update_local: bool = True) 
     sync_mgr = get_sync_manager()
     if sync_mgr and sync_mgr.check_connection():
         try:
-            session_maker = get_session_local()
-            with session_maker() as db:
+            remote_engine = sync_mgr._create_remote_engine()
+            try:
                 mov_clean = {k: v for k, v in movimiento_data.items() 
                            if k not in ('sincronizado', 'created_at')}
                 cols = ", ".join(mov_clean.keys())
                 vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                 sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                db.execute(sql, mov_clean)
-                db.commit()
+                with remote_engine.connect() as conn:
+                    conn.execute(sql, mov_clean)
+                    conn.commit()
+                remote_engine.dispose()
                 LocalReplica.mark_movimiento_sincronizado(local_id)
                 print("[OFFLINE] Movimiento sincronizado inmediatamente")
                 return True
+            except Exception as e:
+                if remote_engine:
+                    remote_engine.dispose()
+                print(f"[OFFLINE] Error al syncar inmediatamente: {e}")
         except Exception as e:
-            print(f"[OFFLINE] Error al syncar inmediatamente: {e}")
+            print(f"[OFFLINE] Error creando engine: {e}")
     
     return False
 

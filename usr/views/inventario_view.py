@@ -739,17 +739,19 @@ class InventarioView(ft.Container):
         def calcular_desde_unidades(e):
             try:
                 cant = float(cant_x_unidad_input.value or 0)
-                peso_u = float(peso_x_unidad_input.value.replace(',', '.') or 0)
+                peso_u_str = peso_x_unidad_input.value.replace(',', '.').strip().rstrip('-').rstrip('+')
+                peso_u = float(peso_u_str or 0)
                 peso_total_input.value = f"{cant * peso_u:.3f}"
                 peso_total_input.update()
             except Exception as e:
-                show_error("Error calculating total", e, "inventario_view.calcular_desde_cantidad")
+                show_error("Error calculating total", e, "inventario_view.calcular_desde_unidades")
                 peso_total_input.value = "0.000"
                 peso_total_input.update()
         
         def calcular_desde_total(e):
             try:
-                total = float(peso_total_input.value.replace(',', '.') or 0)
+                total_str = peso_total_input.value.replace(',', '.').strip().rstrip('-').rstrip('+')
+                total = float(total_str or 0)
                 cant = float(cant_x_unidad_input.value or 1)
                 if cant > 0:
                     peso_x_unidad_input.value = f"{total / cant:.3f}"
