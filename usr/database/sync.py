@@ -227,15 +227,16 @@ class SyncManager:
                     rows = result.fetchall()
                     data = [dict_to_serializable(dict(row._mapping)) for row in rows]
                     
+                    # Usar INSERT OR REPLACE para no perder datos locales sin sincronizar
                     if local_table == 'categorias':
-                        LocalReplica.clear_categorias()
                         LocalReplica.save_categorias(data)
                     elif local_table == 'productos':
-                        LocalReplica.clear_productos()
                         LocalReplica.save_productos(data)
                     elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
                     elif local_table == 'movimientos':
+                        # Primero clear para evitar duplicados
+                        LocalReplica.clear_movimientos()
                         LocalReplica.save_movimientos(data)
                     elif local_table == 'facturas':
                         LocalReplica.save_facturas(data)
@@ -309,6 +310,9 @@ class SyncManager:
         queue = get_sync_queue()
         
         pending = queue.get_pending()
+        
+        # Filtrar solo categorías/productos/facturas (no movimientos - se sync por _upload_pending_movimientos)
+        pending = [p for p in pending if p.get('table_name') != 'movimientos']
         
         if pending:
             # Usar conexión a Supabase para subir datos
@@ -384,9 +388,15 @@ class SyncManager:
                         
                         conn.execute(sql, vals)
                         conn.commit()
-                        queue.mark_completed(item['id'])
-                        uploaded += 1
-                        print(f"[SYNC] Categoría sincronizada")
+                        
+                        # Verificar que sepersistió antes de marcar completado
+                        verify = conn.execute(check_sql, {'nombre': vals['nombre']}).fetchone()
+                        if verify:
+                            queue.mark_completed(item['id'])
+                            uploaded += 1
+                            print(f"[SYNC] Categoría sincronizada")
+                        else:
+                            raise Exception("Error: Categoría no encontrada tras commit")
                         
                     elif table == 'productos':
                         # Determinar si es insert o update
@@ -439,11 +449,11 @@ class SyncManager:
                         queue.mark_completed(item['id'])
                         uploaded += 1
                         print(f"[SYNC] Producto sincronizado")
-                        
+                    
                     elif table == 'movimientos' and operation == 'insert':
                         mov_data = {k: v for k, v in data.items() 
                                    if k not in ('sincronizado', 'created_at')}
-                        # Quitar ID local para que Supabase genere uno nuevo
+# Quitar ID local para que Supabase genere uno nuevo
                         mov_data.pop('id', None)
                         
                         cols = ", ".join(mov_data.keys())
@@ -451,6 +461,9 @@ class SyncManager:
                         sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
                         conn.execute(sql, mov_data)
                         conn.commit()
+                        
+                        # Verificar conexión activa
+                        conn.execute(text("SELECT 1")).fetchone()
                         queue.mark_completed(item['id'])
                         uploaded += 1
                         print(f"[SYNC] Movimiento sincronizado")
@@ -461,6 +474,12 @@ class SyncManager:
                         if mov_id:
                             conn.execute(text("DELETE FROM movimientos WHERE id = :id"), {"id": mov_id})
                             conn.commit()
+                            
+                            # Verificar eliminación
+                            verify = conn.execute(text("SELECT id FROM movimientos WHERE id = :id"), {"id": mov_id}).fetchone()
+                            if verify:
+                                raise Exception("Error: Movimiento aún existe tras eliminación")
+                            
                             queue.mark_completed(item['id'])
                             uploaded += 1
                             print(f"[SYNC] Movimiento eliminado en Supabase")

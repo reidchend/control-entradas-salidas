@@ -484,10 +484,8 @@ class LocalReplica:
                 
                 return last_id
             except Exception as e:
-                print(f"[SYNC] Error sync inmediato: {e}, guardando en cola")
-        
-        queue = get_sync_queue()
-        queue.add_pending('movimientos', 'insert', movimiento)
+                print(f"[SYNC] Error sync inmediato: {e}")
+                print("[SYNC] Movimiento queda en cola local con sincronizado=0 para reintento automático")
         
         return last_id
     
@@ -542,6 +540,15 @@ class LocalReplica:
         conn.close()
     
     @staticmethod
+    def clear_movimientos() -> None:
+        """Limpia todos los movimientos."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM movimientos")
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
     def save_movimientos(movimientos: List[Dict]) -> None:
         """Guarda múltiples movimientos (para sync desde servidor) con deduplicación."""
         if not movimientos:
@@ -559,41 +566,52 @@ class LocalReplica:
         inserted_count = 0
         updated_count = 0
         
-        for mov in movimientos:
-            mov_id = mov.get('id')
-            producto_id = mov.get('producto_id')
-            tipo = mov.get('tipo')
-            cantidad = mov.get('cantidad')
-            fecha = mov.get('fecha_movimiento')
-            factura_id = mov.get('factura_id')
-            
-            # Verificar si producto_id y tipo son válidos (no None)
-            if producto_id is None or tipo is None:
-                continue
-            
-            # También verificar cantidad
-            if cantidad is None:
-                continue
-            
-            # Insertar nuevo solo si no existe
-            values = [mov.get(k) for k in valid_keys]
-            values.append(1)
-            
-            placeholders = ','.join(['?' for _ in valid_keys])
-            placeholders += ',?'
-            
-            columns = ','.join(valid_keys) + ',sincronizado'
-            
-            cursor.execute(f"""
-                INSERT OR IGNORE INTO movimientos ({columns})
-                VALUES ({placeholders})
-            """, values)
-            inserted_count += 1
+        for movimientos_chunk in [movimientos[i:i+100] for i in range(0, len(movimientos), 100)]:
+            for mov in movimientos_chunk:
+                mov_id = mov.get('id')
+                producto_id = mov.get('producto_id')
+                tipo = mov.get('tipo')
+                cantidad = mov.get('cantidad')
+                
+                if producto_id is None or tipo is None:
+                    continue
+                if cantidad is None:
+                    continue
+                
+                # Normalizar fecha para comparación (quitar timezone)
+                fecha_raw = mov.get('fecha_movimiento')
+                fecha_norm = None
+                if fecha_raw and isinstance(fecha_raw, str):
+                    fecha_norm = fecha_raw.replace('+00:00', '+00').replace('+00', '').replace('T', ' ')
+                
+                # Deduplicar por ID o por campos lógicos (sin fecha exacta)
+                cursor.execute("""
+                    SELECT id FROM movimientos 
+                    WHERE id = ?
+                """, (mov_id,))
+                
+                if cursor.fetchone():
+                    updated_count += 1
+                    continue
+                
+                values = [mov.get(k) for k in valid_keys]
+                values.append(1)
+                
+                placeholders = ','.join(['?' for _ in valid_keys])
+                placeholders += ',?'
+                
+                columns = ','.join(valid_keys) + ',sincronizado'
+                
+                cursor.execute(f"""
+                    INSERT INTO movimientos ({columns})
+                    VALUES ({placeholders})
+                """, values)
+                inserted_count += 1
         
         conn.commit()
         conn.close()
         
-        print(f"[SYNC] Movimientos guardados: {inserted_count} nuevos, {updated_count} actualizados")
+        print(f"[SYNC] Movimientos guardados: {inserted_count} nuevos, {updated_count} saltados")
     
     # ==================== FACTURAS ====================
     
@@ -751,10 +769,15 @@ class LocalReplica:
         
         for (producto_id, almacen), data in stock_por_producto_almacen.items():
             if producto_id and almacen and data['cantidad'] is not None:
+                final_stock = data['cantidad']
+                
+                if final_stock < 0:
+                    print(f"[WARN] Stock negativo detectado: producto={producto_id}, almacen={almacen}, stock={final_stock}")
+                
                 cursor.execute("""
                     INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
                     VALUES (?, ?, ?, ?)
-                """, (producto_id, almacen, data['cantidad'], data['unidad']))
+                """, (producto_id, almacen, final_stock, data['unidad']))
         
         conn.commit()
         conn.close()

@@ -1,9 +1,9 @@
 Traceback (most recent call last):
-  File "/workspaces/control-entradas-salidas/main.py", line 420, in main
+  File "/workspaces/control-entradas-salidas/main.py", line 415, in main
     from usr.views.login_view import LoginView
-  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 6, in <module>
-    from .requisiciones_view import RequisicionesView
-  File "/workspaces/control-entradas-salidas/usr/views/requisiciones_view.py", line 166
-    from usr.error_handler import show_error
-    ^^^^
-SyntaxError: expected 'except' or 'finally' block
+  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 2, in <module>
+    from .validacion_view import ValidacionView
+  File "/workspaces/control-entradas-salidas/usr/views/validacion_view.py", line 642
+    def _close_dialog(self, e=None):
+                                    ^
+IndentationError: unindent does not match any outer indentation level

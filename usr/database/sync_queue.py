@@ -15,6 +15,8 @@ from usr.database.conn import get_local_conn, get_cache_conn
 class SyncQueue:
     """Maneja la cola de sincronización."""
     
+    MAX_RETRIES = 5
+    
     _instance = None
     _lock = threading.Lock()
     _running = False
@@ -80,16 +82,27 @@ class SyncQueue:
         
         return row_id
     
+    MAX_RETRIES = 5
+    
     @staticmethod
     def get_pending(limit: int = 50) -> List[Dict]:
-        """Obtiene operaciones pendientes."""
+        """Obtiene operaciones pendientes Y fallidas con reintentos disponibles."""
         conn = get_local_conn()
         cursor = conn.cursor()
         
+        # Primero, convertir failed -> pending para los que se van a procesar
+        cursor.execute("""
+            UPDATE sync_queue 
+            SET status = 'pending', last_error = NULL
+            WHERE status = 'failed' AND retries < 5
+        """)
+        conn.commit()
+        
+        # Luego obtener todos los pending
         cursor.execute("""
             SELECT * FROM sync_queue 
-            WHERE status = 'pending' 
-            ORDER BY created_at 
+            WHERE status = 'pending'
+            ORDER BY created_at
             LIMIT ?
         """, (limit,))
         

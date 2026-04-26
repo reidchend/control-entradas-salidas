@@ -41,8 +41,13 @@ def get_db():
         db.close()
 
 def get_db_adaptive():
-    """Alias de get_db() - siempre usa SQLite local."""
-    return get_db()
+    """Generator que proporciona una sesión SQLite local."""
+    session = get_session()
+    db = session()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Alias de compatibilidad para código existente
 def get_engine():
