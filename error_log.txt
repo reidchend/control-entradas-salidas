@@ -1,5 +1,9 @@
 Traceback (most recent call last):
-  File "/workspaces/control-entradas-salidas/main.py", line 210, in main
-    await page.update_async()
-          ^^^^^^^^^^^^^^^^^
-AttributeError: 'Page' object has no attribute 'update_async'
+  File "/workspaces/control-entradas-salidas/main.py", line 420, in main
+    from usr.views.login_view import LoginView
+  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 6, in <module>
+    from .requisiciones_view import RequisicionesView
+  File "/workspaces/control-entradas-salidas/usr/views/requisiciones_view.py", line 166
+    from usr.error_handler import show_error
+    ^^^^
+SyntaxError: expected 'except' or 'finally' block

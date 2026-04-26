@@ -97,17 +97,15 @@ class SyncManager:
         print("[SYNC] Iniciando sincronización completa...")
         
         try:
-            # Subir pendientes a Supabase (usar remote session)
-            remote_session = self._get_remote_session_maker()
+            # Subir pendientes a Supabase
             uploaded = self._upload_pending_movimientos()
             
             # Descargar del servidor
-            local_session = self._get_session_maker()
             if uploaded > 0:
-                self._download_all_from_server(local_session)
+                self._download_all_from_server()
             else:
                 print("[SYNC] No hay pendientes, descargando del servidor...")
-                self._download_all_from_server(local_session)
+                self._download_all_from_server()
             
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
             print("[SYNC] Sincronización completa finalizada")
@@ -131,6 +129,11 @@ class SyncManager:
             print(f"[SYNC] Error en sincronización: {e}")
             import traceback
             traceback.print_exc()
+            try:
+                from usr.error_handler import show_sync_error
+                show_sync_error(f"Error de sincronización: {type(e).__name__}")
+            except:
+                pass
             return False
     
     def _upload_pending_movimientos(self) -> int:
@@ -183,7 +186,7 @@ class SyncManager:
         print(f"[SYNC] {synced_count} movimientos subidos al servidor")
         return synced_count
     
-    def _download_all_from_server(self, session_maker) -> bool:
+    def _download_all_from_server(self) -> bool:
         """Descarga todos los datos del servidor y guarda en local."""
         from .local_replica import LocalReplica
         import json
@@ -285,7 +288,7 @@ class SyncManager:
                     # Subir pendientes de la cola
                     self._process_sync_queue()
                     # Descargar cambios del servidor
-                    self._download_all_from_server(self._get_session_maker())
+                    self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
             except Exception as e:

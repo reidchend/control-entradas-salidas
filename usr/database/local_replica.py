@@ -403,6 +403,7 @@ class LocalReplica:
         """Guarda un movimiento en la BD local."""
         from .sync_queue import get_sync_queue
         from .sync import get_sync_manager
+        from config.config import get_settings
         
         conn = get_local_conn()
         cursor = conn.cursor()
@@ -441,9 +442,7 @@ class LocalReplica:
             try:
                 from sqlalchemy import text
                 from sqlalchemy import create_engine
-                from config.config import get_settings
                 
-                settings = get_settings()
                 remote_engine = create_engine(settings.DATABASE_URL)
                 
                 mov_clean = {k: v for k, v in movimiento.items() 

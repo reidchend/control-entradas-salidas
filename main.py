@@ -286,9 +286,15 @@ class ControlEntradasSalidasApp:
 
 
 async def main(page: ft.Page):
-    page.title = "Lycoris Control"
+    # ✓ FONDO OSCURO DESDE EL PRIMER MOMENTO (evita white flash)
+    page.bgcolor = "#121212"
+    page.theme_mode = ft.ThemeMode.DARK
     
-    # Favicon relativo para Flet
+    # ✓ Inicializar page y error handler
+    from usr.error_handler import set_page
+    set_page(page)
+    
+    page.title = "Lycoris Control"
     page.favicon = "favicon.png"
     page.assets_allow_override = True
     
@@ -301,14 +307,6 @@ async def main(page: ft.Page):
         except Exception:
             pass
     
-    # Icono de ventana - usar page.window.icon
-    import platform
-    if platform.system() == "Windows":
-        try:
-            icon_path = resource_path("assets/icono.ico")
-            page.window.icon = icon_path
-        except Exception:
-            pass
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],
         current_locale=ft.Locale("es"),

@@ -1,4 +1,5 @@
 import flet as ft
+import traceback
 from datetime import datetime
 from sqlalchemy import create_engine, text
 from usr.database.base import get_db, get_db_adaptive, is_online
@@ -288,9 +289,10 @@ class ValidacionView(ft.Container):
             self._update_validate_button_state()
             if self.page and self.page.client_storage: self.page.update()
         except Exception as ex:
-            logger.error(f"Error cargando entradas: {ex}")
+            from usr.error_handler import show_error
             import traceback
-            traceback.print_exc()
+            show_error("Error cargando entradas", ex, "validacion_view._load_entradas_pendientes")
+            logger.error(f"Error cargando entradas: {ex}")
             self.entradas_list.controls = [ft.Text(f"Error: {str(ex)}")]
         finally:
             if db:

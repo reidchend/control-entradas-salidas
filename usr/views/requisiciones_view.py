@@ -1,6 +1,8 @@
 import warnings
 warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
+import asyncio
+import traceback
 import flet as ft
 from datetime import datetime
 from usr.database.base import get_db, get_db_adaptive
@@ -124,7 +126,9 @@ class RequisicionesView(ft.Container):
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
             if self._vista_actual == "lista":
-                self.page.run_task(self._load_requisiciones)
+                async def _reload():
+                    await asyncio.to_thread(self._load_requisiciones)
+                self.page.run_task(_reload)
     
     def on_sync_complete(self):
         self._on_sync_complete()
@@ -160,7 +164,7 @@ class RequisicionesView(ft.Container):
             if self.page:
                 self.page.update()
         except Exception as e:
-            logger.error(f"Error cargando requisiciones: {e}")
+            show_error("Error cargando requisiciones", e, "requisiciones_view._load_requisiciones")
         finally:
             db.close()
 

@@ -1,4 +1,5 @@
 import flet as ft
+import traceback
 from usr.database.base import get_db, get_db_adaptive, check_connection
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
@@ -378,6 +379,8 @@ class ConfiguracionView(ft.Container):
                     else:
                         nuevo_codigo = "0001"
                 except Exception as ex:
+                    from usr.error_handler import show_error
+                    show_error("Error generating code", ex, "configuracion_view._on_guardar_producto")
                     nuevo_codigo = "0001"
             else:
                 nuevo_codigo = producto.codigo
@@ -475,6 +478,8 @@ class ConfiguracionView(ft.Container):
                     if hasattr(self, '_load_data'):
                         self._load_data()
                 except Exception as ex:
+                    from usr.error_handler import show_error
+                    show_error("Error saving product", ex, "configuracion_view._on_guardar_producto")
                     self._show_error(f"Error: {str(ex)}")
 
             if is_mobile:

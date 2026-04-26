@@ -11,6 +11,7 @@ from usr.logger import get_logger
 from usr.theme import get_theme, get_colors
 from sqlalchemy import func
 import traceback
+from usr.error_handler import show_error
 
 
 def _generar_color(texto):
@@ -38,7 +39,8 @@ def _get_safe_colors(page):
 try:
     from usr.database.cache import get_cache, set_cache, get_cache_any_age
     CACHE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    show_error("Error importing cache", e, "inventario_view.import")
     CACHE_AVAILABLE = False
 
 logger = get_logger(__name__)
@@ -157,8 +159,8 @@ class InventarioView(ft.Container):
                     self._update_connection_indicator()
                     try:
                         self.page.update()
-                    except:
-                        pass
+                    except Exception as e:
+                        show_error("Error updating page", e, "inventario_view.check_connection_loop")
         
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
         self._connection_thread.start()
@@ -225,6 +227,7 @@ class InventarioView(ft.Container):
             ], spacing=0, expand=True) 
             
         except Exception as e:
+            show_error("Error building UI", e, "inventario_view._build_ui")
             logger.error(f"Error UI: {e}")
 
     def _on_refresh(self):
@@ -311,8 +314,8 @@ class InventarioView(ft.Container):
         
         try:
             self._connection_indicator.update()
-        except:
-            pass
+        except Exception as e:
+            show_error("Error updating connection indicator", e, "inventario_view._update_connection_indicator")
 
     async def _load_categorias(self, force_refresh=False):
         if not self.page:
@@ -361,6 +364,7 @@ class InventarioView(ft.Container):
                         if db:
                             db.close()
         except Exception as e:
+            show_error("Error loading categories", e, "inventario_view._load_categorias")
             logger.error(f"Error carga categorías: {e}")
             self.categorias_grid.controls = [ft.Text(f"Error: {e}")]
             if self.page:
@@ -379,6 +383,7 @@ class InventarioView(ft.Container):
             await asyncio.sleep(0.15)
             self._show_productos(categoria)
         except Exception as e:
+            show_error("Error clicking category", e, "inventario_view._on_categoria_click")
             logger.error(f"Error en clic categoría: {e}")
 
     def _get_card_bg(self):
@@ -421,18 +426,25 @@ class InventarioView(ft.Container):
         return card
 
     def _al_pasar_mouse(self, e, card, cat_color):
+        """Efecto profesional: Escala + Rotación + Sombra progresiva con color de categoría"""
         if e.data == "true":
             card.scale = 1.05
-            card.border = ft.border.all(2, cat_color)
+            card.rotate = 0.02
             card.shadow = ft.BoxShadow(
-                blur_radius=25,
-                color=ft.Colors.with_opacity(0.3, cat_color),
-                offset=ft.Offset(0, 10)
+                blur_radius=15,
+                color=ft.Colors.with_opacity(0.2, cat_color),
+                offset=ft.Offset(0, 0),
             )
+            card.animate = ft.Animation(300, ft.AnimationCurve.DECELERATE)
         else:
             card.scale = 1.0
-            card.border = ft.border.only(bottom=ft.BorderSide(3, cat_color))
-            card.shadow = None
+            card.rotate = 0
+            card.shadow = ft.BoxShadow(
+                blur_radius=0,
+                color=ft.Colors.with_opacity(0.1, cat_color),
+                offset=ft.Offset(0, 0),
+            )
+            card.animate = ft.Animation(300, ft.AnimationCurve.DECELERATE)
         card.update()
 
     def _create_categoria_card_from_dict(self, cat_dict):
@@ -454,8 +466,13 @@ class InventarioView(ft.Container):
             height=130,
             alignment=ft.alignment.center,
             border=ft.border.only(bottom=ft.BorderSide(3, cat_color)),
-            animate=ft.Animation(350, ft.AnimationCurve.DECELERATE),
-            animate_scale=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+            shadow=ft.BoxShadow(
+                blur_radius=0,
+                color=ft.Colors.with_opacity(0.2, cat_color),
+                offset=ft.Offset(0, 3),
+            ),
+            animate_scale=ft.Animation(400, ft.AnimationCurve.DECELERATE),
+            animate_rotation=ft.Animation(400, ft.AnimationCurve.DECELERATE),
             content=ft.Column(
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -618,6 +635,7 @@ class InventarioView(ft.Container):
             self.productos_list.controls = items if items else [ft.Text("No hay productos")]
             if self.page: self.update()
         except Exception as e:
+            show_error("Error loading products", e, "inventario_view._load_productos_por_categoria")
             logger.error(f"Error carga productos: {e}")
 
     def _create_producto_item(self, producto, stock_por_almacen=None):
@@ -724,7 +742,8 @@ class InventarioView(ft.Container):
                 peso_u = float(peso_x_unidad_input.value.replace(',', '.') or 0)
                 peso_total_input.value = f"{cant * peso_u:.3f}"
                 peso_total_input.update()
-            except:
+            except Exception as e:
+                show_error("Error calculating total", e, "inventario_view.calcular_desde_cantidad")
                 peso_total_input.value = "0.000"
                 peso_total_input.update()
         
@@ -735,8 +754,8 @@ class InventarioView(ft.Container):
                 if cant > 0:
                     peso_x_unidad_input.value = f"{total / cant:.3f}"
                     peso_x_unidad_input.update()
-            except:
-                pass
+            except Exception as e:
+                show_error("Error calculating from total", e, "inventario_view.calcular_desde_total")
         
         cant_x_unidad_input = ft.TextField(
             label="Und.",
@@ -1023,8 +1042,8 @@ class InventarioView(ft.Container):
         try:
             from usr.database import get_sync_manager
             sync_mgr = get_sync_manager()
-        except:
-            pass
+        except Exception as e:
+            show_error("Error getting sync manager", e, "inventario_view")
         
         online = is_online() if sync_mgr is None else sync_mgr.check_connection()
         
@@ -1068,6 +1087,7 @@ class InventarioView(ft.Container):
                 print("[SYNC] Movimiento syncado inmediatamente")
                 sync_exito = True
             except Exception as e:
+                show_error("Error syncing movement", e, "inventario_view._add_movimiento")
                 print(f"[SYNC] Error al syncar: {e}")
                 sync_exito = False
         else:
@@ -1078,8 +1098,8 @@ class InventarioView(ft.Container):
                 from usr.database.sync_queue import get_sync_queue
                 queue = get_sync_queue()
                 queue.add_pending('movimientos', 'insert', movimiento_data)
-            except:
-                pass
+            except Exception as e:
+                show_error("Error adding to sync queue", e, "inventario_view._add_movimiento")
         
         self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad}")
         self._load_productos()

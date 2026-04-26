@@ -1,3 +1,4 @@
+import asyncio
 import flet as ft
 import locale
 from datetime import datetime, timedelta, date
@@ -225,12 +226,14 @@ class HistorialFacturasView(ft.Container):
     #  LOGICA DE DATOS
     # ══════════════════════════════════════════════════════════════
     def did_mount(self):
+        from usr.error_handler import show_error
         try:
             self._build_ui()
             self._load_facturas()
             self._load_entradas_por_fecha()
             self._update_connection_indicator()
-        except: pass
+        except Exception as e:
+            show_error("Error al montar vista", e, "historial_facturas_view.did_mount")
         
         # Hilo de monitoreo
         import threading
@@ -241,7 +244,8 @@ class HistorialFacturasView(ft.Container):
                 if self.page:
                     self._update_connection_indicator()
                     try: self.page.update()
-                    except: pass
+                    except Exception:
+                        pass
         
         t = threading.Thread(target=check_conn, daemon=True)
         t.start()
@@ -254,8 +258,10 @@ class HistorialFacturasView(ft.Container):
     
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
-            self.page.run_task(self._load_facturas)
-            self.page.run_task(self._load_entradas_por_fecha)
+            async def _reload():
+                await asyncio.to_thread(self._load_facturas)
+                await asyncio.to_thread(self._load_entradas_por_fecha)
+            self.page.run_task(_reload)
     
     def on_sync_complete(self):
         self._on_sync_complete()
@@ -297,7 +303,8 @@ class HistorialFacturasView(ft.Container):
             self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
             self._connection_indicator.tooltip = f"Modo Offline ({pending} pend.)"
         try: self._connection_indicator.update()
-        except: pass
+        except Exception:
+            pass
 
     # ─── FACTURAS ──────────────────────────────────────────────────
     def _load_facturas(self):

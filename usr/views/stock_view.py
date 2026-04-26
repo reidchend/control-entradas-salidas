@@ -1,5 +1,6 @@
 import flet as ft
 import asyncio
+import traceback
 from usr.database.base import get_db, get_db_adaptive
 from usr.models import Producto, Movimiento, Categoria, Existencia, Factura
 from datetime import datetime
@@ -38,6 +39,7 @@ class StockView(ft.Container):
         self.sin_stock_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=colors['error'])
 
     def did_mount(self):
+        self._running = True
         self._build_ui()
         if self.page and self.page.client_storage:
             self._load_categorias()
@@ -53,22 +55,29 @@ class StockView(ft.Container):
         import time
         
         def check_connection_loop():
-            while True:
+            while self._running:
                 time.sleep(10)
                 if hasattr(self, 'page') and self.page:
                     self._update_connection_indicator()
                     try:
                         self.page.update()
-                    except:
+                    except Exception:
                         pass
         
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
         self._connection_thread.start()
     
+    def will_unmount(self):
+        self._running = False
+        from usr.database.sync_callbacks import unregister_sync_callback
+        unregister_sync_callback(self._on_sync_complete)
+    
     def _on_sync_complete(self):
         """Callback que se ejecuta después de cada sync automático."""
         if hasattr(self, 'page') and self.page and self.visible:
-            self.page.run_task(self._load_productos)
+            async def _reload():
+                await asyncio.to_thread(self._load_productos)
+            self.page.run_task(_reload)
     
     def on_sync_complete(self):
         """Alias para compatibilidad con SyncManager callback."""
@@ -156,6 +165,7 @@ class StockView(ft.Container):
         """Se llama cuando cambia el tema"""
         if not self.page or not self.page.client_storage:
             return
+        from usr.error_handler import show_error
         colors = _colors(self.page)
         self.bgcolor = colors['bg']
         try:
@@ -164,8 +174,8 @@ class StockView(ft.Container):
                 self.list_container.bgcolor = colors['bg']
             self._load_categorias()
             self._load_productos()
-        except:
-            pass
+        except Exception as e:
+            show_error("Error al cambiar tema", e, "stock_view.on_theme_change")
 
     def _build_ui(self):
         colors = _colors(self.page)
