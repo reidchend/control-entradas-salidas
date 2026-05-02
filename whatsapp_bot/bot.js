@@ -7,12 +7,13 @@ const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = requi
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const path = require('path');
-const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 
 // Variable global para el socket
 let sock = null;
 let isConnected = false;
 let isConnecting = false; // Evitar múltiples conexiones simultáneas
+let currentQR = null; // Almacenar el QR actual
 
 // Cargar configuración
 const configPath = path.join(__dirname, 'config.json');
@@ -128,8 +129,15 @@ async function connect() {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
-                console.log('\n📱 NUEVO QR GENERADO:');
-                qrcode.generate(qr, { small: true }); // Esto garantiza que lo veas en la consola
+                console.log('\n📱 NUEVO QR GENERADO - Visita: http://localhost:3000/qr');
+                // Generar QR como data URL para servir via HTTP
+                QRCode.toDataURL(qr, (err, url) => {
+                    if (err) {
+                        console.error('Error generando QR:', err);
+                        return;
+                    }
+                    currentQR = url;
+                });
             }
             
             if (connection === 'close') {
@@ -195,5 +203,6 @@ module.exports = {
     getGroups,
     setGroupId,
     getGroupId,
-    isConnected: isWAConnected
+    isConnected: isWAConnected,
+    getCurrentQR: () => currentQR
 };

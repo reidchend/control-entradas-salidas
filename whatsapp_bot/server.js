@@ -5,6 +5,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const bot = require('./bot');
 
 const app = express();
@@ -18,6 +19,144 @@ app.use(express.json());
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
+});
+
+// Página HTML para mostrar el QR
+app.get('/qr', (req, res) => {
+    const qr = bot.getCurrentQR();
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot - QR Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #25D366;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: inline-block;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .qr-container {
+            margin: 20px 0;
+        }
+        .qr-container img {
+            max-width: 100%;
+            height: auto;
+            border: 3px solid #25D366;
+            border-radius: 10px;
+        }
+        .message {
+            color: #666;
+            margin: 20px 0;
+        }
+        .refresh-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .refresh-btn:hover {
+            background: #128C7E;
+        }
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #004085;
+        }
+    </style>
+    <script>
+        function refreshQR() {
+            location.reload();
+        }
+        // Auto-refresh cada 5 segundos si no está conectado
+        setInterval(() => {
+            fetch('/')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.whatsapp_connected) {
+                        location.reload();
+                    }
+                })
+                .catch(() => {});
+        }, 5000);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 WhatsApp Bot</h1>
+        ${bot.isConnected() ? 
+            '<div class="status connected">✅ Conectado</div>' : 
+            '<div class="status disconnected">❌ No conectado</div>'
+        }
+        
+        ${bot.isConnected() ? 
+            '<p class="message">El bot está conectado y listo para usar.</p>' :
+            (qr ? 
+                `<div class="qr-container">
+                    <img src="${qr}" alt="QR Code" />
+                </div>
+                <p class="message">Escanea este código con WhatsApp</p>
+                <button class="refresh-btn" onclick="refreshQR()">🔄 Actualizar</button>` :
+                '<p class="message">Generando QR... Por favor espera</p><button class="refresh-btn" onclick="refreshQR()">🔄 Actualizar</button>'
+            )
+        }
+        
+        ${bot.getGroupId() ? 
+            `<div class="info">📢 Grupo configurado: ${bot.getGroupId()}</div>` : 
+            ''
+        }
+        
+        <div class="info">
+            <strong>📋 Endpoints disponibles:</strong><br>
+            POST /send - Enviar mensaje al grupo<br>
+            GET /groups - Listar grupos<br>
+            POST /set-group - Configurar grupo
+        </div>
+    </div>
+</body>
+</html>
+    `;
+    res.send(html);
 });
 
 // Endpoint de verificación de estado
