@@ -2,23 +2,16 @@ import flet as ft
 import asyncio
 import traceback
 from datetime import datetime
-from sqlalchemy import create_engine, text, or_
+from sqlalchemy import create_engine, text
 from usr.database.base import get_db, get_db_adaptive, is_online
 from usr.models import Movimiento, Factura,Producto, Categoria, Existencia
 from usr.logger import get_logger
 from usr.theme import get_theme, get_colors
 from config.config import get_settings
+from usr.notifications import show_success, show_error, show_info
+from usr.whatsapp_notifier import send_whatsapp_message, format_validation_message
 
 logger = get_logger(__name__)
-
-
-def _fmt_datetime(dt):
-    if dt is None:
-        return "Sin fecha"
-    try:
-        return dt.strftime("%d/%m %H:%M")
-    except:
-        return "Sin fecha"
 
 
 def _colors(page):
@@ -233,14 +226,7 @@ class ValidacionView(ft.Container):
         
         if self.page and self.page.overlay is not None:
             self.page.overlay.clear()
-        if self.page:
-            snack = ft.SnackBar(
-                content=ft.Text("🔄 Actualizando..."),
-                bgcolor=ft.Colors.BLUE_600,
-                duration=1,
-            )
-            self.page.snack_bar = snack
-            self.page.update()
+        show_info("Actualizando...", duration=1)
     
     def _load_entradas_pendientes(self):
         if self.is_loading:
@@ -266,14 +252,6 @@ class ValidacionView(ft.Container):
                 query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search_term}%"))
             
             entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
-            
-            # Debug - ver todos los movimientos en la DB
-            print(f"[DEBUG] Entradas encontradas en query: {len(entradas)}")
-            all_movs = db.query(Movimiento).filter(Movimiento.tipo == "entrada").all()
-            print(f"[DEBUG] Total movimientos tipo=entrada en DB: {len(all_movs)}")
-            
-            for e in entradas[:5]:
-                print(f"  - id={e.id}, prod={e.producto_id}, cant={e.cantidad}, factura_id={e.factura_id}")
             
             self.entradas_data = {e.id: e for e in entradas}
             
@@ -437,22 +415,13 @@ class ValidacionView(ft.Container):
                 self.active_dialog.open = False
                 self.page.update()
                 
-                snack = ft.SnackBar(
-                    content=ft.Text(f"✓ Entrada de {entrada.cantidad} {producto_nombre} eliminada. Stock revertido."),
-                    bgcolor=ft.Colors.GREEN_700
-                )
-                self.page.overlay.append(snack)
-                snack.open = True
-                self.page.update()
+                show_success(f"Entrada de {entrada.cantidad} {producto_nombre} eliminada. Stock revertido.")
                 
             except Exception as ex:
                 db.rollback()
                 logger.error(f"Error eliminando entrada: {ex}")
                 
-                snack = ft.SnackBar(
-                    content=ft.Text(f"❌ Error: {str(ex)[:50]}"),
-                    bgcolor=ft.Colors.RED_700
-                )
+                show_error(f"Error: {str(ex)[:50]}")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -512,10 +481,11 @@ class ValidacionView(ft.Container):
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True
         self.page.update()
-
+    
     def _process_validation(self, ref_factura):
         db = next(get_db_adaptive())
         try:
+            # 1. Crear factura local
             nueva_fac = Factura(
                 numero_factura=ref_factura if ref_factura else f"V-REF-{datetime.now().strftime('%H%M%S')}",
                 proveedor="Varios",
@@ -528,7 +498,8 @@ class ValidacionView(ft.Container):
             )
             db.add(nueva_fac)
             db.flush()
-
+            
+            # 2. Actualizar movimientos locales
             movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(self.selected_entradas))).all()
             for m in movimientos:
                 m.factura_id = nueva_fac.id
@@ -536,15 +507,17 @@ class ValidacionView(ft.Container):
             db.commit()
             self.selected_entradas.clear()
             
+            # 3. Sincronizar con Supabase si está online
             if is_online():
                 try:
                     settings = get_settings()
                     remote_engine = create_engine(settings.DATABASE_URL)
                     
                     with remote_engine.connect() as conn:
+                        # Insertar factura en Supabase
                         conn.execute(text("""
                             INSERT INTO facturas (numero_factura, proveedor, fecha_factura, fecha_recepcion, 
-                                                total_bruto, total_impuestos, total_neto, estado, validada_por, fecha_validacion)
+                                total_bruto, total_impuestos, total_neto, estado, validada_por, fecha_validacion)
                             VALUES (:numero, :proveedor, :fecha_factura, :fecha_recepcion, 
                                     :bruto, :impuestos, :neto, :estado, :validada_por, :fecha_valid)
                         """), {
@@ -560,38 +533,52 @@ class ValidacionView(ft.Container):
                             'fecha_valid': nueva_fac.fecha_validacion
                         })
                         
+                        # Obtener ID de factura en Supabase
                         result = conn.execute(text("SELECT id FROM facturas WHERE numero_factura = :num"), 
-                                             {'num': nueva_fac.numero_factura})
-                        supabase_factura_id = result.fetchone()[0]
+                                            {'num': nueva_fac.numero_factura})
+                        supabase_fac_id = result.fetchone()[0]
                         
+                        # Actualizar movimientos en Supabase
                         for m in movimientos:
-                            conn.execute(text("""
-                                UPDATE movimientos SET factura_id = :fac_id WHERE id = :mov_id
-                            """), {'fac_id': supabase_factura_id, 'mov_id': m.id})
+                            conn.execute(text("UPDATE movimientos SET factura_id = :fac_id WHERE id = :mov_id"),
+                                       {'fac_id': supabase_fac_id, 'mov_id': m.id})
                         
                         conn.commit()
-                    remote_engine.dispose()
-                    print("[SYNC] Validación sincronizada a Supabase")
+                        print("[SYNC] Validación sincronizada a Supabase")
                 except Exception as e:
                     print(f"[SYNC] Error sincronizando validación: {e}")
             
+            # 4. Recargar vista
             self._load_entradas_pendientes()
+            show_success("Entradas validadas correctamente")
             
-            snack = ft.SnackBar(content=ft.Text("✅ Entradas validadas correctamente"), bgcolor=ft.Colors.GREEN_700)
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()
-
+            # 5. Enviar notificación a WhatsApp
+            try:
+                # Obtener datos para el mensaje
+                factura_num = nueva_fac.numero_factura
+                productos_info = []
+                for m in movimientos:
+                    prod = db.query(Producto).filter(Producto.id == m.producto_id).first()
+                    if prod:
+                        productos_info.append(f"{m.cantidad} x {prod.nombre}")
+                
+                msg = format_validation_message(
+                    ", ".join(productos_info[:3]) + ("..." if len(productos_info) > 3 else ""),
+                    sum(m.cantidad for m in movimientos),
+                    factura_num,
+                    nueva_fac.proveedor
+                )
+                send_whatsapp_message(msg)
+            except Exception as e:
+                print(f"[WHATSAPP] Error enviando notificación: {e}")
+                
         except Exception as ex:
             db.rollback()
             logger.error(f"Error procesando validación: {ex}")
-            snack_err = ft.SnackBar(content=ft.Text(f"❌ Error: {str(ex)[:50]}"), bgcolor=ft.Colors.RED_700)
-            self.page.overlay.append(snack_err)
-            snack_err.open = True
-            self.page.update()
+            show_error(f"Error: {str(ex)[:50]}")
         finally:
             db.close()
-
+    
     def _close_dialog(self, e=None):
         if hasattr(self, 'active_dialog') and self.active_dialog:
             self.active_dialog.open = False

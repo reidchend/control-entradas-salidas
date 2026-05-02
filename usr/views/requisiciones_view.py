@@ -10,6 +10,7 @@ from usr.database.sync_callbacks import register_sync_callback, unregister_sync_
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
 from usr.theme import get_theme, get_colors
+from usr.notifications import show_success, show_error, show_warning
 
 logger = logging.getLogger(__name__)
 
@@ -371,7 +372,7 @@ class RequisicionesView(ft.Container):
         
         def on_confirmar(e):
             if not productos_container.controls:
-                snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=colors['warning'])
+                show_warning("Agregue al menos un producto")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -457,14 +458,14 @@ class RequisicionesView(ft.Container):
                 self.page.update()
                 self._load_requisiciones()
                 
-                snack = ft.SnackBar(content=ft.Text(f"✓ {origen} → {destino}"), bgcolor=colors['success'])
+                show_success(f"{origen} → {destino}")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
             except Exception as ex:
                 db.rollback()
                 logger.error(f"Error creando requisición: {ex}")
-                snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=colors['error'])
+                show_error(f"Error: {ex}")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -548,7 +549,7 @@ class RequisicionesView(ft.Container):
         
         colors = _colors(self.page)
         if req.estado == "completada":
-            snack = ft.SnackBar(content=ft.Text("No se puede editar una requisición completada"), bgcolor=colors['warning'])
+            show_warning("No se puede editar una requisición completada")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -1244,7 +1245,7 @@ class RequisicionesView(ft.Container):
             if hasattr(self, '_bs_buscador') and self._bs_buscador:
                 self._bs_buscador.open = False
             
-            snack = ft.SnackBar(content=ft.Text(f"+ {producto.nombre}"), bgcolor=colors['success'])
+            show_success(f"+ {producto.nombre}")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -1322,7 +1323,7 @@ class RequisicionesView(ft.Container):
 
     def _crear_requisicion_vista(self, origen_dropdown, destino_dropdown, observaciones):
         if not self.lista_productos_req:
-            snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=ft.Colors.ORANGE_700)
+            show_warning("Agregue al menos un producto")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -1355,7 +1356,7 @@ class RequisicionesView(ft.Container):
                     db.add(detalle)
                 
                 db.commit()
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición actualizada"), bgcolor=ft.Colors.GREEN_700)
+                show_success("Requisición actualizada")
             else:
                 req = Requisicion(
                     numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -1380,7 +1381,7 @@ class RequisicionesView(ft.Container):
                     db.add(detalle)
                 
                 db.commit()
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición creada: {origen} → {destino}"), bgcolor=ft.Colors.GREEN_700)
+                show_success(f"Requisición creada: {origen} → {destino}")
             
             self.page.overlay.append(snack)
             snack.open = True
@@ -1393,7 +1394,7 @@ class RequisicionesView(ft.Container):
         except Exception as ex:
             db.rollback()
             logger.error(f"Error guardando requisición: {ex}")
-            snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=ft.Colors.RED_700)
+            show_error(f"Error: {ex}")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()

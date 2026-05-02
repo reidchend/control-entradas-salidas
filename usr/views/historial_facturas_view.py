@@ -8,8 +8,8 @@ from usr.database.sync_callbacks import register_sync_callback, unregister_sync_
 from usr.database.cache import get_cache
 from usr.models import Factura, Movimiento, Producto
 from sqlalchemy.orm import joinedload
-from sqlalchemy import func
 from usr.theme import get_theme, get_colors
+from usr.notifications import show_error
 
 
 def _colors(page):
@@ -314,7 +314,7 @@ class HistorialFacturasView(ft.Container):
             self.facturas_data = db.query(Factura).order_by(Factura.fecha_factura.desc()).all()
             self._apply_filters()
         except Exception as e:
-            self._show_error(f"Error cargando facturas: {str(e)}")
+            show_error(f"Error cargando facturas: {str(e)}")
         finally:
             if db: db.close()
 
@@ -462,7 +462,7 @@ class HistorialFacturasView(ft.Container):
                         self.entradas_list.controls.append(self._create_entrada_card(m, colors))
             self.update()
         except Exception as e:
-            self._show_error(f"Error al cargar movimientos: {str(e)}")
+            show_error(f"Error al cargar movimientos: {str(e)}")
         finally:
             if db: db.close()
 
@@ -544,14 +544,3 @@ class HistorialFacturasView(ft.Container):
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
-
-    def _show_error(self, m):
-        if self.page:
-            colors = _colors(self.page)
-            snack = ft.SnackBar(
-                content=ft.Row([ft.Icon(ft.Icons.ERROR_OUTLINE, color="white"), ft.Text(m)], spacing=10),
-                bgcolor=colors['error']
-            )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()

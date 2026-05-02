@@ -7,6 +7,7 @@ from sqlalchemy import text
 from usr.theme import get_theme, get_colors
 from usr.database.local_replica import LocalReplica
 from datetime import datetime
+from usr.notifications import show_success, show_error, show_warning
 
 
 def _colors(page):
@@ -356,7 +357,7 @@ class ConfiguracionView(ft.Container):
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             if not categorias:
-                self._show_error("⚠️ Cree al menos una categoría")
+                show_warning("Cree al menos una categoría")
                 return
 
             nuevo_codigo = ""
@@ -473,14 +474,14 @@ class ConfiguracionView(ft.Container):
                         producto.id if producto else None, 
                         es_pesable_sw.value
                     )
-                    self._show_message("✅ Producto guardado correctamente")
+                    show_success("Producto guardado correctamente")
                     self._close_dialog()
                     if hasattr(self, '_load_data'):
                         self._load_data()
                 except Exception as ex:
                     from usr.error_handler import show_error
                     show_error("Error saving product", ex, "configuracion_view._on_guardar_producto")
-                    self._show_error(f"Error: {str(ex)}")
+                    show_error(f"Error: {str(ex)}")
 
             if is_mobile:
                 content_column = ft.Column([
@@ -566,7 +567,7 @@ class ConfiguracionView(ft.Container):
             from usr.error_handler import show_error
             show_error("Error al agregar categoría a cola de sync", e, "configuracion_view._on_guardar_categoria")
         
-        self._show_message("✅ Categoría guardada")
+        show_success("Categoría guardada")
         
         self._close_dialog()
         self._load_data()
@@ -609,7 +610,7 @@ class ConfiguracionView(ft.Container):
         except:
             pass
         
-        self._show_message("✅ Guardado")
+        show_success("Guardado")
         
         self._close_dialog()
         self._load_data()
@@ -723,11 +724,11 @@ class ConfiguracionView(ft.Container):
                     from usr.error_handler import show_error
                     show_error("Error al actualizar categoría en cola de sync", e, "configuracion_view._on_toggle_categoria")
             
-            self._show_message(f"✅ {tipo.capitalize()} desactivado correctamente")
+            show_success(f"{tipo.capitalize()} desactivado correctamente")
             self._load_data()
             self._close_dialog()
         except Exception as e:
-            self._show_error(f"Error: {str(e)}")
+            show_error(f"Error: {str(e)}")
         finally:
             db.close()
     
@@ -754,7 +755,7 @@ class ConfiguracionView(ft.Container):
             self.update()
             db.close()
         except Exception as e:
-            self._show_error(f"Error al cargar datos: {str(e)}")
+            show_error(f"Error al cargar datos: {str(e)}")
             if db:
                 db.close()
     
@@ -1000,40 +1001,6 @@ class ConfiguracionView(ft.Container):
         if self.page and control in self.page.overlay:
             self.page.overlay.remove(control)
 
-    def _show_error(self, m):
-        self._remove_snackbar()
-        colors = _colors(self.page)
-        self.active_snackbar = ft.SnackBar(
-            content=ft.Row([
-                ft.Icon(ft.Icons.ERROR, color=colors['white']),
-                ft.Text(m, color=colors['white']),
-            ], spacing=10),
-            bgcolor=colors['error'],
-            margin=20,
-        )
-        self._add_to_overlay(self.active_snackbar)
-        self.active_snackbar.open = True
-        self.page.update()
-
-    def _show_message(self, m):
-        self._remove_snackbar()
-        colors = _colors(self.page)
-        self.active_snackbar = ft.SnackBar(
-            content=ft.Row([
-                ft.Icon(ft.Icons.CHECK_CIRCLE, color=colors['white']),
-                ft.Text(m, color=colors['white']),
-            ], spacing=10),
-            bgcolor=colors['success'],
-            margin=20,
-        )
-        self._add_to_overlay(self.active_snackbar)
-        self.active_snackbar.open = True
-        self.page.update()
-
-    def _remove_snackbar(self):
-        if self.active_snackbar and self.page and self.active_snackbar in self.page.overlay:
-            self.page.overlay.remove(self.active_snackbar)
-
     def _build_sistema_tab(self):
         colors = _colors(self.page)
         return ft.Container(
@@ -1191,7 +1158,7 @@ class ConfiguracionView(ft.Container):
         if LocalReplica.verificar_pin(self.pin_verify_input.value):
             self._confirmar_cambio()
         else:
-            self._show_message("PIN incorrecto")
+            show_error("PIN incorrecto")
     
     def _confirmar_cambio(self):
         from usr.database.local_replica import LocalReplica
@@ -1199,7 +1166,7 @@ class ConfiguracionView(ft.Container):
         
         self._close_dialog()
         LocalReplica.eliminar_usuario_dispositivo()
-        self._show_message("Recargando...")
+        show_info("Recargando...")
         self.page.run_task(restart_main, self.page)
     
     def _close_dialog(self, e=None):
@@ -1217,11 +1184,11 @@ class ConfiguracionView(ft.Container):
         if current:
             self.offline_status_indicator.value = "📴 FORZADO OFFLINE"
             self.offline_status_indicator.color = ft.Colors.RED_400
-            self._show_message("⚠️ Modo offline forzado - Los datos se guardarán localmente")
+            show_warning("Modo offline forzado - Los datos se guardarán localmente")
         else:
             self.offline_status_indicator.value = "🟢 ONLINE"
             self.offline_status_indicator.color = ft.Colors.GREEN_400
-            self._show_message("✓ Conexión normal restaurada")
+            show_success("Conexión normal restaurada")
         
         self.update()
 
@@ -1233,12 +1200,12 @@ class ConfiguracionView(ft.Container):
             self.test_result_text.value = "✅ Conexión exitosa - Base de datos operativa"
             self.test_result_text.color = "#2E7D32"
             self.test_result_text.visible = True
-            self._show_message("✅ Conexión a base de datos verificada")
+            show_success("Conexión a base de datos verificada")
         except Exception as ex:
             self.test_result_text.value = f"❌ Error: {str(ex)}"
             self.test_result_text.color = "#c62828"
             self.test_result_text.visible = True
-            self._show_error(f"Error de conexión: {str(ex)}")
+            show_error(f"Error de conexión: {str(ex)}")
         finally:
             if db:
                 db.close()
@@ -1258,14 +1225,14 @@ class ConfiguracionView(ft.Container):
                 
                 if fcm_component:
                     fcm_component.request_permission()
-                    self._show_message("Solicitando permiso de notificaciones...")
+                    show_info("Solicitando permiso de notificaciones...")
                 else:
-                    self._show_error("El servicio de notificaciones no está activo en este entorno.")
+                    show_warning("El servicio de notificaciones no está activo en este entorno.")
             else:
-                self._show_error("No se pudo acceder al sistema de la aplicación.")
+                show_error("No se pudo acceder al sistema de la aplicación.")
                 
         except Exception as ex:
-            self._show_error(f"Error al activar notificaciones: {str(ex)}")
+            show_error(f"Error al activar notificaciones: {str(ex)}")
 
     def _trigger_sync(self):
         """Intenta sincronizar inmediatamente si hay conexión."""

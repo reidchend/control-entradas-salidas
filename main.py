@@ -24,13 +24,6 @@ def resource_path(relative_path: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
-def log_debug(msg):
-    """Registra mensajes de debug con timestamp"""
-    import time
-    ts = time.strftime("%H:%M:%S")
-    print(f"[DEBUG] {msg}", flush=True)
-
-
 def get_theme_colors(page):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     return {

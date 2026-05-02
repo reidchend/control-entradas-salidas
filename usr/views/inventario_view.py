@@ -3,15 +3,14 @@ import asyncio
 import hashlib
 import threading
 from datetime import datetime
-from contextlib import contextmanager
 from usr.database.base import get_db, get_db_adaptive, is_online
 from usr.database.local_replica import LocalReplica
 from usr.models import Categoria, Producto, Movimiento, Existencia
 from usr.logger import get_logger
 from usr.theme import get_theme, get_colors
-from sqlalchemy import func
 import traceback
 from usr.error_handler import show_error
+from usr.notifications import show_success, show_error as show_error_notif
 
 
 def _generar_color(texto):
@@ -36,24 +35,7 @@ def _get_safe_colors(page):
         return get_theme(page.theme_mode == ft.ThemeMode.DARK)
     return get_theme(True)
 
-try:
-    from usr.database.cache import get_cache, set_cache, get_cache_any_age
-    CACHE_AVAILABLE = True
-except ImportError as e:
-    show_error("Error importing cache", e, "inventario_view.import")
-    CACHE_AVAILABLE = False
-
 logger = get_logger(__name__)
-
-
-@contextmanager
-def _safe_db():
-    """Manejador seguro para sesiones de base de datos"""
-    db = next(get_db_adaptive())
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 class InventarioView(ft.Container):
@@ -1019,7 +1001,7 @@ class InventarioView(ft.Container):
             cant_nueva = cant_anterior + cantidad_a_mover
         else:
             if cant_anterior < cantidad_a_mover:
-                self._show_error("Stock insuficiente"); return
+                show_error_notif("Stock insuficiente"); return
             cant_nueva = cant_anterior - cantidad_a_mover
         
         movimiento_data = {
@@ -1103,19 +1085,5 @@ class InventarioView(ft.Container):
             except Exception as e:
                 show_error("Error adding to sync queue", e, "inventario_view._add_movimiento")
         
-        self._show_message(f"✓ {tipo.capitalize()} registrada: {cantidad}")
+        show_success(f"{tipo.capitalize()} registrada: {cantidad}")
         self._load_productos()
-
-    def _show_message(self, texto):
-        if self.page:
-            snack = ft.SnackBar(content=ft.Text(texto), bgcolor=ft.Colors.GREEN_700)
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()
-
-    def _show_error(self, texto):
-        if self.page:
-            snack = ft.SnackBar(content=ft.Text(texto), bgcolor=ft.Colors.RED_700)
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.page.update()

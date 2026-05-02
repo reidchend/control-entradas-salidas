@@ -3,10 +3,10 @@ import asyncio
 import traceback
 from usr.database.base import get_db, get_db_adaptive
 from usr.models import Producto, Movimiento, Categoria, Existencia, Factura
-from datetime import datetime
 import logging
 from sqlalchemy import func
 from usr.theme import get_theme, get_colors
+from usr.notifications import show_success, show_info
 
 logger = logging.getLogger(__name__)
 
@@ -97,25 +97,10 @@ class StockView(ft.Container):
             if sync_mgr:
                 sync_mgr.force_sync_now()
         
-        colors = _colors(self.page)
-        snack = ft.SnackBar(
-            content=ft.Text("🔄 Actualizando..."),
-            bgcolor=colors['accent'],
-            duration=1,
-        )
-        self.page.overlay.append(snack)
-        snack.open = True
-        self.page.update()
+        show_info("Actualizando...", duration=1)
         self._load_categorias()
         self._load_productos()
-        snack = ft.SnackBar(
-            content=ft.Text("✓ Datos actualizados"),
-            bgcolor=colors['success'],
-            duration=2,
-        )
-        self.page.overlay.append(snack)
-        snack.open = True
-        self.page.update()
+        show_success("Datos actualizados", duration=2)
     
     async def _on_sync_indicator_click(self, e=None):
         """Solo actualiza el indicador visual"""
@@ -126,19 +111,6 @@ class StockView(ft.Container):
             return
         
         self._update_connection_indicator()
-        self.page.update()
-    
-    def _show_snack_bar(self, message, bgcolor):
-        """Muestra SnackBar."""
-        if not self.page:
-            return
-        snack = ft.SnackBar(
-            content=ft.Text(message, weight=ft.FontWeight.BOLD),
-            bgcolor=bgcolor,
-            duration=5,
-        )
-        self.page.overlay.append(snack)
-        snack.open = True
         self.page.update()
     
     def _update_connection_indicator(self):
