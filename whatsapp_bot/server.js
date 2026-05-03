@@ -10,10 +10,25 @@ const bot = require('./bot');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN || 'mi_token_secreto_123';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Middleware de autenticación (excepto para /qr)
+app.use((req, res, next) => {
+    // No requiere auth para la página del QR
+    if (req.path === '/qr' || req.path === '/') {
+        return next();
+    }
+    
+    const token = req.headers['x-auth-token'] || req.query.token;
+    if (!token || token !== AUTH_TOKEN) {
+        return res.status(401).json({ error: 'Unauthorized - Token requerido' });
+    }
+    next();
+});
 
 // Middleware de logging
 app.use((req, res, next) => {
@@ -257,32 +272,35 @@ app.get('/config', (req, res) => {
 async function startServer() {
     console.log('🤖 Iniciando Bot de WhatsApp...\n');
     
-    // Conectar a WhatsApp
-    try {
-        await bot.connect();
+    // Conectar a WhatsApp (no bloquea el servidor si falla)
+    bot.connect().then(() => {
         console.log('✅ Cliente WhatsApp conectado\n');
-    } catch (error) {
+    }).catch(error => {
         console.error('❌ Error conectando a WhatsApp:', error.message);
-    }
+        console.log('💡 El servidor sigue corriendo. El bot reintentará conectar automáticamente.\n');
+    });
     
-    // Iniciar servidor HTTP
-    app.listen(PORT, () => {
+    // Iniciar servidor HTTP inmediatamente en todas las interfaces
+    app.listen(PORT, '0.0.0.0', () => {
         console.log(`
-╔════════════════════════════════════════════════════╗
+╔══════════════════════════════════════════════════╗
 ║           🤖 SERVIDOR DE BOT WHATSAPP              ║
-╠════════════════════════════════════════════════════╣
-║  Servidor:     http://localhost:${PORT}             ║
+╠══════════════════════════════════════════════════╣
+║  Servidor:     http://0.0.0.0:${PORT} (todas las interfaces) ║
+║  QR Page:      http://localhost:${PORT}/qr           ║
 ║  Estado:       ${bot.isConnected() ? '✅ Conectado' : '❌ Desconectado'}
 ║  Grupo:        ${bot.getGroupId() || '❌ No configurado'}
-╠════════════════════════════════════════════════════╣
+╠══════════════════════════════════════════════════╣
 ║  Endpoints disponibles:                            ║
+║  - GET  /qr          → Ver código QR                ║
 ║  - POST /send        → Enviar mensaje al grupo     ║
 ║  - POST /send-to     → Enviar a destinatario       ║
 ║  - GET  /groups      → Listar grupos               ║
 ║  - POST /set-group   → Configurar grupo            ║
 ║  - GET  /config      → Ver configuración           ║
-╚════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════╝
 `);
+        console.log('⚠️  Token configurado:', AUTH_TOKEN !== 'mi_token_secreto_123' ? 'Personalizado' : 'Default (cámbialo con WHATSAPP_BOT_TOKEN)');
     });
 }
 

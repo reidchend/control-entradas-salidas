@@ -1,19 +1,25 @@
 /**
  * Módulo de conexión a WhatsApp usando Baileys
- * Maneja la conexión, autenticación y envío de mensajes
+ * Configuración actualizada 2026 - Soluciona error 405
  */
 
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { 
+    default: makeWASocket, 
+    DisconnectReason, 
+    useMultiFileAuthState,
+    Browsers,
+    fetchLatestBaileysVersion 
+} = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 
-// Variable global para el socket
+// Variables globales
 let sock = null;
 let isConnected = false;
-let isConnecting = false; // Evitar múltiples conexiones simultáneas
-let currentQR = null; // Almacenar el QR actual
+let isConnecting = false;
+let currentQR = null;
 
 // Cargar configuración
 const configPath = path.join(__dirname, 'config.json');
@@ -96,10 +102,9 @@ async function sendToGroup(message) {
 }
 
 /**
- * Conecta a WhatsApp con control de bucle
+ * Conecta a WhatsApp - Configuración 2026 actualizada
  */
 async function connect() {
-    // Evitar múltiples conexiones simultáneas
     if (isConnecting) {
         console.log('⏳ Conexión ya en progreso...');
         return sock;
@@ -109,18 +114,27 @@ async function connect() {
     const authPath = path.join(__dirname, 'auth');
     
     try {
-        // Verificar que existe el directorio auth
         if (!fs.existsSync(authPath)) {
             fs.mkdirSync(authPath, { recursive: true });
         }
         
         const { state, saveCreds } = await useMultiFileAuthState(authPath);
         
+        // OBTENER VERSIÓN MÁS RECIENTE - CRÍTICO PARA EVITAR ERROR 405
+        console.log('🔍 Obteniendo versión más reciente de WhatsApp Web...');
+        const { version } = await fetchLatestBaileysVersion();
+        console.log(`✅ Versión de WhatsApp Web: ${version.join('.')}`);
+        
         sock = makeWASocket({
             auth: state,
-            printQRInTerminal: false, // Manejamos el QR manualmente
-            browser: ["Ubuntu", "Chrome", "22.04.4"],
-            syncFullHistory: false // Reducir uso de memoria
+            // USAR Browsers helper - SOLUCIONA ERROR 405
+            browser: Browsers.macOS('Chrome'),
+            version,  // CRÍTICO: Usar versión más reciente
+            printQRInTerminal: false,
+            syncFullHistory: false,
+            defaultQueryTimeoutMs: 0,  // Evita timeouts prematuros
+            connectTimeoutMs: 60000,     // 60 segundos para conectar
+            keepAliveIntervalMs: 30000    // Keep-alive cada 30 segundos
         });
         
         sock.ev.on('creds.update', saveCreds);
@@ -153,9 +167,10 @@ async function connect() {
                     setTimeout(() => {
                         isConnecting = false;
                         connect();
-                    }, 5000); // Delay de 5 segundos
+                    }, 5000);
                 } else {
                     isConnecting = false;
+                    console.log('❌ Sesión cerrada (logged out). Elimina la carpeta auth y vuelve a escanear el QR.');
                 }
             } else if (connection === 'open') {
                 isConnected = true;

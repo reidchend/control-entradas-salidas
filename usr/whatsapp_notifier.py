@@ -1,12 +1,16 @@
 """
 Módulo para enviar notificaciones a WhatsApp desde Python
-Uso el servidor Node.js corriendo en localhost:3000
+Uso el servidor Node.js corriendo en localhost:3000 o URL configurada
 """
 import requests
 import json
+import os
 
 
-WHATSAPP_BOT_URL = "http://localhost:3000"
+# URL configurable via variable de entorno
+WHATSAPP_BOT_URL = os.getenv("WHATSAPP_BOT_URL", "http://localhost:3000")
+# Token de autenticación (debe coincidir con WHATSAPP_BOT_TOKEN en server.js)
+WHATSAPP_BOT_TOKEN = os.getenv("WHATSAPP_BOT_TOKEN", "mi_token_secreto_123")
 
 
 def send_whatsapp_message(message: str) -> bool:
@@ -20,9 +24,11 @@ def send_whatsapp_message(message: str) -> bool:
         True si se envió correctamente, False si hubo error
     """
     try:
+        headers = {'x-auth-token': WHATSAPP_BOT_TOKEN}
         response = requests.post(
             f"{WHATSAPP_BOT_URL}/send",
             json={"message": message},
+            headers=headers,
             timeout=10
         )
         
@@ -50,9 +56,11 @@ def send_whatsapp_to(jid: str, message: str) -> bool:
         message: Texto del mensaje
     """
     try:
+        headers = {'x-auth-token': WHATSAPP_BOT_TOKEN}
         response = requests.post(
             f"{WHATSAPP_BOT_URL}/send-to",
             json={"jid": jid, "message": message},
+            headers=headers,
             timeout=10
         )
         
@@ -76,7 +84,9 @@ def get_whatsapp_status() -> dict:
         Diccionario con 'whatsapp_connected' y 'group_id'
     """
     try:
-        response = requests.get(f"{WHATSAPP_BOT_URL}/config", timeout=5)
+        response = requests.get(f"{WHATSAPP_BOT_URL}/config", 
+                               headers={'x-auth-token': WHATSAPP_BOT_TOKEN}, 
+                               timeout=5)
         if response.status_code == 200:
             return response.json()
         return {"whatsapp_connected": False, "group_id": None}
@@ -92,7 +102,9 @@ def get_available_groups() -> list:
         Lista de grupos con 'id', 'name', 'participants'
     """
     try:
-        response = requests.get(f"{WHATSAPP_BOT_URL}/groups", timeout=5)
+        response = requests.get(f"{WHATSAPP_BOT_URL}/groups", 
+                               headers={'x-auth-token': WHATSAPP_BOT_TOKEN}, 
+                               timeout=5)
         if response.status_code == 200:
             return response.json().get('groups', [])
         return []
