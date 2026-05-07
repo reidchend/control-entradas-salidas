@@ -110,7 +110,7 @@ def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
     Args:
         image_path: Ruta a la imagen
         use_preprocessing: Aplicar pre-procesamiento de imagen
-        
+    
     Returns:
         dict con proveedor, rif, nro_factura, fecha
     """
@@ -130,30 +130,26 @@ def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
     try:
         from paddleocr import PaddleOCR
         
+        print(f"[OCR] Loading PaddleOCR...")
         ocr = PaddleOCR(use_angle_cls=True, lang='es')
         result = ocr.ocr(image_path, cls=True)
         
         if result and result[0]:
             for line in result[0]:
                 if line and len(line) > 1 and len(line[1]) > 1:
-                    full_text += line[1][0] + " "
+                    text_line = line[1][0]
+                    full_text += text_line + " "
+                    print(f"[OCR] Line: {text_line}")
+        
+        print(f"[OCR] Total text extracted: {len(full_text))} chars")
+        print(f"[OCR] First 500 chars: {full_text[:500]}")
+        
     except ImportError:
-        print("[OCR] PaddleOCR no instalado. Usando regex simple.")
-        # Si no hay OCR, devolver datos vacíos
-        return {
-            "proveedor": "",
-            "rif": "",
-            "nro_factura": "",
-            "fecha": ""
-        }
+        print("[OCR] PaddleOCR no instalado.")
+        return {"proveedor": "", "rif": "", "nro_factura": "", "fecha": ""}
     except Exception as e:
         print(f"[OCR ERROR] {e}")
-        return {
-            "proveedor": "",
-            "rif": "",
-            "nro_factura": "",
-            "fecha": ""
-        }
+        return {"proveedor": "", "rif": "", "nro_factura": "", "fecha": ""}
     
     # Limpiar texto
     full_text = full_text.strip()

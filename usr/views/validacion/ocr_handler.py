@@ -7,7 +7,6 @@ class OCRHandler:
         self.page = page
         self.theme_colors = theme_colors
         self.fields = fields
-        
         self._build_ui()
     
     def _build_ui(self):
@@ -20,11 +19,17 @@ class OCRHandler:
         
         self.result_text = ft.TextField(
             "", read_only=True, border_color=ft.Colors.TRANSPARENT,
-            text_size=12, color=self.theme_colors.get('success')
-        )
+            text_size=12, color=self.theme_colors.get('success'))
         
         self.status_text = ft.TextField(
-            "", read_only=True, border_color=ft.Colors.TRANSPARENT, text_size=11
+            "", read_only=True, border_color=ft.Colors.TRANSPARENT, text_size=11)
+        
+        # Manual path input as fallback
+        self.path_input = ft.TextField(
+            label="Ruta de imagen",
+            hint_text="/ruta/a/imagen.jpg",
+            expand=True,
+            on_submit=self._on_path_submit
         )
         
         self.btn_pegar = ft.ElevatedButton(
@@ -39,6 +44,12 @@ class OCRHandler:
             on_click=self._on_select_click
         )
         
+        self.btn_path_load = ft.ElevatedButton(
+            "📂 Cargar Ruta",
+            icon=ft.Icons.UPLOAD_FILE,
+            on_click=self._on_path_load_click
+        )
+        
         self.file_picker = ft.FilePicker(on_result=self._on_file_select)
     
     def section_container(self, content_col):
@@ -47,21 +58,81 @@ class OCRHandler:
             padding=15,
             border_radius=12,
             border=ft.border.all(1, self.theme_colors.get('border', '#333333')),
-            bgcolor=self.theme_colors.get('surface', '#252525')
-        )
+            bgcolor=self.theme_colors.get('surface', '#252525'))
     
     def get_ui(self):
         return self.section_container(ft.Column([
             ft.Row([ft.Icon(ft.Icons.CAMERA_ALT), ft.Text("📷 Extraer de Imagen", weight="bold", size=14)]),
             ft.Row([self.btn_pegar, self.btn_seleccionar], spacing=10),
             ft.Container(content=self.image_preview, alignment=ft.alignment.center),
+            ft.Container(height=10),
+            ft.Text("Ruta manual:", size=12, weight="bold"),
+            ft.Row([self.path_input, self.btn_path_load], spacing=10),
+            ft.Container(height=10),
             ft.Container(content=self.result_text, padding=ft.padding.only(top=5)),
             ft.Container(content=self.status_text, padding=ft.padding.only(top=5)),
         ], spacing=10))
     
     def _on_paste_click(self, e):
-        self.status_text.value = "⏳ Intentando portapapeles..."
+        self.status_text.value = "⏳ Leyendo portapapeles..."
+        self.status_text.color = self.theme_colors.get('text_secondary')
         self.page.update()
+        
+        try:
+            clipboard_data = self.page.get_clipboard()
+            print(f"[OCR] Clipboard data type: {type(clipboard_data)}, length: {len(str(clipboard_data)) if clipboard_data else 0}")
+            
+            if not clipboard_data:
+                self.status_text.value = "❌ Portapapeles vacío"
+                self.status_text.color = self.theme_colors.get('error')
+                self.page.update()
+                return
+            
+            image_path = None
+            
+            # If it's a string (might be a file path)
+            if isinstance(clipboard_data, str):
+                if os.path.exists(clipboard_data):
+                    image_path = clipboard_data
+                    print(f"[OCR] Using clipboard path: {image_path}")
+                else:
+                    # Try to decode as base64 image
+                    try:
+                        import base64
+                        img_bytes = base64.b64decode(clipboard_data)
+                        import tempfile
+                        temp_dir = tempfile.gettempdir()
+                        image_path = os.path.join(temp_dir, "ocr_clipboard.png")
+                        with open(image_path, 'wb') as f:
+                            f.write(img_bytes)
+                        print(f"[OCR] Saved base64 image to: {image_path}")
+                    except Exception as decode_err:
+                        print(f"[OCR] Not base64: {decode_err}")
+            
+            # If it's bytes, save as temp file
+            elif isinstance(clipboard_data, bytes):
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                image_path = os.path.join(temp_dir, "ocr_clipboard.png")
+                with open(image_path, 'wb') as f:
+                    f.write(clipboard_data)
+                print(f"[OCR] Saved clipboard bytes to: {image_path}")
+            
+            if not image_path or not os.path.exists(image_path):
+                self.status_text.value = "❌ No hay imagen en portapapeles"
+                self.status_text.color = self.theme_colors.get('error')
+                print(f"[OCR] Invalid clipboard data")
+                self.page.update()
+                return
+            
+            self._process_image(image_path)
+            
+        except Exception as ex:
+            import traceback
+            print(f"[OCR] Paste error: {ex}\n{traceback.format_exc()}")
+            self.status_text.value = f"Error: {str(ex)}"
+            self.status_text.color = self.theme_colors.get('error')
+            self.page.update()
     
     def _on_select_click(self, e):
         self.file_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg", "bmp", "webp"])
@@ -75,22 +146,21 @@ class OCRHandler:
             return
         
         f = e.files[0]
-        print(f"[OCR] File info: name={f.name}, path={getattr(f, 'path', None)}, size={getattr(f, 'size', 0)}, id={getattr(f, 'id', None)}")
+        print(f"[OCR] File: name={f.name}, path={getattr(f, 'path', None)}, size={getattr(f, 'size', 0)}")
         
-        # Try different ways to get file content
         image_path = None
         
-        # Method 1: Try path (desktop)
+        # Try path attribute (desktop)
         if hasattr(f, 'path') and f.path:
             image_path = f.path
             print(f"[OCR] Using path: {image_path}")
         
-        # Method 2: Try to get file data and save it
+        # Try data attribute (web mode)
         if not image_path and hasattr(f, 'data') and f.data:
             import tempfile
             temp_dir = tempfile.gettempdir()
             ext = f.name.split('.')[-1] if f.name else 'jpg'
-            image_path = os.path.join(temp_dir, f"ocr_{f.id if hasattr(f, 'id') else 'file'}.{ext}")
+            image_path = os.path.join(temp_dir, f"ocr_{f.id if hasattr(f, 'id') else 'upload'}.{ext}")
             try:
                 with open(image_path, 'wb') as fp:
                     fp.write(f.data)
@@ -99,7 +169,7 @@ class OCRHandler:
                 print(f"[OCR] Error saving data: {save_err}")
                 image_path = None
         
-        # Method 3: Try using name directly (might work in some environments)
+        # Try using name as path (fallback)
         if not image_path and f.name:
             import tempfile
             temp_dir = tempfile.gettempdir()
@@ -108,13 +178,33 @@ class OCRHandler:
             if not os.path.exists(image_path):
                 image_path = None
         
-        if not image_path:
-            self.status_text.value = "❌ No se pudo leer el archivo"
+        if not image_path or not os.path.exists(image_path):
+            self.status_text.value = "❌ No se pudo acceder al archivo"
             self.status_text.color = self.theme_colors.get('error')
-            print(f"[OCR] Could not get file content")
+            print(f"[OCR] Could not access file. name={f.name}, path={getattr(f, 'path', None)}")
             self.page.update()
             return
         
+        self._process_image(image_path)
+    
+    def _on_path_submit(self, e):
+        image_path = self.path_input.value.strip() if self.path_input.value else ""
+        print(f"[OCR] Manual path submitted: {image_path}")
+        if not image_path:
+            self.status_text.value = "❌ Ingrese una ruta"
+            self.status_text.color = self.theme_colors.get('error')
+            self.page.update()
+            return
+        self._process_image(image_path)
+    
+    def _on_path_load_click(self, e):
+        image_path = self.path_input.value.strip() if self.path_input.value else ""
+        print(f"[OCR] Manual path load clicked: {image_path}")
+        if not image_path:
+            self.status_text.value = "❌ Ingrese la ruta del archivo"
+            self.status_text.color = self.theme_colors.get('error')
+            self.page.update()
+            return
         self._process_image(image_path)
     
     def _process_image(self, image_path):
