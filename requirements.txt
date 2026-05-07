@@ -5,4 +5,5 @@ Pg8000
 sqlalchemy
 flet-webview
 Pillow
+PaddleOCR
  flet[desktop]

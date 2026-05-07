@@ -12,10 +12,10 @@ _active_banner = None
 
 # Duraciones por defecto (en segundos)
 DEFAULT_DURATION = {
-    'success': 4000,
-    'error': 4000,
-    'warning': 4000,
-    'info': 4000,
+    'success': 3000,
+    'error': 3000,
+    'warning': 3000,
+    'info': 3000,
 }
 
 # Iconos
