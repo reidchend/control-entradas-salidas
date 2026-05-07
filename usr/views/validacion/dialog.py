@@ -80,8 +80,6 @@ class ValidacionDialog:
         self.fields.validar_btn.on_click = callback
     
     def show(self):
-        # Setup file picker callback
-        self.ocr.file_picker.on_change = self.ocr._on_file_select
         self.page.overlay.append(self.dialog)
         self.page.overlay.append(self.ocr.file_picker)
         self.dialog.open = True
