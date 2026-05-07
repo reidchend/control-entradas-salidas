@@ -6,11 +6,9 @@ import requests
 import json
 import os
 
-
-# URL configurable via variable de entorno
-WHATSAPP_BOT_URL = os.getenv("WHATSAPP_BOT_URL", "http://localhost:3000")
+WHATSAPP_BOT_URL = "https://lycorys-control.shares.zrok.io"
 # Token de autenticación (debe coincidir con WHATSAPP_BOT_TOKEN en server.js)
-WHATSAPP_BOT_TOKEN = os.getenv("WHATSAPP_BOT_TOKEN", "mi_token_secreto_123")
+WHATSAPP_BOT_TOKEN = "mi_token_secreto_123"
 
 
 def send_whatsapp_message(message: str) -> bool:
@@ -112,19 +110,23 @@ def get_available_groups() -> list:
         return []
 
 
-def format_validation_message(producto_nombre: str, cantidad: float, factura: str, proveedor: str = "Varios") -> str:
+def format_validation_message(producto_nombre: str, cantidad: float, factura: str, 
+                               proveedor: str = "Varios", monto: float = 0, 
+                               metodos_pago: list = None, usuario: str = "") -> str:
     """
     Formatea un mensaje de validación de entrada para WhatsApp
     """
+    import datetime
+    
     return f"""✅ *Entrada Validada* ✅
 
-📦 *Producto:* {producto_nombre}
-📊 *Cantidad:* {cantidad}
-📃 *Factura:* {factura}
+📦 *Cargo productos:* {producto_nombre}
 🏢 *Proveedor:* {proveedor}
-🕐 *Fecha:* {__import__('datetime').datetime.now().strftime('%d/%m %H:%M')}
+📃 *Factura:* {factura}
+🕐 *Fecha:* {datetime.datetime.now().strftime('%d/%m %H:%M')}
+👤 *Usuario:* {usuario}
 
-_Inventario Lycoris_"""
+_🤖-Lycoris_bot_"""
 
 
 # Ejemplo de uso

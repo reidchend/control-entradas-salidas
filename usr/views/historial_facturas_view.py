@@ -6,10 +6,14 @@ from usr.database.base import get_db, get_db_adaptive
 from usr.database.sync import get_sync_manager
 from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.database.cache import get_cache
-from usr.models import Factura, Movimiento, Producto
+from usr.models import Factura, Movimiento, Producto, FacturaPago
 from sqlalchemy.orm import joinedload
 from usr.theme import get_theme, get_colors
-from usr.notifications import show_error
+from usr.notifications import show_error, show_success
+import os
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 
 def _colors(page):
@@ -62,7 +66,10 @@ class HistorialFacturasView(ft.Container):
         self._periodo_seleccionado = "hoy"
         self._periodo_buttons = {}
         self._fecha_especifica = None
-
+        
+        # FilePicker para exportar
+        self.file_picker = ft.FilePicker(on_result=self._on_file_save)
+        
         # Componentes de UI que necesitan persistencia de referencia
         self.facturas_list = ft.ListView(expand=True, spacing=10, padding=20)
         self.entradas_list = ft.ListView(expand=True, spacing=10, padding=20)
@@ -113,6 +120,12 @@ class HistorialFacturasView(ft.Container):
                 ], expand=True, spacing=0),
                 self._connection_indicator,
                 ft.IconButton(
+                    ft.Icons.DOWNLOAD,
+                    icon_color=colors['accent'],
+                    tooltip="Exportar a Excel",
+                    on_click=self._show_export_dialog,
+                ),
+                ft.IconButton(
                     ft.Icons.REFRESH_ROUNDED,
                     icon_color=colors['accent'],
                     tooltip="Refrescar",
@@ -143,6 +156,19 @@ class HistorialFacturasView(ft.Container):
         )
 
         self.content = ft.Column([header, tabs], expand=True, spacing=0)
+        
+        # Agregar file_picker a la página
+        if self.page:
+            self.page.overlay.append(self.file_picker)
+    
+    def _on_file_save(self, e: ft.FilePickerResultEvent):
+        if e.path:
+            try:
+                self._workbook.save(e.path)
+                show_success(f"Archivo guardado: {e.path}")
+            except Exception as ex:
+                show_error(f"Error: {ex}")
+        self.page.update()
 
     def _build_facturas_tab(self):
         colors = _colors(self.page)
@@ -543,4 +569,240 @@ class HistorialFacturasView(ft.Container):
         )
         self.page.overlay.append(dlg)
         dlg.open = True
+        self.page.update()
+    
+    def _show_export_dialog(self, e):
+        colors = _colors(self.page)
+        
+        meses = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ]
+        
+        mes_actual = datetime.now().month - 1
+        año_actual = datetime.now().year
+        
+        mes_dd = ft.Dropdown(
+            label="Mes",
+            options=[ft.dropdown.Option(str(i), meses[i]) for i in range(12)],
+            value=str(mes_actual),
+            width=150
+        )
+        
+        año_input = ft.TextField(
+            label="Año",
+            value=str(año_actual),
+            width=100,
+            keyboard_type=ft.KeyboardType.NUMBER
+        )
+        
+        def on_exportar(e):
+            try:
+                mes = int(mes_dd.value) + 1
+                año = int(año_input.value or año_actual)
+                
+                fecha_inicio = datetime(año, mes, 1)
+                if mes == 12:
+                    fecha_fin = datetime(año + 1, 1, 1) - timedelta(days=1)
+                else:
+                    fecha_fin = datetime(año, mes + 1, 1) - timedelta(days=1)
+                
+                self._exportar_excel(fecha_inicio, fecha_fin)
+                
+                dlg.open = False
+                self.page.update()
+            except Exception as ex:
+                show_error(f"Error: {str(ex)}")
+        
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("📥 Exportar Libro de Compras"),
+            content=ft.Column([
+                ft.Text("Seleccione el período a exportar:", size=14),
+                ft.Row([mes_dd, año_input], spacing=10),
+                ft.Text("Se exportarán todas las facturas del mes seleccionado.", size=12, color=colors['text_secondary']),
+            ], spacing=15),
+            actions=[
+                ft.TextButton("Cancelar", on_click=close_dlg),
+                ft.ElevatedButton("Exportar", bgcolor=colors['success'], color="white", on_click=on_exportar)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def _exportar_excel(self, fecha_inicio, fecha_fin):
+        colors = _colors(self.page)
+        
+        try:
+            db = next(get_db_adaptive())
+            
+            facturas = db.query(Factura).filter(
+                Factura.fecha_factura >= fecha_inicio,
+                Factura.fecha_factura <= fecha_fin,
+                Factura.estado == "Validada"
+            ).order_by(Factura.fecha_factura).all()
+            
+            if not facturas:
+                show_error(f"No hay facturas validadas en {fecha_inicio.strftime('%B %Y')}")
+                db.close()
+                return
+            
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Libro de Compras"
+            
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            
+            headers = ["Fecha", "N° Factura", "Proveedor", "Efectivo (VES)", "Transferencia (VES)", "Divisas (USD)", "Tasa", "Total (VES)", "Validado por"]
+            ws.append(headers)
+            
+            for col in range(1, len(headers) + 1):
+                cell = ws.cell(row=1, column=col)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            for fac in facturas:
+                pagos = db.query(FacturaPago).filter(FacturaPago.factura_id == fac.id).all()
+                
+                efectivo = 0
+                transferencia = 0
+                divisas_usd = 0
+                tasa = None
+                
+                for p in pagos:
+                    if p.tipo_pago == "efectivo":
+                        efectivo = p.monto
+                    elif p.tipo_pago == "transferencia":
+                        transferencia = p.monto
+                    elif p.tipo_pago == "divisas":
+                        divisas_usd = p.monto
+                        tasa = p.tasa_cambio or 0
+                
+                row = [
+                    fac.fecha_factura.strftime("%d/%m/%Y") if fac.fecha_factura else "",
+                    fac.numero_factura or "",
+                    fac.proveedor or "",
+                    efectivo,
+                    transferencia,
+                    divisas_usd,
+                    tasa if tasa else "",
+                    fac.total_neto or 0,
+                    fac.validada_por or ""
+                ]
+                ws.append(row)
+            
+            for col in ws.columns:
+                max_length = 0
+                column = col[0].column_letter
+                for cell in col:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                ws.column_dimensions[column].width = max_length + 2
+            
+            mes_nombre = fecha_inicio.strftime("%Y-%m").lower()
+            nombre_archivo = f"libro_compras_{mes_nombre}.xlsx"
+            
+            # Guardar workbook y nombre
+            self._workbook = wb
+            self._nombre_archivo = nombre_archivo
+            
+            # Cerrar dialogo anterior
+            for overlay in list(self.page.overlay):
+                if isinstance(overlay, ft.AlertDialog):
+                    overlay.open = False
+            self.page.update()
+            
+            # Mostrar diálogo con info de archivo
+            self._mostrar_descarga(wb, nombre_archivo)
+            
+            db.close()
+            
+        except Exception as ex:
+            error_msg = str(ex)
+            self._mostrar_error_export(error_msg)
+    
+    def _mostrar_error_export(self, error_msg):
+        colors = _colors(self.page)
+        
+        def close_error(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("❌ Error al Exportar", color=colors['error']),
+            content=ft.Column([
+                ft.Text("Ocurrió un error:", weight="bold"),
+                ft.TextField(
+                    value=error_msg,
+                    multiline=True,
+                    min_lines=3,
+                    max_lines=8,
+                    read_only=True,
+                    text_size=11,
+                    border_color=colors['border'],
+                ),
+            ], spacing=10),
+            actions=[
+                ft.TextButton("Cerrar", on_click=close_error),
+            ],
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def _mostrar_descarga(self, workbook, nombre):
+        colors = _colors(self.page)
+        
+        # Guardar en carpeta exports (ruta fija)
+        exports_dir = "/workspaces/control-entradas-salidas/exports"
+        os.makedirs(exports_dir, exist_ok=True)
+        export_path = os.path.join(exports_dir, nombre)
+        
+        try:
+            workbook.save(export_path)
+            msg = f"Archivo guardado en:\nexports/{nombre}"
+            show_msg = f"✅ Archivo guardado\nexports/{nombre}"
+        except Exception as e:
+            msg = f"Error: {str(e)}"
+            show_msg = f"❌ Error: {str(e)}"
+        
+        show_success(show_msg)
+        
+        # Mostrar diálogo con info
+        def close_and_update(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("📥 Excel Exportado"),
+            content=ft.Column([
+                ft.Text(f"Archivo: {nombre}", weight="bold", size=14),
+                ft.Text(msg, color=colors['success'], size=12),
+                ft.Divider(),
+                ft.Text("El archivo se encuentra en la carpeta 'exports' del proyecto.", 
+                     color=colors['text_hint'], size=11),
+            ], spacing=10),
+            actions=[
+                ft.TextButton("Cerrar", on_click=close_and_update),
+            ]
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def _on_file_save(self, e: ft.FilePickerResultEvent):
+        if e.path:
+            try:
+                self._workbook.save(e.path)
+                show_success(f"Archivo guardado: {e.path}")
+            except Exception as ex:
+                show_error(f"Error: {ex}")
         self.page.update()

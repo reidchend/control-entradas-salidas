@@ -1,5 +1,4 @@
 from usr.whatsapp_notifier import send_whatsapp_message, format_validation_message
-msg = format_validation_message('Producto de Prueba', 50, 'FAC-001', 'Proveedor Test')
+msg = format_validation_message('Producto Prueba', 50, 'FAC-001', 'Proveedor Test', 1000, [], 'Reidchend')
 send_whatsapp_message(msg)
-
 

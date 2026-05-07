@@ -449,57 +449,590 @@ class ValidacionView(ft.Container):
         self.page.update()
 
     def _show_validar_dialog(self, e):
+        from usr.database.local_replica import LocalReplica
+        
+        # Obtener usuario actual
+        usuario_actual = LocalReplica.get_usuario_dispositivo()
+        nombre_usuario = usuario_actual['nombre'] if usuario_actual else "Sistema"
+        
+        # Detectar tamaño de pantalla
+        is_mobile = self.page.width < 600 if self.page else False
+        
+        # Obtener colores del tema
+        theme_colors = _colors(self.page)
+        
+        # ==================== VARIABLES DE ESTADO ====================
+        monto_total_ves = [0]
+        pagos_agregados = []  # [{"tipo": "transferencia|efectivo|divisas", "monto": float, "tasa": float|None, "ref": str}]
+        faltante_ves = [0]
+        panel_activo = [None]  # None | "transferencia" | "efectivo" | "divisas"
+        
+        # ==================== CAMPOS DEL FORMULARIO ====================
         factura_input = ft.TextField(
             label="Número de Factura", 
             border_radius=10, 
             autofocus=True,
-            hint_text="Ej: FAC-2024-001"
+            hint_text="Ej: FAC-2024-001",
+            expand=True
+        )
+        
+        # Proveedor - Dropdown
+        proveedores = LocalReplica.get_proveedores(estado="Activo")
+        proveedor_opts = [ft.dropdown.Option(p['nombre'], p['nombre']) for p in proveedores]
+        proveedor_opts.append(ft.dropdown.Option("__nuevo__", "+ Agregar nuevo"))
+        
+        proveedor_dd = ft.Dropdown(
+            label="Proveedor",
+            options=proveedor_opts,
+            border_radius=10,
+            expand=True
+        )
+        
+        nuevo_proveedor_input = ft.TextField(
+            label="Nuevo Proveedor",
+            border_radius=10,
+            expand=True,
+            visible=False,
+            on_change=lambda e: self.page.update()
+        )
+        
+        def on_proveedor_change(e):
+            if proveedor_dd.value == "__nuevo__":
+                nuevo_proveedor_input.visible = True
+            else:
+                nuevo_proveedor_input.visible = False
+            self.page.update()
+        proveedor_dd.on_change = on_proveedor_change
+        
+        # ==================== ESTILO DE SECCIONES ====================
+        
+        def section_container(content_col):
+            return ft.Container(
+                content=content_col,
+                padding=15,
+                border_radius=12,
+                border=ft.border.all(1, theme_colors.get('border', '#333333')),
+                bgcolor=theme_colors.get('surface', '#252525')
+            )
+        
+        # ==================== MONTO TOTAL ====================
+        
+        monto_total_input = ft.TextField(
+            label="💰 Monto Total (VES)",
+            prefix_icon=ft.Icons.ATTACH_MONEY,
+            border_radius=10,
+            hint_text="1000.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True,
+            text_style=ft.TextStyle(size=16, weight=ft.FontWeight.BOLD)
+        )
+        
+        # ==================== TRANSFERENCIA ====================
+        
+        transferencia_monto_input = ft.TextField(
+            label="🏦 Transferencia (VES)",
+            prefix_icon=ft.Icons.ACCOUNT_BALANCE,
+            border_radius=10,
+            hint_text="0.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True
+        )
+        
+        transferencia_ref_input = ft.TextField(
+            label="Referencia",
+            prefix_icon=ft.Icons.LABEL,
+            border_radius=10,
+            hint_text="Nro. operación...",
+            expand=True
+        )
+        
+        # ==================== EFECTIVO BS ====================
+        
+        efectivo_bs_monto_input = ft.TextField(
+            label="💵 Efectivo Bs (VES)",
+            prefix_icon=ft.Icons.PAYMENTS,
+            border_radius=10,
+            hint_text="0.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True
+        )
+        
+        # ==================== DIVISAS ====================
+        
+        divisas_tasa_input = ft.TextField(
+            label="Tasa (VES/USD)",
+            prefix_icon=ft.Icons.CURRENCY_EXCHANGE,
+            border_radius=10,
+            hint_text="1",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True
+        )
+        
+        divisas_monto_usd_input = ft.TextField(
+            label="Monto en USD",
+            prefix_icon=ft.Icons.CURRENCY_EXCHANGE,
+            border_radius=10,
+            hint_text="0.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True
+        )
+        
+        # ==================== LISTA DE PAGOS ====================
+        
+        pagos_list_view = ft.ListView(spacing=5, padding=10)
+        
+        def actualizar_pagos_lista():
+            """Actualiza la lista de pagos agregados"""
+            pagos_list_view.controls.clear()
+            for i, pago in enumerate(pagos_agregados):
+                if pago["tipo"] == "transferencia":
+                    texto = f"🏦 Transferencia {pago['monto']:,.0f} VES"
+                    if pago.get("ref"):
+                        texto += f" (Ref: {pago['ref']})"
+                elif pago["tipo"] == "efectivo":
+                    texto = f"💵 Efectivo {pago['monto']:,.0f} VES"
+                else:  # divisas
+                    texto = f"💱 Divisas {pago['monto']:,.2f} USD @ {pago['tasa']:.2f}"
+                
+                pago_item = ft.Container(
+                    content=ft.Row([
+                        ft.Text(texto, size=13, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_color=theme_colors.get('error'),
+                            on_click=lambda _, idx=i: eliminar_pago(idx)
+                        )
+                    ]),
+                    bgcolor=theme_colors.get('surface'),
+                    border_radius=8,
+                    padding=10
+                )
+                pagos_list_view.controls.append(pago_item)
+            self.page.update()
+        
+        def eliminar_pago(index):
+            """Elimina un pago de la lista"""
+            pago = pagos_agregados.pop(index)
+            # Reintegrar al faltante
+            monto_ves = pago["monto"] * pago.get("tasa", 1)
+            faltante_ves[0] += monto_ves
+            actualizar_pagos_lista()
+            actualizar_resumen()
+        
+        # ==================== RESUMEN ====================
+        
+        faltante_icon = ft.Icon(ft.Icons.HOURGLASS_EMPTY, size=24)
+        faltante_text = ft.Text(
+            "Faltante: 0 VES",
+            size=14,
+            weight=ft.FontWeight.BOLD,
+            color=theme_colors.get('warning', '#FF9800')
+        )
+        
+        def update_resumen_colors(faltante):
+            """Actualiza colores del resumen según el estado"""
+            if abs(faltante) < 0.01:
+                summary_bg = ft.Colors.with_opacity(0.1, ft.Colors.GREEN)
+                summary_border = ft.Colors.GREEN_400
+                faltante_icon.name = ft.Icons.CHECK_CIRCLE
+                faltante_icon.color = ft.Colors.GREEN_400
+                text = "✅ PAGO COMPLETO"
+            elif faltante > 0:
+                summary_bg = ft.Colors.with_opacity(0.1, ft.Colors.ORANGE)
+                summary_border = ft.Colors.ORANGE_400
+                faltante_icon.name = ft.Icons.WARNING_AMBER_ROUNDED
+                faltante_icon.color = ft.Colors.ORANGE_400
+                text = f"⚠️ FALTANTE: {faltante:,.2f} VES"
+            else:
+                summary_bg = ft.Colors.with_opacity(0.1, ft.Colors.RED)
+                summary_border = ft.Colors.RED_400
+                faltante_icon.name = ft.Icons.ERROR_OUTLINE
+                faltante_icon.color = ft.Colors.RED_400
+                text = f"❌ EXCEDENTE: {abs(faltante):,.2f} VES"
+            
+            faltante_text.value = text
+            return text
+        
+        resumen_container = ft.Container(
+            content=ft.Row([faltante_icon, faltante_text], spacing=8),
+            padding=15,
+            border_radius=10,
+            border=ft.border.all(2, theme_colors.get('border', '#333333'))
+        )
+        
+        # ==================== FECHA ====================
+        
+        fecha_picker = ft.DatePicker(
+            first_date=datetime(2020, 1, 1),
+            last_date=datetime.now(),
+            value=datetime.now()
+        )
+        
+        fecha_label = ft.Text(
+            f"Fecha: {datetime.now().strftime('%d/%m/%Y')}",
+            size=12,
+            color=theme_colors.get('text_secondary')
+        )
+        
+        fecha_btn = ft.ElevatedButton(
+            "📅 Fecha",
+            on_click=lambda _: self.page.open(fecha_picker)
+        )
+        
+        def on_fecha_change(e):
+            fecha_label.value = f"Fecha: {fecha_picker.value.strftime('%d/%m/%Y')}"
+            self.page.update()
+        
+        fecha_picker.on_change = on_fecha_change
+        
+# ==================== FUNCIONES DE CÁLCULO ====================
+        
+        def actualizar_resumen():
+            """Actualiza el resumen de pagos y el faltante"""
+            update_resumen_colors(faltante_ves[0])
+            validar_btn.disabled = faltante_ves[0] > 0.01
+            self.page.update()
+        
+        def on_monto_total_change(e):
+            """Cuando cambia el monto total"""
+            try:
+                monto_total_ves[0] = float(monto_total_input.value) if monto_total_input.value else 0
+            except:
+                monto_total_ves[0] = 0
+            
+            faltante_ves[0] = monto_total_ves[0]
+            actualizar_resumen()
+        
+        # Asignar eventos on_change
+        monto_total_input.on_change = on_monto_total_change
+        
+        # ==================== PANEL DE CONTROLES ====================
+        
+        controls_container = ft.Container(visible=False)
+        
+        def abrir_panel(metodo):
+            """Abre el panel decontrols para el método seleccionado"""
+            panel_activo[0] = metodo
+            
+            # Pre-cargar campos
+            if metodo == "divisas":
+                # Tasa por defecto 1, monto equivalente
+                tasas = 1
+                usd_calc = faltante_ves[0] / tasas if tasas > 0 else 0
+                divisas_tasa_input.value = "1"
+                divisas_monto_usd_input.value = f"{usd_calc:.2f}"
+                
+                # Asignar event handler para recálculo automático
+                def recalcular_divisas(e):
+                    try:
+                        tasa_val = float(divisas_tasa_input.value or "1")
+                        if tasa_val <= 0:
+                            tasa_val = 1
+                    except:
+                        tasa_val = 1
+                    monto_usd = faltante_ves[0] / tasa_val if tasa_val > 0 else 0
+                    divisas_monto_usd_input.value = f"{monto_usd:.2f}"
+                    self.page.update()
+                
+                divisas_tasa_input.on_change = recalcular_divisas
+            else:
+                # Transferencia/Efectivo: precargar faltante
+                if metodo == "transferencia":
+                    transferencia_monto_input.value = f"{faltante_ves[0]:.2f}"
+                else:
+                    efectivo_bs_monto_input.value = f"{faltante_ves[0]:.2f}"
+            
+            # Mostrar controls
+            controles = []
+            if metodo == "transferencia":
+                controles = [transferencia_monto_input, transferencia_ref_input]
+            elif metodo == "efectivo":
+                controles = [efectivo_bs_monto_input]
+            else:  # divisas
+                controles = [divisas_tasa_input, divisas_monto_usd_input]
+            
+            controls_container.content = ft.Column(
+                controles + [ft.ElevatedButton("➕ Agregar", on_click=lambda _: agregar_pago(metodo))],
+                spacing=10
+            )
+            controls_container.visible = True
+            self.page.update()
+        
+        def agregar_pago(metodo):
+            """Agrega un pago a la lista"""
+            if metodo == "transferencia":
+                try:
+                    monto = float(transferencia_monto_input.value or "0")
+                except:
+                    monto = 0
+                ref = transferencia_ref_input.value or ""
+                if monto > 0:
+                    pagos_agregados.append({
+                        "tipo": "transferencia",
+                        "monto": monto,
+                        "tasa": 1,
+                        "ref": ref
+                    })
+                    faltante_ves[0] -= monto
+                    transferencia_monto_input.value = ""
+                    transferencia_ref_input.value = ""
+            
+            elif metodo == "efectivo":
+                try:
+                    monto = float(efectivo_bs_monto_input.value or "0")
+                except:
+                    monto = 0
+                if monto > 0:
+                    pagos_agregados.append({
+                        "tipo": "efectivo",
+                        "monto": monto,
+                        "tasa": 1,
+                        "ref": ""
+                    })
+                    faltante_ves[0] -= monto
+                    efectivo_bs_monto_input.value = ""
+            
+            else:  # divisas
+                try:
+                    tasas = float(divisas_tasa_input.value or "1")
+                    if tasas <= 0:
+                        tasas = 1
+                except:
+                    tasas = 1
+                try:
+                    monto_usd = float(divisas_monto_usd_input.value or "0")
+                except:
+                    monto_usd = 0
+                monto_ves = monto_usd * tasas
+                if monto_ves > 0:
+                    pagos_agregados.append({
+                        "tipo": "divisas",
+                        "monto": monto_usd,
+                        "tasa": tasas,
+                        "ref": ""
+                    })
+                    faltante_ves[0] -= monto_ves
+                    divisas_monto_usd_input.value = ""
+            
+            # Cerrar panel
+            controls_container.visible = False
+            panel_activo[0] = None
+            
+            # Actualizar UI
+            actualizar_pagos_lista()
+            actualizar_resumen()
+        
+        # ==================== BOTONES ====================
+        
+        validar_btn = ft.ElevatedButton(
+            "✓ Validar Entradas",
+            bgcolor=theme_colors.get('success', '#4CAF50'),
+            color="white",
+            disabled=True,
+            height=45
         )
         
         def on_confirmar(ev):
+            # Validar monto total
+            try:
+                monto = float(monto_total_input.value) if monto_total_input.value else 0
+            except:
+                monto = 0
+            
+            # Obtener fecha
+            fecha_fac = fecha_picker.value if fecha_picker.value else datetime.now()
+            
+            # Determinar proveedor
+            if proveedor_dd.value == "__nuevo__":
+                prov_seleccionado = nuevo_proveedor_input.value if nuevo_proveedor_input.value else "Varios"
+            elif proveedor_dd.value:
+                prov_seleccionado = proveedor_dd.value
+            else:
+                prov_seleccionado = "Varios"
+            
+            # Preparar datos de pagos desde la lista
+            pagos_data = {'pagos': pagos_agregados}
+            
             self.active_dialog.open = False
             self.page.update()
-            self._process_validation(factura_input.value)
-
+            
+            # Llamar al proceso de validación
+            self._process_validation(
+                ref_factura=factura_input.value,
+                proveedor=prov_seleccionado,
+                monto=monto,
+                fecha_factura=fecha_fac,
+                usuario=nombre_usuario,
+                pagos=pagos_data
+            )
+        
+        validar_btn.on_click = on_confirmar
+        
+        # ==================== CONSTRUIR DIÁLOGO ====================
+        
+        # Aumentar ancho para PC
+        dialog_width = 400 if is_mobile else 650
+        
+        usuario_label = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.PERSON, size=18, color=theme_colors.get('accent', '#BB86FC')),
+                ft.Text(f"Validado por: {nombre_usuario}", weight="bold", size=13, color=theme_colors.get('text_primary', '#FFFFFF'))
+            ]),
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            bgcolor=theme_colors.get('accent_dark', '#9A67EA'),
+            border_radius=8
+        )
+        
+        # Sección: Datos del Documento
+        doc_section = section_container(ft.Column([
+            ft.Row([ft.Icon(ft.Icons.RECEIPT_LONG), ft.Text("📋 Datos del Documento", weight="bold", size=14)]),
+            ft.Row([factura_input], spacing=10),
+            ft.Row([proveedor_dd]),
+            ft.Row([nuevo_proveedor_input]),
+            ft.Row([fecha_btn, fecha_label], spacing=10),
+        ], spacing=10))
+        
+        # Sección: Montos
+        monto_section = section_container(ft.Column([
+            ft.Row([ft.Icon(ft.Icons.ATTACH_MONEY), ft.Text("💰 Monto Total", weight="bold", size=14)]),
+            monto_total_input,
+        ], spacing=10))
+        
+        # ==================== BOTONES DE MÉTODOS ====================
+        
+        btn_transfer = ft.ElevatedButton(
+            "🏦 Transferencia",
+            on_click=lambda _: abrir_panel("transferencia")
+        )
+        btn_efectivo = ft.ElevatedButton(
+            "💵 Efectivo",
+            on_click=lambda _: abrir_panel("efectivo")
+        )
+        btn_divisas = ft.ElevatedButton(
+            "💱 Divisas",
+            on_click=lambda _: abrir_panel("divisas")
+        )
+        
+        metodos_row = ft.Row(
+            [btn_transfer, btn_efectivo, btn_divisas],
+            spacing=10
+        )
+        
+        # ==================== SECCIÓN DE PAGOS ====================
+        
+        pagos_section = section_container(ft.Column([
+            ft.Row([ft.Icon(ft.Icons.PAYMENTS), ft.Text("💳 Distribución de Pago", weight="bold", size=14)]),
+            ft.Container(height=5),
+            metodos_row,
+            ft.Divider(height=10),
+            controls_container,
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("Pagos agregados:", weight="bold", size=12),
+                    pagos_list_view
+                ], spacing=5),
+                padding=10,
+                bgcolor=theme_colors.get('surface'),
+                border_radius=8
+            ),
+        ], spacing=5))
+        
+        content = ft.Column([
+            usuario_label,
+            ft.Divider(height=1),
+            ft.Text(f"Se validarán {len(self.selected_entradas)} entrada(s)", weight="bold", size=14),
+            ft.Container(height=5),
+            doc_section,
+            ft.Container(height=10),
+            monto_section,
+            ft.Container(height=10),
+            pagos_section,
+            ft.Container(height=10),
+            resumen_container,
+            ft.Container(height=5),
+            validar_btn,
+        ], spacing=0, scroll=ft.ScrollMode.AUTO)
+        
         self.active_dialog = ft.AlertDialog(
-            title=ft.Text("Validar Entradas"),
-            content=ft.Column([
-                ft.Text(f"Se vincularán {len(self.selected_entradas)} entradas seleccionadas."),
-                factura_input
-            ], tight=True, spacing=15),
+            title=ft.Text("✅ Validar Entradas"),
+            content=ft.Container(
+                width=dialog_width,
+                content=content,
+                padding=20
+            ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton(
-                    "Validar ahora", 
-                    bgcolor=ft.Colors.BLUE_600, 
-                    color="white", 
-                    on_click=on_confirmar
-                )
-            ]
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
         )
         
         self.page.overlay.append(self.active_dialog)
         self.active_dialog.open = True
         self.page.update()
     
-    def _process_validation(self, ref_factura):
+    def _on_proveedor_change(self, e):
+        """Maneja el cambio en el dropdown de proveedor"""
+        pass
+    
+    def _process_validation(self, ref_factura, proveedor="Varios", monto=0, fecha_factura=None, usuario="Sistema", pagos=None):
         db = next(get_db_adaptive())
+        pagos = pagos or {}
+        
+        # Asegurar que la columna tasa_cambio exista
         try:
-            # 1. Crear factura local
+            from sqlalchemy import text
+            db.execute(text("ALTER TABLE factura_pagos ADD COLUMN tasa_cambio REAL"))
+            db.commit()
+        except:
+            pass
+        
+        if fecha_factura is None:
+            fecha_factura = datetime.now()
+        
+        try:
+            # 1. Crear factura local con los nuevos campos
             nueva_fac = Factura(
                 numero_factura=ref_factura if ref_factura else f"V-REF-{datetime.now().strftime('%H%M%S')}",
-                proveedor="Varios",
-                fecha_factura=datetime.now(),
+                proveedor=proveedor,
+                fecha_factura=fecha_factura,
                 fecha_recepcion=datetime.now(),
-                total_bruto=0, total_impuestos=0, total_neto=0,
+                total_bruto=monto,
+                total_impuestos=0,
+                total_neto=monto,
                 estado="Validada",
-                validada_por="Admin",
+                validada_por=usuario,
                 fecha_validacion=datetime.now()
             )
             db.add(nueva_fac)
             db.flush()
             
-            # 2. Actualizar movimientos locales
+            # 2. Guardar pagos de factura (nuevo formato)
+            from usr.models import FacturaPago
+            
+            # Soporta formato nuevo ['pagos'] o formato antiguo dict
+            lista_pagos = []
+            if isinstance(pagos, dict) and 'pagos' in pagos:
+                lista_pagos = pagos['pagos']
+            
+            for pago in lista_pagos:
+                tipo = pago.get('tipo', '')
+                monto_pago = pago.get('monto', 0)
+                tasa = pago.get('tasa', 1)
+                ref = pago.get('ref', '')
+                
+                # Calcular monto en VES
+                monto_ves = monto_pago * tasa
+                
+                nuevo_pago = FacturaPago(
+                    factura_id=nueva_fac.id,
+                    tipo_pago=tipo,
+                    monto=monto_ves,
+                    referencia=ref,
+                    tasa_cambio=tasa if tipo == 'divisas' else None
+                )
+                db.add(nuevo_pago)
+            
+            # 3. Actualizar movimientos locales
             movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(self.selected_entradas))).all()
             for m in movimientos:
                 m.factura_id = nueva_fac.id
@@ -507,7 +1040,7 @@ class ValidacionView(ft.Container):
             db.commit()
             self.selected_entradas.clear()
             
-            # 3. Sincronizar con Supabase si está online
+            # 4. Sincronizar con Supabase si está online
             if is_online():
                 try:
                     settings = get_settings()
@@ -543,6 +1076,27 @@ class ValidacionView(ft.Container):
                             conn.execute(text("UPDATE movimientos SET factura_id = :fac_id WHERE id = :mov_id"),
                                        {'fac_id': supabase_fac_id, 'mov_id': m.id})
                         
+                        # Insertar pagos en Supabase (nuevo formato)
+                        lista_pagos_sync = pagos.get('pagos', []) if isinstance(pagos, dict) else []
+                        
+                        for pago in lista_pagos_sync:
+                            tipo = pago.get('tipo', '')
+                            monto_pago = pago.get('monto', 0)
+                            tasa = pago.get('tasa', 1)
+                            ref = pago.get('ref', '')
+                            monto_ves = monto_pago * tasa
+                            
+                            conn.execute(text("""
+                                INSERT INTO factura_pagos (factura_id, tipo_pago, monto, referencia, tasa_cambio)
+                                VALUES (:factura_id, :tipo, :monto, :ref, :tasa)
+                            """), {
+                                'factura_id': supabase_fac_id,
+                                'tipo': tipo,
+                                'monto': monto_ves,
+                                'ref': ref,
+                                'tasa': tasa if tipo == 'divisas' else None
+                            })
+                        
                         conn.commit()
                         print("[SYNC] Validación sincronizada a Supabase")
                 except Exception as e:
@@ -566,7 +1120,10 @@ class ValidacionView(ft.Container):
                     ", ".join(productos_info[:3]) + ("..." if len(productos_info) > 3 else ""),
                     sum(m.cantidad for m in movimientos),
                     factura_num,
-                    nueva_fac.proveedor
+                    nueva_fac.proveedor,
+                    monto if monto else nueva_fac.total_neto,
+                    pagos,
+                    nueva_fac.validada_por
                 )
                 send_whatsapp_message(msg)
             except Exception as e:
@@ -578,6 +1135,22 @@ class ValidacionView(ft.Container):
             show_error(f"Error: {str(ex)[:50]}")
         finally:
             db.close()
+    
+    def _clear_selection(self, e=None):
+        """Limpia la selección de entradas."""
+        self.selected_entradas.clear()
+        
+        # Actualizar botones
+        self.validate_button.disabled = True
+        self.validate_button.text = "Validar entradas"
+        
+        self.clear_button.disabled = True
+        
+        # Recargar la vista para actualizar la UI
+        self._load_entradas_pendientes()
+        
+        if self.page:
+            self.page.update()
     
     def _close_dialog(self, e=None):
         if hasattr(self, 'active_dialog') and self.active_dialog:

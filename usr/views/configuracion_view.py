@@ -125,6 +125,11 @@ class ConfiguracionView(ft.Container):
                     content=self._build_productos_tab(),
                 ),
                 ft.Tab(
+                    text="Proveedores", 
+                    icon=ft.Icons.LOCAL_SHIPPING,
+                    content=self._build_proveedores_tab(),
+                ),
+                ft.Tab(
                     text="Sistema", 
                     icon=ft.Icons.DASHBOARD_CUSTOMIZE,
                     content=self._build_sistema_tab(),
@@ -752,6 +757,10 @@ class ConfiguracionView(ft.Container):
                 self.lista_categorias.controls = self._create_categoria_grid(cats)
             
             self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
+            
+            # Cargar proveedores desde SQLite local
+            self._load_proveedores()
+            
             self.update()
             db.close()
         except Exception as e:
@@ -1000,7 +1009,220 @@ class ConfiguracionView(ft.Container):
     def _remove_from_overlay(self, control):
         if self.page and control in self.page.overlay:
             self.page.overlay.remove(control)
-
+    
+    # ==================== PROVEEDORES ====================
+    
+    def _build_proveedores_tab(self):
+        colors = _colors(self.page)
+        fab_content = ft.Row([
+            ft.Icon(ft.Icons.ADD, size=20),
+            ft.Text("Nuevo Proveedor" if not self.is_mobile else "Nuevo", weight=ft.FontWeight.BOLD),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+        
+        self.proveedor_search = ft.TextField(
+            hint_text="Buscar proveedores...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=10,
+            bgcolor=colors['card'],
+            border_color=colors['border'],
+            height=40,
+            expand=True,
+            on_change=self._filter_proveedores,
+        )
+        
+        self.lista_proveedores = ft.GridView(
+            expand=True,
+            runs_count=1 if self.is_mobile else 3,
+            spacing=10,
+            padding=20,
+        )
+        
+        return ft.Container(
+            content=ft.Column([
+                ft.Container(height=15),
+                ft.Row([
+                    self.proveedor_search,
+                    ft.Container(
+                        content=fab_content,
+                        bgcolor=colors['accent'],
+                        padding=ft.padding.symmetric(horizontal=20, vertical=12),
+                        border_radius=30,
+                        on_click=lambda _: self._show_proveedor_dialog(),
+                    ),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10),
+                ft.Container(height=15),
+                self.lista_proveedores,
+            ], expand=True, spacing=0),
+            padding=20,
+            expand=True,
+        )
+    
+    def _show_proveedor_dialog(self, proveedor=None):
+        colors = _colors(self.page)
+        
+        nombre_input = ft.TextField(
+            label="Nombre *", 
+            value=proveedor.get('nombre', '') if proveedor else '',
+            border_radius=10
+        )
+        rif_input = ft.TextField(
+            label="RIF",
+            value=proveedor.get('rif', '') if proveedor else '',
+            border_radius=10
+        )
+        telefono_input = ft.TextField(
+            label="Teléfono",
+            value=proveedor.get('telefono', '') if proveedor else '',
+            border_radius=10
+        )
+        email_input = ft.TextField(
+            label="Email",
+            value=proveedor.get('email', '') if proveedor else '',
+            border_radius=10
+        )
+        direccion_input = ft.TextField(
+            label="Dirección",
+            value=proveedor.get('direccion', '') if proveedor else '',
+            border_radius=10,
+            multiline=True,
+            min_lines=2
+        )
+        contacto_input = ft.TextField(
+            label="Persona de contacto",
+            value=proveedor.get('contacto', '') if proveedor else '',
+            border_radius=10
+        )
+        observaciones_input = ft.TextField(
+            label="Observaciones",
+            value=proveedor.get('observaciones', '') if proveedor else '',
+            border_radius=10,
+            multiline=True,
+            min_lines=2
+        )
+        estado_switch = ft.Switch(
+            label="Activo",
+            value=proveedor.get('estado', 'Activo') == 'Activo' if proveedor else True,
+        )
+        
+        prov_id = proveedor.get('id') if proveedor else None
+        
+        def on_guardar(e):
+            if not nombre_input.value.strip():
+                return
+            self._save_proveedor(
+                nombre_input.value.strip(),
+                rif_input.value.strip(),
+                telefono_input.value.strip(),
+                email_input.value.strip(),
+                direccion_input.value.strip(),
+                contacto_input.value.strip(),
+                observaciones_input.value.strip(),
+                estado_switch.value,
+                prov_id
+            )
+        
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"{'Editar' if proveedor else 'Nuevo'} Proveedor"),
+            content=ft.Column([
+                nombre_input, rif_input, telefono_input, email_input,
+                direccion_input, contacto_input, observaciones_input, estado_switch
+            ], tight=True, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
+                ft.ElevatedButton("Guardar", on_click=on_guardar, bgcolor=colors['accent']),
+            ]
+        )
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
+        self.page.update()
+    
+    def _save_proveedor(self, nombre, rif, telefono, email, direccion, contacto, observaciones, activo, prov_id):
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        prov_data = {
+            "nombre": str(nombre),
+            "rif": str(rif) if rif else None,
+            "telefono": str(telefono) if telefono else None,
+            "email": str(email) if email else None,
+            "direccion": str(direccion) if direccion else None,
+            "contacto": str(contacto) if contacto else None,
+            "observaciones": str(observaciones) if observaciones else None,
+            "estado": "Activo" if activo else "Inactivo",
+            "updated_at": datetime.now().isoformat()
+        }
+        if prov_id:
+            prov_data["id"] = prov_id
+        
+        # Guardar local
+        try:
+            LocalReplica.save_proveedores([prov_data])
+        except Exception as e:
+            print(f"❌ Error SQLite: {e}")
+        
+        # Sync queue
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('proveedores', 'insert', prov_data)
+            self._trigger_sync()
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al agregar proveedor a sync", e, "configuracion_view._save_proveedor")
+        
+        show_success("Proveedor guardado")
+        self._close_dialog()
+        self._load_proveedores()
+    
+    def _load_proveedores(self):
+        from usr.database.local_replica import LocalReplica
+        self.proveedores_data = LocalReplica.get_proveedores()
+        self._render_proveedores(self.proveedores_data)
+    
+    def _render_proveedores(self, data):
+        colors = _colors(self.page)
+        self.lista_proveedores.controls = []
+        
+        for prov in data:
+            card = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.LOCAL_SHIPPING, color=colors['accent']),
+                        ft.Text(prov.get('nombre', 'Sin nombre'), weight="bold", expand=True),
+                        ft.Container(
+                            content=ft.Text(prov.get('estado', 'Activo'), size=10, color="white"),
+                            bgcolor=colors['success'] if prov.get('estado') == 'Activo' else colors['error'],
+                            padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                            border_radius=10
+                        )
+                    ]),
+                    ft.Divider(height=10),
+                    ft.Text(prov.get('rif', 'Sin RIF'), size=11, color=colors['text_secondary']),
+                    ft.Text(prov.get('telefono', 'Sin teléfono'), size=11, color=colors['text_secondary']),
+                    ft.Text(prov.get('email', 'Sin email'), size=11, color=colors['text_secondary']),
+                ], spacing=2),
+                padding=15,
+                bgcolor=colors['card'],
+                border_radius=10,
+                ink=True,
+                on_click=lambda _, p=prov: self._show_proveedor_dialog(p)
+            )
+            self.lista_proveedores.controls.append(card)
+        
+        self.page.update()
+    
+    def _filter_proveedores(self, e):
+        search = self.proveedor_search.value.lower()
+        if not search:
+            self._render_proveedores(self.proveedores_data)
+            return
+        
+        filtered = [p for p in self.proveedores_data 
+                   if search in (p.get('nombre') or '').lower() 
+                   or search in (p.get('rif') or '').lower()]
+        self._render_proveedores(filtered)
+    
+    # ==================== FIN PROVEEDORES ====================
+    
     def _build_sistema_tab(self):
         colors = _colors(self.page)
         return ft.Container(

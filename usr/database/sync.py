@@ -209,9 +209,11 @@ class SyncManager:
         tables_to_sync = [
             ('categorias', 'categorias'), 
             ('productos', 'productos'), 
+            ('proveedores', 'proveedores'),
             ('existencias', 'existencias'), 
             ('movimientos', 'movimientos'), 
             ('facturas', 'facturas'), 
+            ('factura_pagos', 'factura_pagos'),
             ('requisiciones', 'requisiciones')
         ]
         
@@ -232,6 +234,8 @@ class SyncManager:
                         LocalReplica.save_categorias(data)
                     elif local_table == 'productos':
                         LocalReplica.save_productos(data)
+                    elif local_table == 'proveedores':
+                        LocalReplica.save_proveedores(data)
                     elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
                     elif local_table == 'movimientos':
@@ -240,6 +244,8 @@ class SyncManager:
                         LocalReplica.save_movimientos(data)
                     elif local_table == 'facturas':
                         LocalReplica.save_facturas(data)
+                    elif local_table == 'factura_pagos':
+                        LocalReplica.save_factura_pagos(data)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
                     

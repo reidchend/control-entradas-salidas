@@ -31,6 +31,21 @@ def init_local_db():
     """)
     
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS proveedores (
+            id INTEGER PRIMARY KEY,
+            nombre TEXT NOT NULL UNIQUE,
+            rif TEXT,
+            telefono TEXT,
+            email TEXT,
+            direccion TEXT,
+            contacto TEXT,
+            observaciones TEXT,
+            estado TEXT DEFAULT 'Activo',
+            created_at TEXT
+        )
+    """)
+    
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS productos (
             id INTEGER PRIMARY KEY,
             nombre TEXT NOT NULL,
@@ -98,6 +113,20 @@ def init_local_db():
             fecha_validacion TEXT,
             created_at TEXT,
             updated_at TEXT
+        )
+    """)
+    
+    # Tabla de pagos de facturas
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS factura_pagos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            factura_id INTEGER NOT NULL,
+            tipo_pago TEXT NOT NULL,
+            monto REAL NOT NULL,
+            referencia TEXT,
+            tasa_cambio REAL,
+            fecha_pago TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE CASCADE
         )
     """)
     
@@ -241,6 +270,79 @@ class LocalReplica:
         conn.close()
         
         return [dict(row) for row in rows]
+    
+    # ==================== PROVEEDORES ====================
+    
+    @staticmethod
+    def save_proveedores(proveedores: List[Dict]) -> None:
+        """Guarda proveedores en la base de datos local."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        for prov in proveedores:
+            cursor.execute("""
+                INSERT OR REPLACE INTO proveedores 
+                (id, nombre, rif, telefono, email, direccion, contacto, observaciones, estado, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                prov.get('id'), prov.get('nombre'), prov.get('rif'),
+                prov.get('telefono'), prov.get('email'), prov.get('direccion'),
+                prov.get('contacto'), prov.get('observaciones'),
+                prov.get('estado', 'Activo'), prov.get('created_at')
+            ))
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def get_proveedores(estado: str = None) -> List[Dict]:
+        """Obtiene todos los proveedores de la BD local."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        if estado:
+            cursor.execute("SELECT * FROM proveedores WHERE estado = ? ORDER BY nombre", (estado,))
+        else:
+            cursor.execute("SELECT * FROM proveedores ORDER BY nombre")
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    @staticmethod
+    def get_proveedor_by_nombre(nombre: str) -> Dict | None:
+        """Obtiene un proveedor por su nombre."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM proveedores WHERE nombre = ?", (nombre,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    
+    @staticmethod
+    def migrate_proveedores_from_facturas() -> int:
+        """Migra proveedores únicos de facturas a la tabla de proveedores."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT proveedor FROM facturas WHERE proveedor IS NOT NULL AND proveedor != 'Varios'")
+        rows = cursor.fetchall()
+        
+        count = 0
+        for row in rows:
+            nombre = row[0]
+            try:
+                cursor.execute("INSERT OR IGNORE INTO proveedores (nombre, estado) VALUES (?, 'Activo')", (nombre,))
+                count += 1
+            except:
+                pass
+        
+        conn.commit()
+        conn.close()
+        return count
     
     # ==================== PRODUCTOS ====================
     
@@ -636,6 +738,26 @@ class LocalReplica:
                 fac.get('observaciones'), fac.get('validada_por'),
                 fac.get('fecha_validacion'), fac.get('created_at'),
                 fac.get('updated_at')
+            ))
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def save_factura_pagos(pagos: List[Dict]) -> None:
+        """Guarda pagos de facturas en la base de datos local."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        for pago in pagos:
+            cursor.execute("""
+                INSERT OR REPLACE INTO factura_pagos 
+                (id, factura_id, tipo_pago, monto, referencia, tasa_cambio, fecha_pago)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                pago.get('id'), pago.get('factura_id'), pago.get('tipo_pago'),
+                pago.get('monto', 0), pago.get('referencia'), pago.get('tasa_cambio'),
+                pago.get('fecha_pago')
             ))
         
         conn.commit()

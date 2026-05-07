@@ -12,10 +12,10 @@ _active_banner = None
 
 # Duraciones por defecto (en segundos)
 DEFAULT_DURATION = {
-    'success': 4,
-    'error': 5,
-    'warning': 6,
-    'info': 4,
+    'success': 4000,
+    'error': 4000,
+    'warning': 4000,
+    'info': 4000,
 }
 
 # Iconos
@@ -62,8 +62,13 @@ def _get_colors():
     }
 
 
-def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: bool = True):
-    """Función interna para mostrar SnackBar."""
+def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
+    """Función interna para mostrar SnackBar.
+    
+    Args:
+        action_text: Texto para botón de acción (ej: "Copiar")
+        action_callback: Función callback al presionar botón
+    """
     if not _page:
         print(f"[NOTIF] {tipo.upper()}: {message}")
         return
@@ -88,6 +93,8 @@ def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: boo
         content=ft.Row(content_parts, spacing=10, expand=True),
         bgcolor=bgcolor,
         duration=duration,
+        action=action_text if action_text else None,
+        on_action=action_callback,
         show_close_icon=True,
         behavior=ft.SnackBarBehavior.FLOATING,
     )
@@ -106,24 +113,24 @@ def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: boo
         print(f"[NOTIF] Error mostrando SnackBar: {e}")
 
 
-def show_success(message: str, duration: int = None, with_icon: bool = True):
+def show_success(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
     """Mostrar mensaje de éxito (verde)."""
-    _show_snackbar(message, 'success', duration, with_icon)
+    _show_snackbar(message, 'success', duration, with_icon, action_text, action_callback)
 
 
-def show_error(message: str, duration: int = None, with_icon: bool = True):
+def show_error(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
     """Mostrar mensaje de error (rojo)."""
-    _show_snackbar(message, 'error', duration, with_icon)
+    _show_snackbar(message, 'error', duration, with_icon, action_text, action_callback)
 
 
-def show_warning(message: str, duration: int = None, with_icon: bool = True):
+def show_warning(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
     """Mostrar mensaje de advertencia (naranja)."""
-    _show_snackbar(message, 'warning', duration, with_icon)
+    _show_snackbar(message, 'warning', duration, with_icon, action_text, action_callback)
 
 
-def show_info(message: str, duration: int = None, with_icon: bool = True):
+def show_info(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
     """Mostrar mensaje informativo (azul)."""
-    _show_snackbar(message, 'info', duration, with_icon)
+    _show_snackbar(message, 'info', duration, with_icon, action_text, action_callback)
 
 
 def show_banner(message: str, tipo: str = 'info'):
