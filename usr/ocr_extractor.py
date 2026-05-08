@@ -14,10 +14,10 @@ def parse_factura_text(text: str) -> dict:
         dict con proveedor, rif, nro_factura, fecha
     """
     data = {
-        "proveedor": "",
-        "rif": "",
-        "nro_factura": "",
-        "fecha": ""
+        "Proveedor": "",
+        "R.I.F-C.I": "",
+        "FACTURA #": "",
+        "Fecha": ""
     }
     
     # 1. Extraer RIF (formato Venezuela: J-XXXXXXXX-X o JXXXXXXXXX)
@@ -141,7 +141,7 @@ def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
                     full_text += text_line + " "
                     print(f"[OCR] Line: {text_line}")
         
-        print(f"[OCR] Total text extracted: {len(full_text))} chars")
+        print(f"[OCR] Total text extracted: {len(full_text)} chars")
         print(f"[OCR] First 500 chars: {full_text[:500]}")
         
     except ImportError:
