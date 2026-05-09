@@ -24,14 +24,6 @@ class OCRHandler:
         self.status_text = ft.TextField(
             "", read_only=True, border_color=ft.Colors.TRANSPARENT, text_size=11)
         
-        # Manual path input as fallback
-        self.path_input = ft.TextField(
-            label="Ruta de imagen",
-            hint_text="/ruta/a/imagen.jpg",
-            expand=True,
-            on_submit=self._on_path_submit
-        )
-        
         self.btn_pegar = ft.ElevatedButton(
             "📋 Pegar Imagen",
             icon=ft.Icons.CONTENT_PASTE,
@@ -42,12 +34,6 @@ class OCRHandler:
             "📂 Seleccionar",
             icon=ft.Icons.FOLDER_OPEN,
             on_click=self._on_select_click
-        )
-        
-        self.btn_path_load = ft.ElevatedButton(
-            "📂 Cargar Ruta",
-            icon=ft.Icons.UPLOAD_FILE,
-            on_click=self._on_path_load_click
         )
         
         self.file_picker = ft.FilePicker(on_result=self._on_file_select)
@@ -66,9 +52,6 @@ class OCRHandler:
             ft.Row([self.btn_pegar, self.btn_seleccionar], spacing=10),
             ft.Container(content=self.image_preview, alignment=ft.alignment.center),
             ft.Container(height=10),
-            ft.Text("Ruta manual:", size=12, weight="bold"),
-            ft.Row([self.path_input, self.btn_path_load], spacing=10),
-            ft.Container(height=10),
             ft.Container(content=self.result_text, padding=ft.padding.only(top=5)),
             ft.Container(content=self.status_text, padding=ft.padding.only(top=5)),
         ], spacing=10))
@@ -78,32 +61,49 @@ class OCRHandler:
         self.status_text.color = self.theme_colors.get('text_secondary')
         self.page.update()
         
-        import platform
-        image_path = None
-        
-        # Solo intentar en Windows
-        if platform.system() == 'Windows':
-            try:
-                from usr.windows_clipboard import get_windows_clipboard
-                print(f"[OCR] Intentando portapapeles de Windows...")
-                image_path = get_windows_clipboard()
-                print(f"[OCR] Resultado portapapeles: {image_path}")
-            except Exception as wb_error:
-                print(f"[OCR] Error con portapapeles Windows: {wb_error}")
-        else:
-            # Fallback para otros sistemas
-            self.status_text.value = "��️ Solo disponible en Windows"
-            self.status_text.color = self.theme_colors.get('warning')
-            self.page.update()
-            return
-        
-        if not image_path:
-            self.status_text.value = "❌ No hay imagen en portapapeles"
+        try:
+            from PIL import ImageGrab, Image
+            import io
+            import base64
+            import tempfile
+            
+            print("[OCR] Capturando imagen del portapapeles...")
+            img = ImageGrab.grabclipboard()
+            
+            if img is None:
+                self.status_text.value = "❌ No hay imagen en portapapeles"
+                self.status_text.color = self.theme_colors.get('error')
+                self.page.update()
+                return
+            
+            print(f"[OCR] Imagen capturada: {img.size}, modo: {img.mode}")
+            
+            buffered = io.BytesIO()
+            img.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            print(f"[OCR] Base64 generado: {len(img_base64)} caracteres")
+            
+            temp_dir = tempfile.gettempdir()
+            image_path = os.path.join(temp_dir, "clipboard_image.png")
+            img.save(image_path, 'PNG')
+            print(f"[OCR] Imagen guardada en: {image_path}")
+            
+            self.image_preview.visible = True
+            self.image_preview.content = ft.Image(src_base64=img_base64, width=200, height=100, fit="contain")
+            self.image_preview.update()
+            
+            self._process_image(image_path)
+            
+        except ImportError:
+            self.status_text.value = "❌ Instalar: pip install pillow"
             self.status_text.color = self.theme_colors.get('error')
             self.page.update()
-            return
-        
-        self._process_image(image_path)
+        except Exception as ex:
+            import traceback
+            print(f"[OCR] Error: {ex}\n{traceback.format_exc()}")
+            self.status_text.value = f"Error: {str(ex)}"
+            self.status_text.color = self.theme_colors.get('error')
+            self.page.update()
     
     def _on_select_click(self, e):
         self.file_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg", "bmp", "webp"])
@@ -117,8 +117,6 @@ class OCRHandler:
             return
         
         f = e.files[0]
-        print(f"[OCR] File: name={f.name}, path={getattr(f, 'path', None)}")
-        
         image_path = getattr(f, 'path', None)
         
         if not image_path:
@@ -127,24 +125,6 @@ class OCRHandler:
             self.page.update()
             return
         
-        self._process_image(image_path)
-    
-    def _on_path_submit(self, e):
-        image_path = self.path_input.value.strip() if self.path_input.value else ""
-        if not image_path:
-            self.status_text.value = "❌ Ingrese una ruta"
-            self.status_text.color = self.theme_colors.get('error')
-            self.page.update()
-            return
-        self._process_image(image_path)
-    
-    def _on_path_load_click(self, e):
-        image_path = self.path_input.value.strip() if self.path_input.value else ""
-        if not image_path:
-            self.status_text.value = "❌ Ingrese la ruta del archivo"
-            self.status_text.color = self.theme_colors.get('error')
-            self.page.update()
-            return
         self._process_image(image_path)
     
     def _process_image(self, image_path):
@@ -194,7 +174,7 @@ class OCRHandler:
                         self.fields.nuevo_proveedor_rif.value = datos.get('rif', '')
                         self.status_text.value = "Nuevo proveedor"
             
-            self.status_text.value = "✅ Datos extraídos"
+            self.status_text.value = "�� Datos extraídos"
             self.status_text.color = self.theme_colors.get('success')
             print(f"[OCR] Success")
         except Exception as ex:

@@ -160,6 +160,7 @@ class ValidacionView(ft.Container):
     def _on_refresh(self):
         if not self.page:
             return
+
         online = is_online()
         if online:
             from usr.database import get_sync_manager
@@ -167,6 +168,8 @@ class ValidacionView(ft.Container):
             if sync_mgr:
                 sync_mgr.force_sync_now()
         self._load_entradas_pendientes()
+
+        show_success("Datos refrescados correctamente")
 
     def _show_validar_dialog(self, e):
         theme_colors = get_colors(self.page)
@@ -197,6 +200,8 @@ class ValidacionView(ft.Container):
         self.is_loading = True
         
         self.entradas_list.controls = [ft.ProgressBar()]
+        if self.page:
+            self.update()
         
         db = None
         try:

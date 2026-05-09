@@ -188,6 +188,14 @@ def init_local_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS compras_lista (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            created_at TEXT
+        )
+    """)
+    
     conn.commit()
     conn.close()
 

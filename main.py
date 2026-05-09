@@ -4,14 +4,8 @@ import os
 import ssl
 import certifi
 import glob
-import warnings
 import asyncio
 import sys
-
-# Deshabilitar warning de asyncio "Task was destroyed"
-os.environ['PYTHONASYNCIODEBUG'] = '0'  # Deshabilitar debug de asyncio
-warnings.filterwarnings("ignore", category=ResourceWarning)
-warnings.filterwarnings("ignore", message=".*Task.*destroyed.*")
 
 # Esto le dice a Python exactamente dónde encontrar los certificados
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -279,6 +273,20 @@ class ControlEntradasSalidasApp:
 
 
 async def main(page: ft.Page):
+    # Silenciar mensajes molestos de asyncio
+    loop = asyncio.get_running_loop()
+    if loop.get_debug():
+        loop.set_debug(False)
+    _old_handler = loop.get_exception_handler()
+    def _filter_asyncio_warnings(_loop, context):
+        if 'Task was destroyed' in context.get('message', ''):
+            return
+        if _old_handler:
+            _old_handler(_loop, context)
+        else:
+            loop.default_exception_handler(context)
+    loop.set_exception_handler(_filter_asyncio_warnings)
+
     # ✓ FONDO OSCURO DESDE EL PRIMER MOMENTO (evita white flash)
     page.bgcolor = "#121212"
     page.theme_mode = ft.ThemeMode.DARK
