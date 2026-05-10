@@ -118,9 +118,25 @@ def show_success(message: str, duration: int = None, with_icon: bool = True, act
     _show_snackbar(message, 'success', duration, with_icon, action_text, action_callback)
 
 
-def show_error(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
-    """Mostrar mensaje de error (rojo)."""
-    _show_snackbar(message, 'error', duration, with_icon, action_text, action_callback)
+def show_error_with_copy(message: str, ex: Exception = None, duration: int = 6):
+    """Mostrar mensaje de error con botón para copiar detalles al clipboard."""
+    import traceback as tb
+    detail_lines = [f"Error: {message}"]
+    if ex:
+        detail_lines.append(f"Tipo: {type(ex).__name__}")
+        detail_lines.append("")
+        detail_lines.extend(tb.format_exception(type(ex), ex, ex.__traceback__))
+    full_detail = "\n".join(detail_lines)
+
+    def _copy(e):
+        try:
+            if _page:
+                _page.set_clipboard(full_detail)
+        except Exception:
+            pass
+
+    truncated = message[:100] + ("..." if len(message) > 100 else "")
+    _show_snackbar(truncated, 'error', duration, True, "📋 Copiar", _copy)
 
 
 def show_warning(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):

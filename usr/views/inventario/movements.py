@@ -116,5 +116,11 @@ def _encolar_sync(movimiento_data):
         from usr.database.sync_queue import get_sync_queue
         queue = get_sync_queue()
         queue.add_pending('movimientos', 'insert', movimiento_data)
+        print(f"[SYNC] Movimiento encolado: {movimiento_data.get('id', 'sin-id')}")
     except Exception as e:
         print(f"[SYNC] Error cola: {e}")
+        try:
+            from usr.notifications import show_error_with_copy
+            show_error_with_copy("Error al encolar movimiento para sync", e)
+        except:
+            pass

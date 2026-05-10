@@ -1,6 +1,14 @@
 import flet as ft
 
 
+def _notify_error(msg, ex=None):
+    try:
+        from usr.notifications import show_error_with_copy
+        show_error_with_copy(msg, ex)
+    except Exception:
+        print(f"[ERROR] {msg}: {ex}")
+
+
 class PaymentsManager:
     def __init__(self, page, theme_colors):
         self.page = page
@@ -10,7 +18,12 @@ class PaymentsManager:
         self.pagos = []
         self.faltante_ves = [0]
 
-        self._build_ui()
+        try:
+            self._build_ui()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager.__init__: {ex}")
+            import traceback; traceback.print_exc()
+            _notify_error("Error inicializando pagos", ex)
 
     def _build_ui(self):
         self.transferencia_monto = ft.TextField(
@@ -90,132 +103,182 @@ class PaymentsManager:
                 nuevo_usd = faltante / tasa
                 self.divisas_monto.value = f"{nuevo_usd:.2f}" if nuevo_usd > 0 else ""
                 self.page.update()
-        except:
-            pass
+            else:
+                self.divisas_monto.value = ""
+                self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._on_tasa_change: {ex}")
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error calculando tasa de cambio", ex)
+            except:
+                pass
 
     def _abrir_panel(self, metodo):
-        self.controls_container.visible = True
+        try:
+            self.controls_container.visible = True
 
-        faltante = max(0, self.faltante_ves[0])
-        controles = []
+            faltante = max(0, self.faltante_ves[0])
+            controles = []
 
-        if metodo == "transferencia":
-            self.transferencia_monto.value = f"{int(faltante)}" if faltante > 0 else ""
-            self.transferencia_ref.value = ""
-            controles = [self.transferencia_monto, self.transferencia_ref]
-        elif metodo == "efectivo":
-            self.efectivo_monto.value = f"{int(faltante)}" if faltante > 0 else ""
-            controles = [self.efectivo_monto]
-        else:
+            if metodo == "transferencia":
+                self.transferencia_monto.value = f"{int(faltante)}" if faltante > 0 else ""
+                self.transferencia_ref.value = ""
+                controles = [self.transferencia_monto, self.transferencia_ref]
+            elif metodo == "efectivo":
+                self.efectivo_monto.value = f"{int(faltante)}" if faltante > 0 else ""
+                controles = [self.efectivo_monto]
+            else:
+                try:
+                    tasa = float(self.divisas_tasa.value or "50")
+                except ValueError:
+                    tasa = 50
+                monto_usd = faltante / tasa if tasa > 0 else 0
+                self.divisas_monto.value = f"{monto_usd:.2f}" if monto_usd > 0 else ""
+                controles = [self.divisas_tasa, self.divisas_monto]
+
+            self.controls_container.content = ft.Column(
+                controles + [ft.ElevatedButton("➕ Agregar", on_click=lambda _: self._agregar_pago(metodo))],
+                spacing=10
+            )
+            self.controls_container.visible = True
+            self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._abrir_panel: {ex}")
             try:
-                tasa = float(self.divisas_tasa.value or "50")
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al abrir panel de pago", ex)
             except:
-                tasa = 50
-            monto_usd = faltante / tasa if tasa > 0 else 0
-            self.divisas_monto.value = f"{monto_usd:.2f}" if monto_usd > 0 else ""
-            controles = [self.divisas_tasa, self.divisas_monto]
-
-        self.controls_container.content = ft.Column(
-            controles + [ft.ElevatedButton("➕ Agregar", on_click=lambda _: self._agregar_pago(metodo))],
-            spacing=10
-        )
-        self.controls_container.visible = True
-        self.page.update()
+                pass
 
     def set_page(self, page):
-        self.page = page
+        try:
+            self.page = page
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager.set_page: {ex}")
 
     def _agregar_pago(self, metodo):
-        monto = 0
-        ref = ""
+        try:
+            monto = 0
+            ref = ""
 
-        if metodo == "transferencia":
+            if metodo == "transferencia":
+                try:
+                    monto = float(self.transferencia_monto.value or "0")
+                except ValueError:
+                    print(f"[WARN] Transferencia monto inválido")
+                    monto = 0
+                ref = self.transferencia_ref.value or ""
+                self.transferencia_monto.value = ""
+                self.transferencia_ref.value = ""
+
+            elif metodo == "efectivo":
+                try:
+                    monto = float(self.efectivo_monto.value or "0")
+                except ValueError:
+                    print(f"[WARN] Efectivo monto inválido")
+                    monto = 0
+                self.efectivo_monto.value = ""
+
+            else:
+                try:
+                    tasa = float(self.divisas_tasa.value or "1")
+                    monto_usd = float(self.divisas_monto.value or "0")
+                    monto = monto_usd * tasa
+                except ValueError:
+                    print(f"[WARN] Divisas monto/tasa inválido")
+                    monto = 0
+                self.divisas_monto.value = ""
+
+            if monto > 0:
+                self.pagos.append({
+                    "tipo": metodo,
+                    "monto": monto,
+                    "ref": ref
+                })
+                self.faltante_ves[0] -= monto
+                self._actualizar_lista()
+                self._actualizar_resumen()
+            else:
+                try:
+                    from usr.notifications import show_warning
+                    show_warning("Ingrese un monto mayor a cero")
+                except:
+                    pass
+
+            self.controls_container.visible = False
+            self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._agregar_pago: {ex}")
             try:
-                monto = float(self.transferencia_monto.value or "0")
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al agregar pago", ex)
             except:
-                monto = 0
-            ref = self.transferencia_ref.value or ""
-            self.transferencia_monto.value = ""
-            self.transferencia_ref.value = ""
-
-        elif metodo == "efectivo":
-            try:
-                monto = float(self.efectivo_monto.value or "0")
-            except:
-                monto = 0
-            self.efectivo_monto.value = ""
-
-        else:
-            try:
-                tasa = float(self.divisas_tasa.value or "1")
-                monto_usd = float(self.divisas_monto.value or "0")
-                monto = monto_usd * tasa
-            except:
-                monto = 0
-            self.divisas_monto.value = ""
-
-        if monto > 0:
-            self.pagos.append({
-                "tipo": metodo,
-                "monto": monto,
-                "ref": ref
-            })
-            self.faltante_ves[0] -= monto
-            self._actualizar_lista()
-            self._actualizar_resumen()
-
-        self.controls_container.visible = False
-        self.page.update()
+                pass
 
     def _actualizar_lista(self):
-        self.pagos_list_view.controls.clear()
-        icon_map = {"transferencia": "🏦", "efectivo": "💵", "divisas": "💱"}
+        try:
+            self.pagos_list_view.controls.clear()
+            icon_map = {"transferencia": "🏦", "efectivo": "💵", "divisas": "💱"}
 
-        for i, pago in enumerate(self.pagos):
-            texto = f"{icon_map.get(pago['tipo'], '💳')} {pago['tipo'].title()} {pago['monto']:,.0f} VES"
-            if pago.get('ref'):
-                texto += f" (Ref: {pago['ref']})"
+            for i, pago in enumerate(self.pagos):
+                texto = f"{icon_map.get(pago['tipo'], '💳')} {pago['tipo'].title()} {pago['monto']:,.0f} VES"
+                if pago.get('ref'):
+                    texto += f" (Ref: {pago['ref']})"
 
-            item = ft.Container(
-                content=ft.Row([
-                    ft.Text(texto, size=13, expand=True),
-                    ft.IconButton(
-                        icon=ft.Icons.DELETE_OUTLINE,
-                        icon_color=self.theme_colors.get('error'),
-                        on_click=lambda _, idx=i: self._eliminar_pago(idx)
-                    )
-                ]),
-                bgcolor=self.theme_colors.get('surface'),
-                border_radius=8,
-                padding=10
-            )
-            self.pagos_list_view.controls.append(item)
+                item = ft.Container(
+                    content=ft.Row([
+                        ft.Text(texto, size=13, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_color=self.theme_colors.get('error'),
+                            on_click=lambda _, idx=i: self._eliminar_pago(idx)
+                        )
+                    ]),
+                    bgcolor=self.theme_colors.get('surface'),
+                    border_radius=8,
+                    padding=10
+                )
+                self.pagos_list_view.controls.append(item)
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._actualizar_lista: {ex}")
 
     def _eliminar_pago(self, index):
-        pago = self.pagos.pop(index)
-        self.faltante_ves[0] += pago['monto']
-        self._actualizar_lista()
-        self._actualizar_resumen()
-        self.page.update()
+        try:
+            pago = self.pagos.pop(index)
+            self.faltante_ves[0] += pago['monto']
+            self._actualizar_lista()
+            self._actualizar_resumen()
+            self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._eliminar_pago: {ex}")
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al eliminar pago", ex)
+            except:
+                pass
 
     def _actualizar_resumen(self):
-        faltante = self.faltante_ves[0]
+        try:
+            faltante = self.faltante_ves[0]
 
-        if abs(faltante) < 0.01:
-            self.faltante_icon.name = ft.Icons.CHECK_CIRCLE
-            self.faltante_icon.color = ft.Colors.GREEN_400
-            self.faltante_text.value = "✅ PAGO COMPLETO"
-        elif faltante > 0:
-            self.faltante_icon.name = ft.Icons.WARNING_AMBER_ROUNDED
-            self.faltante_icon.color = ft.Colors.ORANGE_400
-            self.faltante_text.value = f"⚠️ FALTANTE: {faltante:,.2f} VES"
-        else:
-            self.faltante_icon.name = ft.Icons.ERROR_OUTLINE
-            self.faltante_icon.color = ft.Colors.RED_400
-            self.faltante_text.value = f"❌ EXCEDENTE: {abs(faltante):,.2f} VES"
+            if abs(faltante) < 0.01:
+                self.faltante_icon.name = ft.Icons.CHECK_CIRCLE
+                self.faltante_icon.color = ft.Colors.GREEN_400
+                self.faltante_text.value = "✅ PAGO COMPLETO"
+            elif faltante > 0:
+                self.faltante_icon.name = ft.Icons.WARNING_AMBER_ROUNDED
+                self.faltante_icon.color = ft.Colors.ORANGE_400
+                self.faltante_text.value = f"⚠️ FALTANTE: {faltante:,.2f} VES"
+            else:
+                self.faltante_icon.name = ft.Icons.ERROR_OUTLINE
+                self.faltante_icon.color = ft.Colors.RED_400
+                self.faltante_text.value = f"❌ EXCEDENTE: {abs(faltante):,.2f} VES"
 
-        if self.page:
-            self.page.update()
+            if self.page:
+                self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager._actualizar_resumen: {ex}")
 
     def get_ui(self):
         return self.section_container(ft.Column([
@@ -243,8 +306,14 @@ class PaymentsManager:
         return self.pagos
 
     def set_monto_total(self, monto):
-        self.monto_total = monto
-        self.faltante_ves[0] = monto
-        self._actualizar_resumen()
-        if self.page:
-            self.page.update()
+        try:
+            self.monto_total = monto
+            self.faltante_ves[0] = monto
+            self._actualizar_resumen()
+        except Exception as ex:
+            print(f"[ERROR] PaymentsManager.set_monto_total: {ex}")
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al establecer monto total", ex)
+            except:
+                pass

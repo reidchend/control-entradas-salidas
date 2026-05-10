@@ -219,12 +219,21 @@ class InventarioView(ft.Container):
         self.page.update()
 
     async def _on_sync_indicator_click(self, e=None):
-        from usr.database import get_sync_manager
-        sync_mgr = get_sync_manager()
-        if not sync_mgr or not self.page:
-            return
-        self._update_connection_indicator()
-        self.page.update()
+        try:
+            from usr.database import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if not sync_mgr or not self.page:
+                return
+            self._update_connection_indicator()
+            self.page.update()
+        except Exception as ex:
+            print(f"[ERROR] _on_sync_indicator_click: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al verificar conexión", ex)
+            except:
+                pass
 
     def _show_snack_bar(self, message, bgcolor):
         if not self.page:
@@ -308,8 +317,17 @@ class InventarioView(ft.Container):
                 self.update()
 
     def _on_categoria_click(self, cat_dict):
-        categoria = type('Categoria', (), cat_dict)()
-        self.page.run_task(self._handle_category_click, None, categoria)
+        try:
+            categoria = type('Categoria', (), cat_dict)()
+            self.page.run_task(self._handle_category_click, None, categoria)
+        except Exception as ex:
+            print(f"[ERROR] _on_categoria_click: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al seleccionar categoría", ex)
+            except:
+                pass
 
     async def _handle_category_click(self, container, categoria):
         try:
@@ -330,35 +348,44 @@ class InventarioView(ft.Container):
         return create_categoria_card(categoria, get_safe_colors(self.page), self._show_productos)
 
     def _show_productos(self, categoria):
-        self.categoria_seleccionada = categoria
-        colors = get_safe_colors(self.page)
-        if self.search_field:
-            self.search_field.visible = False
+        try:
+            self.categoria_seleccionada = categoria
+            colors = get_safe_colors(self.page)
+            if self.search_field:
+                self.search_field.visible = False
 
-        header_nav = ft.Container(
-            content=ft.Row([
-                ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=lambda _: self._reset_view(),
-                              icon_color=colors['text_secondary']),
-                ft.Text(categoria.nombre, size=18, weight="bold", color=colors['text_primary']),
-            ]),
-            bgcolor=colors['surface'], padding=10, border_radius=10,
-        )
+            header_nav = ft.Container(
+                content=ft.Row([
+                    ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=lambda _: self._reset_view(),
+                                  icon_color=colors['text_secondary']),
+                    ft.Text(categoria.nombre, size=18, weight="bold", color=colors['text_primary']),
+                ]),
+                bgcolor=colors['surface'], padding=10, border_radius=10,
+            )
 
-        self.productos_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
+            self.productos_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
 
-        self.search_for_products = ft.TextField(
-            hint_text="Buscar productos...", prefix_icon=ft.Icons.SEARCH_ROUNDED,
-            border_radius=12, border_color=colors['input_border'],
-            focused_border_color=colors['accent'],
-            height=45, text_size=14,
-            on_change=self._on_search_change, value="",
-        )
+            self.search_for_products = ft.TextField(
+                hint_text="Buscar productos...", prefix_icon=ft.Icons.SEARCH_ROUNDED,
+                border_radius=12, border_color=colors['input_border'],
+                focused_border_color=colors['accent'],
+                height=45, text_size=14,
+                on_change=self._on_search_change, value="",
+            )
 
-        nueva_vista = ft.Column([header_nav, self.search_for_products, self.productos_list], expand=True, spacing=5)
-        self.main_content_area.content = nueva_vista
-        self._load_productos()
-        if self.page:
-            self.update()
+            nueva_vista = ft.Column([header_nav, self.search_for_products, self.productos_list], expand=True, spacing=5)
+            self.main_content_area.content = nueva_vista
+            self._load_productos()
+            if self.page:
+                self.update()
+        except Exception as ex:
+            print(f"[ERROR] _show_productos: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al mostrar productos", ex)
+            except:
+                pass
 
     def _reset_view(self):
         self.categoria_seleccionada = None

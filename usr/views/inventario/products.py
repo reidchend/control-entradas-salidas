@@ -5,15 +5,24 @@ from usr.views.inventario.helpers import get_attr, get_safe_colors
 
 
 def get_almacenes():
-    db = next(get_db_adaptive())
+    db = None
     try:
+        db = next(get_db_adaptive())
         almacenes = db.query(Existencia.almacen).distinct().all()
         opciones = [a[0] for a in almacenes]
         if "principal" not in opciones:
             opciones.insert(0, "principal")
         return opciones
+    except Exception as ex:
+        print(f"[ERROR] get_almacenes: {ex}")
+        import traceback; traceback.print_exc()
+        return ["principal"]
     finally:
-        db.close()
+        if db:
+            try:
+                db.close()
+            except:
+                pass
 
 
 def create_producto_item(producto, stock_por_almacen, colors, callbacks):
