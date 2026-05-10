@@ -2,7 +2,7 @@
 
 Aplicacion de escritorio/web para gestion de inventario desarrollada con Flet y SQLAlchemy.
 
-## 🆕 Version Actual - Sistema Offline-First
+## Version Actual - Sistema Offline-First
 
 ### Caracteristicas Principales
 
@@ -10,17 +10,8 @@ Aplicacion de escritorio/web para gestion de inventario desarrollada con Flet y 
 - **Sincronizacion Automatica**: Se sincroniza con Supabase cuando hay conexion
 - **Productos Pesables**: Registro de productos por peso (kg) con calculo automatico
 - **Cola de Operaciones**: Las operaciones offline se procesan cuando hay conexion
-
----
-
-## Caracteristicas
-
-- **Registro de Entradas**: Agregar productos al inventario por categoria
-- **Validacion de Facturas**: Verificar y aprobar facturas de proveedores
-- **Consulta de Stock**: Visualizar niveles de inventario en tiempo real
-- **Historial de Facturas**: Consultar y revisar facturas registradas con busqueda avanzada
-- **Productos Pesables**: Registro de productos que se venden por peso (jamon, queso, carnes)
-- **Configuracion**: Gestionar categorias, productos y base de datos
+- **OCR de Facturas**: Extraccion automatica de datos de facturas desde imagenes del portapapeles usando Gemini API
+- **Lista de Compras**: Gestion de productos pendientes por ingresar al inventario
 
 ---
 
@@ -38,9 +29,9 @@ Aplicacion de escritorio/web para gestion de inventario desarrollada con Flet y 
 
 2. **Crear entorno virtual (recomendado)**
 ```bash
-python -m venv venv
-source venv/bin/activate  # En Linux/Mac
-venv\Scripts\activate     # En Windows
+python -m venv .venv
+source .venv/bin/activate  # En Linux/Mac
+.venv\Scripts\activate     # En Windows
 ```
 
 3. **Instalar dependencias**
@@ -60,12 +51,49 @@ DB_USER=postgres
 DB_PASSWORD=your-supabase-password
 ```
 
-5. **Inicializar la base de datos local**
+5. **Ejecutar la aplicacion**
 ```bash
 python main.py
 ```
 
 La aplicacion sincronizara automaticamente los datos desde Supabase al iniciar.
+
+---
+
+## OCR de Facturas
+
+La aplicacion extrae automaticamente datos de facturas desde imagenes del portapapeles usando **Gemini API**.
+
+### Como usar
+
+1. En cualquier aplicacion (WhatsApp, correo, etc.), copia la imagen de la factura
+2. En la app, ve a **Validacion** y presiona `Ctrl+V` o haz clic en el area de pegado
+3. La imagen se procesa automaticamente y se extraen los datos:
+   - Proveedor
+   - RIF / C.I.
+   - Numero de factura
+   - Fecha
+
+### Configuracion de OCR
+
+La API key de Gemini viene precargada en el codigo. Si necesitas cambiarla, edita `GEMINI_API_KEY` en `usr/ocr_extractor.py`.
+
+### Metodo de extraccion
+
+1. **Gemini API** (metodo principal) - requiere `google-genai>=2.0.0`
+2. **Fallbacks**: Tesseract OCR, EasyOCR (instalados automaticamente si estan disponibles)
+
+---
+
+## Lista de Compras
+
+Permite gestionar productos pendientes por ingresar al inventario.
+
+- Agregar productos con busqueda filtrada
+- Ver stock actual en almacen principal y restaurante
+- Registrar entradas desde la lista (elimina el item al completar)
+- Corregir stock (entrada/salida segun cantidad fisica real)
+- Eliminar productos de la lista
 
 ---
 
@@ -148,7 +176,6 @@ Local (SQLite) <---> Sync Manager <---> Supabase
 ```
 proyecto_control/
 ├── main.py                    # Punto de entrada
-├── init_db.py                 # Script de inicializacion
 ├── requirements.txt           # Dependencias
 ├── .env                       # Configuracion (no incluir en git)
 ├── config/
@@ -156,52 +183,43 @@ proyecto_control/
 │   └── __init__.py
 ├── usr/
 │   ├── database/
-│   │   ├── base.py            # Configuracion SQLAlchemy
-│   │   ├── local_replica.py   # Replica local SQLite
-│   │   ├── sync.py            # Sincronizacion con Supabase
-│   │   ├── sync_queue.py      # Cola de operaciones offline
+│   │   ├── conn.py           # Conexion SQLite local
+│   │   ├── base.py           # Configuracion SQLAlchemy
+│   │   ├── local_replica.py  # Replica local SQLite
+│   │   ├── sync.py           # Sincronizacion con Supabase
+│   │   ├── sync_queue.py     # Cola de operaciones offline
 │   │   └── __init__.py
 │   ├── models/
 │   │   ├── categoria.py       # Modelo Categoria
-│   │   ├── producto.py        # Modelo Producto (es_pesable)
-│   │   ├── factura.py        # Modelo Factura
+│   │   ├── producto.py       # Modelo Producto (es_pesable)
+│   │   ├── factura.py         # Modelo Factura
 │   │   ├── movimiento.py      # Modelo Movimiento (peso_total)
 │   │   ├── existencia.py     # Modelo Existencia
+│   │   ├── compra_lista.py   # Modelo Lista de Compras
 │   │   └── __init__.py
-│   └── views/
-│       ├── inventario_view.py        # Vista de entradas
-│       ├── validacion_view.py        # Vista de facturas
-│       ├── stock_view.py             # Vista de stock
-│       ├── historial_facturas_view.py # Vista de historial
-│       ├── configuracion_view.py     # Vista de configuracion
-│       └── __init__.py
+│   ├── ocr_extractor.py      # OCR con Gemini API
+│   ├── views/
+│   │   ├── inventario_view.py        # Vista de inventario
+│   │   ├── validacion_view.py        # Vista de facturas
+│   │   ├── stock_view.py             # Vista de stock
+│   │   ├── historial_facturas_view.py # Vista de historial
+│   │   ├── requisiciones_view.py     # Vista de requisiciones
+│   │   └── __init__.py
+│   └── views/inventario/      # Modulos de inventario
+│       ├── helpers.py
+│       ├── categories.py
+│       ├── products.py
+│       ├── dialogs.py
+│       ├── movements.py
+│       └── shopping_list.py
 └── lycoris_local.db          # Base de datos local SQLite
 ```
 
 ---
 
-## Base de Datos
-
-### Modelos
-
-- **Categoria**: Clasificacion de productos (Verduras, Frutas, Granos, etc.)
-- **Producto**: Articulos del inventario con stock y umbrales
-  - `es_pesable`: Boolean - producto se vende por peso
-  - `peso_unitario`: Float - peso de cada unidad
-  - `unidad_medida`: String - "unidad" o "kg"
-- **Factura**: Documentos de proveedores para validar
-- **Movimiento**: Historial de entradas y salidas
-  - `cantidad`: Cantidad en unidades
-  - `peso_total`: Peso total (para productos pesables)
-- **Existencia**: Stock actual por producto y almacen
-  - `cantidad`: Cantidad actual
-  - `unidad`: "unidad" o "kg"
-
----
-
 ## Uso
 
-### 1. Inventario (Entradas)
+### 1. Inventario
 
 1. Selecciona una categoria
 2. Elige un producto
@@ -209,24 +227,28 @@ proyecto_control/
 4. **Para productos pesables**: Ingresa cantidad de unidades y peso por unidad
 5. Guarda la entrada
 
-### 2. Validacion de Facturas
+### 2. Validacion de Facturas (OCR)
 
-1. Ve a la seccion "Validacion"
-2. Busca facturas pendientes
-3. Selecciona las entradas a validar
-4. Ingresa el numero de factura
-5. Confirma la validacion (se sincroniza a Supabase)
+1. Ve a la seccion **Validacion**
+2. Copia una imagen de factura en el portapapeles
+3. Presiona `Ctrl+V` o pega la imagen
+4. Los datos se extraen automaticamente
+5. Valida y confirma la factura
 
-### 3. Consulta de Stock
+### 3. Lista de Compras
 
-1. Ve a "Stock"
+1. Ve a **Inventario** y presiona el icono de carrito
+2. Presiona **Agregar** y busca productos
+3. Desde cada tarjeta puedes:
+   - Registrar **Entrada** (elimina de la lista)
+   - **Corregir stock** (ajusta stock sin salir de la lista)
+   - **Eliminar** de la lista
+
+### 4. Consulta de Stock
+
+1. Ve a **Stock**
 2. Filtra por categoria o busca
 3. Revisa niveles y alertas
-
-### 4. Historial de Facturas
-
-1. Ve a la seccion "Historial"
-2. Usa los filtros de busqueda
 
 ---
 
@@ -234,8 +256,8 @@ proyecto_control/
 
 ### Desktop
 ```
-📦 INVENTARIO      → Registro de entradas (incluye productos pesables)
-✓  VALIDACION      → Validar facturas (sync a Supabase)
+📦 INVENTARIO      → Registro de entradas + Lista de Compras
+✓  VALIDACION      → Validar facturas (con OCR automatico)
 📊 STOCK           → Consultar inventario
 🕒 HISTORIAL       → Ver facturas historicas
 ⚙️ CONFIGURACION   → Ajustes del sistema
@@ -258,6 +280,13 @@ Para usar PostgreSQL en produccion:
 ---
 
 ## Historial de Cambios
+
+### Version 2.1.0 (Mayo 2026)
+- ✨ **OCR con Gemini API**: Extraccion automatica de datos de facturas desde imagenes del portapapeles
+- ✨ **Lista de Compras**: Gestion de productos pendientes por ingresar
+- 🔧 Correcciones de UI en lista de compras (empty state, actualizacion de stock)
+- 🔧 Silenciado de mensajes de debug de asyncio en consola
+- 🔧 Modularizacion de inventario_view.py (separacion en helpers, categories, products, dialogs, movements, shopping_list)
 
 ### Version 2.0.0 (Abril 2026)
 - ✨ **Sistema Offline-First**: SQLite como fuente de verdad local
@@ -285,6 +314,7 @@ Para usar PostgreSQL en produccion:
 - **Backend**: SQLAlchemy ORM
 - **Base de datos local**: SQLite
 - **Base de datos central**: Supabase (PostgreSQL)
+- **OCR**: Google Gemini API (google-genai)
 - **Configuracion**: Pydantic + python-dotenv
 
 ### Arquitectura

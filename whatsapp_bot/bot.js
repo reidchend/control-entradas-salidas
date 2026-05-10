@@ -102,6 +102,30 @@ async function sendToGroup(message) {
 }
 
 /**
+ * Envía una imagen con caption al grupo configurado
+ */
+async function sendImageToGroup(imageBuffer, caption = '') {
+    if (!config.groupId) {
+        throw new Error('No hay grupo configurado.');
+    }
+    if (!sock || !isConnected) {
+        throw new Error('WhatsApp no conectado');
+    }
+
+    try {
+        await sock.sendMessage(config.groupId, {
+            image: imageBuffer,
+            caption: caption
+        });
+        console.log('✅ Imagen enviada al grupo');
+        return true;
+    } catch (error) {
+        console.error('Error enviando imagen:', error);
+        throw error;
+    }
+}
+
+/**
  * Conecta a WhatsApp - Configuración 2026 actualizada
  */
 async function connect() {
@@ -215,6 +239,7 @@ module.exports = {
     connect,
     sendMessage,
     sendToGroup,
+    sendImageToGroup,
     getGroups,
     setGroupId,
     getGroupId,

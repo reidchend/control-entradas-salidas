@@ -3,9 +3,10 @@ from datetime import datetime
 
 
 class ValidacionFields:
-    def __init__(self, page, theme_colors):
+    def __init__(self, page, theme_colors, payments=None):
         self.page = page
         self.theme_colors = theme_colors
+        self.payments = payments
         self._build_fields()
     
     def _build_fields(self):
@@ -90,7 +91,12 @@ class ValidacionFields:
         self.page.update()
     
     def _on_monto_change(self, e):
-        pass
+        if self.payments:
+            try:
+                monto = float(e.control.value or "0")
+                self.payments.set_monto_total(monto)
+            except ValueError:
+                self.payments.set_monto_total(0)
     
     def _on_fecha_change(self, e):
         self.fecha_label.value = f"Fecha: {self.fecha_picker.value.strftime('%d/%m/%Y')}"

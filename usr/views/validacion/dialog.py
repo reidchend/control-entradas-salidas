@@ -12,9 +12,9 @@ class ValidacionDialog:
         self.theme_colors = theme_colors
         
         self.is_mobile = page.width < 600 if page else False
-        self.fields = ValidacionFields(page, theme_colors)
+        self.payments = PaymentsManager(page, theme_colors)
+        self.fields = ValidacionFields(page, theme_colors, self.payments)
         self.ocr = OCRHandler(page, theme_colors, self.fields)
-        self.payments = PaymentsManager(theme_colors)
         
         self._build_ui()
     

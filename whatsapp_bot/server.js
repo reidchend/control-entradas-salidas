@@ -163,9 +163,11 @@ app.get('/qr', (req, res) => {
         
         <div class="info">
             <strong>📋 Endpoints disponibles:</strong><br>
-            POST /send - Enviar mensaje al grupo<br>
-            GET /groups - Listar grupos<br>
-            POST /set-group - Configurar grupo
+            POST /send        → Enviar mensaje al grupo<br>
+            POST /send-image  → Enviar imagen con caption al grupo<br>
+            POST /send-to     → Enviar a destinatario       <br>
+            GET  /groups      → Listar grupos               <br>
+            POST /set-group   → Configurar grupo            <br>
         </div>
     </div>
 </body>
@@ -199,6 +201,34 @@ app.post('/send', async (req, res) => {
         await bot.sendToGroup(message);
         
         res.json({ success: true, message: 'Mensaje enviado al grupo' });
+    } catch (error) {
+        console.error('Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint para enviar imagen con caption al grupo
+app.post('/send-image', async (req, res) => {
+    try {
+        const { caption, imagePath } = req.body;
+
+        if (!imagePath) {
+            return res.status(400).json({ error: 'El campo "imagePath" es requerido' });
+        }
+
+        if (!bot.isConnected()) {
+            return res.status(503).json({ error: 'WhatsApp no conectado' });
+        }
+
+        const fs = require('fs');
+        if (!fs.existsSync(imagePath)) {
+            return res.status(400).json({ error: 'Archivo de imagen no encontrado: ' + imagePath });
+        }
+
+        const imageBuffer = fs.readFileSync(imagePath);
+        await bot.sendImageToGroup(imageBuffer, caption || '');
+
+        res.json({ success: true, message: 'Imagen enviada al grupo' });
     } catch (error) {
         console.error('Error:', error.message);
         res.status(500).json({ error: error.message });

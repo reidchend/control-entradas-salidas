@@ -1,5 +1,6 @@
 import flet as ft
 import asyncio
+import os
 from usr.database.base import get_db_adaptive, is_online
 from usr.models import Movimiento
 from usr.logger import get_logger
@@ -7,6 +8,10 @@ from usr.theme import get_colors
 from usr.notifications import show_success, show_error
 from usr.views.validacion import ValidacionDialog
 from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
+from usr.whatsapp_notifier import (
+    send_whatsapp_message, send_whatsapp_image,
+    format_validation_message, get_whatsapp_status
+)
 
 logger = get_logger(__name__)
 
@@ -179,11 +184,30 @@ class ValidacionView(ft.Container):
             data = dialog.get_data()
             dialog.dialog.open = False
             self.page.update()
-            
+
             from usr.views.validacion.service import ValidacionService
             try:
                 result = ValidacionService.procesar(data, self.selected_entradas)
                 show_success(f"✅ Validadas {result.get('movimientos_count', 0)} entradas")
+
+                # Enviar a WhatsApp
+                wa_status = get_whatsapp_status()
+                if wa_status.get('whatsapp_connected'):
+                    img_path = "/tmp/clipboard_image.png"
+                    productos = ", ".join([
+                        f"{e.get('nombre_producto', 'Producto')} ({e.get('cantidad', 0)})"
+                        for e in self.selected_entradas
+                    ])
+                    msg = format_validation_message(
+                        productos, 0, data.get('factura', ''),
+                        data.get('proveedor', ''), data.get('monto', 0),
+                        [], ""
+                    )
+                    if os.path.exists(img_path):
+                        send_whatsapp_image(img_path, msg)
+                    else:
+                        send_whatsapp_message(msg)
+
                 if result.get('sync'):
                     print("[SYNC] Factura sincronizada")
                 self.selected_entradas.clear()
