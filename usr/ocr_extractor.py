@@ -2,11 +2,25 @@ import re
 import os
 from datetime import datetime
 
-GEMINI_API_KEY = "AIzaSyBfh9cassXz_MMYMFAZGtRxhlSccKcXQ6g"
 OCRSPACE_API_KEY = "K86411242588957"
 
+_gemini_error = None
+
+def _get_gemini_key():
+    try:
+        from config.config import get_settings
+        key = get_settings().GEMINI_API_KEY
+        if key:
+            return key
+    except Exception:
+        pass
+    return ""
+
+def _set_gemini_error(msg):
+    global _gemini_error
+    _gemini_error = msg
+
 GEMINI_MODELS = [
-    "gemini-3.1-flash-lite-preview",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
 ]
@@ -14,13 +28,21 @@ GEMINI_MODELS = [
 
 def _is_quota_exceeded(exc):
     err_str = str(exc).lower()
-    return "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "exceeded" in err_str
+    return any(k in err_str for k in ("429", "quota", "resource_exhausted", "exceeded", "rate"))
+
+
+def _is_api_key_error(exc):
+    err_str = str(exc).lower()
+    return any(k in err_str for k in ("permission_denied", "leaked", "invalid", "api_key", "unauthorized", "forbidden"))
 
 
 def _extract_from_image_gemini(image_path: str, model: str) -> str:
     from google import genai
     import PIL.Image
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    api_key = _get_gemini_key()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY no configurada en .env")
+    client = genai.Client(api_key=api_key)
     img = PIL.Image.open(image_path)
     prompt = (
         "Devuelve TODO el texto visible en esta imagen de factura. "
@@ -40,7 +62,10 @@ def _extract_from_image_gemini_json(image_path: str, model: str) -> dict:
     from google import genai
     import PIL.Image
     import json
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    api_key = _get_gemini_key()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY no configurada en .env")
+    client = genai.Client(api_key=api_key)
     img = PIL.Image.open(image_path)
     prompt = (
         'Analiza este documento de recepción. Extrae los datos en formato JSON.\n\n'
@@ -72,31 +97,60 @@ def _extract_from_image_ocrspace(image_path: str) -> dict:
         print(f"[OCR.SPACE] Archivo no encontrado: {image_path}")
         return None
 
+    file_size = os.path.getsize(image_path)
+    if file_size > 1_000_000:
+        print(f"[OCR.SPACE] Imagen grande ({file_size // 1024}KB), comprimiendo...")
+        try:
+            from PIL import Image
+            img = Image.open(image_path)
+            max_side = 1800
+            if max(img.size) > max_side:
+                ratio = max_side / max(img.size)
+                new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_size, Image.LANCZOS)
+            img.save(image_path, 'PNG', optimize=True)
+            print(f"[OCR.SPACE] Comprimida a {os.path.getsize(image_path) // 1024}KB")
+        except Exception as e:
+            print(f"[OCR.SPACE] Compresión fallida: {e}")
+
     with open(image_path, 'rb') as f:
         img_data = base64.b64encode(f.read()).decode('utf-8')
 
-    payload = {
-        'base64Image': f"data:image/png;base64,{img_data}",
-        'language': 'spa',
-        'isOverlayRequired': 'false',
-        'detectOrientation': 'true',
-        'scale': 'true',
-        'OCREngine': 2,
-    }
     headers = {'apikey': OCRSPACE_API_KEY}
 
     try:
         print(f"[OCR.SPACE] Enviando imagen...")
         response = requests.post(
             'https://api.ocr.space/parse/image',
-            data=payload,
+            data={
+                'base64Image': f"data:image/png;base64,{img_data}",
+                'language': 'spa',
+                'isOverlayRequired': 'false',
+                'detectOrientation': 'true',
+                'scale': 'true',
+                'OCREngine': '2',
+            },
             headers=headers,
             timeout=30
         )
-        result = response.json()
+
+        print(f"[OCR.SPACE] Status: {response.status_code} | Content-Length: {len(response.content)}")
+
+        if not response.content:
+            print(f"[OCR.SPACE] Respuesta vacía — cuota diaria agotada o error del servidor")
+            return None
+
+        try:
+            result = response.json()
+        except Exception:
+            print(f"[OCR.SPACE] Respuesta no es JSON: {response.text[:200]}")
+            return None
 
         if result.get("IsErroredOnProcessing"):
-            print(f"[OCR.SPACE] Error: {result.get('ErrorMessage')}")
+            err_msg = result.get('ErrorMessage')
+            if isinstance(err_msg, list):
+                err_msg = err_msg[0]
+            print(f"[OCR.SPACE] Error: {err_msg}")
             return None
 
         parsed_results = result.get("ParsedResults", [])
@@ -177,6 +231,9 @@ def _get_easyocr_reader():
 
 
 def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
+    global _gemini_error
+    _gemini_error = None
+
     if not image_path:
         return {"proveedor": "", "rif": "", "nro_factura": "", "fecha": ""}
 
@@ -203,6 +260,10 @@ def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
             if _is_quota_exceeded(e):
                 print(f"[OCR] {model} agotado, siguiente...")
                 continue
+            if _is_api_key_error(e):
+                print(f"[OCR] Gemini API key inválida o revocada. Agrega GEMINI_API_KEY en .env")
+                _set_gemini_error("API key de Gemini inválida o revocada")
+                break
             print(f"[OCR] {model}: {e}")
             break
 
@@ -217,6 +278,10 @@ def extract_from_image(image_path: str, use_preprocessing: bool = True) -> dict:
             if _is_quota_exceeded(e):
                 print(f"[OCR] {model} agotado, siguiente...")
                 continue
+            if _is_api_key_error(e):
+                print(f"[OCR] Gemini API key inválida o revocada. Agrega GEMINI_API_KEY en .env")
+                _set_gemini_error("API key de Gemini inválida o revocada")
+                break
             print(f"[OCR] {model}: {e}")
             break
 

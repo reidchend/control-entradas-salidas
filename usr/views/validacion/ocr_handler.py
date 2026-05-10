@@ -9,7 +9,11 @@ from PIL import ImageGrab, Image
 def _notify_error(msg, ex=None, page=None):
     try:
         from usr.notifications import show_error_with_copy
-        show_error_with_copy(msg, ex)
+        from usr.ocr_extractor import _gemini_error
+        final_msg = msg
+        if _gemini_error:
+            final_msg = "OCR.SPACE agotado + Gemini sin clave. Agrega GEMINI_API_KEY en tu archivo .env"
+        show_error_with_copy(final_msg, ex)
     except Exception:
         print(f"[ERROR] {msg}: {ex}")
 
@@ -202,6 +206,7 @@ class OCRHandler:
 
             datos = extract_from_image(path)
 
+            has_data = any(datos.values())
             self.result_display.value = (
                 f"🏷️ {datos.get('proveedor', 'No hallado')}\n"
                 f"🆔 RIF: {datos.get('rif', 'No hallado')}\n"
@@ -209,6 +214,14 @@ class OCRHandler:
                 f"📅 Fecha: {datos.get('fecha', '---')}"
             )
             self.result_display.italic = False
+
+            if not has_data:
+                self._set_loading(False, "⚠️ OCR no detectó datos")
+                self.status_text.value = "⚠️ No se extrajeron datos de la imagen. Puedes ingresar los datos manualmente."
+                self.status_text.color = ft.Colors.ORANGE_400
+                if hasattr(self.fields, 'check_validar_button'):
+                    self.fields.check_validar_button()
+                return
 
             if self.fields:
                 try:

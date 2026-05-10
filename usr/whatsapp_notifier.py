@@ -75,35 +75,21 @@ def send_whatsapp_to(jid: str, message: str) -> bool:
 
 
 def send_whatsapp_image(image_path: str, caption: str = "") -> bool:
-    """
-    Envía una imagen con caption al grupo de WhatsApp.
-
-    Args:
-        image_path: Ruta al archivo de imagen (ej: /tmp/clipboard_image.png)
-        caption: Texto que aparece debajo de la imagen en WhatsApp
-
-    Returns:
-        True si se envió correctamente, False si hubo error
-    """
     try:
         if not os.path.exists(image_path):
             print(f"[WA] Imagen no encontrada: {image_path}")
             return False
 
-        headers = {'x-auth-token': WHATSAPP_BOT_TOKEN}
-        with open(image_path, 'rb') as f:
-            image_data = f.read()
-
-        from io import BytesIO
         import requests
-
-        files = {'image': (os.path.basename(image_path), BytesIO(image_data), 'image/png')}
-        data = {'caption': caption}
+        headers = {
+            'x-auth-token': WHATSAPP_BOT_TOKEN,
+            'Content-Type': 'application/json'
+        }
+        payload = {'imagePath': image_path, 'caption': caption}
 
         response = requests.post(
             f"{WHATSAPP_BOT_URL}/send-image",
-            files=files,
-            data=data,
+            json=payload,
             headers=headers,
             timeout=30
         )

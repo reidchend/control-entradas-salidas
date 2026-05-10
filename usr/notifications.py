@@ -118,6 +118,11 @@ def show_success(message: str, duration: int = None, with_icon: bool = True, act
     _show_snackbar(message, 'success', duration, with_icon, action_text, action_callback)
 
 
+def show_error(message: str, duration: int = None, with_icon: bool = True, action_text: str = None, action_callback = None):
+    """Mostrar mensaje de error (rojo)."""
+    _show_snackbar(message, 'error', duration, with_icon, action_text, action_callback)
+
+
 def show_error_with_copy(message: str, ex: Exception = None, duration: int = 6):
     """Mostrar mensaje de error con botón para copiar detalles al clipboard."""
     import traceback as tb

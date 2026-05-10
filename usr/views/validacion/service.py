@@ -25,8 +25,12 @@ class ValidacionService:
 
         try:
             try:
-                db.execute(text("ALTER TABLE factura_pagos ADD COLUMN tasa_cambio REAL"))
-                db.commit()
+                from sqlalchemy import inspect
+                inspector = inspect(db.bind)
+                columnas = [c['name'] for c in inspector.get_columns('factura_pagos')]
+                if 'tasa_cambio' not in columnas:
+                    db.execute(text("ALTER TABLE factura_pagos ADD COLUMN tasa_cambio REAL"))
+                    db.commit()
             except Exception as ex:
                 print(f"[WARN] ALTER TABLE factura_pagos: {ex}")
 
@@ -50,8 +54,36 @@ class ValidacionService:
                     print(f"[WARN] Buscar proveedor: {ex}")
 
             try:
-                ref_fact = data.get('ref_factura') or f"V-REF-{datetime.now().strftime('%H%M%S')}"
-                usuario_val = data.get('usuario', 'Sistema')
+                from usr.database.local_replica import LocalReplica
+                usuario = LocalReplica.get_usuario_dispositivo()
+                usuario_val = usuario['nombre'] if usuario else 'Sistema'
+            except Exception:
+                usuario_val = 'Sistema'
+
+            ref_fact = data.get('factura') or f"V-REF-{datetime.now().strftime('%H%M%S')}"
+
+            try:
+                existente = db.query(Factura).filter(Factura.numero_factura == ref_fact).first()
+                if existente:
+                    print(f"[WARN] Factura {ref_fact} ya existe, se vinculan las entradas")
+                    movements_updated = db.query(Movimiento).filter(
+                        Movimiento.id.in_(list(selected_entradas))
+                    ).all()
+                    for m in movements_updated:
+                        m.factura_id = existente.id
+                    db.commit()
+                    result = {
+                        'factura_id': existente.id,
+                        'movimientos_count': len(movements_updated),
+                        'proveedor_obj': None
+                    }
+                    db.close()
+                    return result
+            except Exception as ex:
+                print(f"[ERROR] ValidacionService.procesar — buscar duplicado: {ex}")
+                ref_fact = f"V-REF-{datetime.now().strftime('%H%M%S')}"
+
+            try:
                 monto_val = data.get('monto', 0)
                 nueva_fac = Factura(
                     numero_factura=ref_fact,
@@ -92,15 +124,15 @@ class ValidacionService:
                 except Exception as ex:
                     print(f"[WARN] Agregar pago: {ex}")
 
-            movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(selected_entradas))).all()
-            for m in movimientos:
+            movements = db.query(Movimiento).filter(Movimiento.id.in_(list(selected_entradas))).all()
+            for m in movements:
                 m.factura_id = nueva_fac.id
 
             db.commit()
 
             result = {
                 'factura_id': nueva_fac.id,
-                'movimientos_count': len(movimientos),
+                'movimientos_count': len(movements),
                 'proveedor_obj': proveedor_obj
             }
 

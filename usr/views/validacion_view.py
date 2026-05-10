@@ -1,6 +1,7 @@
 import flet as ft
 import asyncio
 import os
+import tempfile
 from usr.database.base import get_db_adaptive, is_online
 from usr.models import Movimiento
 from usr.logger import get_logger
@@ -181,27 +182,47 @@ class ValidacionView(ft.Container):
         dialog = ValidacionDialog(self.page, self.selected_entradas, theme_colors)
         
         def on_validar_click(btn_event):
-            data = dialog.get_data()
-            dialog.dialog.open = False
-            self.page.update()
-
-            from usr.views.validacion.service import ValidacionService
             try:
+                data = dialog.get_data()
+                dialog.dialog.open = False
+                self.page.update()
+
+                from usr.views.validacion.service import ValidacionService
                 result = ValidacionService.procesar(data, self.selected_entradas)
                 show_success(f"✅ Validadas {result.get('movimientos_count', 0)} entradas")
 
-                # Enviar a WhatsApp
-                wa_status = get_whatsapp_status()
+                wa_status = {}
+                try:
+                    wa_status = get_whatsapp_status()
+                except Exception:
+                    pass
                 if wa_status.get('whatsapp_connected'):
-                    img_path = "/tmp/clipboard_image.png"
-                    productos = ", ".join([
-                        f"{e.get('nombre_producto', 'Producto')} ({e.get('cantidad', 0)})"
-                        for e in self.selected_entradas
-                    ])
+                    img_path = os.path.join(tempfile.gettempdir(), "clipboard_image.png")
+                    if not os.path.exists(img_path):
+                        img_path = os.path.join(tempfile.gettempdir(), "ocr_temp.png")
+                    productos_str = "Productos variados"
+                    if self.selected_entradas:
+                        try:
+                            from usr.database.local_replica import LocalReplica
+                            db = next(get_db_adaptive())
+                            try:
+                                movimientos = db.query(Movimiento).filter(Movimiento.id.in_(list(self.selected_entradas))).all()
+                                productos_ids = set(m.get('producto_id') if isinstance(m, dict) else m.producto_id for m in movimientos)
+                                nombres = []
+                                for pid in productos_ids:
+                                    prod = LocalReplica.get_producto_by_id(pid)
+                                    if prod:
+                                        nom = prod.get('nombre', 'Producto') if isinstance(prod, dict) else getattr(prod, 'nombre', 'Producto')
+                                        nombres.append(nom)
+                                productos_str = ", ".join(nombres) if nombres else "Productos variados"
+                            finally:
+                                db.close()
+                        except Exception:
+                            productos_str = "Productos variados"
                     msg = format_validation_message(
-                        productos, 0, data.get('factura', ''),
+                        productos_str, 0, data.get('factura', ''),
                         data.get('proveedor', ''), data.get('monto', 0),
-                        [], ""
+                        data.get('pagos', []), ""
                     )
                     if os.path.exists(img_path):
                         send_whatsapp_image(img_path, msg)
@@ -213,7 +234,13 @@ class ValidacionView(ft.Container):
                 self.selected_entradas.clear()
                 self._load_entradas_pendientes()
             except Exception as ex:
-                show_error(f"Error: {str(ex)}")
+                print(f"[ERROR] on_validar_click: {ex}")
+                import traceback; traceback.print_exc()
+                try:
+                    from usr.notifications import show_error_with_copy
+                    show_error_with_copy("Error al validar entradas", ex)
+                except:
+                    pass
         
         dialog.set_on_validate(on_validar_click)
         dialog.show()

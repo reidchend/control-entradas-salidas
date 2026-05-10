@@ -95,6 +95,8 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: str = os.getenv("MAX_FILE_SIZE", "10485760")
     SQLITE_PATH: str = os.getenv("SQLITE_PATH", "./control_entradas_salidas.db")
 
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+
     class Config:
         # Usamos la ruta encontrada dinámicamente
         env_file = env_path if env_path else ".env"
