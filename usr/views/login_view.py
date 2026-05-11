@@ -191,7 +191,8 @@ class LoginView(ft.Container):
                 from config.config import get_settings
                 from usr.views import (
                     InventarioView, ValidacionView, StockView, 
-                    ConfiguracionView, HistorialFacturasView, RequisicionesView
+                    ConfiguracionView, HistorialFacturasView, RequisicionesView,
+                    BandejaWhatsAppView
                 )
                 from main import ControlEntradasSalidasApp
                 
@@ -234,7 +235,8 @@ class LoginView(ft.Container):
                     2: StockView(), 
                     3: requisiciones_view, 
                     4: HistorialFacturasView(), 
-                    5: ConfiguracionView()
+                    5: ConfiguracionView(),
+                    6: BandejaWhatsAppView()
                 }
                 
                 app_instance = ControlEntradasSalidasApp()

@@ -1,8 +1,7 @@
 from datetime import datetime
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from usr.database.base import get_db_adaptive, is_online
 from usr.models import Proveedor, Factura, Movimiento, FacturaPago
-from config.config import get_settings
 
 
 class ValidacionService:
@@ -72,6 +71,18 @@ class ValidacionService:
                     for m in movements_updated:
                         m.factura_id = existente.id
                     db.commit()
+
+                    # Reset sincronizado=0 so _upload_pending_movimientos picks them up
+                    try:
+                        from usr.database.local_replica import get_local_conn
+                        c2 = get_local_conn()
+                        for m in movements_updated:
+                            c2.execute("UPDATE movimientos SET sincronizado = 0 WHERE id = ?", (m.id,))
+                        c2.commit()
+                        c2.close()
+                    except Exception as ex:
+                        print(f"[WARN] Reset sincronizado (dup): {ex}")
+
                     result = {
                         'factura_id': existente.id,
                         'movimientos_count': len(movements_updated),
@@ -79,27 +90,43 @@ class ValidacionService:
                         'usuario': usuario_val
                     }
 
-                    if is_online():
-                        try:
-                            settings = get_settings()
-                            remote_engine = create_engine(settings.DATABASE_URL)
-                            with remote_engine.connect() as conn:
-                                existing = conn.execute(
-                                    text("SELECT id FROM facturas WHERE numero_factura = :num"),
-                                    {'num': ref_fact}
-                                ).fetchone()
-                                if existing:
-                                    remote_id = existing[0]
-                                    for mov_id in [m.id for m in movements_updated]:
-                                        conn.execute(
-                                            text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
-                                            {'factura_id': remote_id, 'id': mov_id}
-                                        )
-                                    conn.commit()
-                                    print(f"[SYNC OK] {len(movements_updated)} movimientos vinculados a factura {ref_fact}")
-                            remote_engine.dispose()
-                        except Exception as ex:
-                            print(f"[SYNC ERROR] Vincular movimientos duplicados: {ex}")
+                    # Queue factura + payments + movement IDs for background sync
+                    try:
+                        from usr.database.sync_queue import SyncQueue as SyncQ
+                        from datetime import datetime as dt_module
+
+                        _s = lambda v: v.isoformat() if hasattr(v, 'isoformat') else str(v) if v else None
+                        fact_data = {
+                            'numero_factura': existente.numero_factura,
+                            'proveedor': existente.proveedor,
+                            'fecha_factura': _s(existente.fecha_factura),
+                            'fecha_recepcion': _s(existente.fecha_recepcion),
+                            'total_bruto': existente.total_bruto,
+                            'total_impuestos': existente.total_impuestos,
+                            'total_neto': existente.total_neto,
+                            'estado': existente.estado,
+                            'validada_por': existente.validada_por,
+                            'fecha_validacion': _s(existente.fecha_validacion),
+                            'movimiento_ids': [m.id for m in movements_updated],
+                        }
+                        SyncQ.add_pending('facturas', 'update', fact_data)
+
+                        for pago in data.get('pagos', []):
+                            SyncQ.add_pending('factura_pagos', 'insert', {
+                                'factura_numero': existente.numero_factura,
+                                'tipo_pago': pago.get('tipo', ''),
+                                'monto': pago.get('monto', 0) * pago.get('tasa', 1),
+                                'referencia': pago.get('ref', ''),
+                                'tasa_cambio': pago.get('tasa', 1) if pago.get('tipo') == 'divisas' else None,
+                            })
+
+                        if is_online():
+                            from usr.database.sync import get_sync_manager
+                            sm = get_sync_manager()
+                            if sm:
+                                sm.force_sync_now()
+                    except Exception as ex:
+                        print(f"[SYNC] Error encolando factura duplicada: {ex}")
 
                     db.close()
                     return result
@@ -154,6 +181,17 @@ class ValidacionService:
 
             db.commit()
 
+            # Reset sincronizado=0 on linked movements so _upload_pending_movimientos picks them up
+            try:
+                from usr.database.local_replica import get_local_conn
+                c2 = get_local_conn()
+                for m in movements:
+                    c2.execute("UPDATE movimientos SET sincronizado = 0 WHERE id = ?", (m.id,))
+                c2.commit()
+                c2.close()
+            except Exception as ex:
+                print(f"[WARN] Reset sincronizado movements: {ex}")
+
             result = {
                 'factura_id': nueva_fac.id,
                 'movimientos_count': len(movements),
@@ -161,94 +199,53 @@ class ValidacionService:
                 'usuario': usuario_val
             }
 
-            if is_online():
+            # Queue to SyncQueue for background sync (works offline too)
+            try:
+                from usr.database.sync_queue import SyncQueue as SyncQ
+
+                _serialize = lambda v: v.isoformat() if hasattr(v, 'isoformat') else str(v) if v else None
+
+                fact_data = {
+                    'numero_factura': nueva_fac.numero_factura,
+                    'proveedor': nueva_fac.proveedor,
+                    'fecha_factura': _serialize(nueva_fac.fecha_factura),
+                    'fecha_recepcion': _serialize(nueva_fac.fecha_recepcion),
+                    'total_bruto': nueva_fac.total_bruto,
+                    'total_impuestos': nueva_fac.total_impuestos,
+                    'total_neto': nueva_fac.total_neto,
+                    'estado': nueva_fac.estado,
+                    'validada_por': nueva_fac.validada_por,
+                    'fecha_validacion': _serialize(nueva_fac.fecha_validacion),
+                    'movimiento_ids': [m.id for m in movements],
+                }
+                SyncQ.add_pending('facturas', 'insert', fact_data)
+
+                for pago in lista_pagos:
+                    pago_data = {
+                        'factura_numero': nueva_fac.numero_factura,
+                        'tipo_pago': pago.get('tipo', ''),
+                        'monto': pago.get('monto', 0) * pago.get('tasa', 1),
+                        'referencia': pago.get('ref', ''),
+                        'tasa_cambio': pago.get('tasa', 1) if pago.get('tipo') == 'divisas' else None,
+                    }
+                    SyncQ.add_pending('factura_pagos', 'insert', pago_data)
+
+                # Try immediate sync if online
                 try:
-                    result['sync'] = True
-                    settings = get_settings()
-                    remote_engine = create_engine(settings.DATABASE_URL)
-
-                    with remote_engine.connect() as conn:
-                        existing_fact = conn.execute(
-                            text("SELECT id FROM facturas WHERE numero_factura = :num"),
-                            {'num': nueva_fac.numero_factura}
-                        ).fetchone()
-
-                        if existing_fact:
-                            remote_factura_id = existing_fact[0]
-                            conn.execute(text("""
-                                UPDATE facturas SET
-                                    proveedor = :proveedor,
-                                    fecha_factura = :fecha_factura,
-                                    fecha_recepcion = :fecha_recepcion,
-                                    total_bruto = :bruto,
-                                    total_neto = :neto,
-                                    estado = :estado,
-                                    validada_por = :validada_por,
-                                    fecha_validacion = :fecha_valid
-                                WHERE id = :id
-                            """), {
-                                'proveedor': nueva_fac.proveedor,
-                                'fecha_factura': nueva_fac.fecha_factura,
-                                'fecha_recepcion': nueva_fac.fecha_recepcion,
-                                'bruto': nueva_fac.total_bruto,
-                                'neto': nueva_fac.total_neto,
-                                'estado': nueva_fac.estado,
-                                'validada_por': nueva_fac.validada_por,
-                                'fecha_valid': nueva_fac.fecha_validacion,
-                                'id': remote_factura_id
-                            })
-                        else:
-                            result_insert = conn.execute(text("""
-                                INSERT INTO facturas (numero_factura, proveedor, fecha_factura, fecha_recepcion,
-                                    total_bruto, total_impuestos, total_neto, estado, validada_por, fecha_validacion)
-                                VALUES (:numero, :proveedor, :fecha_factura, :fecha_recepcion,
-                                        :bruto, :impuestos, :neto, :estado, :validada_por, :fecha_valid)
-                                RETURNING id
-                            """), {
-                                'numero': nueva_fac.numero_factura,
-                                'proveedor': nueva_fac.proveedor,
-                                'fecha_factura': nueva_fac.fecha_factura,
-                                'fecha_recepcion': nueva_fac.fecha_recepcion,
-                                'bruto': nueva_fac.total_bruto,
-                                'impuestos': nueva_fac.total_impuestos,
-                                'neto': nueva_fac.total_neto,
-                                'estado': nueva_fac.estado,
-                                'validada_por': nueva_fac.validada_por,
-                                'fecha_valid': nueva_fac.fecha_validacion
-                            })
-                            remote_factura_id = result_insert.fetchone()[0]
-
-                        for mov_id in [m.id for m in movements]:
-                            conn.execute(
-                                text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
-                                {'factura_id': remote_factura_id, 'id': mov_id}
-                            )
-
-                        for pago in lista_pagos:
-                            try:
-                                conn.execute(text("""
-                                    INSERT INTO factura_pagos (factura_id, tipo_pago, monto, referencia, tasa_cambio)
-                                    VALUES (:factura_id, :tipo, :monto, :ref, :tasa)
-                                """), {
-                                    'factura_id': remote_factura_id,
-                                    'tipo': pago.get('tipo', ''),
-                                    'monto': pago.get('monto', 0) * pago.get('tasa', 1),
-                                    'ref': pago.get('ref', ''),
-                                    'tasa': pago.get('tasa', 1) if pago.get('tipo') == 'divisas' else None
-                                })
-                            except Exception:
-                                pass
-
-                        conn.commit()
+                    if is_online():
+                        from usr.database.sync import get_sync_manager
+                        sm = get_sync_manager()
+                        if sm:
+                            sm.force_sync_now()
+                            result['sync'] = True
+                            print("[SYNC] Factura sincronizada inmediatamente")
                 except Exception as ex:
-                    print(f"[SYNC ERROR] ValidacionService.procesar — sync: {ex}")
-                    import traceback; traceback.print_exc()
-                    try:
-                        from usr.notifications import show_error_with_copy
-                        show_error_with_copy("Error sincronizando con servidor", ex)
-                    except:
-                        pass
+                    print(f"[SYNC] Error en sync inmediato (queda en cola): {ex}")
                     result['sync'] = False
+            except Exception as ex:
+                print(f"[SYNC ERROR] Error encolando sync: {ex}")
+                import traceback; traceback.print_exc()
+                result['sync'] = False
 
             db.close()
             return result
