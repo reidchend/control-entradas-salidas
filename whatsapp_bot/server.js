@@ -210,22 +210,27 @@ app.post('/send', async (req, res) => {
 // Endpoint para enviar imagen con caption al grupo
 app.post('/send-image', async (req, res) => {
     try {
-        const { caption, imagePath } = req.body;
+        const { caption, imagePath, imageBase64 } = req.body;
 
-        if (!imagePath) {
-            return res.status(400).json({ error: 'El campo "imagePath" es requerido' });
+        if (!imagePath && !imageBase64) {
+            return res.status(400).json({ error: 'Se requiere "imagePath" o "imageBase64"' });
         }
 
         if (!bot.isConnected()) {
             return res.status(503).json({ error: 'WhatsApp no conectado' });
         }
 
-        const fs = require('fs');
-        if (!fs.existsSync(imagePath)) {
-            return res.status(400).json({ error: 'Archivo de imagen no encontrado: ' + imagePath });
+        let imageBuffer;
+        if (imageBase64) {
+            imageBuffer = Buffer.from(imageBase64, 'base64');
+        } else {
+            const fs = require('fs');
+            if (!fs.existsSync(imagePath)) {
+                return res.status(400).json({ error: 'Archivo de imagen no encontrado: ' + imagePath });
+            }
+            imageBuffer = fs.readFileSync(imagePath);
         }
 
-        const imageBuffer = fs.readFileSync(imagePath);
         await bot.sendImageToGroup(imageBuffer, caption || '');
 
         res.json({ success: true, message: 'Imagen enviada al grupo' });

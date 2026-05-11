@@ -196,6 +196,22 @@ def init_local_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS whatsapp_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,
+            mensaje TEXT,
+            imagen_base64 TEXT,
+            imagen_path TEXT,
+            estado TEXT DEFAULT 'pending',
+            intentos INTEGER DEFAULT 0,
+            max_intentos INTEGER DEFAULT 10,
+            ultimo_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     conn.commit()
     conn.close()
 

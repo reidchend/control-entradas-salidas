@@ -158,6 +158,7 @@ class ControlEntradasSalidasApp:
                 ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Requisiciones"),
                 ft.NavigationRailDestination(icon=ft.Icons.HISTORY_OUTLINED, selected_icon=ft.Icons.HISTORY, label="Historial"),
                 ft.NavigationRailDestination(icon=ft.Icons.SETTINGS_OUTLINED, selected_icon=ft.Icons.SETTINGS, label="Ajustes"),
+                ft.NavigationRailDestination(icon=ft.Icons.MAIL_OUTLINED, selected_icon=ft.Icons.MAIL, label="Bandeja"),
             ], on_change=self._on_navigation_change,
         )
 
@@ -208,7 +209,7 @@ class ControlEntradasSalidasApp:
         if self.page is None:
             return
             
-        opciones = [("assignment", "Requisiciones", 3), ("history", "Historial", 4), ("settings", "Ajustes", 5)]
+        opciones = [("assignment", "Requisiciones", 3), ("history", "Historial", 4), ("settings", "Ajustes", 5), ("mail", "Bandeja", 6)]
         
         is_dark = self.page.theme_mode == ft.ThemeMode.DARK
         theme_icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
@@ -488,7 +489,7 @@ async def main(page: ft.Page):
         page.update()
         
         await asyncio.sleep(0.5)
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView
+        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
         status_text.value = "✓ Cargado"
         page.update()
 
@@ -502,7 +503,7 @@ async def main(page: ft.Page):
         requisiciones_view = RequisicionesView()
         requisiciones_view.inventario_view = inventario_view
 
-        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView()}
+        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView(), 6: BandejaWhatsAppView()}
         
         # Registrar callback para notificar vistas cuando termina sync
         def on_sync_done():

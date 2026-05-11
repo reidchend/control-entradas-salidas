@@ -18,6 +18,17 @@ def _notify_error(msg, ex=None, page=None):
         print(f"[ERROR] {msg}: {ex}")
 
 
+def _get_long_path(path):
+    try:
+        import ctypes
+        GetLongPathName = ctypes.windll.kernel32.GetLongPathNameW
+        buf = ctypes.create_unicode_buffer(512)
+        result = GetLongPathName(path, buf, 512)
+        return buf.value if result else path
+    except Exception:
+        return path
+
+
 class OCRHandler:
     def __init__(self, page, theme_colors, fields=None):
         self.page = page
@@ -88,6 +99,7 @@ class OCRHandler:
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_select)
         self.page.overlay.append(self.file_picker)
+        self.current_image_path = None
 
     def section_container(self, content):
         return ft.Container(
@@ -160,8 +172,11 @@ class OCRHandler:
             img.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-            temp_path = os.path.join(tempfile.gettempdir(), "ocr_temp.png")
+            temp_dir = _get_long_path(tempfile.gettempdir())
+            temp_path = os.path.join(temp_dir, "ocr_temp.png")
             img.save(temp_path, 'PNG')
+            self.current_image_path = temp_path
+            print(f"[OCR] Imagen guardada: {temp_path} ({os.path.getsize(temp_path) // 1024}KB)")
 
             self.image_preview.content = ft.Image(
                 src_base64=img_base64,
@@ -188,8 +203,10 @@ class OCRHandler:
         try:
             if e.files:
                 self._set_loading(True, "Cargando archivo...")
-                path = e.files[0].path
+                path = _get_long_path(e.files[0].path)
                 self.image_preview.content = ft.Image(src=path, fit=ft.ImageFit.CONTAIN, border_radius=8)
+                self.current_image_path = path
+                print(f"[OCR] Imagen seleccionada: {path}")
                 self._process_image(path)
         except Exception as ex:
             print(f"[ERROR] OCRHandler._on_file_select: {ex}")
@@ -275,6 +292,7 @@ class OCRHandler:
             self.result_display.value = "Esperando documento..."
             self.result_display.italic = True
             self.status_text.value = ""
+            self.current_image_path = None
             self._on_clear_fields()
             self.page.update()
         except Exception as ex:

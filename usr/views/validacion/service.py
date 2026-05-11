@@ -34,7 +34,7 @@ class ValidacionService:
             except Exception as ex:
                 print(f"[WARN] ALTER TABLE factura_pagos: {ex}")
 
-            fecha_factura = data.get('fecha_factura') or datetime.now()
+            fecha_factura = data.get('fecha') or datetime.now()
             rif = data.get('rif', '')
             proveedor = data.get('proveedor', 'Varios')
 
@@ -75,8 +75,32 @@ class ValidacionService:
                     result = {
                         'factura_id': existente.id,
                         'movimientos_count': len(movements_updated),
-                        'proveedor_obj': None
+                        'proveedor_obj': None,
+                        'usuario': usuario_val
                     }
+
+                    if is_online():
+                        try:
+                            settings = get_settings()
+                            remote_engine = create_engine(settings.DATABASE_URL)
+                            with remote_engine.connect() as conn:
+                                existing = conn.execute(
+                                    text("SELECT id FROM facturas WHERE numero_factura = :num"),
+                                    {'num': ref_fact}
+                                ).fetchone()
+                                if existing:
+                                    remote_id = existing[0]
+                                    for mov_id in [m.id for m in movements_updated]:
+                                        conn.execute(
+                                            text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
+                                            {'factura_id': remote_id, 'id': mov_id}
+                                        )
+                                    conn.commit()
+                                    print(f"[SYNC OK] {len(movements_updated)} movimientos vinculados a factura {ref_fact}")
+                            remote_engine.dispose()
+                        except Exception as ex:
+                            print(f"[SYNC ERROR] Vincular movimientos duplicados: {ex}")
+
                     db.close()
                     return result
             except Exception as ex:
@@ -133,7 +157,8 @@ class ValidacionService:
             result = {
                 'factura_id': nueva_fac.id,
                 'movimientos_count': len(movements),
-                'proveedor_obj': proveedor_obj
+                'proveedor_obj': proveedor_obj,
+                'usuario': usuario_val
             }
 
             if is_online():
@@ -143,31 +168,78 @@ class ValidacionService:
                     remote_engine = create_engine(settings.DATABASE_URL)
 
                     with remote_engine.connect() as conn:
-                        conn.execute(text("""
-                            INSERT INTO facturas (numero_factura, proveedor, fecha_factura, fecha_recepcion,
-                                total_bruto, total_impuestos, total_neto, estado, validada_por, fecha_validacion)
-                            VALUES (:numero, :proveedor, :fecha_factura, :fecha_recepcion,
-                                    :bruto, :impuestos, :neto, :estado, :validada_por, :fecha_valid)
-                        """), {
-                            'numero': nueva_fac.numero_factura,
-                            'proveedor': nueva_fac.proveedor,
-                            'fecha_factura': nueva_fac.fecha_factura,
-                            'fecha_recepcion': nueva_fac.fecha_recepcion,
-                            'bruto': nueva_fac.total_bruto,
-                            'impuestos': nueva_fac.total_impuestos,
-                            'neto': nueva_fac.total_neto,
-                            'estado': nueva_fac.estado,
-                            'validada_por': nueva_fac.validada_por,
-                            'fecha_valid': nueva_fac.fecha_validacion
-                        })
-
-                        result['supabase_id'] = conn.execute(
+                        existing_fact = conn.execute(
                             text("SELECT id FROM facturas WHERE numero_factura = :num"),
                             {'num': nueva_fac.numero_factura}
-                        ).fetchone()[0]
+                        ).fetchone()
 
-                    remote_engine.dispose()
-                    print(f"[SYNC OK] Factura {nueva_fac.numero_factura} syncada a Supabase")
+                        if existing_fact:
+                            remote_factura_id = existing_fact[0]
+                            conn.execute(text("""
+                                UPDATE facturas SET
+                                    proveedor = :proveedor,
+                                    fecha_factura = :fecha_factura,
+                                    fecha_recepcion = :fecha_recepcion,
+                                    total_bruto = :bruto,
+                                    total_neto = :neto,
+                                    estado = :estado,
+                                    validada_por = :validada_por,
+                                    fecha_validacion = :fecha_valid
+                                WHERE id = :id
+                            """), {
+                                'proveedor': nueva_fac.proveedor,
+                                'fecha_factura': nueva_fac.fecha_factura,
+                                'fecha_recepcion': nueva_fac.fecha_recepcion,
+                                'bruto': nueva_fac.total_bruto,
+                                'neto': nueva_fac.total_neto,
+                                'estado': nueva_fac.estado,
+                                'validada_por': nueva_fac.validada_por,
+                                'fecha_valid': nueva_fac.fecha_validacion,
+                                'id': remote_factura_id
+                            })
+                        else:
+                            result_insert = conn.execute(text("""
+                                INSERT INTO facturas (numero_factura, proveedor, fecha_factura, fecha_recepcion,
+                                    total_bruto, total_impuestos, total_neto, estado, validada_por, fecha_validacion)
+                                VALUES (:numero, :proveedor, :fecha_factura, :fecha_recepcion,
+                                        :bruto, :impuestos, :neto, :estado, :validada_por, :fecha_valid)
+                                RETURNING id
+                            """), {
+                                'numero': nueva_fac.numero_factura,
+                                'proveedor': nueva_fac.proveedor,
+                                'fecha_factura': nueva_fac.fecha_factura,
+                                'fecha_recepcion': nueva_fac.fecha_recepcion,
+                                'bruto': nueva_fac.total_bruto,
+                                'impuestos': nueva_fac.total_impuestos,
+                                'neto': nueva_fac.total_neto,
+                                'estado': nueva_fac.estado,
+                                'validada_por': nueva_fac.validada_por,
+                                'fecha_valid': nueva_fac.fecha_validacion
+                            })
+                            remote_factura_id = result_insert.fetchone()[0]
+
+                        for mov_id in [m.id for m in movements]:
+                            conn.execute(
+                                text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
+                                {'factura_id': remote_factura_id, 'id': mov_id}
+                            )
+
+                        for pago in lista_pagos:
+                            try:
+                                conn.execute(text("""
+                                    INSERT INTO factura_pagos (factura_id, tipo_pago, monto, referencia, tasa_cambio)
+                                    VALUES (:factura_id, :tipo, :monto, :ref, :tasa)
+                                """), {
+                                    'factura_id': remote_factura_id,
+                                    'tipo': pago.get('tipo', ''),
+                                    'monto': pago.get('monto', 0) * pago.get('tasa', 1),
+                                    'ref': pago.get('ref', ''),
+                                    'tasa': pago.get('tasa', 1) if pago.get('tipo') == 'divisas' else None
+                                })
+                            except Exception:
+                                pass
+
+                        conn.commit()
                 except Exception as ex:
                     print(f"[SYNC ERROR] ValidacionService.procesar — sync: {ex}")
                     import traceback; traceback.print_exc()

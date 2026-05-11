@@ -197,9 +197,36 @@ class ValidacionView(ft.Container):
                 except Exception:
                     pass
                 if wa_status.get('whatsapp_connected'):
-                    img_path = os.path.join(tempfile.gettempdir(), "clipboard_image.png")
-                    if not os.path.exists(img_path):
-                        img_path = os.path.join(tempfile.gettempdir(), "ocr_temp.png")
+                    img_path = None
+                    
+                    def get_long_path(short_path):
+                        try:
+                            import ctypes
+                            GetLongPathName = ctypes.windll.kernel32.GetLongPathNameW
+                            buf = ctypes.create_unicode_buffer(512)
+                            result = GetLongPathName(short_path, buf, 512)
+                            return buf.value if result else short_path
+                        except Exception:
+                            return short_path
+                    
+                    temp_dir = get_long_path(tempfile.gettempdir())
+                    
+                    if hasattr(dialog.ocr, 'current_image_path') and dialog.ocr.current_image_path:
+                        candidate = get_long_path(dialog.ocr.current_image_path)
+                        if os.path.exists(candidate):
+                            img_path = candidate
+                        else:
+                            print(f"[WA] Imagen OCR no existe: {candidate}")
+                    
+                    if not img_path:
+                        candidates = [
+                            os.path.join(temp_dir, "ocr_temp.png"),
+                            os.path.join(temp_dir, "clipboard_image.png"),
+                        ]
+                        for c in candidates:
+                            if os.path.exists(c):
+                                img_path = c
+                                break
                     productos_str = "Productos variados"
                     if self.selected_entradas:
                         try:
@@ -222,11 +249,13 @@ class ValidacionView(ft.Container):
                     msg = format_validation_message(
                         productos_str, 0, data.get('factura', ''),
                         data.get('proveedor', ''), data.get('monto', 0),
-                        data.get('pagos', []), ""
+                        data.get('pagos', []), result.get('usuario', 'Sistema')
                     )
-                    if os.path.exists(img_path):
+                    if img_path:
+                        print(f"[WA] Enviando imagen: {img_path}")
                         send_whatsapp_image(img_path, msg)
                     else:
+                        print("[WA] No se encontró imagen de factura para enviar")
                         send_whatsapp_message(msg)
 
                 if result.get('sync'):
