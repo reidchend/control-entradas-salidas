@@ -4,5 +4,6 @@ from .stock_view import StockView
 from .configuracion_view import ConfiguracionView
 from .historial_facturas_view import HistorialFacturasView
 from .requisiciones_view import RequisicionesView
+from .whatsapp_bandeja_view import BandejaWhatsAppView
 
-__all__ = ['InventarioView', 'ValidacionView', 'StockView', 'ConfiguracionView', 'HistorialFacturasView', 'RequisicionesView']
+__all__ = ['InventarioView', 'ValidacionView', 'StockView', 'ConfiguracionView', 'HistorialFacturasView', 'RequisicionesView', 'BandejaWhatsAppView']

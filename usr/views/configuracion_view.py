@@ -1,9 +1,13 @@
 import flet as ft
-from usr.database.base import get_db
+import traceback
+from usr.database.base import get_db, get_db_adaptive, check_connection
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
 from sqlalchemy import text
 from usr.theme import get_theme, get_colors
+from usr.database.local_replica import LocalReplica
+from datetime import datetime
+from usr.notifications import show_success, show_error, show_warning
 
 
 def _colors(page):
@@ -51,6 +55,16 @@ class ConfiguracionView(ft.Container):
         self.lista_productos = ft.Column(expand=True, spacing=12, scroll=ft.ScrollMode.AUTO)
         self.test_result_text = ft.Text("", size=14, weight=ft.FontWeight.BOLD)
         
+        from usr.database import base
+        is_online = base.is_online()
+        
+        self.offline_status_indicator = ft.Text(
+            "🟢 ONLINE" if is_online else "📴 OFFLINE",
+            size=14,
+            color=ft.Colors.GREEN_400 if is_online else ft.Colors.RED_400,
+            weight=ft.FontWeight.BOLD,
+        )
+        
         colors = _colors(None)  # Default for __init__
 
     def did_mount(self):
@@ -61,16 +75,13 @@ class ConfiguracionView(ft.Container):
             self._load_data()
 
     def on_theme_change(self):
-        """Se llama cuando cambia el tema"""
+        """Se llama cuando cambia el tema - solo actualizar colores, no reconstruir UI"""
         if not self.page:
             return
         colors = _colors(self.page)
         self.bgcolor = colors['bg']
-        try:
-            self._build_ui()
-            self._load_data()
-        except:
-            pass
+        # NO llamar _build_ui() - solo actualizar colores existentes
+        self.update()
 
     def _on_resize(self, e):
         self.is_mobile = self.page.width < 768
@@ -112,6 +123,11 @@ class ConfiguracionView(ft.Container):
                     text="Productos", 
                     icon=ft.Icons.INVENTORY_2,
                     content=self._build_productos_tab(),
+                ),
+                ft.Tab(
+                    text="Proveedores", 
+                    icon=ft.Icons.LOCAL_SHIPPING,
+                    content=self._build_proveedores_tab(),
                 ),
                 ft.Tab(
                     text="Sistema", 
@@ -325,12 +341,10 @@ class ConfiguracionView(ft.Container):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             # ✅ fullscreen ELIMINADO
-        )
-        
+)
+         
         self._add_to_overlay(self.active_dialog)
-        self.active_dialog.open = True
-        self.page.update()
-
+    
     def _update_color_preview(self, color, preview_row, dropdown=None):
         colors = _colors(self.page)
         if dropdown:
@@ -344,11 +358,11 @@ class ConfiguracionView(ft.Container):
 
     def _show_producto_dialog(self, producto=None):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             if not categorias:
-                self._show_error("⚠️ Cree al menos una categoría")
+                show_warning("Cree al menos una categoría")
                 return
 
             nuevo_codigo = ""
@@ -371,6 +385,8 @@ class ConfiguracionView(ft.Container):
                     else:
                         nuevo_codigo = "0001"
                 except Exception as ex:
+                    from usr.error_handler import show_error
+                    show_error("Error generating code", ex, "configuracion_view._on_guardar_producto")
                     nuevo_codigo = "0001"
             else:
                 nuevo_codigo = producto.codigo
@@ -463,12 +479,14 @@ class ConfiguracionView(ft.Container):
                         producto.id if producto else None, 
                         es_pesable_sw.value
                     )
-                    self._show_message("✅ Producto guardado correctamente")
+                    show_success("Producto guardado correctamente")
                     self._close_dialog()
                     if hasattr(self, '_load_data'):
                         self._load_data()
                 except Exception as ex:
-                    self._show_error(f"Error: {str(ex)}")
+                    from usr.error_handler import show_error
+                    show_error("Error saving product", ex, "configuracion_view._on_guardar_producto")
+                    show_error(f"Error: {str(ex)}")
 
             if is_mobile:
                 content_column = ft.Column([
@@ -520,73 +538,88 @@ class ConfiguracionView(ft.Container):
             )
             
             self._add_to_overlay(self.active_dialog)
-            self.active_dialog.open = True
-            self.page.update()
         finally:
             db.close()
 
     def _save_categoria(self, nombre, descripcion, color, activo, cat_id):
-        db = next(get_db())
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        # 1. Preparar data con tipos correctos
+        cat_data = {
+            "nombre": str(nombre),
+            "descripcion": str(descripcion) if descripcion else "",
+            "color": str(color),
+            "activo": 1 if activo else 0,
+            "updated_at": datetime.now().isoformat()
+        }
+        if cat_id:
+            cat_data["id"] = cat_id
+        
+        # 2. Guardar local en SQLite (siempre)
         try:
-            if cat_id:
-                cat = db.query(Categoria).get(cat_id)
-                if cat:
-                    cat.nombre = nombre
-                    cat.descripcion = descripcion
-                    cat.color = color
-                    cat.activo = activo
-            else:
-                cat = Categoria(nombre=nombre, descripcion=descripcion, color=color, activo=activo)
-                db.add(cat)
-            db.commit()
-            self._load_data()
-            self._show_message("✅ Categoría guardada correctamente")
+            LocalReplica.save_categorias([cat_data])
         except Exception as e:
-            db.rollback()
-            self._show_error(f"Error DB: {str(e)}")
-        finally:
-            db.close()
+            print(f"❌ Error SQLite: {e}")
+        
+        # 3. Agregar a la cola de sync (se procesará cuando haya internet)
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('categorias', 'insert', cat_data)
+            # Intentar sync inmediato si hay conexión
+            self._trigger_sync()
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al agregar categoría a cola de sync", e, "configuracion_view._on_guardar_categoria")
+        
+        show_success("Categoría guardada")
+        
+        self._close_dialog()
+        self._load_data()
 
     def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
-        db = next(get_db())
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        # 1. Preparar data con tipos correctos para Postgres
+        prod_data = {
+            "nombre": str(n),
+            "codigo": str(c),
+            "descripcion": str(d) if d else "",
+            "categoria_id": int(cat_id) if cat_id else None,
+            "requiere_foto_peso": 1 if rf else 0,
+            "peso_unitario": float(pu) if pu else 0.0,
+            "stock_minimo": float(sm) if sm else 0.0,
+            "stock_actual": 0,
+            "unidad_medida": str(u) if u else "unidad",
+            "activo": 1 if a else 0,
+            "es_pesable": 1 if es_p else 0,
+            "almacen_predeterminado": "principal",
+            "updated_at": datetime.now().isoformat()
+        }
+        if p_id:
+            prod_data["id"] = p_id
+        
+        # 2. Guardar local en SQLite (siempre)
         try:
-            if p_id:
-                p = db.query(Producto).get(p_id)
-                if p:
-                    p.nombre = n
-                    p.codigo = c
-                    p.descripcion = d
-                    p.categoria_id = cat_id
-                    p.requiere_foto_peso = rf
-                    p.peso_unitario = pu
-                    p.unidad_medida = u
-                    p.stock_minimo = sm
-                    p.activo = a
-                    if hasattr(p, 'es_pesable'):
-                        p.es_pesable = es_p
-            else:
-                p = Producto(
-                    nombre=n, 
-                    codigo=c, 
-                    descripcion=d, 
-                    categoria_id=cat_id, 
-                    requiere_foto_peso=rf, 
-                    peso_unitario=pu, 
-                    unidad_medida=u, 
-                    stock_minimo=sm, 
-                    stock_actual=0, 
-                    activo=a
-                )
-                if hasattr(p, 'es_pesable'):
-                    p.es_pesable = es_p
-                db.add(p)
-            db.commit()
-            return True
+            LocalReplica.save_productos([prod_data])
         except Exception as e:
-            db.rollback()
-            self._show_error(f"Error DB: {str(e)}")
-        finally:
-            db.close()
+            print(f"❌ Error SQLite: {e}")
+        
+        # 3. Agregar a la cola de sync (se procesará cuando haya internet)
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('productos', 'insert', prod_data)
+            # Intentar sync inmediato si hay conexión
+            self._trigger_sync()
+        except:
+            pass
+        
+        show_success("Guardado")
+        
+        self._close_dialog()
+        self._load_data()
+        return True
 
     def _confirm_delete(self, objeto, tipo="producto"):
         colors = _colors(self.page)
@@ -619,61 +652,122 @@ class ConfiguracionView(ft.Container):
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
-        )
+)
         
         self._add_to_overlay(self.active_dialog)
-        self.active_dialog.open = True
-        self.page.update()
-
+    
     def _delete_logic(self, objeto, tipo):
-        db = next(get_db())
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        from usr.database.local_replica import LocalReplica
+        
+        db = next(get_db_adaptive())
         try:
             if tipo == "producto":
                 item = db.query(Producto).get(objeto.id)
             else:
                 item = db.query(Categoria).get(objeto.id)
             
-            if item:
+            if tipo == "producto":
                 item.activo = False
                 db.commit()
-                self._show_message(f"✅ {tipo.capitalize()} desactivado correctamente")
-                self._load_data()
+                
+                # Guardar en local
+                LocalReplica.save_productos([{
+                    'id': item.id,
+                    'nombre': item.nombre,
+                    'codigo': item.codigo,
+                    'descripcion': item.descripcion,
+                    'categoria_id': item.categoria_id,
+                    'es_pesable': item.es_pesable,
+                    'requiere_foto_peso': item.requiere_foto_peso,
+                    'peso_unitario': item.peso_unitario,
+                    'unidad_medida': item.unidad_medida,
+                    'stock_actual': item.stock_actual,
+                    'stock_minimo': item.stock_minimo,
+                    'activo': 0,
+                    'updated_at': datetime.now().isoformat(),
+                    'almacen_predeterminado': item.almacen_predeterminado
+                }])
+                
+                # Agregar a cola de sync
+                try:
+                    queue = get_sync_queue()
+                    queue.add_pending('productos', 'update', {
+                        'id': item.id,
+                        'activo': 0,
+                        'updated_at': datetime.now().isoformat()
+                    })
+                    self._trigger_sync()
+                except:
+                    pass
+                    
+            else:  # categoria
+                item.activo = False
+                db.commit()
+                
+                # Guardar en local
+                LocalReplica.save_categorias([{
+                    'id': item.id,
+                    'nombre': item.nombre,
+                    'descripcion': item.descripcion,
+                    'color': item.color,
+                    'activo': 0,
+                    'updated_at': datetime.now().isoformat()
+                }])
+                
+                # Agregar a cola de sync
+                try:
+                    queue = get_sync_queue()
+                    queue.add_pending('categorias', 'update', {
+                        'id': item.id,
+                        'activo': 0,
+                        'updated_at': datetime.now().isoformat()
+                    })
+                    self._trigger_sync()
+                except Exception as e:
+                    from usr.error_handler import show_error
+                    show_error("Error al actualizar categoría en cola de sync", e, "configuracion_view._on_toggle_categoria")
+            
+            show_success(f"{tipo.capitalize()} desactivado correctamente")
+            self._load_data()
             self._close_dialog()
         except Exception as e:
-            self._show_error(f"Error: {str(e)}")
+            show_error(f"Error: {str(e)}")
         finally:
             db.close()
-
+    
     def _load_data(self):
         colors = _colors(self.page)
-        db = next(get_db())
+        self.is_mobile = self.page.width < 768 if self.page else False
+        
         try:
-            # ✅ Detectar modo móvil ANTES de cargar datos
-            self.is_mobile = self.page.width < 768 if self.page else False
-            
+            db = next(get_db_adaptive())
             cats = db.query(Categoria).filter(Categoria.activo == True).all()
             prods = db.query(Producto).filter(Producto.activo == True).options(
                 joinedload(Producto.categoria)
             ).all()
             
-            # Store for filtering
             self.categorias_cache = cats
             self.productos_cache = prods
-             
-             # ✅ Usar el método correcto según el dispositivo
+            
             if self.is_mobile:
-                 self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
+                self.lista_categorias.controls = [self._create_categoria_item_mobile(c) for c in cats]
             else:
-                 self.lista_categorias.controls = self._create_categoria_grid(cats)
+                self.lista_categorias.controls = self._create_categoria_grid(cats)
             
             self.lista_productos.controls = [self._create_producto_item(p) for p in prods]
             
+            # Cargar proveedores desde SQLite local
+            self._load_proveedores()
+            
             self.update()
-        except Exception as e:
-            self._show_error(f"Error al cargar datos: {str(e)}")
-        finally:
             db.close()
-
+        except Exception as e:
+            show_error(f"Error al cargar datos: {str(e)}")
+            if db:
+                db.close()
+    
     def _filter_categorias(self, e=None):
         if not hasattr(self, 'categorias_cache'):
             return
@@ -883,67 +977,252 @@ class ConfiguracionView(ft.Container):
         )
 
     def _close_dialog(self, e=None):
-            if self.active_dialog:
-                try:
-                    # Paso 1: Cerrar visualmente el diálogo
-                    self.active_dialog.open = False
-                    self.page.update()
-                    
-                    # Paso 2: Eliminar del overlay
-                    if self.active_dialog in self.page.overlay:
-                        self.page.overlay.remove(self.active_dialog)
-                    
-                    # Paso 3: Limpiar referencia
-                    self.active_dialog = None
-                    
-                    # Paso 4: Actualizar página para limpiar residuos visuales
-                    self.page.update()
-                except Exception as ex:
-                    self.active_dialog = None
-                    self.page.update()    
+        if not self.page:
+            return
+        
+        # Cerrar todos los AlertDialog en overlay
+        for control in self.page.overlay[:]:
+            if isinstance(control, ft.AlertDialog):
+                control.open = False
+        
+        # También cerrar active_dialog si existe
+        if self.active_dialog:
+            self.active_dialog.open = False
+        
+        # Actualizar la página
+        self.page.update()
+        
+        # Limpiar referencia
+        self.active_dialog = None    
 
     def _add_to_overlay(self, control):
-        if self.page and control not in self.page.overlay:
-            self.page.overlay.append(control)
+        if self.page:
+            if isinstance(control, ft.AlertDialog):
+                control.open = True
+                if control not in self.page.overlay:
+                    self.page.overlay.append(control)
+            else:
+                if control not in self.page.overlay:
+                    self.page.overlay.append(control)
+            self.page.update()
 
     def _remove_from_overlay(self, control):
         if self.page and control in self.page.overlay:
             self.page.overlay.remove(control)
-
-    def _show_error(self, m):
-        self._remove_snackbar()
+    
+    # ==================== PROVEEDORES ====================
+    
+    def _build_proveedores_tab(self):
         colors = _colors(self.page)
-        self.active_snackbar = ft.SnackBar(
-            content=ft.Row([
-                ft.Icon(ft.Icons.ERROR, color=colors['white']),
-                ft.Text(m, color=colors['white']),
-            ], spacing=10),
-            bgcolor=colors['error'],
-            margin=20,
+        fab_content = ft.Row([
+            ft.Icon(ft.Icons.ADD, size=20),
+            ft.Text("Nuevo Proveedor" if not self.is_mobile else "Nuevo", weight=ft.FontWeight.BOLD),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+        
+        self.proveedor_search = ft.TextField(
+            hint_text="Buscar proveedores...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_radius=10,
+            bgcolor=colors['card'],
+            border_color=colors['border'],
+            height=40,
+            expand=True,
+            on_change=self._filter_proveedores,
         )
-        self._add_to_overlay(self.active_snackbar)
-        self.active_snackbar.open = True
-        self.page.update()
-
-    def _show_message(self, m):
-        self._remove_snackbar()
+        
+        self.lista_proveedores = ft.GridView(
+            expand=True,
+            runs_count=1 if self.is_mobile else 3,
+            spacing=10,
+            padding=20,
+        )
+        
+        return ft.Container(
+            content=ft.Column([
+                ft.Container(height=15),
+                ft.Row([
+                    self.proveedor_search,
+                    ft.Container(
+                        content=fab_content,
+                        bgcolor=colors['accent'],
+                        padding=ft.padding.symmetric(horizontal=20, vertical=12),
+                        border_radius=30,
+                        on_click=lambda _: self._show_proveedor_dialog(),
+                    ),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10),
+                ft.Container(height=15),
+                self.lista_proveedores,
+            ], expand=True, spacing=0),
+            padding=20,
+            expand=True,
+        )
+    
+    def _show_proveedor_dialog(self, proveedor=None):
         colors = _colors(self.page)
-        self.active_snackbar = ft.SnackBar(
-            content=ft.Row([
-                ft.Icon(ft.Icons.CHECK_CIRCLE, color=colors['white']),
-                ft.Text(m, color=colors['white']),
-            ], spacing=10),
-            bgcolor=colors['success'],
-            margin=20,
+        
+        nombre_input = ft.TextField(
+            label="Nombre *", 
+            value=proveedor.get('nombre', '') if proveedor else '',
+            border_radius=10
         )
-        self._add_to_overlay(self.active_snackbar)
-        self.active_snackbar.open = True
+        rif_input = ft.TextField(
+            label="RIF",
+            value=proveedor.get('rif', '') if proveedor else '',
+            border_radius=10
+        )
+        telefono_input = ft.TextField(
+            label="Teléfono",
+            value=proveedor.get('telefono', '') if proveedor else '',
+            border_radius=10
+        )
+        email_input = ft.TextField(
+            label="Email",
+            value=proveedor.get('email', '') if proveedor else '',
+            border_radius=10
+        )
+        direccion_input = ft.TextField(
+            label="Dirección",
+            value=proveedor.get('direccion', '') if proveedor else '',
+            border_radius=10,
+            multiline=True,
+            min_lines=2
+        )
+        contacto_input = ft.TextField(
+            label="Persona de contacto",
+            value=proveedor.get('contacto', '') if proveedor else '',
+            border_radius=10
+        )
+        observaciones_input = ft.TextField(
+            label="Observaciones",
+            value=proveedor.get('observaciones', '') if proveedor else '',
+            border_radius=10,
+            multiline=True,
+            min_lines=2
+        )
+        estado_switch = ft.Switch(
+            label="Activo",
+            value=proveedor.get('estado', 'Activo') == 'Activo' if proveedor else True,
+        )
+        
+        prov_id = proveedor.get('id') if proveedor else None
+        
+        def on_guardar(e):
+            if not nombre_input.value.strip():
+                return
+            self._save_proveedor(
+                nombre_input.value.strip(),
+                rif_input.value.strip(),
+                telefono_input.value.strip(),
+                email_input.value.strip(),
+                direccion_input.value.strip(),
+                contacto_input.value.strip(),
+                observaciones_input.value.strip(),
+                estado_switch.value,
+                prov_id
+            )
+        
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"{'Editar' if proveedor else 'Nuevo'} Proveedor"),
+            content=ft.Column([
+                nombre_input, rif_input, telefono_input, email_input,
+                direccion_input, contacto_input, observaciones_input, estado_switch
+            ], tight=True, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: self._close_dialog()),
+                ft.ElevatedButton("Guardar", on_click=on_guardar, bgcolor=colors['accent']),
+            ]
+        )
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
         self.page.update()
-
-    def _remove_snackbar(self):
-        if self.active_snackbar and self.page and self.active_snackbar in self.page.overlay:
-            self.page.overlay.remove(self.active_snackbar)
-
+    
+    def _save_proveedor(self, nombre, rif, telefono, email, direccion, contacto, observaciones, activo, prov_id):
+        from datetime import datetime
+        from usr.database.sync_queue import get_sync_queue
+        
+        prov_data = {
+            "nombre": str(nombre),
+            "rif": str(rif) if rif else None,
+            "telefono": str(telefono) if telefono else None,
+            "email": str(email) if email else None,
+            "direccion": str(direccion) if direccion else None,
+            "contacto": str(contacto) if contacto else None,
+            "observaciones": str(observaciones) if observaciones else None,
+            "estado": "Activo" if activo else "Inactivo",
+            "updated_at": datetime.now().isoformat()
+        }
+        if prov_id:
+            prov_data["id"] = prov_id
+        
+        # Guardar local
+        try:
+            LocalReplica.save_proveedores([prov_data])
+        except Exception as e:
+            print(f"❌ Error SQLite: {e}")
+        
+        # Sync queue
+        try:
+            queue = get_sync_queue()
+            queue.add_pending('proveedores', 'insert', prov_data)
+            self._trigger_sync()
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al agregar proveedor a sync", e, "configuracion_view._save_proveedor")
+        
+        show_success("Proveedor guardado")
+        self._close_dialog()
+        self._load_proveedores()
+    
+    def _load_proveedores(self):
+        from usr.database.local_replica import LocalReplica
+        self.proveedores_data = LocalReplica.get_proveedores()
+        self._render_proveedores(self.proveedores_data)
+    
+    def _render_proveedores(self, data):
+        colors = _colors(self.page)
+        self.lista_proveedores.controls = []
+        
+        for prov in data:
+            card = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.LOCAL_SHIPPING, color=colors['accent']),
+                        ft.Text(prov.get('nombre', 'Sin nombre'), weight="bold", expand=True),
+                        ft.Container(
+                            content=ft.Text(prov.get('estado', 'Activo'), size=10, color="white"),
+                            bgcolor=colors['success'] if prov.get('estado') == 'Activo' else colors['error'],
+                            padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                            border_radius=10
+                        )
+                    ]),
+                    ft.Divider(height=10),
+                    ft.Text(prov.get('rif', 'Sin RIF'), size=11, color=colors['text_secondary']),
+                    ft.Text(prov.get('telefono', 'Sin teléfono'), size=11, color=colors['text_secondary']),
+                    ft.Text(prov.get('email', 'Sin email'), size=11, color=colors['text_secondary']),
+                ], spacing=2),
+                padding=15,
+                bgcolor=colors['card'],
+                border_radius=10,
+                ink=True,
+                on_click=lambda _, p=prov: self._show_proveedor_dialog(p)
+            )
+            self.lista_proveedores.controls.append(card)
+        
+        self.page.update()
+    
+    def _filter_proveedores(self, e):
+        search = self.proveedor_search.value.lower()
+        if not search:
+            self._render_proveedores(self.proveedores_data)
+            return
+        
+        filtered = [p for p in self.proveedores_data 
+                   if search in (p.get('nombre') or '').lower() 
+                   or search in (p.get('rif') or '').lower()]
+        self._render_proveedores(filtered)
+    
+    # ==================== FIN PROVEEDORES ====================
+    
     def _build_sistema_tab(self):
         colors = _colors(self.page)
         return ft.Container(
@@ -1007,6 +1286,53 @@ class ConfiguracionView(ft.Container):
                                 border_radius=8,
                                 visible=False,
                             ),
+                            
+                            # --- NUEVA SECCIÓN: MODO OFFLINE ---
+                            ft.Divider(height=30, color=colors['border']),
+                            ft.Text(
+                                "Modo Offline", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Active el modo offline para usar la aplicación sin conexión a internet. Los datos se guardarán localmente y se sincronizarán al reconectar.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.Text("Estado:", size=14, color=colors['text_secondary']),
+                                self.offline_status_indicator,
+                            ], spacing=10),
+                            ft.Container(height=10),
+                            ft.ElevatedButton(
+                                "Cambiar Modo", 
+                                on_click=self._toggle_offline_mode,
+                                icon=ft.Icons.WIFI_OFF,
+                                bgcolor=colors['accent'],
+                                color=colors['white'],
+                            ),
+                            
+                            ft.Divider(height=30, color=colors['border']),
+                            
+                            ft.Text(
+                                "Gestion de Operador", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Cambie el operador registrado en este dispositivo.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.Container(height=10),
+                            ft.ElevatedButton(
+                                "Cambiar operador de este dispositivo", 
+                                on_click=self._on_cambiar_operador,
+                                icon=ft.Icons.PERSON_OUTLINED,
+                                bgcolor=ft.Colors.ORANGE_600,
+                                color=ft.Colors.WHITE,
+                            ),
                         ], spacing=15),
                         padding=25,
                     ),
@@ -1015,21 +1341,93 @@ class ConfiguracionView(ft.Container):
             padding=20,
             expand=True,
         )
+    
+    def _on_cambiar_operador(self, e):
+        from usr.database.local_replica import LocalReplica
+        
+        usuario = LocalReplica.get_usuario_dispositivo()
+        
+        if usuario and usuario.get("pin_hash"):
+            self.pin_verify_input = ft.TextField(
+                label="PIN actual",
+                password=True,
+                max_length=4,
+                keyboard_type=ft.KeyboardType.NUMBER
+            )
+            
+            self.verify_dialog = ft.AlertDialog(
+                title=ft.Text("Verificar PIN"),
+                content=ft.Column([
+                    ft.Text("Ingrese su PIN actual para continuar"),
+                    self.pin_verify_input,
+                ], tight=True),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=self._close_dialog),
+                    ft.ElevatedButton("Verificar", on_click=self._on_verificar_pin_cambio, bgcolor=ft.Colors.DEEP_PURPLE_600, color=ft.Colors.WHITE),
+                ]
+            )
+            self.page.overlay.append(self.verify_dialog)
+            self.verify_dialog.open = True
+            self.page.update()
+        else:
+            self._confirmar_cambio()
+    
+    def _on_verificar_pin_cambio(self, e):
+        from usr.database.local_replica import LocalReplica
+        
+        if not self.pin_verify_input.value:
+            return
+        if LocalReplica.verificar_pin(self.pin_verify_input.value):
+            self._confirmar_cambio()
+        else:
+            show_error("PIN incorrecto")
+    
+    def _confirmar_cambio(self):
+        from usr.database.local_replica import LocalReplica
+        from main import main as restart_main
+        
+        self._close_dialog()
+        LocalReplica.eliminar_usuario_dispositivo()
+        show_info("Recargando...")
+        self.page.run_task(restart_main, self.page)
+    
+    def _close_dialog(self, e=None):
+        if hasattr(self, 'page') and self.page and self.page.overlay:
+            for d in self.page.overlay.copy():
+                if hasattr(d, 'open'):
+                    d.open = False
+            self.page.update()
+    
+    def _toggle_offline_mode(self, e=None):
+        from usr.database import base
+        current = base.is_online()
+        base._is_online = not current
+        
+        if current:
+            self.offline_status_indicator.value = "📴 FORZADO OFFLINE"
+            self.offline_status_indicator.color = ft.Colors.RED_400
+            show_warning("Modo offline forzado - Los datos se guardarán localmente")
+        else:
+            self.offline_status_indicator.value = "🟢 ONLINE"
+            self.offline_status_indicator.color = ft.Colors.GREEN_400
+            show_success("Conexión normal restaurada")
+        
+        self.update()
 
     def _test_connection_action(self, e):
         db = None
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             db.execute(text("SELECT 1"))
             self.test_result_text.value = "✅ Conexión exitosa - Base de datos operativa"
             self.test_result_text.color = "#2E7D32"
             self.test_result_text.visible = True
-            self._show_message("✅ Conexión a base de datos verificada")
+            show_success("Conexión a base de datos verificada")
         except Exception as ex:
             self.test_result_text.value = f"❌ Error: {str(ex)}"
             self.test_result_text.color = "#c62828"
             self.test_result_text.visible = True
-            self._show_error(f"Error de conexión: {str(ex)}")
+            show_error(f"Error de conexión: {str(ex)}")
         finally:
             if db:
                 db.close()
@@ -1049,11 +1447,24 @@ class ConfiguracionView(ft.Container):
                 
                 if fcm_component:
                     fcm_component.request_permission()
-                    self._show_message("Solicitando permiso de notificaciones...")
+                    show_info("Solicitando permiso de notificaciones...")
                 else:
-                    self._show_error("El servicio de notificaciones no está activo en este entorno.")
+                    show_warning("El servicio de notificaciones no está activo en este entorno.")
             else:
-                self._show_error("No se pudo acceder al sistema de la aplicación.")
+                show_error("No se pudo acceder al sistema de la aplicación.")
                 
         except Exception as ex:
-            self._show_error(f"Error al activar notificaciones: {str(ex)}")
+            show_error(f"Error al activar notificaciones: {str(ex)}")
+
+    def _trigger_sync(self):
+        """Intenta sincronizar inmediatamente si hay conexión."""
+        try:
+            from usr.database.sync import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if sync_mgr and sync_mgr.check_connection():
+                import threading
+                thread = threading.Thread(target=sync_mgr._process_sync_queue, daemon=True)
+                thread.start()
+                print("[SYNC] Sync inmediato activado")
+        except Exception as e:
+            print(f"[SYNC] Error al activar sync inmediato: {e}")

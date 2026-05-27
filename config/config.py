@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     DB_USER: str = os.getenv("DB_USER", "postgres")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     
+    # --- CONFIGURACIÓN LOCAL (OFFLINE) ---
+    LOCAL_DB_PATH: str = os.getenv("LOCAL_DB_PATH", "")
+    DEVICE_ID: str = os.getenv("DEVICE_ID", "")
+    
     @property
     def DATABASE_URL(self) -> str:
         """Construye la URL de conexión a la base de datos de forma segura."""
@@ -50,6 +54,34 @@ class Settings(BaseSettings):
         
         return f"postgresql+pg8000://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{final_port}/{self.DB_NAME}"
     
+    @property
+    def LOCAL_DATABASE_URL(self) -> str:
+        from usr.database.conn import get_db_path
+        try:
+            return f"sqlite:///{get_db_path()}"
+        except RuntimeError:
+            return "sqlite:///lycoris_local.db"
+    
+    @property
+    def DEVICE_IDENTIFIER(self) -> str:
+        """Identificador único del dispositivo."""
+        if self.DEVICE_ID:
+            return self.DEVICE_ID
+        
+        import os
+        import uuid
+        device_file = os.path.join(os.path.dirname(__file__), '.device_id')
+        
+        if os.path.exists(device_file):
+            with open(device_file, 'r') as f:
+                return f.read().strip()
+        
+        new_id = f"device_{uuid.uuid4().hex[:8]}"
+        with open(device_file, 'w') as f:
+            f.write(new_id)
+        
+        return new_id
+    
     # --- EL RESTO DE TUS VARIABLES ORIGINALES ---
     FLET_APP_NAME: str = os.getenv("FLET_APP_NAME", "Lycoris_Control")
     FLET_APP_ICON: str = os.getenv("FLET_APP_ICON", "favicon.png")
@@ -62,6 +94,8 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     MAX_FILE_SIZE: str = os.getenv("MAX_FILE_SIZE", "10485760")
     SQLITE_PATH: str = os.getenv("SQLITE_PATH", "./control_entradas_salidas.db")
+
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     class Config:
         # Usamos la ruta encontrada dinámicamente

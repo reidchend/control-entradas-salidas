@@ -1,0 +1,274 @@
+"""
+Cola de sincronización unificada para trabajo offline-first.
+Maneja:
+- Cola de operaciones pendientes de subir a Supabase
+- Metadatos de última sincronización por tabla
+- Cache de productos y categorías localmente
+"""
+import threading
+import time
+import json
+from datetime import datetime
+from typing import List, Dict, Optional
+from usr.database.conn import get_local_conn, get_cache_conn
+
+class SyncQueue:
+    """Maneja la cola de sincronización."""
+    
+    MAX_RETRIES = 5
+    
+    _instance = None
+    _lock = threading.Lock()
+    _running = False
+    _thread = None
+    _stop_event = threading.Event()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    @staticmethod
+    def init_queue():
+        """Inicializa la tabla de cola."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_name TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                data TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                retries INTEGER DEFAULT 0,
+                last_error TEXT,
+                status TEXT DEFAULT 'pending'
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TEXT
+            )
+        """)
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def add_pending(table_name: str, operation: str, data: dict) -> int:
+        """Agrega una operación a la cola de sync."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO sync_queue (table_name, operation, data, created_at, status)
+            VALUES (?, ?, ?, ?, 'pending')
+        """, (
+            table_name,
+            operation,
+            json.dumps(data),  # Usar JSON en lugar de str
+            datetime.now().isoformat()
+        ))
+        
+        conn.commit()
+        row_id = cursor.lastrowid
+        conn.close()
+        
+        return row_id
+    
+    MAX_RETRIES = 5
+    
+    @staticmethod
+    def get_pending(limit: int = 50) -> List[Dict]:
+        """Obtiene operaciones pendientes Y fallidas con reintentos disponibles."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        # Primero, convertir failed -> pending para los que se van a procesar
+        cursor.execute("""
+            UPDATE sync_queue 
+            SET status = 'pending', last_error = NULL
+            WHERE status = 'failed' AND retries < 5
+        """)
+        conn.commit()
+        
+        # Luego obtener todos los pending
+        cursor.execute("""
+            SELECT * FROM sync_queue 
+            WHERE status = 'pending'
+            ORDER BY created_at
+            LIMIT ?
+        """, (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    @staticmethod
+    def mark_completed(queue_id: int) -> None:
+        """Marca operación como completada."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE sync_queue 
+            SET status = 'completed' 
+            WHERE id = ?
+        """, (queue_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def mark_failed(queue_id: int, error: str) -> None:
+        """Marca operación como fallida."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE sync_queue 
+            SET status = 'failed', last_error = ?, retries = retries + 1
+            WHERE id = ?
+        """, (error, queue_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def get_status() -> dict:
+        """Obtiene estado de la cola."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT status, COUNT(*) as count 
+            FROM sync_queue 
+            GROUP BY status
+        """)
+        
+        rows = cursor.fetchall()
+        status_dict = {row['status']: row['count'] for row in rows}
+        
+        cursor.execute("SELECT value FROM sync_metadata WHERE key = 'last_sync'")
+        row = cursor.fetchone()
+        last_sync = row['value'] if row else None
+        
+        conn.close()
+        
+        return {
+            'pending': status_dict.get('pending', 0),
+            'completed': status_dict.get('completed', 0),
+            'failed': status_dict.get('failed', 0),
+            'last_sync': last_sync
+        }
+    
+    @staticmethod
+    def set_last_sync(timestamp: str) -> None:
+        """Guarda timestamp del último sync."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO sync_metadata (key, value, updated_at)
+            VALUES ('last_sync', ?, ?)
+        """, (timestamp, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def get_last_sync() -> Optional[str]:
+        """Obtiene timestamp del último sync."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT value FROM sync_metadata WHERE key = 'last_sync'
+        """)
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return row['value'] if row else None
+    
+    @staticmethod
+    def cleanup_completed(max_age_hours: int = 24) -> None:
+        """Limpia operaciones completadas antiguas."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            DELETE FROM sync_queue 
+            WHERE status = 'completed' 
+            AND created_at < datetime('now', '-' || ? || ' hours')
+        """, (max_age_hours,))
+        
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        if deleted > 0:
+            print(f"[CLEANUP] {deleted} operaciones antiguas eliminadas")
+    
+    @staticmethod
+    def get_queue_count() -> int:
+        """Obtiene número de operaciones pendientes."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) as count 
+            FROM sync_queue 
+            WHERE status = 'pending'
+        """)
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return row['count'] if row else 0
+
+
+def get_sync_queue() -> SyncQueue:
+    """Obtiene instancia singleton de SyncQueue."""
+    return SyncQueue()
+
+
+def init_sync_storage():
+    """Inicializa storage unificado de sincronización."""
+    conn = get_cache_conn()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_pending (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            record_id INTEGER,
+            data TEXT,
+            created_at TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            last_error TEXT,
+            retries INTEGER DEFAULT 0
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            synced_at TEXT
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+
+
+init_sync_storage()

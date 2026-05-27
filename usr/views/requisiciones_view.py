@@ -1,12 +1,16 @@
 import warnings
 warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
+import asyncio
+import traceback
 import flet as ft
 from datetime import datetime
-from usr.database.base import get_db
+from usr.database.base import get_db, get_db_adaptive
+from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 import logging
 from usr.theme import get_theme, get_colors
+from usr.notifications import show_success, show_error, show_warning
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +118,28 @@ class RequisicionesView(ft.Container):
         self.update() 
         self._load_requisiciones()
     def did_mount(self):
-        self._build_ui()
+        try:
+            self._build_ui()
+            register_sync_callback(self._on_sync_complete)
+        except Exception as e:
+            from usr.error_handler import show_error
+            show_error("Error al montar vista de requisiciones", e, "requisiciones_view.did_mount")
+    
+    def will_unmount(self):
+        unregister_sync_callback(self._on_sync_complete)
+    
+    def _on_sync_complete(self):
+        if hasattr(self, 'page') and self.page and self.visible:
+            if self._vista_actual == "lista":
+                async def _reload():
+                    await asyncio.to_thread(self._load_requisiciones)
+                self.page.run_task(_reload)
+    
+    def on_sync_complete(self):
+        self._on_sync_complete()
 
     def _load_requisiciones(self):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             reqs = db.query(Requisicion).order_by(Requisicion.fecha_creacion.desc()).all()
             
@@ -147,7 +169,7 @@ class RequisicionesView(ft.Container):
             if self.page:
                 self.page.update()
         except Exception as e:
-            logger.error(f"Error cargando requisiciones: {e}")
+            show_error("Error cargando requisiciones", e, "requisiciones_view._load_requisiciones")
         finally:
             db.close()
 
@@ -167,7 +189,7 @@ class RequisicionesView(ft.Container):
         # Obtener total de items de forma segura
         total_items = 0
         try:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             total_items = db.query(RequisicionDetalle).filter(
                 RequisicionDetalle.requisicion_id == req.id
             ).count()
@@ -220,7 +242,7 @@ class RequisicionesView(ft.Container):
         is_mobile = self.page.width < 700 if self.page else False
         self.detalles_temp = []
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             almacenes = db.query(Existencia.almacen).distinct().all()
             opciones_almacen = [a[0] for a in almacenes]
@@ -350,13 +372,13 @@ class RequisicionesView(ft.Container):
         
         def on_confirmar(e):
             if not productos_container.controls:
-                snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=colors['warning'])
+                show_warning("Agregue al menos un producto")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
                 return
             
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 detalles = []
                 origen = origen_dropdown.value or "principal"
@@ -436,14 +458,14 @@ class RequisicionesView(ft.Container):
                 self.page.update()
                 self._load_requisiciones()
                 
-                snack = ft.SnackBar(content=ft.Text(f"✓ {origen} → {destino}"), bgcolor=colors['success'])
+                show_success(f"{origen} → {destino}")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
             except Exception as ex:
                 db.rollback()
                 logger.error(f"Error creando requisición: {ex}")
-                snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=colors['error'])
+                show_error(f"Error: {ex}")
                 self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()
@@ -527,7 +549,7 @@ class RequisicionesView(ft.Container):
         
         colors = _colors(self.page)
         if req.estado == "completada":
-            snack = ft.SnackBar(content=ft.Text("No se puede editar una requisición completada"), bgcolor=colors['warning'])
+            show_warning("No se puede editar una requisición completada")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -537,7 +559,7 @@ class RequisicionesView(ft.Container):
 
     def _show_agregar_producto_dialog(self, productos_container):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(200).all()
         finally:
@@ -722,7 +744,7 @@ class RequisicionesView(ft.Container):
             return
         
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             detalles = db.query(RequisicionDetalle).filter(
                 RequisicionDetalle.requisicion_id == req.id
@@ -803,7 +825,7 @@ class RequisicionesView(ft.Container):
         else:
             self.lista_productos_req = []
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         almacenes = []
         try:
             almacenes_result = db.query(Existencia.almacen).distinct().all()
@@ -1037,7 +1059,7 @@ class RequisicionesView(ft.Container):
         self._buscar_productos_buscador("", resultados)
 
     def _buscar_productos_buscador(self, texto, container):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             query = db.query(Producto).filter(Producto.activo == True)
             if texto:
@@ -1088,7 +1110,7 @@ class RequisicionesView(ft.Container):
             )
         
         container.update()
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             query = db.query(Producto).filter(Producto.activo == True)
             if texto:
@@ -1144,7 +1166,7 @@ class RequisicionesView(ft.Container):
         almacen_origen = getattr(self, '_origen_dropdown', None)
         origen = almacen_origen.value if almacen_origen else "principal"
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         disponible = 0
         try:
             exist = db.query(Existencia).filter(
@@ -1223,7 +1245,7 @@ class RequisicionesView(ft.Container):
             if hasattr(self, '_bs_buscador') and self._bs_buscador:
                 self._bs_buscador.open = False
             
-            snack = ft.SnackBar(content=ft.Text(f"+ {producto.nombre}"), bgcolor=colors['success'])
+            show_success(f"+ {producto.nombre}")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -1301,7 +1323,7 @@ class RequisicionesView(ft.Container):
 
     def _crear_requisicion_vista(self, origen_dropdown, destino_dropdown, observaciones):
         if not self.lista_productos_req:
-            snack = ft.SnackBar(content=ft.Text("Agregue al menos un producto"), bgcolor=ft.Colors.ORANGE_700)
+            show_warning("Agregue al menos un producto")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()
@@ -1310,7 +1332,7 @@ class RequisicionesView(ft.Container):
         origen = origen_dropdown.value or "principal"
         destino = destino_dropdown.value or "restaurante"
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             req_editando = getattr(self, '_requisicion_editando', None)
             
@@ -1334,7 +1356,7 @@ class RequisicionesView(ft.Container):
                     db.add(detalle)
                 
                 db.commit()
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición actualizada"), bgcolor=ft.Colors.GREEN_700)
+                show_success("Requisición actualizada")
             else:
                 req = Requisicion(
                     numero=f"REQ-{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -1359,7 +1381,7 @@ class RequisicionesView(ft.Container):
                     db.add(detalle)
                 
                 db.commit()
-                snack = ft.SnackBar(content=ft.Text(f"✓ Requisición creada: {origen} → {destino}"), bgcolor=ft.Colors.GREEN_700)
+                show_success(f"Requisición creada: {origen} → {destino}")
             
             self.page.overlay.append(snack)
             snack.open = True
@@ -1372,7 +1394,7 @@ class RequisicionesView(ft.Container):
         except Exception as ex:
             db.rollback()
             logger.error(f"Error guardando requisición: {ex}")
-            snack = ft.SnackBar(content=ft.Text(f"Error: {ex}"), bgcolor=ft.Colors.RED_700)
+            show_error(f"Error: {ex}")
             self.page.overlay.append(snack)
             snack.open = True
             self.page.update()

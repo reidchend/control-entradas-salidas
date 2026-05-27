@@ -37,6 +37,9 @@ class Factura(Base):
     
     # Relación con movimientos
     movimientos = relationship("Movimiento", back_populates="factura")
+    
+    # Relación con pagos
+    pagos = relationship("FacturaPago", back_populates="factura", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Factura(id={self.id}, numero='{self.numero_factura}', estado='{self.estado}')>"

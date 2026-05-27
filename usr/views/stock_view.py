@@ -1,11 +1,12 @@
 import flet as ft
 import asyncio
-from usr.database.base import get_db
-from usr.models import Producto, Movimiento, Categoria, Existencia
-from datetime import datetime
+import traceback
+from usr.database.base import get_db, get_db_adaptive
+from usr.models import Producto, Movimiento, Categoria, Existencia, Factura
 import logging
 from sqlalchemy import func
 from usr.theme import get_theme, get_colors
+from usr.notifications import show_success, show_info
 
 logger = logging.getLogger(__name__)
 
@@ -38,39 +39,105 @@ class StockView(ft.Container):
         self.sin_stock_text = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=colors['error'])
 
     def did_mount(self):
+        self._running = True
         self._build_ui()
         if self.page and self.page.client_storage:
             self._load_categorias()
             self._load_productos()
+        
+        self._update_connection_indicator()
+        
+        # Registrar callback para sync automático
+        from usr.database.sync_callbacks import register_sync_callback
+        register_sync_callback(self._on_sync_complete)
+        
+        import threading
+        import time
+        
+        def check_connection_loop():
+            while self._running:
+                time.sleep(10)
+                if hasattr(self, 'page') and self.page:
+                    self._update_connection_indicator()
+                    try:
+                        self.page.update()
+                    except Exception:
+                        pass
+        
+        self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
+        self._connection_thread.start()
+    
+    def will_unmount(self):
+        self._running = False
+        from usr.database.sync_callbacks import unregister_sync_callback
+        unregister_sync_callback(self._on_sync_complete)
+    
+    def _on_sync_complete(self):
+        """Callback que se ejecuta después de cada sync automático."""
+        if hasattr(self, 'page') and self.page and self.visible:
+            async def _reload():
+                await asyncio.to_thread(self._load_productos)
+            self.page.run_task(_reload)
+    
+    def on_sync_complete(self):
+        """Alias para compatibilidad con SyncManager callback."""
+        self._on_sync_complete()
 
     def _on_refresh(self):
         if not self.page:
             return
         
-        colors = _colors(self.page)
-        snack = ft.SnackBar(
-            content=ft.Text("🔄 Actualizando..."),
-            bgcolor=colors['accent'],
-            duration=1,
-        )
-        self.page.overlay.append(snack)
-        snack.open = True
-        self.page.update()
+        from usr.database.base import is_online as base_is_online
+        from usr.database import get_sync_manager
+        
+        online = base_is_online()
+        
+        if online:
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                sync_mgr.force_sync_now()
+        
+        show_info("Actualizando...", duration=1)
         self._load_categorias()
         self._load_productos()
-        snack = ft.SnackBar(
-            content=ft.Text("✓ Datos actualizados"),
-            bgcolor=colors['success'],
-            duration=2,
-        )
-        self.page.overlay.append(snack)
-        snack.open = True
+        show_success("Datos actualizados", duration=2)
+    
+    async def _on_sync_indicator_click(self, e=None):
+        """Solo actualiza el indicador visual"""
+        from usr.database import get_sync_manager
+        
+        sync_mgr = get_sync_manager()
+        if not sync_mgr or not self.page:
+            return
+        
+        self._update_connection_indicator()
         self.page.update()
+    
+    def _update_connection_indicator(self):
+        from usr.database.base import is_online as base_is_online
+        from usr.database import get_pending_movimientos_count
+        
+        if not hasattr(self, '_connection_indicator'):
+            return
+        
+        pending = get_pending_movimientos_count()
+        
+        online = base_is_online()
+        
+        if online:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18)
+            self._connection_indicator.tooltip = f"Conectado - {pending} cambios pendientes" if pending else "Conectado"
+        else:
+            self._connection_indicator.content = ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.RED_400, size=18)
+            self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
+        
+        self._connection_indicator.update()
 
     def on_theme_change(self):
         """Se llama cuando cambia el tema"""
         if not self.page or not self.page.client_storage:
             return
+        from usr.error_handler import show_error
         colors = _colors(self.page)
         self.bgcolor = colors['bg']
         try:
@@ -79,17 +146,26 @@ class StockView(ft.Container):
                 self.list_container.bgcolor = colors['bg']
             self._load_categorias()
             self._load_productos()
-        except:
-            pass
+        except Exception as e:
+            show_error("Error al cambiar tema", e, "stock_view.on_theme_change")
 
     def _build_ui(self):
         colors = _colors(self.page)
+        
+        self._connection_indicator = ft.Container(
+            content=ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_400, size=18),
+            tooltip="Conectado",
+            padding=5,
+            on_click=self._on_sync_indicator_click
+        )
+        
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
                     ft.Text("Gestión de Stock", size=24, weight=ft.FontWeight.BOLD, color=colors['text_primary']),
                     ft.Text("Control e inventario de productos y pesaje", size=14, color=colors['text_secondary']),
                 ], spacing=2, expand=True),
+                self._connection_indicator,
                 ft.IconButton(
                     icon=ft.Icons.REFRESH_ROUNDED,
                     icon_color=colors['text_secondary'],
@@ -185,7 +261,7 @@ class StockView(ft.Container):
         )
 
     def _load_categorias(self):
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             categorias = db.query(Categoria).filter(Categoria.activo == True).all()
             self.categoria_filter.options = [ft.dropdown.Option("", "Todas")]
@@ -222,7 +298,7 @@ class StockView(ft.Container):
             )
             self.update()
 
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             productos = db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(50).all()
             
@@ -238,7 +314,7 @@ class StockView(ft.Container):
         if not producto_ids:
             return {}
         
-        db = next(get_db())
+        db = next(get_db_adaptive())
         existencias_map = {}
         try:
             existencias = db.query(Existencia.producto_id, Existencia.almacen, Existencia.cantidad).filter(Existencia.producto_id.in_(producto_ids)).all()
@@ -263,7 +339,7 @@ class StockView(ft.Container):
             categoria = self.categoria_filter.value if self.categoria_filter.value else ""
             almacen = self.almacen_filter.value if self.almacen_filter.value else ""
             
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 query = db.query(Producto).filter(Producto.activo == True)
                 
@@ -306,7 +382,7 @@ class StockView(ft.Container):
         if not productos:
             self.productos_list.controls.append(ft.Text("No se encontraron productos", color=colors['text_secondary'], text_align="center"))
         else:
-            db = next(get_db())
+            db = next(get_db_adaptive())
             try:
                 for p in productos:
                     stock_por_almacen = existencias_map.get(p.id, {})
@@ -399,7 +475,7 @@ class StockView(ft.Container):
 
     def _show_producto_details(self, producto: Producto):
         colors = _colors(self.page)
-        db = next(get_db())
+        db = next(get_db_adaptive())
         try:
             movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(20).all()
             mov_list = ft.ListView(height=400, spacing=8)
@@ -407,18 +483,71 @@ class StockView(ft.Container):
                 is_entrada = m.tipo == "entrada"
                 icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
                 color = colors['success'] if is_entrada else colors['error']
-                peso_info = f"\n⚖️ Peso: {(m.peso_total or 0):.2f} kg" if (m.peso_total or 0) > 0 else ""
-
+                
+                es_pesable = producto.es_pesable if producto else False
+                unidad_prod = producto.unidad_medida if producto else 'unidad'
+                
+                if es_pesable and (m.peso_total or 0) > 0:
+                    cantidad_display = f"{(m.peso_total or 0):.3f} kg"
+                    cantidad_valor = m.peso_total or 0
+                else:
+                    cantidad_display = f"{int(m.cantidad)} {unidad_prod}"
+                    cantidad_valor = m.cantidad
+                
+                # Número de factura si existe (sin fondo, del mismo tamaño que el tipo)
+                factura_texto = ""
+                if m.factura_id:
+                    factura = db.query(Factura).filter(Factura.id == m.factura_id).first()
+                    if factura:
+                        factura_texto = f" - 📄 {factura.numero_factura}"
+                
+                # Contenedor Principal (Más flexible que ListTile)
                 mov_list.controls.append(
                     ft.Container(
-                        content=ft.ListTile(
-                            leading=ft.Icon(icon, color=color, size=28),
-                            title=ft.Text(f"{m.tipo.upper()}: {int(m.cantidad)} unidades", weight="bold"),
-                            subtitle=ft.Text(f"{m.fecha_movimiento.strftime('%d/%m/%Y %H:%M')}{peso_info}", size=12),
-                            trailing=ft.Text(f"{'+' if is_entrada else '-'}{int(m.cantidad)}", color=color, weight="bold"),
+                        content=ft.Row(
+                            [
+                                # Icono
+                                ft.Container(
+                                    content=ft.Icon(icon, color=color, size=24),
+                                    padding=ft.padding.only(right=10)
+                                ),
+                                # Contenido central (Tipo, cantidad y factura)
+                                ft.Column(
+                                    [
+                                        ft.Row([
+                                            ft.Text(f"{m.tipo.upper()}{factura_texto}", weight="bold", size=14, selectable=True),
+                                        ], alignment=ft.MainAxisAlignment.START, spacing=2),
+                                        ft.Text(
+                                            cantidad_display, 
+                                            size=12, 
+                                            color="#9E9E9E",
+                                            selectable=True
+                                        ),
+                                        ft.Text(
+                                            m.fecha_movimiento.strftime('%d/%m/%Y %H:%M'), 
+                                            size=11, 
+                                            color="#757575",
+                                            selectable=True
+                                        ),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.START,
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                                # Cantidad (Alineado a la derecha)
+                                ft.Text(
+                                    f"{'+' if is_entrada else '-'}{cantidad_valor:.3f}" if es_pesable and (m.peso_total or 0) > 0 else f"{'+' if is_entrada else '-'}{int(cantidad_valor)}", 
+                                    color=color, 
+                                    weight="bold",
+                                    size=16
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         bgcolor=colors['bg'],
+                        padding=15,
                         border_radius=10,
+                        margin=ft.margin.only(bottom=8),
                     )
                 )
 
@@ -439,3 +568,37 @@ class StockView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             self.page.update()
+    
+    def _show_factura_details(self, factura: Factura):
+        """Muestra los detalles de la factura en un dialog."""
+        colors = _colors(self.page)
+        
+        self.active_dialog = ft.AlertDialog(
+            title=ft.Text(f"📄 Factura: {factura.numero_factura}"),
+            content=ft.Column([
+                ft.Divider(),
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Proveedor", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(factura.proveedor or "N/A", weight="bold"),
+                    ], spacing=2, expand=1),
+                    ft.Column([
+                        ft.Text("Fecha Factura", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(factura.fecha_factura or "N/A", weight="bold"),
+                    ], spacing=2, expand=1),
+                ], spacing=20),
+                ft.Divider(),
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Total Neto", size=12, color=colors.get('text_secondary', '#888')),
+                        ft.Text(f"${factura.total_neto:,.2f}" if factura.total_neto else "$0.00", weight="bold", size=16),
+                    ], spacing=2),
+                ]),
+                ft.Divider(),
+                ft.Text(f"Estado: {factura.estado}", weight="bold", color=colors.get('success', '#4CAF50')),
+            ], tight=True),
+            actions=[ft.TextButton("Cerrar", on_click=self._close_dialog)],
+        )
+        self.page.overlay.append(self.active_dialog)
+        self.active_dialog.open = True
+        self.page.update()
