@@ -32,7 +32,8 @@ class Producto(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     almacen_predeterminado = Column(String(50), default="principal")
-
+    tipo = Column(String(50), default="ninguno", nullable=False)
+    
     movimientos = relationship("Movimiento", back_populates="producto", cascade="all, delete-orphan")
     existencias = relationship("Existencia", primaryjoin="Producto.id==Existencia.producto_id", viewonly=True)
 

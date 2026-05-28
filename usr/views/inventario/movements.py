@@ -28,7 +28,7 @@ def registrar_movimiento(page, producto_seleccionado, tipo, cantidad, peso_total
         cantidad_a_mover = cantidad
         unidad = get_attr(producto_seleccionado, 'unidad_medida', 'unidad')
 
-    if tipo == "entrada":
+    if tipo == "entrada" or tipo == "ajuste":
         cant_nueva = cant_anterior + cantidad_a_mover
     else:
         if cant_anterior < cantidad_a_mover:
@@ -54,6 +54,8 @@ def registrar_movimiento(page, producto_seleccionado, tipo, cantidad, peso_total
 
     local_id = movimiento_data.get('id')
 
+    LocalReplica.recalculate_existencias()
+
     sync_mgr = None
     try:
         from usr.database import get_sync_manager
@@ -65,10 +67,14 @@ def registrar_movimiento(page, producto_seleccionado, tipo, cantidad, peso_total
 
     if online:
         try:
-            from sqlalchemy import create_engine, text
-            from config.config import get_settings
-            settings = get_settings()
-            remote_engine = create_engine(settings.DATABASE_URL)
+            from sqlalchemy import text
+
+            if sync_mgr:
+                remote_engine = sync_mgr._create_remote_engine()
+            else:
+                from sqlalchemy import create_engine
+                from config.config import get_settings
+                remote_engine = create_engine(get_settings().DATABASE_URL)
 
             with remote_engine.connect() as conn:
                 mov_clean = {k: v for k, v in movimiento_data.items()
@@ -79,20 +85,6 @@ def registrar_movimiento(page, producto_seleccionado, tipo, cantidad, peso_total
                 vals = ", ".join([f":{k}" for k in mov_clean.keys()])
                 sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
                 conn.execute(sql, mov_clean)
-                conn.commit()
-
-                exist_sql = text("""
-                    INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
-                    VALUES (:producto_id, :almacen, :cantidad, :unidad)
-                    ON CONFLICT (producto_id, almacen)
-                    DO UPDATE SET cantidad = :cantidad, unidad = :unidad
-                """)
-                conn.execute(exist_sql, {
-                    'producto_id': producto_id,
-                    'almacen': almacen_seleccionado,
-                    'cantidad': cant_nueva,
-                    'unidad': unidad
-                })
                 conn.commit()
 
             remote_engine.dispose()

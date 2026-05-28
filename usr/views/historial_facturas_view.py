@@ -6,7 +6,7 @@ from usr.database.base import get_db, get_db_adaptive
 from usr.database.sync import get_sync_manager
 from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.database.cache import get_cache
-from usr.models import Factura, Movimiento, Producto, FacturaPago
+from usr.models import Factura, Movimiento, MovimientoArchivo, Producto, FacturaPago
 from sqlalchemy.orm import joinedload
 from usr.theme import get_theme, get_colors
 from usr.notifications import show_error, show_success
@@ -66,6 +66,8 @@ class HistorialFacturasView(ft.Container):
         self._periodo_seleccionado = "hoy"
         self._periodo_buttons = {}
         self._fecha_especifica = None
+        self._filtro_fecha_inicio = None
+        self._filtro_fecha_fin = None
         
         # FilePicker para exportar
         self.file_picker = ft.FilePicker(on_result=self._on_file_save)
@@ -157,8 +159,8 @@ class HistorialFacturasView(ft.Container):
 
         self.content = ft.Column([header, tabs], expand=True, spacing=0)
         
-        # Agregar file_picker a la página
-        if self.page:
+        # Agregar file_picker a la página (solo si no está ya)
+        if self.page and self.file_picker not in self.page.overlay:
             self.page.overlay.append(self.file_picker)
     
     def _on_file_save(self, e: ft.FilePickerResultEvent):
@@ -172,11 +174,74 @@ class HistorialFacturasView(ft.Container):
 
     def _build_facturas_tab(self):
         colors = _colors(self.page)
+
+        def _pick_inicio(e):
+            def on_pick(e):
+                if e.control.value:
+                    self._filtro_fecha_inicio = e.control.value
+                    self._btn_fecha_inicio.text = f"📅 {e.control.value.strftime('%d/%m/%Y')}"
+                    self._btn_fecha_inicio.update()
+                    self._load_facturas()
+            self.page.overlay.append(ft.DatePicker(on_change=on_pick))
+            self.page.overlay[-1].open = True
+            self.page.update()
+
+        def _pick_fin(e):
+            def on_pick(e):
+                if e.control.value:
+                    self._filtro_fecha_fin = e.control.value
+                    self._btn_fecha_fin.text = f"📅 {e.control.value.strftime('%d/%m/%Y')}"
+                    self._btn_fecha_fin.update()
+                    self._load_facturas()
+            self.page.overlay.append(ft.DatePicker(on_change=on_pick))
+            self.page.overlay[-1].open = True
+            self.page.update()
+
+        def _limpiar_filtro_fecha(e):
+            self._filtro_fecha_inicio = None
+            self._filtro_fecha_fin = None
+            self._btn_fecha_inicio.text = "📅 Inicio"
+            self._btn_fecha_fin.text = "📅 Fin"
+            self._btn_fecha_inicio.update()
+            self._btn_fecha_fin.update()
+            self._load_facturas()
+
+        self._btn_fecha_inicio = ft.TextButton(
+            text="📅 Inicio",
+            on_click=_pick_inicio,
+            style=ft.ButtonStyle(color=colors['accent']),
+        )
+        self._btn_fecha_fin = ft.TextButton(
+            text="📅 Fin",
+            on_click=_pick_fin,
+            style=ft.ButtonStyle(color=colors['accent']),
+        )
+
+        fecha_filtro_row = ft.Container(
+            content=ft.Row([
+                self._btn_fecha_inicio,
+                ft.Text("→", color=colors['text_secondary'], size=14),
+                self._btn_fecha_fin,
+                ft.IconButton(
+                    ft.Icons.CLOSE,
+                    icon_size=16,
+                    icon_color=colors['text_secondary'],
+                    on_click=_limpiar_filtro_fecha,
+                    tooltip="Limpiar filtro",
+                ),
+            ], spacing=2),
+            padding=ft.padding.symmetric(horizontal=4, vertical=0),
+        )
+
         filtros = ft.Container(
-            content=ft.Row(
-                [self.search_field, self.clear_search_btn], 
-                spacing=5,
-            ),
+            content=ft.Column([
+                ft.Row([self.search_field, self.clear_search_btn], spacing=5),
+                ft.Divider(height=1, color=colors['border']),
+                ft.Row([
+                    ft.Text("Filtrar por fecha:", size=11, color=colors['text_secondary']),
+                    fecha_filtro_row,
+                ], spacing=5, vertical_alignment="center"),
+            ], spacing=4),
             padding=ft.padding.symmetric(horizontal=15, vertical=8),
             bgcolor=colors['card'],
             margin=ft.margin.symmetric(horizontal=10),
@@ -337,7 +402,14 @@ class HistorialFacturasView(ft.Container):
         db = None
         try:
             db = next(get_db_adaptive())
-            self.facturas_data = db.query(Factura).order_by(Factura.fecha_factura.desc()).all()
+            query = db.query(Factura)
+            if self._filtro_fecha_inicio:
+                query = query.filter(Factura.fecha_factura >= self._filtro_fecha_inicio)
+            if self._filtro_fecha_fin:
+                from datetime import timedelta
+                fin = self._filtro_fecha_fin + timedelta(days=1)
+                query = query.filter(Factura.fecha_factura < fin)
+            self.facturas_data = query.order_by(Factura.fecha_factura.desc()).all()
             self._apply_filters()
         except Exception as e:
             show_error(f"Error cargando facturas: {str(e)}")
@@ -531,16 +603,29 @@ class HistorialFacturasView(ft.Container):
     def _show_factura_detalle(self, f):
         colors = _colors(self.page)
         db = next(get_db_adaptive())
-        items = db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(Movimiento.factura_id == f.id).all()
+        items_mov = db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(Movimiento.factura_id == f.id).all()
+        items_arch = db.query(MovimientoArchivo).filter(MovimientoArchivo.factura_id == f.id).all()
+        prod_ids = {i.producto_id for i in items_arch}
+        prods = {p.id: p for p in db.query(Producto).filter(Producto.id.in_(prod_ids)).all()} if prod_ids else {}
         db.close()
 
         lista_items = ft.ListView(expand=True, spacing=5)
-        for i in items:
+        for i in items_mov:
             lista_items.controls.append(
                 ft.ListTile(
                     leading=ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=20, color=colors['accent']),
                     title=ft.Text(i.producto.nombre if i.producto else "Producto", size=13, weight="bold"),
                     subtitle=ft.Text(f"Cant: {int(i.cantidad)} | Peso: {i.peso_total or 0:.2f} kg", size=11),
+                    dense=True
+                )
+            )
+        for i in items_arch:
+            prod = prods.get(i.producto_id)
+            lista_items.controls.append(
+                ft.ListTile(
+                    leading=ft.Icon(ft.Icons.ARCHIVE_OUTLINED, size=20, color=colors.get('warning', colors['text_hint'])),
+                    title=ft.Text(prod.nombre if prod else "Producto", size=13, weight="bold"),
+                    subtitle=ft.Text(f"Cant: {int(i.cantidad)} | Peso: {i.peso_total or 0:.2f} kg (archivado)", size=11),
                     dense=True
                 )
             )
@@ -720,8 +805,11 @@ class HistorialFacturasView(ft.Container):
                     overlay.open = False
             self.page.update()
             
-            # Mostrar diálogo con info de archivo
-            self._mostrar_descarga(wb, nombre_archivo)
+            # Abrir diálogo nativo para elegir ruta de guardado
+            self.file_picker.save_file(
+                allowed_extensions=["xlsx"],
+                file_name=nombre_archivo,
+            )
             
             db.close()
             
@@ -796,13 +884,4 @@ class HistorialFacturasView(ft.Container):
         )
         self.page.overlay.append(dlg)
         dlg.open = True
-        self.page.update()
-    
-    def _on_file_save(self, e: ft.FilePickerResultEvent):
-        if e.path:
-            try:
-                self._workbook.save(e.path)
-                show_success(f"Archivo guardado: {e.path}")
-            except Exception as ex:
-                show_error(f"Error: {ex}")
         self.page.update()
