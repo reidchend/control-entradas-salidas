@@ -1,6 +1,7 @@
 import flet as ft
 import asyncio
 import threading
+import itertools
 from datetime import datetime
 from usr.database.base import get_db, get_db_adaptive, is_online
 from usr.database.local_replica import LocalReplica
@@ -9,7 +10,7 @@ from usr.models import Categoria, Producto, Movimiento, Existencia, CompraListaI
 from usr.logger import get_logger
 from usr.theme import get_colors
 from usr.error_handler import show_error
-from usr.notifications import show_success, show_error as show_error_notif
+from usr.notifications import show_success, show_warning, show_error as show_error_notif
 from usr.views.inventario.helpers import get_attr, get_safe_colors
 from usr.views.inventario.categories import (
     create_categoria_card_from_dict,
@@ -25,7 +26,8 @@ from usr.views.inventario.dialogs import (
     show_agregar_producto_dialog,
 )
 from usr.views.inventario.movements import registrar_movimiento
-from usr.views.inventario.shopping_list import create_compra_lista_card
+from usr.views.inventario.shopping_list import create_compra_lista_card, create_categoria_header
+from usr.whatsapp_notifier import send_whatsapp_message
 
 
 logger = get_logger(__name__)
@@ -60,8 +62,9 @@ class InventarioView(ft.Container):
         self._productos_req = []
 
         self._vista_lista_compra_activa = False
-        self.compras_lista_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
+        self.compras_lista_list = None
         self._item_compra_actual = None
+        self._btn_refresh_orig_on_click = None
 
         self.categoria_seleccionada = None
         self.producto_seleccionado = None
@@ -113,12 +116,13 @@ class InventarioView(ft.Container):
         def check_connection_loop():
             while True:
                 time.sleep(10)
-                if hasattr(self, 'page') and self.page:
-                    self._update_connection_indicator()
-                    try:
-                        self.page.update()
-                    except Exception as e:
-                        show_error("Error updating page", e, "inventario_view.check_connection_loop")
+                if not hasattr(self, 'page') or not self.page:
+                    continue
+                self._update_connection_indicator()
+                try:
+                    self.page.update()
+                except Exception as e:
+                    logger.error(f"check_connection_loop: {e}")
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
         self._connection_thread.start()
 
@@ -156,6 +160,13 @@ class InventarioView(ft.Container):
                 visible=False,
             )
 
+            self._btn_refresh = ft.IconButton(
+                icon=ft.Icons.REFRESH_ROUNDED,
+                on_click=lambda _: self._on_refresh(),
+                tooltip="Recargar desde BD",
+                icon_color=colors['text_secondary'],
+            )
+
             self.header_container = ft.Container(
                 content=ft.Row([
                     ft.Column([
@@ -166,12 +177,7 @@ class InventarioView(ft.Container):
                     self._connection_indicator,
                     self._btn_lista_compra,
                     self._btn_lista_compra_active,
-                    ft.IconButton(
-                        icon=ft.Icons.REFRESH_ROUNDED,
-                        on_click=lambda _: self._on_refresh(),
-                        tooltip="Recargar desde BD",
-                        icon_color=colors['text_secondary'],
-                    ),
+                    self._btn_refresh,
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 margin=ft.margin.only(bottom=10),
             )
@@ -249,7 +255,7 @@ class InventarioView(ft.Container):
     def _update_connection_indicator(self):
         from usr.database import get_sync_manager, get_pending_movimientos_count
         from usr.database.base import is_online as base_is_online
-        if not hasattr(self, '_connection_indicator'):
+        if not hasattr(self, '_connection_indicator') or not self.page:
             return
         sync_mgr = get_sync_manager()
         pending = get_pending_movimientos_count()
@@ -263,6 +269,8 @@ class InventarioView(ft.Container):
             self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
         try:
             self._connection_indicator.update()
+        except AssertionError:
+            pass
         except Exception as e:
             show_error("Error updating connection indicator", e, "inventario_view._update_connection_indicator")
 
@@ -493,9 +501,9 @@ class InventarioView(ft.Container):
     def _close_dialog(self, e=None):
         if self.active_dialog:
             self.active_dialog.open = False
+            self.active_dialog = None
             if self.page:
                 self.page.update()
-            self.active_dialog = None
 
     def _toggle_lista_compra(self):
         if not self.page:
@@ -505,11 +513,20 @@ class InventarioView(ft.Container):
             if self._vista_lista_compra_activa:
                 self._btn_lista_compra.visible = False
                 self._btn_lista_compra_active.visible = True
+                # Reciclar botón refresh del header para la lista de compras
+                self._btn_refresh_orig_on_click = self._btn_refresh.on_click
+                self._btn_refresh.on_click = lambda _: self._refresh_compras_lista()
+                self._btn_refresh.tooltip = "Recargar lista de compras"
                 self._build_compras_lista_panel()
                 self._load_compras_lista()
             else:
                 self._btn_lista_compra.visible = True
                 self._btn_lista_compra_active.visible = False
+                # Restaurar botón refresh del header
+                if self._btn_refresh_orig_on_click:
+                    self._btn_refresh.on_click = self._btn_refresh_orig_on_click
+                    self._btn_refresh.tooltip = "Recargar desde BD"
+                    self._btn_refresh_orig_on_click = None
                 self.main_content_area.content = self.categorias_grid
                 if self._categorias_cache:
                     self.categorias_grid.controls = [
@@ -520,10 +537,16 @@ class InventarioView(ft.Container):
             self.update()
         except Exception as ex:
             logger.error(f"Error toggling lista compra: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al cambiar vista de lista de compras", ex)
+            except:
+                pass
 
     def _build_compras_lista_panel(self):
         colors = get_safe_colors(self.page)
-        header = ft.Container(
+        self._compras_header = ft.Container(
             content=ft.Row([
                 ft.IconButton(
                     ft.Icons.ARROW_BACK_ROUNDED,
@@ -538,16 +561,63 @@ class InventarioView(ft.Container):
                     "➕ Agregar", bgcolor=colors['accent'], color="white",
                     on_click=lambda _: self._show_agregar_producto_dialog(),
                 ),
+                ft.IconButton(
+                    ft.Icons.SHARE, icon_size=20, icon_color=colors['success'],
+                    tooltip="Enviar lista a WhatsApp",
+                    on_click=self._enviar_lista_whatsapp,
+                ),
             ]),
             padding=ft.padding.only(bottom=8),
         )
-        self._compras_header = header
         self.search_field.visible = False
+        self.compras_lista_list = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
         self.main_content_area.content = ft.Column(
             [self._compras_header, self.compras_lista_list], expand=True, spacing=5,
         )
 
     def _load_compras_lista(self):
+        items, colors = self._build_compras_lista_data()
+        if items is None:
+            return
+        nuevo_listview = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
+        if not items:
+            nuevo_listview.controls.append(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.SHOPPING_CART_OUTLINED, size=60, color=colors['text_hint']),
+                        ft.Container(height=10),
+                        ft.Text("Lista de compras vacía", color=colors['text_hint'], size=18, weight="bold"),
+                        ft.Container(height=4),
+                        ft.Text("Agrega productos con el botón \"➕ Agregar\"", color=colors['text_secondary'], size=13),
+                    ], horizontal_alignment="center", spacing=0),
+                    expand=True,
+                    alignment=ft.alignment.center,
+                )
+            )
+        else:
+            for cat_name, cat_group in itertools.groupby(items, key=lambda x: x["categoria_nombre"]):
+                cat_items = list(cat_group)
+                nuevo_listview.controls.append(
+                    create_categoria_header(cat_name, cat_items[0].get("categoria_color"), colors)
+                )
+                for item in cat_items:
+                    nuevo_listview.controls.append(
+                        create_compra_lista_card(item, colors, {
+                            'on_corregir': self._show_correccion_dialog,
+                            'on_entrada': self._show_entrada_desde_lista,
+                            'on_eliminar': self._eliminar_de_lista_compra,
+                        })
+                    )
+        self.compras_lista_list = nuevo_listview
+        self.main_content_area.content = ft.Column(
+            [self._compras_header, self.compras_lista_list], expand=True, spacing=5,
+        )
+        self.page.update()
+
+    def _build_compras_lista_data(self):
+        """Lee datos de la BD local y retorna (items, colors)."""
+        if self.page is None:
+            return None, None
         try:
             conn = get_local_conn()
             cursor = conn.cursor()
@@ -563,23 +633,46 @@ class InventarioView(ft.Container):
                     if not producto:
                         continue
                     nombre = producto.get("nombre", "Sin nombre") if isinstance(producto, dict) else getattr(producto, "nombre", "Sin nombre")
+                    es_pesable = producto.get("es_pesable", False) if isinstance(producto, dict) else getattr(producto, "es_pesable", False)
+                    categoria_id = producto.get("categoria_id") if isinstance(producto, dict) else getattr(producto, "categoria_id", None)
+                    cat_info = LocalReplica.get_categoria(categoria_id) if categoria_id else None
+                    categoria_nombre = cat_info.get("nombre", "Sin categoría") if cat_info else "Sin categoría"
+                    categoria_color = cat_info.get("color", "#757575") if cat_info else "#757575"
                     existencias = LocalReplica.get_existencias(producto_id=producto_id)
-                    stock_principal = next((e.get("cantidad", 0) for e in existencias if e.get("almacen") == "principal"), 0)
-                    stock_restaurante = next((e.get("cantidad", 0) for e in existencias if e.get("almacen") == "restaurante"), 0)
+                    stock_principal_row = next((e for e in existencias if e.get("almacen") == "principal"), None)
+                    stock_restaurante_row = next((e for e in existencias if e.get("almacen") == "restaurante"), None)
                     items.append({
                         "id": item_id, "producto_id": producto_id, "nombre": nombre,
-                        "stock_principal": stock_principal, "stock_restaurante": stock_restaurante,
+                        "stock_principal": stock_principal_row["cantidad"] if stock_principal_row else 0,
+                        "stock_principal_unidad": "kg" if es_pesable else (stock_principal_row["unidad"] if stock_principal_row else "unidad"),
+                        "stock_restaurante": stock_restaurante_row["cantidad"] if stock_restaurante_row else 0,
+                        "stock_restaurante_unidad": "kg" if es_pesable else (stock_restaurante_row["unidad"] if stock_restaurante_row else "unidad"),
+                        "categoria_nombre": categoria_nombre,
+                        "categoria_color": categoria_color,
                     })
                 except Exception as ex:
                     logger.error(f"Error cargando item de compras_lista: {ex}")
                     continue
 
+            items.sort(key=lambda x: (x["categoria_nombre"], x["nombre"]))
             self.compras_lista_items = items
-            colors = get_safe_colors(self.page)
-            self.compras_lista_list.controls.clear()
+            return items, get_safe_colors(self.page)
+        except Exception as ex:
+            logger.error(f"Error cargando datos de compras_lista: {ex}")
+            return None, None
 
+    def _show_correccion_dialog(self, item, almacen):
+        show_correccion_dialog(self, item, almacen, on_success=self._refresh_compras_lista)
+
+    def _refresh_compras_lista(self):
+        """Recarga datos y reconstruye la lista de compras con un ListView fresco."""
+        try:
+            items, colors = self._build_compras_lista_data()
+            if items is None or self.page is None:
+                return
+            nuevo_listview = ft.ListView(expand=True, spacing=10, padding=ft.padding.only(top=10))
             if not items:
-                self.compras_lista_list.controls.append(
+                nuevo_listview.controls.append(
                     ft.Container(
                         content=ft.Column([
                             ft.Icon(ft.Icons.SHOPPING_CART_OUTLINED, size=60, color=colors['text_hint']),
@@ -593,30 +686,69 @@ class InventarioView(ft.Container):
                     )
                 )
             else:
-                for item in items:
-                    self.compras_lista_list.controls.append(
-                        create_compra_lista_card(item, colors, {
-                            'on_corregir': self._show_correccion_dialog,
-                            'on_entrada': self._show_entrada_desde_lista,
-                            'on_eliminar': self._eliminar_de_lista_compra,
-                        })
+                for cat_name, cat_group in itertools.groupby(items, key=lambda x: x["categoria_nombre"]):
+                    cat_items = list(cat_group)
+                    nuevo_listview.controls.append(
+                        create_categoria_header(cat_name, cat_items[0].get("categoria_color"), colors)
                     )
-        except Exception as ex:
-            logger.error(f"Error cargando lista de compras: {ex}")
-            colors = get_safe_colors(self.page)
-            self.compras_lista_list.controls.clear()
-            self.compras_lista_list.controls.append(
-                ft.Text(f"Error al cargar: {ex}", color=colors['error'])
+                    for item in cat_items:
+                        nuevo_listview.controls.append(
+                            create_compra_lista_card(item, colors, {
+                                'on_corregir': self._show_correccion_dialog,
+                                'on_entrada': self._show_entrada_desde_lista,
+                                'on_eliminar': self._eliminar_de_lista_compra,
+                            })
+                        )
+            self.compras_lista_list = nuevo_listview
+            self.main_content_area.content = ft.Column(
+                [self._compras_header, self.compras_lista_list], expand=True, spacing=5,
             )
-        if self.page:
+            show_success("🔄 Lista actualizada")
             self.page.update()
+        except Exception as ex:
+            logger.error(f"Error refrescando lista de compras: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al recargar lista de compras", ex)
+            except:
+                pass
 
-    def _show_correccion_dialog(self, item, almacen):
-        show_correccion_dialog(self, item, almacen, on_success=self._refresh_compras_lista)
+    def _enviar_lista_whatsapp(self, e=None):
+        from datetime import date
+        items = getattr(self, 'compras_lista_items', [])
+        if not items:
+            show_warning("La lista de compras está vacía")
+            return
 
-    def _refresh_compras_lista(self):
-        self._build_compras_lista_panel()
-        self._load_compras_lista()
+        lines = [f"📋 *LISTA DE COMPRAS*", f"📅 {date.today().strftime('%d/%m/%Y')}", ""]
+        for cat_name, cat_group in itertools.groupby(items, key=lambda x: x["categoria_nombre"]):
+            lines.append(f"*{cat_name}*")
+            for item in cat_group:
+                p_stock = item['stock_principal']
+                r_stock = item['stock_restaurante']
+                if p_stock > 0:
+                    unid = item["stock_principal_unidad"]
+                    if unid == 'kg':
+                        lines.append(f"• {item['nombre']} (Principal: {p_stock:.2f} kg)")
+                    else:
+                        lines.append(f"• {item['nombre']} (Principal: {int(p_stock)} und)")
+                elif r_stock > 0:
+                    unid = item["stock_restaurante_unidad"]
+                    if unid == 'kg':
+                        lines.append(f"• {item['nombre']} (Restaurante: {r_stock:.2f} kg)")
+                    else:
+                        lines.append(f"• {item['nombre']} (Restaurante: {int(r_stock)} und)")
+                else:
+                    lines.append(f"• {item['nombre']} — NO HAY")
+            lines.append("")
+
+        mensaje = "\n".join(lines)
+        ok = send_whatsapp_message(mensaje)
+        if ok:
+            show_success("Lista enviada a WhatsApp")
+        else:
+            show_warning("Lista encolada para enviar cuando haya conexión")
 
     def _show_entrada_desde_lista(self, item):
         try:
@@ -632,8 +764,12 @@ class InventarioView(ft.Container):
             logger.error(f"Error en entrada desde lista: {ex}")
 
     def _on_entrada_compra_completada(self, item):
-        self._eliminar_de_lista_compra(item["id"])
-        self._item_compra_actual = None
+        try:
+            self._eliminar_de_lista_compra(item["id"])
+        except Exception as ex:
+            logger.error(f"Error en entrada completada: {ex}")
+        finally:
+            self._item_compra_actual = None
 
     def _eliminar_de_lista_compra(self, item_id):
         try:
@@ -649,7 +785,16 @@ class InventarioView(ft.Container):
             show_error_notif(f"Error al eliminar: {ex}")
 
     def _show_agregar_producto_dialog(self):
-        show_agregar_producto_dialog(self)
+        try:
+            show_agregar_producto_dialog(self)
+        except Exception as ex:
+            logger.error(f"Error en diálogo agregar producto: {ex}")
+            import traceback; traceback.print_exc()
+            try:
+                from usr.notifications import show_error_with_copy
+                show_error_with_copy("Error al abrir diálogo de agregar producto", ex)
+            except:
+                pass
 
     def _eliminar_item_req(self, idx, tabla):
         if idx < len(self.lista_requisicion):

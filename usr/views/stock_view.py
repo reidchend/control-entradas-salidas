@@ -374,8 +374,16 @@ class StockView(ft.Container):
             self.list_container.content = self.productos_list
 
         self.total_productos_text.value = str(len(productos))
-        self.stock_bajo_text.value = str(sum(1 for p in productos if 0 < (p.stock_actual or 0) <= (p.stock_minimo or 0)))
-        self.sin_stock_text.value = str(sum(1 for p in productos if (p.stock_actual or 0) <= 0))
+        bajo = 0
+        sin = 0
+        for p in productos:
+            stock_total = sum(existencias_map.get(p.id, {}).values()) or 0
+            if stock_total <= 0:
+                sin += 1
+            elif stock_total <= (p.stock_minimo or 0):
+                bajo += 1
+        self.stock_bajo_text.value = str(bajo)
+        self.sin_stock_text.value = str(sin)
 
         self.productos_list.controls.clear()
         

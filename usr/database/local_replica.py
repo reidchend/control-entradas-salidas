@@ -42,28 +42,28 @@ def init_local_db():
             observaciones TEXT,
             estado TEXT DEFAULT 'Activo',
             created_at TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS productos (
-            id INTEGER PRIMARY KEY,
-            nombre TEXT NOT NULL,
-            codigo TEXT UNIQUE,
-            descripcion TEXT,
-            categoria_id INTEGER,
-            es_pesable INTEGER DEFAULT 0,
-            requiere_foto_peso INTEGER DEFAULT 0,
-            peso_unitario REAL,
-            unidad_medida TEXT DEFAULT 'unidad',
-            stock_actual REAL DEFAULT 0,
-            stock_minimo REAL DEFAULT 0,
-            activo INTEGER DEFAULT 1,
-            created_at TEXT,
-            updated_at TEXT,
-            almacen_predeterminado TEXT DEFAULT 'principal'
-        )
-    """)
+     )
+     """)
+     cursor.execute("""
+         CREATE TABLE IF NOT EXISTS productos (
+             id INTEGER PRIMARY KEY,
+             nombre TEXT NOT NULL,
+             codigo TEXT UNIQUE,
+             descripcion TEXT,
+             categoria_id INTEGER,
+             es_pesable INTEGER DEFAULT 0,
+             requiere_foto_peso INTEGER DEFAULT 0,
+             peso_unitario REAL,
+             unidad_medida TEXT DEFAULT 'unidad',
+             stock_actual REAL DEFAULT 0,
+             stock_minimo REAL DEFAULT 0,
+             activo INTEGER DEFAULT 1,
+             created_at TEXT,
+             updated_at TEXT,
+             almacen_predeterminado TEXT DEFAULT 'principal',
+             tipo TEXT DEFAULT 'ninguno'
+         )
+     """)
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS existencias (
@@ -73,6 +73,17 @@ def init_local_db():
             cantidad REAL DEFAULT 0,
             unidad TEXT DEFAULT 'unidad'
         )
+    """)
+    
+    # Migración: eliminar duplicados en existencias y crear UNIQUE index
+    cursor.execute("""
+        DELETE FROM existencias WHERE id NOT IN (
+            SELECT MIN(id) FROM existencias GROUP BY producto_id, almacen
+        )
+    """)
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_existencias_unique 
+        ON existencias (producto_id, almacen)
     """)
     
     cursor.execute("""
@@ -168,18 +179,6 @@ def init_local_db():
     """)
     
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pending_operations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            table_name TEXT NOT NULL,
-            operation TEXT NOT NULL,
-            record_id INTEGER,
-            data TEXT,
-            created_at TEXT NOT NULL,
-            retries INTEGER DEFAULT 0
-        )
-    """)
-    
-    cursor.execute("""
         CREATE TABLE IF NOT EXISTS dispositivo_usuario (
             id          INTEGER PRIMARY KEY,
             nombre      TEXT    NOT NULL,
@@ -192,6 +191,26 @@ def init_local_db():
         CREATE TABLE IF NOT EXISTS compras_lista (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             producto_id INTEGER NOT NULL,
+            created_at TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS movimientos_archivo (
+            id INTEGER PRIMARY KEY,
+            producto_id INTEGER NOT NULL,
+            factura_id INTEGER,
+            tipo TEXT NOT NULL,
+            cantidad REAL NOT NULL,
+            cantidad_anterior REAL DEFAULT 0,
+            cantidad_nueva REAL DEFAULT 0,
+            peso_total REAL DEFAULT 0,
+            peso_registrado REAL,
+            foto_peso_url TEXT,
+            registrado_por TEXT,
+            observaciones TEXT,
+            almacen TEXT,
+            fecha_movimiento TEXT,
             created_at TEXT
         )
     """)
@@ -212,6 +231,16 @@ def init_local_db():
         )
     """)
     
+    # Índices locales
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_tipo_fecha ON movimientos (tipo, fecha_movimiento DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_producto ON movimientos (producto_id, fecha_movimiento DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_factura ON movimientos (factura_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_sync ON movimientos (sincronizado)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_archivo_tipo_fecha ON movimientos_archivo (tipo, fecha_movimiento DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_archivo_producto ON movimientos_archivo (producto_id, fecha_movimiento DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_archivo_factura ON movimientos_archivo (factura_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_lista_producto ON compras_lista (producto_id)")
+
     conn.commit()
     conn.close()
 
@@ -294,6 +323,16 @@ class LocalReplica:
         conn.close()
         
         return [dict(row) for row in rows]
+
+    @staticmethod
+    def get_categoria(categoria_id: int) -> Optional[Dict]:
+        """Obtiene una categoría por ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM categorias WHERE id = ?", (categoria_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
     
     # ==================== PROVEEDORES ====================
     
@@ -385,24 +424,25 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-        for prod in productos:
-            cursor.execute("""
-                INSERT OR REPLACE INTO productos 
-                (id, nombre, codigo, descripcion, categoria_id, es_pesable, 
-                 requiere_foto_peso, peso_unitario, unidad_medida, stock_actual, 
-                 stock_minimo, activo, created_at, updated_at, almacen_predeterminado)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                prod.get('id'), prod.get('nombre'), prod.get('codigo'),
-                prod.get('descripcion'), prod.get('categoria_id'),
-                1 if prod.get('es_pesable') else 0,
-                1 if prod.get('requiere_foto_peso') else 0,
-                prod.get('peso_unitario'), prod.get('unidad_medida', 'unidad'),
-                prod.get('stock_actual', 0), prod.get('stock_minimo', 0),
-                1 if prod.get('activo', True) else 0,
-                prod.get('created_at'), prod.get('updated_at'),
-                prod.get('almacen_predeterminado', 'principal')
-            ))
+         for prod in productos:
+             cursor.execute("""
+                 INSERT OR REPLACE INTO productos 
+                  (id, nombre, codigo, descripcion, categoria_id, es_pesable, 
+                   requiere_foto_peso, peso_unitario, unidad_medida, stock_actual, 
+                   stock_minimo, activo, created_at, updated_at, almacen_predeterminado, tipo)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             """, (
+                 prod.get('id'), prod.get('nombre'), prod.get('codigo'),
+                 prod.get('descripcion'), prod.get('categoria_id'),
+                 1 if prod.get('es_pesable') else 0,
+                 1 if prod.get('requiere_foto_peso') else 0,
+                 prod.get('peso_unitario'), prod.get('unidad_medida', 'unidad'),
+                 prod.get('stock_actual', 0), prod.get('stock_minimo', 0),
+                 1 if prod.get('activo', True) else 0,
+                 prod.get('created_at'), prod.get('updated_at'),
+                 prod.get('almacen_predeterminado', 'principal'),
+                 prod.get('tipo', 'ninguno')
+             ))
         
         conn.commit()
         conn.close()
@@ -515,9 +555,15 @@ class LocalReplica:
             unidad = result['unidad'] if result and result['unidad'] else 'unidad'
         
         cursor.execute("""
-            INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
-            VALUES (?, ?, ?, ?)
-        """, (producto_id, almacen, cantidad, unidad))
+            UPDATE existencias SET cantidad = ?, unidad = ? 
+            WHERE producto_id = ? AND almacen = ?
+        """, (cantidad, unidad, producto_id, almacen))
+        
+        if cursor.rowcount == 0:
+            cursor.execute("""
+                INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
+                VALUES (?, ?, ?, ?)
+            """, (producto_id, almacen, cantidad, unidad))
         
         conn.commit()
         conn.close()
@@ -577,42 +623,6 @@ class LocalReplica:
         conn.close()
         
         movimiento['id'] = last_id
-        
-        if skip_sync:
-            return last_id
-        
-        sync_mgr = get_sync_manager()
-        if sync_mgr and sync_mgr.check_connection():
-            try:
-                from sqlalchemy import text
-                from sqlalchemy import create_engine
-                
-                remote_engine = create_engine(settings.DATABASE_URL)
-                
-                mov_clean = {k: v for k, v in movimiento.items() 
-                           if k not in ('sincronizado', 'created_at', 'id')}
-                
-                with remote_engine.connect() as conn:
-                    cols = ", ".join(mov_clean.keys())
-                    vals = ", ".join([f":{k}" for k in mov_clean.keys()])
-                    sql = text(f"INSERT INTO movimientos ({cols}) VALUES ({vals})")
-                    conn.execute(sql, mov_clean)
-                    conn.commit()
-                    print(f"[SYNC] Movimiento {last_id} subido inmediatamente")
-                
-                remote_engine.dispose()
-                
-                conn = get_local_conn()
-                cursor = conn.cursor()
-                cursor.execute("UPDATE movimientos SET sincronizado = 1 WHERE id = ?", (last_id,))
-                conn.commit()
-                conn.close()
-                
-                return last_id
-            except Exception as e:
-                print(f"[SYNC] Error sync inmediato: {e}")
-                print("[SYNC] Movimiento queda en cola local con sincronizado=0 para reintento automático")
-        
         return last_id
     
     @staticmethod
@@ -928,7 +938,92 @@ class LocalReplica:
         conn.commit()
         conn.close()
     
-# ==================== METADATOS DE SYNC ====================
+    # ==================== MOVIMIENTOS ARCHIVO ====================
+
+    @staticmethod
+    def clear_movimientos_archivo() -> None:
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM movimientos_archivo")
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def save_movimientos_archivo(movimientos: List[Dict]) -> None:
+        if not movimientos:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        valid_keys = ['id', 'producto_id', 'factura_id', 'tipo', 'cantidad',
+                      'cantidad_anterior', 'cantidad_nueva', 'peso_total',
+                      'peso_registrado', 'foto_peso_url', 'registrado_por',
+                      'observaciones', 'almacen', 'fecha_movimiento', 'created_at']
+        inserted = 0
+        for chunk in [movimientos[i:i+100] for i in range(0, len(movimientos), 100)]:
+            for mov in chunk:
+                mov_id = mov.get('id')
+                cursor.execute("SELECT id FROM movimientos_archivo WHERE id = ?", (mov_id,))
+                if cursor.fetchone():
+                    continue
+                values = [mov.get(k) for k in valid_keys]
+                cols = ','.join(valid_keys)
+                ph = ','.join(['?' for _ in valid_keys])
+                cursor.execute(f"INSERT INTO movimientos_archivo ({cols}) VALUES ({ph})", values)
+                inserted += 1
+        conn.commit()
+        conn.close()
+        print(f"[SYNC] Movimientos archivo guardados: {inserted}")
+
+    @staticmethod
+    def get_movimientos_archivo(producto_id: int = None) -> List[Dict]:
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        if producto_id:
+            cursor.execute(
+                "SELECT * FROM movimientos_archivo WHERE producto_id = ? ORDER BY fecha_movimiento DESC",
+                (producto_id,)
+            )
+        else:
+            cursor.execute("SELECT * FROM movimientos_archivo ORDER BY fecha_movimiento DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def insert_movimiento_archivo(mov: Dict) -> None:
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO movimientos_archivo
+            (id, producto_id, factura_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
+             peso_total, peso_registrado, foto_peso_url, registrado_por, observaciones,
+             almacen, fecha_movimiento, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            mov.get('id'), mov.get('producto_id'), mov.get('factura_id'),
+            mov.get('tipo'), mov.get('cantidad'), mov.get('cantidad_anterior', 0),
+            mov.get('cantidad_nueva', 0), mov.get('peso_total', 0),
+            mov.get('peso_registrado'), mov.get('foto_peso_url'),
+            mov.get('registrado_por'), mov.get('observaciones'),
+            mov.get('almacen'), mov.get('fecha_movimiento'), mov.get('created_at')
+        ))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def delete_movimiento_archivo_older_than(fecha_limite: str) -> int:
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM movimientos_archivo WHERE fecha_movimiento < ?",
+            (fecha_limite,)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
+    # ==================== METADATOS DE SYNC ====================
     # Delegamos en sync_queue.py para mantener un solo source of truth
     
     def set_last_sync(key: str, timestamp: str = None) -> None:
@@ -937,60 +1032,6 @@ class LocalReplica:
     def get_last_sync(key: str) -> Optional[str]:
         return SyncQueue.get_last_sync()
     
-    # ==================== OPERACIONES PENDIENTES ====================
-    
-    @staticmethod
-    def add_pending_operation(table_name: str, operation: str, record_id: int, data: Dict) -> None:
-        """Agrega una operación pendiente de sincronización."""
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO pending_operations (table_name, operation, record_id, data, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            table_name, operation, record_id, json.dumps(data, default=str),
-            datetime.now().isoformat()
-        ))
-        
-        conn.commit()
-        conn.close()
-    
-    @staticmethod
-    def get_pending_operations() -> List[Dict]:
-        """Obtiene todas las operaciones pendientes."""
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM pending_operations ORDER BY created_at")
-        rows = cursor.fetchall()
-        conn.close()
-        
-        return [dict(row) for row in rows]
-    
-    @staticmethod
-    def clear_pending_operation(operation_id: int) -> None:
-        """Elimina una operación pendiente."""
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM pending_operations WHERE id = ?", (operation_id,))
-        
-        conn.commit()
-        conn.close()
-    
-    @staticmethod
-    def get_pending_count() -> int:
-        """Retorna el número de operaciones pendientes."""
-        conn = get_local_conn()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) as count FROM pending_operations")
-        row = cursor.fetchone()
-        conn.close()
-        
-        return row['count'] if row else 0
-
     @staticmethod
     def get_usuario_dispositivo() -> dict | None:
         """Devuelve el usuario registrado en este dispositivo, o None."""

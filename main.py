@@ -480,6 +480,17 @@ async def main(page: ft.Page):
         else:
             status_text.value = " Modo offline"
         page.update()
+
+        # Archivado automático - ejecutar el primer día de cada mes
+        from datetime import date as dt_date
+        if dt_date.today().day == 1:
+            try:
+                from usr.database.archive import archivar_movimientos
+                await asyncio.to_thread(archivar_movimientos)
+                status_text.value = "✓ Archivado mensual completado"
+                page.update()
+            except Exception as e:
+                print(f"Error en archivado mensual: {e}")
         
         await asyncio.sleep(0.5)
         

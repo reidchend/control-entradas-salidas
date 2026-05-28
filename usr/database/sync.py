@@ -97,13 +97,17 @@ class SyncManager:
         print("[SYNC] Iniciando sincronización completa...")
         
         try:
-            # Subir pendientes a Supabase
-            self._upload_pending_movimientos()
-            
-            # Procesar cola de sync (facturas, productos, etc.)
+            # 1. Procesar cola de sync primero (facturas, pagos, etc.)
+            #    Las facturas deben existir en Supabase antes de que los movimientos
+            #    intenten referenciarlas via factura_id.
             self._process_sync_queue()
             
-            # Descargar del servidor
+            # 2. Subir movimientos pendientes (sincronizado=0)
+            #    Ahora las facturas ya existen en Supabase y podemos resolver
+            #    factura_id local → remoto via numero_factura.
+            self._upload_pending_movimientos()
+            
+            # 3. Descargar del servidor para alinear IDs
             self._download_all_from_server()
             
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
@@ -137,6 +141,7 @@ class SyncManager:
     
     def _upload_pending_movimientos(self) -> int:
         from .local_replica import LocalReplica
+        from .conn import get_local_conn
         from sqlalchemy import create_engine
         from config.config import get_settings
 
@@ -154,7 +159,30 @@ class SyncManager:
                 for mov in pending_movimientos:
                     try:
                         mov_id = mov.get('id')
-                        factura_id = mov.get('factura_id')
+                        local_factura_id = mov.get('factura_id')
+
+                        # Resolver factura_id local → remoto via numero_factura
+                        remote_factura_id = None
+                        if local_factura_id:
+                            try:
+                                local_conn = get_local_conn()
+                                cur = local_conn.cursor()
+                                cur.execute(
+                                    "SELECT numero_factura FROM facturas WHERE id = ?",
+                                    (local_factura_id,)
+                                )
+                                row = cur.fetchone()
+                                local_conn.close()
+                                if row:
+                                    num_fact = row['numero_factura']
+                                    result = conn.execute(
+                                        text("SELECT id FROM facturas WHERE numero_factura = :num"),
+                                        {'num': num_fact}
+                                    ).fetchone()
+                                    if result:
+                                        remote_factura_id = result[0]
+                            except Exception as ex:
+                                print(f"[SYNC] Error resolviendo factura_id {local_factura_id}: {ex}")
 
                         # Buscar si el movimiento ya existe en Supabase por campos clave
                         match = conn.execute(text("""
@@ -172,17 +200,17 @@ class SyncManager:
 
                         if match:
                             remote_mov_id = match[0]
-                            if factura_id:
+                            if remote_factura_id:
                                 conn.execute(
                                     text("UPDATE movimientos SET factura_id = :fid WHERE id = :id"),
-                                    {'fid': factura_id, 'id': remote_mov_id}
+                                    {'fid': remote_factura_id, 'id': remote_mov_id}
                                 )
                                 conn.commit()
-                                print(f"[SYNC] Movimiento {mov_id} → factura_id={factura_id} actualizado en Supabase (ID remoto: {remote_mov_id})")
+                                print(f"[SYNC] Movimiento {mov_id} → factura_id={remote_factura_id} (remoto) actualizado (ID remoto: {remote_mov_id})")
                         else:
                             mov_data = {
                                 'producto_id': mov.get('producto_id'),
-                                'factura_id': factura_id,
+                                'factura_id': remote_factura_id,
                                 'tipo': mov.get('tipo'),
                                 'cantidad': mov.get('cantidad'),
                                 'cantidad_anterior': mov.get('cantidad_anterior', 0),
@@ -199,6 +227,12 @@ class SyncManager:
                             placeholders = ", ".join([f":{k}" for k in mov_data.keys()])
                             conn.execute(text(f"INSERT INTO movimientos ({columns}) VALUES ({placeholders})"), mov_data)
                             conn.commit()
+
+                        # Si el movimiento tiene factura_id pero no se pudo resolver
+                        # el ID remoto, no lo marcamos como sincronizado para reintentar
+                        if local_factura_id and not remote_factura_id:
+                            print(f"[SYNC] Movimiento {mov_id} postergado: factura_id={local_factura_id} no resuelto en Supabase")
+                            continue
 
                         LocalReplica.mark_movimiento_sincronizado(mov_id)
                         synced_count += 1
@@ -238,7 +272,8 @@ class SyncManager:
             ('movimientos', 'movimientos'), 
             ('facturas', 'facturas'), 
             ('factura_pagos', 'factura_pagos'),
-            ('requisiciones', 'requisiciones')
+            ('requisiciones', 'requisiciones'),
+            ('movimientos_archivo', 'movimientos_archivo')
         ]
         
         from sqlalchemy import create_engine
@@ -272,6 +307,9 @@ class SyncManager:
                         LocalReplica.save_factura_pagos(data)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
+                    elif local_table == 'movimientos_archivo':
+                        LocalReplica.clear_movimientos_archivo()
+                        LocalReplica.save_movimientos_archivo(data)
                     
                     print(f"[SYNC] {len(data)} {local_table} baixats")
                 except Exception as e:
@@ -314,11 +352,11 @@ class SyncManager:
         while not self._stop_event.is_set():
             try:
                 if self.check_connection():
-                    # Subir movimientos pendientes (sincronizado=0)
-                    self._upload_pending_movimientos()
-                    # Subir pendientes de la cola
+                    # 1. Procesar cola de sync primero (facturas deben existir en Supabase)
                     self._process_sync_queue()
-                    # Descargar cambios del servidor
+                    # 2. Subir movimientos pendientes (pueden referenciar facturas ya subidas)
+                    self._upload_pending_movimientos()
+                    # 3. Descargar cambios del servidor
                     self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
@@ -436,21 +474,22 @@ class SyncManager:
                         vals = None  # Inicializar
                         
                         if has_codigo:
-                            vals = {
-                                'nombre': data.get('nombre'),
-                                'codigo': data.get('codigo'),
-                                'descripcion': data.get('descripcion', ''),
-                                'categoria_id': int(data.get('categoria_id')) if data.get('categoria_id') else None,
-                                'es_pesable': data.get('es_pesable', 0),
-                                'requiere_foto_peso': data.get('requiere_foto_peso', 0),
-                                'peso_unitario': float(data.get('peso_unitario', 0)),
-                                'unidad_medida': data.get('unidad_medida', 'unidad'),
-                                'stock_actual': float(data.get('stock_actual', 0)),
-                                'stock_minimo': float(data.get('stock_minimo', 0)),
-                                'activo': data.get('activo', 1),
-                                'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
-                                'updated_at': data.get('updated_at')
-                            }
+                         vals = {
+                                 'nombre': data.get('nombre'),
+                                 'codigo': data.get('codigo'),
+                                 'descripcion': data.get('descripcion', ''),
+                                 'categoria_id': int(data.get('categoria_id')) if data.get('categoria_id') else None,
+                                 'es_pesable': data.get('es_pesable', 0),
+                                 'requiere_foto_peso': data.get('requiere_foto_peso', 0),
+                                 'peso_unitario': float(data.get('peso_unitario', 0)),
+                                 'unidad_medida': data.get('unidad_medida', 'unidad'),
+                                 'stock_actual': float(data.get('stock_actual', 0)),
+                                 'stock_minimo': float(data.get('stock_minimo', 0)),
+                                 'activo': data.get('activo', 1),
+                                 'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
+                                 'tipo': data.get('tipo', 'ninguno'),
+                                 'updated_at': data.get('updated_at')
+                             }
                             
                             # Upsert por código
                             check_sql = text("SELECT id FROM productos WHERE codigo = :codigo")
@@ -571,14 +610,8 @@ class SyncManager:
                         
                         conn.commit()
                         
-                        mov_ids = data.get('movimiento_ids', [])
-                        for mov_id in mov_ids:
-                            conn.execute(
-                                text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
-                                {'factura_id': remote_id, 'id': mov_id}
-                            )
-                        if mov_ids:
-                            conn.commit()
+                        # Los movimientos se vinculan via _upload_pending_movimientos()
+                        # que resuelve factura_id local → remoto por numero_factura
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1

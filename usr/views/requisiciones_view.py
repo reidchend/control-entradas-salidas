@@ -112,10 +112,7 @@ class RequisicionesView(ft.Container):
         ], expand=True, spacing=0)
         self.content.bgcolor = colors['bg']
         
-        # Test: Añadir algo visible si la lista está vacía
-        self.requisiciones_list.controls.append(ft.Text("PRUEBA DE LISTA", color=ft.Colors.RED))
-        
-        self.update() 
+        self.update()
         self._load_requisiciones()
     def did_mount(self):
         try:
@@ -143,9 +140,7 @@ class RequisicionesView(ft.Container):
         try:
             reqs = db.query(Requisicion).order_by(Requisicion.fecha_creacion.desc()).all()
             
-            # Limpiar y añadir algo fijo para probar renderizado
             self.requisiciones_list.controls.clear()
-            self.requisiciones_list.controls.append(ft.Container(content=ft.Text("PRUEBA DE DATOS", color=ft.Colors.WHITE), bgcolor=ft.Colors.BLUE, padding=20))
             
             if not reqs:
                 colors = _colors(self.page)
@@ -373,8 +368,6 @@ class RequisicionesView(ft.Container):
         def on_confirmar(e):
             if not productos_container.controls:
                 show_warning("Agregue al menos un producto")
-                self.page.overlay.append(snack)
-                snack.open = True
                 self.page.update()
                 return
             
@@ -459,15 +452,11 @@ class RequisicionesView(ft.Container):
                 self._load_requisiciones()
                 
                 show_success(f"{origen} → {destino}")
-                self.page.overlay.append(snack)
-                snack.open = True
                 self.page.update()
             except Exception as ex:
                 db.rollback()
                 logger.error(f"Error creando requisición: {ex}")
                 show_error(f"Error: {ex}")
-                self.page.overlay.append(snack)
-                snack.open = True
                 self.page.update()
             is_mobile = self.page.width < 700 if self.page else False
         
@@ -550,8 +539,6 @@ class RequisicionesView(ft.Container):
         colors = _colors(self.page)
         if req.estado == "completada":
             show_warning("No se puede editar una requisición completada")
-            self.page.overlay.append(snack)
-            snack.open = True
             self.page.update()
             return
         
@@ -1110,53 +1097,6 @@ class RequisicionesView(ft.Container):
             )
         
         container.update()
-        db = next(get_db_adaptive())
-        try:
-            query = db.query(Producto).filter(Producto.activo == True)
-            if texto:
-                query = query.filter(Producto.nombre.ilike(f"%{texto}%"))
-            resultados = query.limit(30).all()
-        finally:
-            db.close()
-        
-        colors = _colors(self.page)
-        container.controls.clear()
-        
-        for p in resultados:
-            es_pesable = getattr(p, 'es_pesable', False)
-            badge = ft.Container(
-                content=ft.Text("PESABLE", size=9, color="white", weight="bold"),
-                bgcolor=colors['warning'],
-                padding=ft.padding.symmetric(horizontal=4, vertical=1),
-                border_radius=3,
-            ) if es_pesable else ft.Container()
-            
-            container.controls.append(
-                ft.Container(
-                    content=ft.Row([
-                        ft.Column([
-                            ft.Text(p.nombre, weight="bold", size=13, color=colors['text_primary']),
-                            ft.Row([
-                                ft.Text(f"Unidad: {p.unidad_medida or 'uds'}", size=11, color=colors['text_secondary']),
-                                badge,
-                            ], spacing=5),
-                        ], expand=True),
-                        ft.IconButton(
-                            ft.Icons.ADD_CIRCLE,
-                            icon_color=colors['success'],
-                            on_click=lambda _, prod=p: self._agregar_producto_req(prod),
-                        ),
-                    ], spacing=10),
-                    padding=10,
-                    bgcolor=colors['card'],
-                    border_radius=8,
-                )
-            )
-        
-        if not resultados and texto:
-            container.controls.append(ft.Text("Sin resultados", color=colors['text_secondary']))
-        
-        container.update()
 
     def _agregar_producto_req(self, producto):
         """Agrega un producto con diálogo de cantidad"""
@@ -1246,8 +1186,6 @@ class RequisicionesView(ft.Container):
                 self._bs_buscador.open = False
             
             show_success(f"+ {producto.nombre}")
-            self.page.overlay.append(snack)
-            snack.open = True
             self.page.update()
         
         dialog = ft.AlertDialog(
@@ -1324,8 +1262,6 @@ class RequisicionesView(ft.Container):
     def _crear_requisicion_vista(self, origen_dropdown, destino_dropdown, observaciones):
         if not self.lista_productos_req:
             show_warning("Agregue al menos un producto")
-            self.page.overlay.append(snack)
-            snack.open = True
             self.page.update()
             return
         
