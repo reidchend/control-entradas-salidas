@@ -786,9 +786,16 @@ class InventarioView(ft.Container):
 
     def _show_agregar_producto_dialog(self):
         try:
-            show_agregar_producto_dialog(self)
+            # Delegar a la vista de requisiciones para mantener consistencia
+            if hasattr(self, 'app_controller') and self.app_controller:
+                # Navegar a la vista de crear requisición
+                self.app_controller.mostrar_vista(3)  # Índice de requisiciones
+                # Alternativamente, podríamos llamar directamente al método si está disponible
+                # pero por ahora usamos la navegación estándar
+            else:
+                logger.warning("App controller no disponible para mostrar vista de requisiciones")
         except Exception as ex:
-            logger.error(f"Error en diálogo agregar producto: {ex}")
+            logger.error(f"Error al intentar mostrar vista de requisiciones: {ex}")
             import traceback; traceback.print_exc()
             try:
                 from usr.notifications import show_error_with_copy

@@ -44,7 +44,7 @@ def init_local_db():
             created_at TEXT
      )
      """)
-     cursor.execute("""
+    cursor.execute("""
          CREATE TABLE IF NOT EXISTS productos (
              id INTEGER PRIMARY KEY,
              nombre TEXT NOT NULL,
@@ -424,7 +424,7 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
         
-         for prod in productos:
+        for prod in productos:
              cursor.execute("""
                  INSERT OR REPLACE INTO productos 
                   (id, nombre, codigo, descripcion, categoria_id, es_pesable, 

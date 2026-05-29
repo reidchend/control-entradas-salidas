@@ -474,7 +474,7 @@ class SyncManager:
                         vals = None  # Inicializar
                         
                         if has_codigo:
-                         vals = {
+                            vals = {
                                  'nombre': data.get('nombre'),
                                  'codigo': data.get('codigo'),
                                  'descripcion': data.get('descripcion', ''),
