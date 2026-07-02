@@ -253,13 +253,18 @@ class SyncManager:
                     rows = result.fetchall()
                     data = [dict_to_serializable(dict(row._mapping)) for row in rows]
                     
+                    remote_ids = [r['id'] for r in data if r.get('id') is not None]
+                    
                     # Usar INSERT OR REPLACE para no perder datos locales sin sincronizar
                     if local_table == 'categorias':
                         LocalReplica.save_categorias(data)
+                        LocalReplica.delete_orphaned_records('categorias', remote_ids, 'nombre')
                     elif local_table == 'productos':
                         LocalReplica.save_productos(data)
+                        LocalReplica.delete_orphaned_records('productos', remote_ids, 'codigo')
                     elif local_table == 'proveedores':
                         LocalReplica.save_proveedores(data)
+                        LocalReplica.delete_orphaned_records('proveedores', remote_ids, 'nombre')
                     elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
                     elif local_table == 'movimientos':
@@ -268,10 +273,13 @@ class SyncManager:
                         LocalReplica.save_movimientos(data)
                     elif local_table == 'facturas':
                         LocalReplica.save_facturas(data)
+                        LocalReplica.delete_orphaned_records('facturas', remote_ids, 'numero_factura')
                     elif local_table == 'factura_pagos':
                         LocalReplica.save_factura_pagos(data)
+                        LocalReplica.delete_orphaned_records('factura_pagos', remote_ids)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
+                        LocalReplica.delete_orphaned_records('requisiciones', remote_ids, 'numero')
                     
                     print(f"[SYNC] {len(data)} {local_table} baixats")
                 except Exception as e:
@@ -448,6 +456,7 @@ class SyncManager:
                                 'stock_actual': float(data.get('stock_actual', 0)),
                                 'stock_minimo': float(data.get('stock_minimo', 0)),
                                 'activo': data.get('activo', 1),
+                                'tipo': data.get('tipo'),
                                 'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
                                 'updated_at': data.get('updated_at')
                             }

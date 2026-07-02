@@ -38,6 +38,15 @@ def _c(page, color_name):
     return mapping.get(color_name, colors['text_primary'])
 
 
+def _get_tipo_label(tipo):
+    labels = {
+        "PRODUCTO PARA USO INTERNO": "Uso Interno",
+        "PRODUCTOS PARA LA VENTA": "Venta",
+        "INSUMOS": "Insumo",
+    }
+    return labels.get(tipo)
+
+
 class ConfiguracionView(ft.Container):
     def __init__(self):
         super().__init__()
@@ -414,6 +423,21 @@ class ConfiguracionView(ft.Container):
                 read_only=not producto,
             )
             
+            tipo_options = [
+                ft.dropdown.Option("PRODUCTO PARA USO INTERNO", "Producto Uso Interno"),
+                ft.dropdown.Option("PRODUCTOS PARA LA VENTA", "Productos para la Venta"),
+                ft.dropdown.Option("INSUMOS", "Insumos"),
+            ]
+            tipo_dropdown = ft.Dropdown(
+                label="Tipo de Producto",
+                options=tipo_options,
+                value=getattr(producto, 'tipo', 'PRODUCTOS PARA LA VENTA') if producto else "PRODUCTOS PARA LA VENTA",
+                expand=True,
+                border=ft.InputBorder.OUTLINE,
+                border_radius=10,
+                prefix_icon=ft.Icons.CATEGORY_OUTLINED,
+            )
+            
             cat_options = [ft.dropdown.Option(str(c.id), c.nombre) for c in categorias]
             cat_dropdown = ft.Dropdown(
                 label="Categoría",
@@ -477,6 +501,7 @@ class ConfiguracionView(ft.Container):
                         float(stock_min_field.value or 0), 
                         activo_sw.value, 
                         producto.id if producto else None, 
+                        tipo_dropdown.value,
                         es_pesable_sw.value
                     )
                     show_success("Producto guardado correctamente")
@@ -492,6 +517,7 @@ class ConfiguracionView(ft.Container):
                 content_column = ft.Column([
                     nombre_field,
                     codigo_field,
+                    tipo_dropdown,
                     cat_dropdown,
                     stock_min_field,
                     unidad_field,
@@ -502,6 +528,7 @@ class ConfiguracionView(ft.Container):
             else:
                 content_column = ft.Column([
                     ft.Row([nombre_field, codigo_field], spacing=15),
+                    tipo_dropdown,
                     cat_dropdown,
                     ft.Row([stock_min_field, unidad_field], spacing=15),
                     ft.Divider(height=20, color=colors['border']),
@@ -577,7 +604,7 @@ class ConfiguracionView(ft.Container):
         self._close_dialog()
         self._load_data()
 
-    def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False):
+    def _save_producto(self, n, c, d, cat_id, rf, pu, u, sm, a, p_id, tipo, es_p=False):
         from datetime import datetime
         from usr.database.sync_queue import get_sync_queue
         
@@ -593,6 +620,7 @@ class ConfiguracionView(ft.Container):
             "stock_actual": 0,
             "unidad_medida": str(u) if u else "unidad",
             "activo": 1 if a else 0,
+            "tipo": tipo,
             "es_pesable": 1 if es_p else 0,
             "almacen_predeterminado": "principal",
             "updated_at": datetime.now().isoformat()
@@ -945,7 +973,7 @@ class ConfiguracionView(ft.Container):
                             tag if tag else ft.Container(),
                         ], spacing=8),
                         ft.Text(
-                            f"Cat: {p.categoria.nombre if p.categoria else 'N/A'} • SKU: {p.codigo}",
+                            f"{_get_tipo_label(p.tipo) or 'Sin tipo'} • Cat: {p.categoria.nombre if p.categoria else 'N/A'} • SKU: {p.codigo}",
                             size=11, 
                             color=colors['text_secondary'],
                         ),

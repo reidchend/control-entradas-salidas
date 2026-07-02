@@ -7,3 +7,4 @@ python-dotenv
 SQLAlchemy
 certifi
 google-genai>=2.0.0
+openpyxl

@@ -59,11 +59,18 @@ def init_local_db():
             stock_actual REAL DEFAULT 0,
             stock_minimo REAL DEFAULT 0,
             activo INTEGER DEFAULT 1,
+            tipo TEXT,
             created_at TEXT,
             updated_at TEXT,
             almacen_predeterminado TEXT DEFAULT 'principal'
         )
     """)
+    
+    # Migración: agregar columna tipo a productos si no existe
+    try:
+        cursor.execute("ALTER TABLE productos ADD COLUMN tipo TEXT")
+    except Exception:
+        pass  # Ya existe
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS existencias (
@@ -390,8 +397,8 @@ class LocalReplica:
                 INSERT OR REPLACE INTO productos 
                 (id, nombre, codigo, descripcion, categoria_id, es_pesable, 
                  requiere_foto_peso, peso_unitario, unidad_medida, stock_actual, 
-                 stock_minimo, activo, created_at, updated_at, almacen_predeterminado)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 stock_minimo, activo, tipo, created_at, updated_at, almacen_predeterminado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 prod.get('id'), prod.get('nombre'), prod.get('codigo'),
                 prod.get('descripcion'), prod.get('categoria_id'),
@@ -400,6 +407,7 @@ class LocalReplica:
                 prod.get('peso_unitario'), prod.get('unidad_medida', 'unidad'),
                 prod.get('stock_actual', 0), prod.get('stock_minimo', 0),
                 1 if prod.get('activo', True) else 0,
+                prod.get('tipo'),
                 prod.get('created_at'), prod.get('updated_at'),
                 prod.get('almacen_predeterminado', 'principal')
             ))
@@ -1037,6 +1045,58 @@ class LocalReplica:
         
         return row and row['pin_hash'] == pin_hash
     
+    @staticmethod
+    def delete_orphaned_records(table_name: str, remote_ids: List[int], key_column: str = None) -> int:
+        """
+        Elimina registros locales que no están en la lista de IDs remotos
+        y no están pendientes de sincronización en la cola.
+        """
+        if not remote_ids:
+            return 0
+        
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        
+        import json
+        
+        # 1. Obtener valores clave de la cola de sync pendientes para esta tabla
+        cursor.execute("SELECT data FROM sync_queue WHERE table_name = ? AND status = 'pending'", (table_name,))
+        pending_rows = cursor.fetchall()
+        
+        pending_keys = []
+        if key_column:
+            for row in pending_rows:
+                try:
+                    p_data = json.loads(row[0])
+                    if key_column in p_data:
+                        pending_keys.append(p_data[key_column])
+                except:
+                    pass
+        
+        # 2. Construir la consulta de eliminación
+        placeholders = ','.join(['?' for _ in remote_ids])
+        query = f"DELETE FROM {table_name} WHERE id NOT IN ({placeholders})"
+        params = list(remote_ids)
+        
+        if key_column and pending_keys:
+            key_placeholders = ','.join(['?' for _ in pending_keys])
+            query += f" AND {key_column} NOT IN ({key_placeholders})"
+            params.extend(pending_keys)
+            
+        cursor.execute(query, params)
+        deleted = cursor.rowcount
+        
+        # Caso especial para requisiciones: también eliminar detalles huérfanos
+        if table_name == 'requisiciones':
+            cursor.execute(f"DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN ({placeholders})", list(remote_ids))
+            
+        conn.commit()
+        conn.close()
+        
+        if deleted > 0:
+            print(f"[SYNC] {deleted} registros huérfanos eliminados de la tabla local '{table_name}'")
+        return deleted
+
     @staticmethod
     def eliminar_usuario_dispositivo() -> None:
         """Resetea el usuario (para cambio de operador)."""

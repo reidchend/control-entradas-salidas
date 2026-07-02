@@ -209,7 +209,9 @@ class InventarioView(ft.Container):
         self.page.run_task(self._load_categorias, True)
         if self.categoria_seleccionada:
             self._load_productos()
-        self.page.overlay.clear()
+        for control in self.page.overlay[:]:
+            if isinstance(control, ft.SnackBar):
+                self.page.overlay.remove(control)
         snack = ft.SnackBar(
             content=ft.Text("🔄 Actualizando..."),
             bgcolor=ft.Colors.BLUE_600, duration=1,
@@ -494,6 +496,10 @@ class InventarioView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             if self.page:
+                try:
+                    self.page.overlay.remove(self.active_dialog)
+                except ValueError:
+                    pass
                 self.page.update()
             self.active_dialog = None
 

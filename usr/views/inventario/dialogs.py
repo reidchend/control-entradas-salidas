@@ -181,7 +181,7 @@ def show_cantidad_dialog(view, producto, tipo, on_success=None):
         actions_alignment="space-between",
     )
 
-    view.page.overlay.clear()
+    view._close_dialog()
     view.page.overlay.append(dialog)
     view.active_dialog = dialog
     dialog.open = True
@@ -280,7 +280,7 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
         actions_alignment="space-between",
     )
 
-    view.page.overlay.clear()
+    view._close_dialog()
     view.page.overlay.append(dialog)
     view.active_dialog = dialog
     dialog.open = True
@@ -361,7 +361,7 @@ def show_agregar_producto_dialog(view):
         actions_alignment="end",
     )
 
-    view.page.overlay.clear()
+    view._close_dialog()
     view.page.overlay.append(dialog)
     view.active_dialog = dialog
     dialog.open = True

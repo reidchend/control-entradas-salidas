@@ -27,6 +27,7 @@ class Producto(Base):
     stock_minimo = Column(Float, default=0)
     
     activo = Column(Boolean, default=True)
+    tipo = Column(String(100), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
