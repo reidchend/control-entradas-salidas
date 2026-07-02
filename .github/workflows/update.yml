@@ -1,0 +1,50 @@
+name: Auto-Update App Logic
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'version.json'
+      - 'update.zip'
+      - '.github/**'
+
+jobs:
+  build-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Update Zip
+        run: |
+          zip -r update.zip usr config
+
+      - name: Update version.json
+        run: |
+          # Generar versión basada en timestamp para evitar colisiones
+          TIMESTAMP=$(date +'%Y%m%d_%H%M')
+          VERSION="1.0.0_$TIMESTAMP"
+          
+          # URL del raw content de GitHub (cambiar TU_USUARIO y TU_REPO dinámicamente)
+          USER=$(git config user.name | cut -d' ' -f1)
+          REPO=$(basename $(git rev-parse --show-toplevel))
+          
+          # Si el nombre de usuario no está disponible, usamos el de la variable de entorno
+          if [ -z "$USER" ]; then USER="tu_usuario"; fi
+          
+          ZIP_URL="https://github.com/$(git remote get-url origin | sed -E 's/.*\/([^\/]+)\.git/\1/')/main/update.zip"
+          
+          echo "{\"version\": \"$VERSION\", \"zip_url\": \"$ZIP_URL\"}" > version.json
+          echo "Nueva versión generada: $VERSION"
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add update.zip version.json
+          git commit -m "chore: auto-update app logic [skip ci]"
+          git push
