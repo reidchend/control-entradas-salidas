@@ -667,7 +667,7 @@ async def main(page: ft.Page):
         await asyncio.sleep(0.5)
         
         # Done
-        step_text.value = "Listo!"
+        step_text.value = "Listo!!!"
         page.update()
         await asyncio.sleep(0.5)
 
