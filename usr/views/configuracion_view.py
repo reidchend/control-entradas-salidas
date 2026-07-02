@@ -1253,12 +1253,38 @@ class ConfiguracionView(ft.Container):
     
     def _build_sistema_tab(self):
         colors = _colors(self.page)
+        
+        # Obtener versión actual
+        version = "1.0.0"
+        if os.path.exists("version.json"):
+            try:
+                import json
+                with open("version.json", "r", encoding="utf-8") as f:
+                    version = json.load(f).get("version", "1.0.0")
+            except:
+                pass
+        
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=20),
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
+                            # --- SECCIÓN DE VERSIÓN ---
+                            ft.Row([
+                                ft.Container(
+                                    content=ft.Icon(ft.Icons.SYSTEM_UPDATE, color=colors['white'], size=28),
+                                    bgcolor=colors['accent'],
+                                    padding=12,
+                                    border_radius=12,
+                                ),
+                                ft.Column([
+                                    ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
+                                    ft.Text(f"Actualidad: {version}", size=12, color=colors['text_secondary']),
+                                ], spacing=2),
+                            ], spacing=15),
+                            ft.Divider(height=20, color=colors['border']),
+                            
                             # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
                             ft.Row([
                                 ft.Container(
@@ -1286,7 +1312,7 @@ class ConfiguracionView(ft.Container):
                                 bgcolor="#7B1FA2",
                                 color=colors['white'],
                             ),
-
+                            
                             # --- NUEVA SECCIÓN: NOTIFICACIONES PUSH (2026 Fix) ---
                             ft.Divider(height=20, color=colors['border']),
                             ft.Text(
@@ -1306,7 +1332,7 @@ class ConfiguracionView(ft.Container):
                                 bgcolor=colors['accent_dark'],
                                 color=colors['white'],
                             ),
-
+                            
                             ft.Container(
                                 content=self.test_result_text,
                                 padding=10,
@@ -1348,24 +1374,11 @@ class ConfiguracionView(ft.Container):
                                 weight=ft.FontWeight.BOLD, 
                                 size=14
                             ),
-                            ft.Text(
-                                "Cambie el operador registrado en este dispositivo.",
-                                size=12,
-                                color=colors['text_secondary'],
-                            ),
-                            ft.Container(height=10),
-                            ft.ElevatedButton(
-                                "Cambiar operador de este dispositivo", 
-                                on_click=self._on_cambiar_operador,
-                                icon=ft.Icons.PERSON_OUTLINED,
-                                bgcolor=ft.Colors.ORANGE_600,
-                                color=ft.Colors.WHITE,
-                            ),
                         ], spacing=15),
-                        padding=25,
-                    ),
+                        padding=20,
+                    )
                 ),
-            ], spacing=10, scroll=ft.ScrollMode.AUTO, expand=True),
+            ], spacing=15),
             padding=20,
             expand=True,
         )
