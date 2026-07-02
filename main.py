@@ -18,6 +18,140 @@ def resource_path(relative_path: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
+async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Text):
+    """Comprueba, descarga e instala actualizaciones de código de forma dinámica."""
+    import json
+    import urllib.request
+    import zipfile
+    import shutil
+    
+    # 1. Obtener la URL de actualización de forma aislada para no importar config antes de tiempo
+    update_url = ""
+    try:
+        if os.path.exists(".env"):
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("UPDATE_URL="):
+                        update_url = line.split("=")[1].strip().strip('"').strip("'")
+                        break
+    except Exception as e:
+        print(f"[UPDATER] Error leyendo .env: {e}")
+        
+    if not update_url:
+        print("[LAUNCHER] UPDATE_URL no configurada en .env. Omitiendo actualizaciones.")
+        return
+        
+    status_text.value = "Buscando actualizaciones..."
+    page.update()
+    
+    # 2. Obtener versión local actual
+    local_version = "1.0.0"
+    if os.path.exists("version.json"):
+        try:
+            with open("version.json", "r", encoding="utf-8") as f:
+                local_version = json.load(f).get("version", "1.0.0")
+        except Exception as e:
+            print(f"[UPDATER] Error leyendo version.json local: {e}")
+            
+    try:
+        # 3. Descargar metadata remota (version.json)
+        req = urllib.request.Request(update_url, headers={'User-Agent': 'Mozilla/5.0'})
+        # Timeout de 4 segundos para que si no hay internet o falla el host, no tranque el arranque
+        with urllib.request.urlopen(req, timeout=4) as response:
+            remote_info = json.loads(response.read().decode('utf-8'))
+            
+        remote_version = remote_info.get("version", "1.0.0")
+        zip_url = remote_info.get("zip_url", "")
+        
+        if remote_version != local_version and zip_url:
+            status_text.value = f"Nueva v{remote_version} disponible. Descargando..."
+            page.update()
+            
+            # Descargar archivo temporal
+            zip_temp = "update_temp.zip"
+            req_zip = urllib.request.Request(zip_url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            with urllib.request.urlopen(req_zip, timeout=60) as response_zip:
+                total_size = int(response_zip.headers.get('content-length', 0))
+                downloaded = 0
+                block_size = 1024 * 8
+                
+                with open(zip_temp, 'wb') as out_file:
+                    while True:
+                        block = response_zip.read(block_size)
+                        if not block:
+                            break
+                        downloaded += len(block)
+                        out_file.write(block)
+                        
+                        if total_size > 0:
+                            percent = int(downloaded * 100 / total_size)
+                            status_text.value = f"Descargando actualización ({percent}%)..."
+                            page.update()
+                            
+            status_text.value = "Instalando actualización..."
+            page.update()
+            
+            # Descomprimir temporalmente
+            temp_extract_dir = "temp_extract"
+            if os.path.exists(temp_extract_dir):
+                shutil.rmtree(temp_extract_dir)
+            os.makedirs(temp_extract_dir)
+            
+            with zipfile.ZipFile(zip_temp, 'r') as zip_ref:
+                zip_ref.extractall(temp_extract_dir)
+                
+            # Determinar ruta del contenido (por si GitHub mete todo en una carpeta raíz del repo)
+            src_dir = temp_extract_dir
+            subdirs = [os.path.join(temp_extract_dir, d) for d in os.listdir(temp_extract_dir) if os.path.isdir(os.path.join(temp_extract_dir, d))]
+            if len(subdirs) == 1 and not os.path.exists(os.path.join(temp_extract_dir, "usr")):
+                src_dir = subdirs[0]
+                
+            # Crear directorio de actualizaciones permanente
+            updates_dir = "app_updates"
+            if not os.path.exists(updates_dir):
+                os.makedirs(updates_dir)
+                
+            # Copiar carpeta usr (lógica de negocio)
+            src_usr = os.path.join(src_dir, "usr")
+            if os.path.exists(src_usr):
+                dest_usr = os.path.join(updates_dir, "usr")
+                if os.path.exists(dest_usr):
+                    shutil.rmtree(dest_usr)
+                shutil.copytree(src_usr, dest_usr)
+                
+            # Copiar carpeta config
+            src_config = os.path.join(src_dir, "config")
+            if os.path.exists(src_config):
+                dest_config = os.path.join(updates_dir, "config")
+                if os.path.exists(dest_config):
+                    shutil.rmtree(dest_config)
+                shutil.copytree(src_config, dest_config)
+                
+            # Guardar nueva versión localmente
+            with open("version.json", "w", encoding="utf-8") as f:
+                json.dump({"version": remote_version}, f)
+                
+            # Limpiar archivos temporales
+            shutil.rmtree(temp_extract_dir)
+            if os.path.exists(zip_temp):
+                os.remove(zip_temp)
+                
+            status_text.value = f"¡Actualización v{remote_version} lista!"
+            page.update()
+            await asyncio.sleep(1)
+        else:
+            status_text.value = f"Aplicación al día (v{local_version})"
+            page.update()
+            await asyncio.sleep(0.5)
+            
+    except Exception as e:
+        print(f"[UPDATER] Error al buscar/aplicar actualización: {e}")
+        status_text.value = "Modo offline (omitiendo búsqueda)"
+        page.update()
+        await asyncio.sleep(1)
+
+
 def get_theme_colors(page):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     return {
@@ -380,6 +514,18 @@ async def main(page: ft.Page):
         
         page.add(loading)
         page.update()
+        
+        # Step 0: Comprobar actualizaciones dinámicas antes de importar la lógica
+        try:
+            await comprobar_y_aplicar_actualizaciones(page, status_text)
+        except Exception as e_up:
+            print(f"[LAUNCHER] Error ejecutando actualizador: {e_up}")
+            
+        # Inyectar la carpeta de actualizaciones al sys.path para que cargue los módulos nuevos
+        updates_dir = os.path.abspath("app_updates")
+        if os.path.exists(updates_dir):
+            sys.path.insert(0, updates_dir)
+            print(f"[LAUNCHER] Cargando código actualizado desde {updates_dir}")
         
         # Delay original para mostrar pantalla de carga
         await asyncio.sleep(0.5)
