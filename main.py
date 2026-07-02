@@ -300,14 +300,7 @@ async def main(page: ft.Page):
     page.favicon = "favicon.png"
     page.assets_allow_override = True
     
-    # Icono de ventana - usar page.window.icon en Windows
-    import platform
-    if platform.system() == "Windows":
-        try:
-            icon_path = resource_path("assets/icono.ico")
-            page.window.icon = icon_path
-        except Exception:
-            pass
+    page.window.icon = resource_path("assets/icono.ico")
     
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("es")],

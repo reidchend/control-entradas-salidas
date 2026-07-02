@@ -1,5 +1,4 @@
 flet==0.28.3
-flet-webview
 Pillow
 pg8000
 pydantic-settings
