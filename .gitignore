@@ -2,6 +2,8 @@ node_modules/
 config/*.json
 *.json
 !whatsapp_bot/*.json
+!version.json
+!update.zip
 .env
 __pycache__/
 build/
@@ -10,5 +12,4 @@ build/
 *.db-wal
 logs/
 .control_entradas_cache/
-config/.device_id!version.json
-!update.zip
+config/.device_id

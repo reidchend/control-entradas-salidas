@@ -1,5 +1,6 @@
 import flet as ft
 import traceback
+import os
 from usr.database.base import get_db, get_db_adaptive, check_connection
 from usr.models import Categoria, Producto, Movimiento
 from sqlalchemy.orm import joinedload
