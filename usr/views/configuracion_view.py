@@ -1265,6 +1265,16 @@ class ConfiguracionView(ft.Container):
             except:
                 pass
         
+        self.version_label = ft.Text(f"Actualidad: {version}", size=12, color=colors['text_secondary'])
+        self.update_status_text = ft.Text("", size=13, weight=ft.FontWeight.BOLD)
+        self.update_status_container = ft.Container(
+            content=self.update_status_text,
+            padding=10,
+            bgcolor=colors['bg'],
+            border_radius=8,
+            visible=False,
+        )
+        
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=20),
@@ -1272,18 +1282,28 @@ class ConfiguracionView(ft.Container):
                     content=ft.Container(
                         content=ft.Column([
                             # --- SECCIÓN DE VERSIÓN ---
-                            ft.Row([
-                                ft.Container(
-                                    content=ft.Icon(ft.Icons.SYSTEM_UPDATE, color=colors['white'], size=28),
-                                    bgcolor=colors['accent'],
-                                    padding=12,
-                                    border_radius=12,
-                                ),
-                                ft.Column([
-                                    ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
-                                    ft.Text(f"Actualidad: {version}", size=12, color=colors['text_secondary']),
-                                ], spacing=2),
-                            ], spacing=15),
+                            ft.Column([
+                                ft.Row([
+                                    ft.Container(
+                                        content=ft.Icon(ft.Icons.SYSTEM_UPDATE, color=colors['white'], size=28),
+                                        bgcolor=colors['accent'],
+                                        padding=12,
+                                        border_radius=12,
+                                    ),
+                                    ft.Column([
+                                        ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
+                                        self.version_label,
+                                    ], spacing=2, expand=True),
+                                    ft.ElevatedButton(
+                                        "Buscar actualizaciones",
+                                        on_click=lambda e: self.page.run_task(self._check_for_updates, e),
+                                        icon=ft.Icons.UPDATE,
+                                        bgcolor=colors['accent'],
+                                        color=colors['white'],
+                                    ),
+                                ], spacing=15),
+                                self.update_status_container,
+                            ], spacing=10),
                             ft.Divider(height=20, color=colors['border']),
                             
                             # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
@@ -1474,6 +1494,32 @@ class ConfiguracionView(ft.Container):
             if db:
                 db.close()
             self.update()
+
+    async def _check_for_updates(self, e):
+        self.update_status_container.visible = True
+        self.update_status_text.value = "Buscando actualizaciones..."
+        self.update_status_text.color = "#BB86FC"
+        self.update()
+        
+        try:
+            from main import comprobar_y_aplicar_actualizaciones
+            await comprobar_y_aplicar_actualizaciones(self.page, self.update_status_text)
+            
+            # Refrescar la versión mostrada
+            version = "1.0.0"
+            if os.path.exists("version.json"):
+                try:
+                    import json
+                    with open("version.json", "r", encoding="utf-8") as f:
+                        version = json.load(f).get("version", "1.0.0")
+                except:
+                    pass
+            self.version_label.value = f"Actualidad: {version}"
+        except Exception as ex:
+            self.update_status_text.value = f"Error: {str(ex)}"
+            self.update_status_text.color = "#c62828"
+        
+        self.update()
 
     def refresh(self):
         self.is_mobile = self.page.width < 768 if self.page else False
