@@ -1502,7 +1502,7 @@ class ConfiguracionView(ft.Container):
         self.update()
         
         try:
-            from main import comprobar_y_aplicar_actualizaciones
+            from usr.updater import comprobar_y_aplicar_actualizaciones
             await comprobar_y_aplicar_actualizaciones(self.page, self.update_status_text)
             
             # Refrescar la versión mostrada
