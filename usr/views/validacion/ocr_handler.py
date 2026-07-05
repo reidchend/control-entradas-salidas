@@ -243,8 +243,8 @@ class OCRHandler:
             if self.fields:
                 try:
                     tipo_ocr = datos.get('tipo_documento', 'Factura')
-                    if tipo_ocr != (self.fields.tipo_documento_dd.value or 'Factura'):
-                        self.fields.tipo_documento_dd.value = tipo_ocr
+                    if tipo_ocr not in self.fields.tipo_documento_segmented.selected:
+                        self.fields.tipo_documento_segmented.selected = {tipo_ocr}
                 except Exception as ex:
                     print(f"[WARN] Error llenando tipo_documento: {ex}")
 

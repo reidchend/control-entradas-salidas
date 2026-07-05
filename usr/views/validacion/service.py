@@ -63,12 +63,7 @@ class ValidacionService:
                 except Exception as ex:
                     print(f"[WARN] Buscar proveedor: {ex}")
 
-            try:
-                from usr.database.local_replica import LocalReplica
-                usuario = LocalReplica.get_usuario_dispositivo()
-                usuario_val = usuario['nombre'] if usuario else 'Sistema'
-            except Exception:
-                usuario_val = 'Sistema'
+            usuario_val = data.get('validada_por', 'Sistema')
 
             ref_fact = data.get('factura') or f"V-REF-{datetime.now().strftime('%H%M%S')}"
 

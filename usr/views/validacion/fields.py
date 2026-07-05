@@ -101,17 +101,16 @@ class ValidacionFields:
 
         self.fecha_picker.on_change = self._on_fecha_change
 
-        self.tipo_documento_dd = ft.Dropdown(
-            label="Tipo de Documento",
-            options=[
-                ft.dropdown.Option("Factura", "Factura"),
-                ft.dropdown.Option("Nota de Entrega", "Nota de Entrega"),
-                ft.dropdown.Option("Entrada", "Entrada"),
+        self.tipo_documento_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="Factura", label=ft.Text("Factura")),
+                ft.Segment(value="Nota de Entrega", label=ft.Text("N. Entrega")),
+                ft.Segment(value="Entrada", label=ft.Text("Entrada")),
             ],
-            value="Factura",
-            border_radius=10,
-            expand=True,
-            on_change=self._on_tipo_documento_change
+            selected={"Factura"},
+            on_change=self._on_tipo_documento_change,
+            allow_empty_selection=False,
+            allow_multiple_selection=False,
         )
 
         self.validar_btn = ft.ElevatedButton(
@@ -236,7 +235,8 @@ class ValidacionFields:
             if raw.upper().startswith(prefix):
                 raw = raw[len(prefix):]
                 break
-        tipo = self.tipo_documento_dd.value or "Factura"
+        selected = self.tipo_documento_segmented.selected
+        tipo = next(iter(selected)) if selected else "Factura"
         prefix = PREFIX_MAP.get(tipo, "F-")
         if raw:
             self.factura_input.value = f"{prefix}{raw}"
@@ -253,11 +253,13 @@ class ValidacionFields:
     def get_doc_section(self):
         return self.section_container(ft.Column([
             ft.Row([ft.Icon(ft.Icons.RECEIPT_LONG), ft.Text("📋 Datos del Documento", weight="bold", size=14)]),
+            ft.Container(height=5),
+            self.tipo_documento_segmented,
+            ft.Container(height=5),
             ft.Row([self.factura_input], spacing=10),
             ft.Row([self.proveedor_dd]),
             ft.Row([self.nuevo_proveedor_input, self.nuevo_proveedor_rif], spacing=10),
             ft.Row([self.fecha_btn, self.fecha_label], spacing=10),
-            ft.Row([self.tipo_documento_dd]),
         ], spacing=10))
 
     def get_monto_section(self):
@@ -292,7 +294,7 @@ class ValidacionFields:
                 'factura': self.factura_input.value or "",
                 'monto': monto,
                 'fecha': fecha,
-                'tipo_documento': self.tipo_documento_dd.value or 'Factura'
+                'tipo_documento': next(iter(self.tipo_documento_segmented.selected)) if self.tipo_documento_segmented.selected else 'Factura'
             }
         except Exception as ex:
             print(f"[ERROR] ValidacionFields.get_data: {ex}")
