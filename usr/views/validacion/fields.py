@@ -32,10 +32,15 @@ class ValidacionFields:
             from usr.database.local_replica import LocalReplica
             proveedores = LocalReplica.get_proveedores(estado="Activo")
             proveedor_opts = [ft.dropdown.Option(p['nombre'], p['nombre']) for p in proveedores]
+            if not any(o.key == "Varios" for o in proveedor_opts):
+                proveedor_opts.insert(0, ft.dropdown.Option("Varios", "Varios (Entrada sin proveedor)"))
             proveedor_opts.append(ft.dropdown.Option("__nuevo__", "+ Agregar nuevo"))
         except Exception as ex:
             print(f"[WARN] No se pudieron cargar proveedores: {ex}")
-            proveedor_opts = [ft.dropdown.Option("__nuevo__", "+ Agregar nuevo")]
+            proveedor_opts = [
+                ft.dropdown.Option("Varios", "Varios (Entrada sin proveedor)"),
+                ft.dropdown.Option("__nuevo__", "+ Agregar nuevo")
+            ]
 
         self.proveedor_dd = ft.Dropdown(
             label="Proveedor",
@@ -246,7 +251,8 @@ class ValidacionFields:
                 'rif': rif,
                 'factura': self.factura_input.value or "",
                 'monto': monto,
-                'fecha': fecha
+                'fecha': fecha,
+                'tipo_documento': getattr(self, 'tipo_documento', 'Factura')
             }
         except Exception as ex:
             print(f"[ERROR] ValidacionFields.get_data: {ex}")
@@ -260,5 +266,6 @@ class ValidacionFields:
                 'rif': '',
                 'factura': '',
                 'monto': 0,
-                'fecha': datetime.now()
+                'fecha': datetime.now(),
+                'tipo_documento': 'Factura'
             }

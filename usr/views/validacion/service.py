@@ -35,7 +35,8 @@ class ValidacionService:
 
             fecha_factura = data.get('fecha') or datetime.now()
             rif = data.get('rif', '')
-            proveedor = data.get('proveedor', 'Varios')
+            proveedor = data.get('proveedor') or 'Varios'
+            tipo_documento = data.get('tipo_documento', 'Factura')
 
             proveedor_obj = None
             if rif and proveedor != "Varios":
@@ -99,6 +100,7 @@ class ValidacionService:
                         fact_data = {
                             'numero_factura': existente.numero_factura,
                             'proveedor': existente.proveedor,
+                            'tipo_documento': existente.tipo_documento,
                             'fecha_factura': _s(existente.fecha_factura),
                             'fecha_recepcion': _s(existente.fecha_recepcion),
                             'total_bruto': existente.total_bruto,
@@ -146,7 +148,8 @@ class ValidacionService:
                     total_neto=monto_val,
                     estado="Validada",
                     validada_por=usuario_val,
-                    fecha_validacion=datetime.now()
+                    fecha_validacion=datetime.now(),
+                    tipo_documento=tipo_documento
                 )
                 db.add(nueva_fac)
                 db.flush()
@@ -208,6 +211,7 @@ class ValidacionService:
                 fact_data = {
                     'numero_factura': nueva_fac.numero_factura,
                     'proveedor': nueva_fac.proveedor,
+                    'tipo_documento': nueva_fac.tipo_documento,
                     'fecha_factura': _serialize(nueva_fac.fecha_factura),
                     'fecha_recepcion': _serialize(nueva_fac.fecha_recepcion),
                     'total_bruto': nueva_fac.total_bruto,

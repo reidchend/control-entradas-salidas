@@ -268,6 +268,24 @@ class OCRHandler:
                     print(f"[WARN] Error llenando proveedor: {ex}")
 
                 try:
+                    if not datos.get('proveedor') and datos.get('tipo_documento') == 'Entrada':
+                        existing_keys = [o.key for o in self.fields.proveedor_dd.options]
+                        if "Varios" not in existing_keys:
+                            self.fields.proveedor_dd.options.insert(
+                                0, ft.dropdown.Option("Varios", "Varios (Entrada sin proveedor)")
+                            )
+                        self.fields.proveedor_dd.value = "Varios"
+                        self.status_text.value = "✅ Proveedor asignado: Varios (Entrada sin proveedor)"
+                except Exception as ex:
+                    print(f"[WARN] Error asignando proveedor Varios: {ex}")
+
+                try:
+                    tipo_doc = datos.get('tipo_documento', 'Factura')
+                    setattr(self.fields, 'tipo_documento', tipo_doc)
+                except Exception as ex:
+                    print(f"[WARN] Error guardando tipo_documento: {ex}")
+
+                try:
                     if hasattr(self.fields, 'check_validar_button'):
                         self.fields.check_validar_button()
                 except Exception as ex:
