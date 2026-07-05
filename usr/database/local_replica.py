@@ -123,6 +123,12 @@ def init_local_db():
         )
     """)
     
+    # Migración: agregar columna tipo_documento a facturas si no existe
+    try:
+        cursor.execute("ALTER TABLE facturas ADD COLUMN tipo_documento TEXT DEFAULT 'Factura'")
+    except Exception:
+        pass  # Ya existe
+    
     # Tabla de pagos de facturas
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS factura_pagos (
