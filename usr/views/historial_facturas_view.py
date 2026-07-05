@@ -710,18 +710,18 @@ class HistorialFacturasView(ft.Container):
             mes_nombre = fecha_inicio.strftime("%Y-%m").lower()
             nombre_archivo = f"libro_compras_{mes_nombre}.xlsx"
             
-            # Guardar workbook y nombre
             self._workbook = wb
             self._nombre_archivo = nombre_archivo
             
-            # Cerrar dialogo anterior
             for overlay in list(self.page.overlay):
                 if isinstance(overlay, ft.AlertDialog):
                     overlay.open = False
             self.page.update()
             
-            # Mostrar diálogo con info de archivo
-            self._mostrar_descarga(wb, nombre_archivo)
+            self.file_picker.save_file(
+                file_name=nombre_archivo,
+                allowed_extensions=["xlsx"]
+            )
             
             db.close()
             
@@ -753,46 +753,6 @@ class HistorialFacturasView(ft.Container):
             actions=[
                 ft.TextButton("Cerrar", on_click=close_error),
             ],
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
-    
-    def _mostrar_descarga(self, workbook, nombre):
-        colors = _colors(self.page)
-        
-        # Guardar en carpeta exports (ruta fija)
-        exports_dir = "/workspaces/control-entradas-salidas/exports"
-        os.makedirs(exports_dir, exist_ok=True)
-        export_path = os.path.join(exports_dir, nombre)
-        
-        try:
-            workbook.save(export_path)
-            msg = f"Archivo guardado en:\nexports/{nombre}"
-            show_msg = f"✅ Archivo guardado\nexports/{nombre}"
-        except Exception as e:
-            msg = f"Error: {str(e)}"
-            show_msg = f"❌ Error: {str(e)}"
-        
-        show_success(show_msg)
-        
-        # Mostrar diálogo con info
-        def close_and_update(e):
-            dlg.open = False
-            self.page.update()
-        
-        dlg = ft.AlertDialog(
-            title=ft.Text("📥 Excel Exportado"),
-            content=ft.Column([
-                ft.Text(f"Archivo: {nombre}", weight="bold", size=14),
-                ft.Text(msg, color=colors['success'], size=12),
-                ft.Divider(),
-                ft.Text("El archivo se encuentra en la carpeta 'exports' del proyecto.", 
-                     color=colors['text_hint'], size=11),
-            ], spacing=10),
-            actions=[
-                ft.TextButton("Cerrar", on_click=close_and_update),
-            ]
         )
         self.page.overlay.append(dlg)
         dlg.open = True
