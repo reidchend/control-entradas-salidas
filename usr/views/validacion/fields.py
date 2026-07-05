@@ -159,14 +159,10 @@ class ValidacionFields:
             has_factura = bool(self.factura_input.value and self.factura_input.value.strip())
             has_proveedor = self.proveedor_dd.value and self.proveedor_dd.value != "__nuevo__"
             has_nuevo_prov = (self.proveedor_dd.value == "__nuevo__" and
-                              self.nuevo_proveedor_input.value and self.nuevo_proveedor_input.value.strip())
-            has_monto = False
-            try:
-                m = float(self.monto_total_input.value or "0")
-                has_monto = m > 0
-            except ValueError as ve:
-                print(f"[WARN] Monto no parseable: {ve}")
-            completo = has_factura and (has_proveedor or has_nuevo_prov) and has_monto
+                               self.nuevo_proveedor_input.value and self.nuevo_proveedor_input.value.strip())
+            
+            # El monto ya no es obligatorio para habilitar el botón
+            completo = has_factura and (has_proveedor or has_nuevo_prov)
             self.validar_btn.disabled = not completo
             if self.page:
                 self.page.update()
