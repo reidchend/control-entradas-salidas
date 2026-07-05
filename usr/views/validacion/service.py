@@ -33,6 +33,16 @@ class ValidacionService:
             except Exception as ex:
                 print(f"[WARN] ALTER TABLE factura_pagos: {ex}")
 
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(db.bind)
+                columnas = [c['name'] for c in inspector.get_columns('facturas')]
+                if 'tipo_documento' not in columnas:
+                    db.execute(text("ALTER TABLE facturas ADD COLUMN tipo_documento TEXT DEFAULT 'Factura'"))
+                    db.commit()
+            except Exception as ex:
+                print(f"[WARN] ALTER TABLE facturas (tipo_documento): {ex}")
+
             fecha_factura = data.get('fecha') or datetime.now()
             rif = data.get('rif', '')
             proveedor = data.get('proveedor') or 'Varios'
