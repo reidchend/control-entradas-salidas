@@ -242,8 +242,17 @@ class OCRHandler:
 
             if self.fields:
                 try:
+                    tipo_ocr = datos.get('tipo_documento', 'Factura')
+                    if tipo_ocr != (self.fields.tipo_documento_dd.value or 'Factura'):
+                        self.fields.tipo_documento_dd.value = tipo_ocr
+                except Exception as ex:
+                    print(f"[WARN] Error llenando tipo_documento: {ex}")
+
+                try:
                     if datos.get('nro_factura'):
                         self.fields.factura_input.value = datos['nro_factura']
+                        if hasattr(self.fields, '_apply_tipo_prefix'):
+                            self.fields._apply_tipo_prefix()
                         if hasattr(self.fields, 'check_validar_button'):
                             self.fields.check_validar_button()
                 except Exception as ex:
@@ -278,12 +287,6 @@ class OCRHandler:
                         self.status_text.value = "✅ Proveedor asignado: Varios (Entrada sin proveedor)"
                 except Exception as ex:
                     print(f"[WARN] Error asignando proveedor Varios: {ex}")
-
-                try:
-                    tipo_doc = datos.get('tipo_documento', 'Factura')
-                    setattr(self.fields, 'tipo_documento', tipo_doc)
-                except Exception as ex:
-                    print(f"[WARN] Error guardando tipo_documento: {ex}")
 
                 try:
                     if hasattr(self.fields, 'check_validar_button'):

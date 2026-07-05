@@ -596,10 +596,23 @@ class HistorialFacturasView(ft.Container):
             keyboard_type=ft.KeyboardType.NUMBER
         )
         
+        tipo_dd = ft.Dropdown(
+            label="Tipo de Documento",
+            options=[
+                ft.dropdown.Option("", "Todos"),
+                ft.dropdown.Option("Factura", "Factura"),
+                ft.dropdown.Option("Nota de Entrega", "Nota de Entrega"),
+                ft.dropdown.Option("Entrada", "Entrada"),
+            ],
+            value="",
+            width=200
+        )
+        
         def on_exportar(e):
             try:
                 mes = int(mes_dd.value) + 1
                 año = int(año_input.value or año_actual)
+                tipo = tipo_dd.value or None
                 
                 fecha_inicio = datetime(año, mes, 1)
                 if mes == 12:
@@ -607,7 +620,7 @@ class HistorialFacturasView(ft.Container):
                 else:
                     fecha_fin = datetime(año, mes + 1, 1) - timedelta(days=1)
                 
-                self._exportar_excel(fecha_inicio, fecha_fin)
+                self._exportar_excel(fecha_inicio, fecha_fin, tipo)
                 
                 dlg.open = False
                 self.page.update()
@@ -623,7 +636,8 @@ class HistorialFacturasView(ft.Container):
             content=ft.Column([
                 ft.Text("Seleccione el período a exportar:", size=14),
                 ft.Row([mes_dd, año_input], spacing=10),
-                ft.Text("Se exportarán todas las facturas del mes seleccionado.", size=12, color=colors['text_secondary']),
+                tipo_dd,
+                ft.Text("Se exportarán las facturas del mes seleccionado.", size=12, color=colors['text_secondary']),
             ], spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=close_dlg),
@@ -636,17 +650,20 @@ class HistorialFacturasView(ft.Container):
         dlg.open = True
         self.page.update()
     
-    def _exportar_excel(self, fecha_inicio, fecha_fin):
+    def _exportar_excel(self, fecha_inicio, fecha_fin, tipo_doc=None):
         colors = _colors(self.page)
         
         try:
             db = next(get_db_adaptive())
             
-            facturas = db.query(Factura).filter(
+            q = db.query(Factura).filter(
                 Factura.fecha_factura >= fecha_inicio,
                 Factura.fecha_factura <= fecha_fin,
                 Factura.estado == "Validada"
-            ).order_by(Factura.fecha_factura).all()
+            )
+            if tipo_doc:
+                q = q.filter(Factura.tipo_documento == tipo_doc)
+            facturas = q.order_by(Factura.fecha_factura).all()
             
             if not facturas:
                 show_error(f"No hay facturas validadas en {fecha_inicio.strftime('%B %Y')}")

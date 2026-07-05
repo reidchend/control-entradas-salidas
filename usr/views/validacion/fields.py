@@ -1,6 +1,11 @@
 import flet as ft
 from datetime import datetime
 
+PREFIX_MAP = {
+    "Factura": "F-",
+    "Nota de Entrega": "NE-",
+    "Entrada": "EV-",
+}
 
 class ValidacionFields:
     def __init__(self, page, theme_colors, payments=None):
@@ -95,6 +100,19 @@ class ValidacionFields:
         )
 
         self.fecha_picker.on_change = self._on_fecha_change
+
+        self.tipo_documento_dd = ft.Dropdown(
+            label="Tipo de Documento",
+            options=[
+                ft.dropdown.Option("Factura", "Factura"),
+                ft.dropdown.Option("Nota de Entrega", "Nota de Entrega"),
+                ft.dropdown.Option("Entrada", "Entrada"),
+            ],
+            value="Factura",
+            border_radius=10,
+            expand=True,
+            on_change=self._on_tipo_documento_change
+        )
 
         self.validar_btn = ft.ElevatedButton(
             "✓ Validar Entradas",
@@ -202,6 +220,27 @@ class ValidacionFields:
             except:
                 pass
 
+    def _on_tipo_documento_change(self, e):
+        try:
+            self._apply_tipo_prefix()
+            self.check_validar_button()
+            if self.page:
+                self.page.update()
+        except Exception as ex:
+            print(f"[WARN] Error cambiando tipo documento: {ex}")
+
+    def _apply_tipo_prefix(self):
+        current = self.factura_input.value or ""
+        raw = current
+        for prefix in ["NE-", "EV-", "F-"]:
+            if raw.upper().startswith(prefix):
+                raw = raw[len(prefix):]
+                break
+        tipo = self.tipo_documento_dd.value or "Factura"
+        prefix = PREFIX_MAP.get(tipo, "F-")
+        if raw:
+            self.factura_input.value = f"{prefix}{raw}"
+
     def section_container(self, content_col):
         return ft.Container(
             content=content_col,
@@ -218,6 +257,7 @@ class ValidacionFields:
             ft.Row([self.proveedor_dd]),
             ft.Row([self.nuevo_proveedor_input, self.nuevo_proveedor_rif], spacing=10),
             ft.Row([self.fecha_btn, self.fecha_label], spacing=10),
+            ft.Row([self.tipo_documento_dd]),
         ], spacing=10))
 
     def get_monto_section(self):
@@ -252,7 +292,7 @@ class ValidacionFields:
                 'factura': self.factura_input.value or "",
                 'monto': monto,
                 'fecha': fecha,
-                'tipo_documento': getattr(self, 'tipo_documento', 'Factura')
+                'tipo_documento': self.tipo_documento_dd.value or 'Factura'
             }
         except Exception as ex:
             print(f"[ERROR] ValidacionFields.get_data: {ex}")
