@@ -36,6 +36,7 @@ class ValidacionView(ft.Container):
         self.cards_dict = {}
         self._connection_indicator = None
         self._connection_thread = None
+        self.loading_overlay = None
 
     def build(self):
         self._build_controls()
@@ -87,6 +88,43 @@ class ValidacionView(ft.Container):
                         pass
         self._connection_thread = threading.Thread(target=loop, daemon=True)
         self._connection_thread.start()
+
+    def _set_loading_overlay(self, visible: bool, message: str = "Procesando..."):
+        if not self.page: return
+        
+        if visible:
+            colors = get_colors(self.page)
+            self.loading_overlay = ft.Container(
+                content=ft.Column([
+                    ft.ProgressBar(width=300, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                    ft.Text(message, size=14, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=ft.Colors.with_opacity(0.6, ft.Colors.BLACK),
+                expand=True,
+                alignment=ft.alignment.center,
+                # Use a Stack or simply append to overlay
+            )
+            # Use an AlertDialog as a modal loading screen for simplicity and consistency
+            self.loading_overlay = ft.AlertDialog(
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.ProgressBar(width=300, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                        ft.Text(message, size=14, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=20,
+                    width=300,
+                ),
+                # Remove actions and title for a clean loading look
+            )
+            self.page.overlay.append(self.loading_overlay)
+            self.loading_overlay.open = True
+            self.page.update()
+        else:
+            if self.loading_overlay:
+                self.loading_overlay.open = False
+                self.page.overlay.remove(self.loading_overlay)
+                self.loading_overlay = None
+                self.page.update()
 
     def _build_controls(self):
         colors = get_colors(self.page)
@@ -180,15 +218,17 @@ class ValidacionView(ft.Container):
     def _show_validar_dialog(self, e):
         theme_colors = get_colors(self.page)
         dialog = ValidacionDialog(self.page, self.selected_entradas, theme_colors)
-        
-        def on_validar_click(btn_event):
+        async def on_validar_click(btn_event):
             try:
                 data = dialog.get_data()
                 dialog.dialog.open = False
                 self.page.update()
 
+                self._set_loading_overlay(True, "Validando datos...")
+
                 from usr.views.validacion.service import ValidacionService
-                result = ValidacionService.procesar(data, self.selected_entradas)
+                result = await asyncio.to_thread(ValidacionService.procesar, data, self.selected_entradas)
+                
                 show_success(f"✅ Validadas {result.get('movimientos_count', 0)} entradas")
 
                 wa_status = {}
@@ -196,9 +236,11 @@ class ValidacionView(ft.Container):
                     wa_status = get_whatsapp_status()
                 except Exception:
                     pass
+                
                 if wa_status.get('whatsapp_connected'):
-                    img_path = None
+                    self._set_loading_overlay(True, "Sincronizando con servidor y enviando WhatsApp...")
                     
+                    img_path = None
                     def get_long_path(short_path):
                         try:
                             import ctypes
@@ -227,6 +269,7 @@ class ValidacionView(ft.Container):
                             if os.path.exists(c):
                                 img_path = c
                                 break
+                    
                     productos_str = "Productos variados"
                     if self.selected_entradas:
                         try:
@@ -246,23 +289,31 @@ class ValidacionView(ft.Container):
                                 db.close()
                         except Exception:
                             productos_str = "Productos variados"
+                    
                     msg = format_validation_message(
                         productos_str, 0, data.get('factura', ''),
                         data.get('proveedor', ''), data.get('monto', 0),
                         data.get('pagos', []), result.get('usuario', 'Sistema')
                     )
+                    
                     if img_path:
                         print(f"[WA] Enviando imagen: {img_path}")
-                        send_whatsapp_image(img_path, msg)
+                        await asyncio.to_thread(send_whatsapp_image, img_path, msg)
                     else:
                         print("[WA] No se encontró imagen de factura para enviar")
-                        send_whatsapp_message(msg)
+                        await asyncio.to_thread(send_whatsapp_message, msg)
 
                 if result.get('sync'):
                     print("[SYNC] Factura sincronizada")
+                
+                self._set_loading_overlay(True, "Actualizando lista de pendientes...")
                 self.selected_entradas.clear()
                 self._load_entradas_pendientes()
+                
+                self._set_loading_overlay(False)
+
             except Exception as ex:
+                self._set_loading_overlay(False)
                 print(f"[ERROR] on_validar_click: {ex}")
                 import traceback; traceback.print_exc()
                 try:

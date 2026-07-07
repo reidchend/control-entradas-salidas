@@ -59,9 +59,9 @@ def parse_factura_text(text: str) -> dict:
             candidate = prov_match2.group(1).strip()
             if MY_COMPANY_NAME.upper() not in candidate.upper():
                 data["proveedor"] = candidate
-    rif_match = re.search(r'(?:R\.?I\.?F\.?|C\.?I\.?\/R\.?I\.?F\.?)\s*[:.]?\s*J[\s-]*(\d{8,9})', text, re.IGNORECASE)
+    rif_match = re.search(r'(?:R\.?I\.?F\.?[-/ ]*C\.?I\.?[-/ ]*|C\.?I\.?[-/ ]*R\.?I\.?F\.?[-/ ]*|R\.?I\.?F\.?|C\.?I\.?)\s*[:.]?\s*([JGV E])[\s-]*(\d{8,9})', text, re.IGNORECASE)
     if rif_match:
-        found_rif = "J" + rif_match.group(1)
+        found_rif = (rif_match.group(1) + rif_match.group(2)).upper()
         if found_rif != MY_COMPANY_RIF:
             data["rif"] = found_rif
     nro_match = re.search(r'(?:FACTURA|NOTA\s*DE\s*ENTREGA|ENTRADA\s*DE\s*INVENTARIO|ENTRADA|DOC|NRO|NUM)\s*#?\s*[:.]?\s*(\d{4,10})', text, re.IGNORECASE)
