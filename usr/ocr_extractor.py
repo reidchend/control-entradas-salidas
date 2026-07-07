@@ -59,18 +59,21 @@ def parse_factura_text(text: str) -> dict:
             candidate = prov_match2.group(1).strip()
             if MY_COMPANY_NAME.upper() not in candidate.upper():
                 data["proveedor"] = candidate
-    rif_match = re.search(r'(?:R\.?I\.?F\.?[-/ ]*C\.?I\.?[-/ ]*|C\.?I\.?[-/ ]*R\.?I\.?F\.?[-/ ]*|R\.?I\.?F\.?|C\.?I\.?)\s*[:.]?\s*([JGV E])[\s-]*(\d{8,9})', text, re.IGNORECASE)
+    # 1. Intento con etiquetas conocidas (más preciso)
+    rif_match = re.search(r'(?:R\.?I\.?F\.?[-/ ]*C\.?I\.?[-/ ]*|C\.?I\.?[-/ ]*R\.?I\.?F\.?[-/ ]*|R\.?I\.?F\.?|C\.?I\.?|Cod\s*Prov\.?)\s*[:.]?\s*([JGV E])[\s-]*(\d{8,12})', text, re.IGNORECASE)
     if rif_match:
         found_rif = (rif_match.group(1) + rif_match.group(2)).upper()
         if found_rif != MY_COMPANY_RIF:
             data["rif"] = found_rif
-    elif not data["rif"]:
-        # Fallback: Buscar cualquier patrón de RIF huérfano en el texto
-        orphan_rif = re.search(r'\b([JGV E])\s*(\d{8,9})\b', text, re.IGNORECASE)
-        if orphan_rif:
-            found_rif = (orphan_rif.group(1) + orphan_rif.group(2)).upper()
-            if found_rif != MY_COMPANY_RIF:
-                data["rif"] = found_rif
+    
+    # 2. Fallback: Buscar cualquier patrón de RIF en todo el texto si aún no se encontró
+    if not data["rif"]:
+        all_rifs = re.findall(r'\b([JGV E])[\s-]*(\d{8,12})\b', text, re.IGNORECASE)
+        for prefix, digits in all_rifs:
+            candidate = (prefix + digits).upper()
+            if candidate != MY_COMPANY_RIF:
+                data["rif"] = candidate
+                break
     nro_match = re.search(r'(?:FACTURA|NOTA\s*DE\s*ENTREGA|ENTRADA\s*DE\s*INVENTARIO|ENTRADA|DOC|NRO|NUM)\s*#?\s*[:.]?\s*(\d{4,10})', text, re.IGNORECASE)
     if nro_match:
         data["nro_factura"] = nro_match.group(1)

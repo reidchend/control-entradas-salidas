@@ -49,15 +49,15 @@ class ValidacionService:
             tipo_documento = data.get('tipo_documento', 'Factura')
 
             proveedor_obj = None
-            if rif and proveedor != "Varios":
+            if proveedor and proveedor != "Varios":
                 try:
                     proveedor_obj = db.query(Proveedor).filter(Proveedor.nombre == proveedor).first()
                     if not proveedor_obj:
                         try:
-                            proveedor_obj = Proveedor(nombre=proveedor, rif=rif, estado="Activo")
+                            proveedor_obj = Proveedor(nombre=proveedor, rif=rif or "", estado="Activo")
                             db.add(proveedor_obj)
                             db.flush()
-                            print(f"[NUEVO PROVEEDOR] Creado: {proveedor} (RIF: {rif})")
+                            print(f"[NUEVO PROVEEDOR] Creado: {proveedor} (RIF: {rif or 'No prov'})")
                         except Exception as ex:
                             print(f"[WARN] Crear proveedor: {ex}")
                 except Exception as ex:
