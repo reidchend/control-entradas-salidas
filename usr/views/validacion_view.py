@@ -93,35 +93,36 @@ class ValidacionView(ft.Container):
         if not self.page: return
         
         if visible:
+            if self.loading_overlay:
+                # Actualizar solo el texto del mensaje
+                try:
+                    self.loading_overlay.content.content.controls[1].value = message
+                    self.page.update()
+                    return
+                except Exception:
+                    pass
+
             colors = get_colors(self.page)
             self.loading_overlay = ft.Container(
-                content=ft.Column([
-                    ft.ProgressBar(width=300, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
-                    ft.Text(message, size=14, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
-                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                bgcolor=ft.Colors.with_opacity(0.6, ft.Colors.BLACK),
-                expand=True,
-                alignment=ft.alignment.center,
-                # Use a Stack or simply append to overlay
-            )
-            # Use an AlertDialog as a modal loading screen for simplicity and consistency
-            self.loading_overlay = ft.AlertDialog(
                 content=ft.Container(
                     content=ft.Column([
-                        ft.ProgressBar(width=300, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
-                        ft.Text(message, size=14, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
-                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.ProgressBar(width=200, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                        ft.Text(message, size=13, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                    ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor=colors.get('surface', '#252525'),
                     padding=20,
-                    width=300,
+                    border_radius=15,
+                    border=ft.border.all(1, colors.get('border')),
+                    width=250,
                 ),
-                # Remove actions and title for a clean loading look
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                alignment=ft.alignment.center,
+                expand=True,
             )
             self.page.overlay.append(self.loading_overlay)
-            self.loading_overlay.open = True
             self.page.update()
         else:
             if self.loading_overlay:
-                self.loading_overlay.open = False
                 self.page.overlay.remove(self.loading_overlay)
                 self.loading_overlay = None
                 self.page.update()

@@ -253,14 +253,12 @@ class ValidacionFields:
     def get_doc_section(self):
         return self.section_container(ft.Column([
             ft.Row([ft.Icon(ft.Icons.RECEIPT_LONG), ft.Text("📋 Datos del Documento", weight="bold", size=14)]),
-            ft.Container(height=5),
             self.tipo_documento_segmented,
-            ft.Container(height=5),
             ft.Row([self.factura_input], spacing=10),
-            ft.Row([self.proveedor_dd]),
+            ft.Row([self.proveedor_dd], spacing=10),
             ft.Row([self.nuevo_proveedor_input, self.nuevo_proveedor_rif], spacing=10),
             ft.Row([self.fecha_btn, self.fecha_label], spacing=10),
-        ], spacing=10))
+        ], spacing=8))
 
     def get_monto_section(self):
         return self.section_container(ft.Column([

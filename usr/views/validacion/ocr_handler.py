@@ -46,15 +46,15 @@ class OCRHandler:
     def _build_ui(self):
         self.image_preview = ft.Container(
             content=ft.Column([
-                ft.Icon(ft.Icons.IMAGE_OUTLINED, size=40, color=self.theme_colors.get('text_hint')),
-                ft.Text("Vista previa de factura", size=12, color=self.theme_colors.get('text_hint'))
+                ft.Icon(ft.Icons.IMAGE_OUTLINED, size=30, color=self.theme_colors.get('text_hint')),
+                ft.Text("Vista previa", size=11, color=self.theme_colors.get('text_hint'))
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             width=350,
-            height=180,
+            height=140,
             bgcolor=self.theme_colors.get('surface_variant', '#1e1e1e'),
             border=ft.border.all(1, self.theme_colors.get('border')),
             border_radius=12,
-            margin=ft.margin.only(bottom=10)
+            margin=ft.margin.only(bottom=5)
         )
 
         self.loading_bar = ft.ProgressBar(
