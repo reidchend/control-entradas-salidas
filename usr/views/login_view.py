@@ -190,7 +190,7 @@ class LoginView(ft.Container):
                 from usr.database.base import get_engine, get_session, check_connection, init_local_tables
                 from usr.database.sync import init_sync_manager
                 from config.config import get_settings
-                from main import ControlEntradasSalidasAppV2
+                from main import ControlEntradasSalidasApp
                 
                 # Resetear el engine para que use el path correcto
                 from usr.database import base
@@ -221,7 +221,7 @@ class LoginView(ft.Container):
                     except Exception as sync_err:
                         logger.error(f"Error en sync: {sync_err}")
                 
-                app_instance = ControlEntradasSalidasAppV2()
+                app_instance = ControlEntradasSalidasApp()
                 
                 # Arrancar la interfaz (crea las vistas internamente)
                 await app_instance.arrancar_interfaz(self.page, settings, None)

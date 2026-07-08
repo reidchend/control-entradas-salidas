@@ -84,7 +84,7 @@ def mostrar_error_critico(page: ft.Page, error_completo: str):
     page.update()
 
 
-class ControlEntradasSalidasAppV2:
+class ControlEntradasSalidasApp:
     def __init__(self):
         # Type hints para que Pylance entienda el tipo de cada atributo
         self.page: ft.Page = None
@@ -567,7 +567,7 @@ async def main(page: ft.Page):
         page.update()
         
         # El resto de la creación de vistas y callbacks ahora ocurre dentro de app_instance.arrancar_interfaz
-        app_instance = ControlEntradasSalidasAppV2()
+        app_instance = ControlEntradasSalidasApp()
         status_text.value = "✓ Creado"
         page.update()
         
