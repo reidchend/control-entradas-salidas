@@ -1,5 +1,4 @@
 import flet as ft
-from pathlib import Path
 from usr.logger import get_logger
 from usr.database.local_replica import LocalReplica
 from usr.theme import get_theme
@@ -178,11 +177,9 @@ class LoginView(ft.Container):
                 
                 # Configurar path de BD primero
                 import os
-                from usr.database.conn import set_db_path, get_db_path
-                db_path = get_db_path()
-                if db_path == str(Path(".") / "lycoris_local.db"):
-                    db_dir = self.page.session.get("_db_dir") or "."
-                    db_path = os.path.join(db_dir, "lycoris_local.db")
+                from usr.database.conn import set_db_path
+                db_dir = self.page.session.get("_db_dir") or "."
+                db_path = os.path.join(db_dir, "lycoris_local.db")
                 set_db_path(db_path)
                 
                 # Asegurar que la BD local existe

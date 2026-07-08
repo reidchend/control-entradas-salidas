@@ -331,17 +331,15 @@ async def main(page: ft.Page):
         # LOGICA RESTAURADA: Determina el path según la plataforma
         from usr.database.conn import set_db_path, get_db_path
         
-        # Intentar usar app_data_dir primero (Android tiene permisos)
-        db_dir = None
+        # Solo en Android usar app_data_dir (donde la app tiene permisos)
+        db_dir = "."
         try:
-            if hasattr(page, 'app_data_dir') and page.app_data_dir:
-                db_dir = page.app_data_dir
+            platform = getattr(page, 'platform', None)
+            if platform and str(platform) in ('android', 'ios', 'android_tv'):
+                if hasattr(page, 'app_data_dir') and page.app_data_dir:
+                    db_dir = page.app_data_dir
         except:
             pass
-        
-        # Si no funciona, usar directorio actual (siempre escribible)
-        if not db_dir:
-            db_dir = "."
         
         page.session.set("_db_dir", db_dir)
         db_path = os.path.join(db_dir, "lycoris_local.db")
