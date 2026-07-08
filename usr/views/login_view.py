@@ -190,12 +190,7 @@ class LoginView(ft.Container):
                 from usr.database.base import get_engine, get_session, check_connection, init_local_tables
                 from usr.database.sync import init_sync_manager
                 from config.config import get_settings
-                from usr.views import (
-                    InventarioView, ValidacionView, StockView, 
-                    ConfiguracionView, HistorialFacturasView, RequisicionesView,
-                    BandejaWhatsAppView
-                )
-                from main import ControlEntradasSalidasApp
+                from main import ControlEntradasSalidasAppV2
                 
                 # Resetear el engine para que use el path correcto
                 from usr.database import base
@@ -226,25 +221,10 @@ class LoginView(ft.Container):
                     except Exception as sync_err:
                         logger.error(f"Error en sync: {sync_err}")
                 
-                # Las vistas ya están cargadas en el device
-                inventario_view = InventarioView()
-                requisiciones_view = RequisicionesView()
-                requisiciones_view.inventario_view = inventario_view
-                vistas = {
-                    0: inventario_view, 
-                    1: ValidacionView(), 
-                    2: StockView(), 
-                    3: requisiciones_view, 
-                    4: HistorialFacturasView(), 
-                    5: ConfiguracionView(),
-                    6: BandejaWhatsAppView()
-                }
+                app_instance = ControlEntradasSalidasAppV2()
                 
-                app_instance = ControlEntradasSalidasApp()
-                requisiciones_view.app_controller = app_instance
-                
-                # Arrancar la interfaz
-                await app_instance.arrancar_interfaz(self.page, settings, vistas)
+                # Arrancar la interfaz (crea las vistas internamente)
+                await app_instance.arrancar_interfaz(self.page, settings, None)
                 
         except Exception as e:
             logger.error(f"Error al cargar app: {e}")
