@@ -158,6 +158,7 @@ class ControlEntradasSalidasApp:
                 ft.NavigationRailDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, selected_icon=ft.Icons.SHOPPING_CART, label="Inventario"),
                 ft.NavigationRailDestination(icon=ft.Icons.CHECKLIST_OUTLINED, selected_icon=ft.Icons.CHECKLIST, label="Validación"),
                 ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Stock"),
+                ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Producciones"),
                 ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Requisiciones"),
                 ft.NavigationRailDestination(icon=ft.Icons.HISTORY_OUTLINED, selected_icon=ft.Icons.HISTORY, label="Historial"),
                 ft.NavigationRailDestination(icon=ft.Icons.SETTINGS_OUTLINED, selected_icon=ft.Icons.SETTINGS, label="Ajustes"),
@@ -212,7 +213,7 @@ class ControlEntradasSalidasApp:
         if self.page is None:
             return
             
-        opciones = [("assignment", "Requisiciones", 3), ("history", "Historial", 4), ("settings", "Ajustes", 5), ("mail", "Bandeja", 6)]
+        opciones = [("factory", "Producciones", 3), ("assignment", "Requisiciones", 4), ("history", "Historial", 5), ("settings", "Ajustes", 6), ("mail", "Bandeja", 7)]
         
         is_dark = self.page.theme_mode == ft.ThemeMode.DARK
         theme_icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
@@ -501,7 +502,7 @@ async def main(page: ft.Page):
         page.update()
         
         await asyncio.sleep(0.5)
-        from usr.views import InventarioView, ValidacionView, StockView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
+        from usr.views import InventarioView, ValidacionView, StockView, ProduccionesView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
         status_text.value = "✓ Cargado"
         page.update()
 
@@ -515,7 +516,7 @@ async def main(page: ft.Page):
         requisiciones_view = RequisicionesView()
         requisiciones_view.inventario_view = inventario_view
 
-        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: requisiciones_view, 4: HistorialFacturasView(), 5: ConfiguracionView(), 6: BandejaWhatsAppView()}
+        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: ProduccionesView(), 4: requisiciones_view, 5: HistorialFacturasView(), 6: ConfiguracionView(), 7: BandejaWhatsAppView()}
         
         # Registrar callback para notificar vistas cuando termina sync
         def on_sync_done():

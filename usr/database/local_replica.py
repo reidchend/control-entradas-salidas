@@ -225,6 +225,56 @@ def init_local_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recetas (
+            id INTEGER PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            producto_base_id INTEGER,
+            producto_final_id INTEGER,
+            cantidad_producida REAL DEFAULT 1,
+            activo INTEGER DEFAULT 1,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS receta_componentes (
+            id INTEGER PRIMARY KEY,
+            receta_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            cantidad REAL NOT NULL,
+            unidad TEXT DEFAULT 'unidad',
+            tipo_componente TEXT NOT NULL
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS producciones (
+            id INTEGER PRIMARY KEY,
+            receta_id INTEGER NOT NULL,
+            cantidad REAL NOT NULL,
+            estado TEXT DEFAULT 'completado',
+            usuario TEXT,
+            observaciones TEXT,
+            fecha_produccion TEXT,
+            created_at TEXT
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS produccion_detalles (
+            id INTEGER PRIMARY KEY,
+            produccion_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            cantidad REAL NOT NULL,
+            unidad TEXT DEFAULT 'unidad',
+            movimiento_id INTEGER
+        )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -1111,6 +1161,184 @@ class LocalReplica:
         cursor.execute("DELETE FROM dispositivo_usuario")
         conn.commit()
         conn.close()
+
+    # ==================== RECETAS ====================
+
+    @staticmethod
+    def get_recetas(activo: bool = True) -> List[Dict]:
+        """Obtiene todas las recetas."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        if activo:
+            cursor.execute("SELECT * FROM recetas WHERE activo = 1 ORDER BY nombre")
+        else:
+            cursor.execute("SELECT * FROM recetas ORDER BY nombre")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def get_receta_by_id(receta_id: int) -> Optional[Dict]:
+        """Obtiene una receta por ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM recetas WHERE id = ?", (receta_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    @staticmethod
+    def save_receta(receta: Dict) -> int:
+        """Guarda una receta y retorna su ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        receta_id = receta.get('id')
+        if receta_id:
+            cursor.execute("""
+                UPDATE recetas SET nombre=?, tipo=?, producto_base_id=?, producto_final_id=?,
+                cantidad_producida=?, activo=?, updated_at=?
+                WHERE id=?
+            """, (
+                receta.get('nombre'), receta.get('tipo'),
+                receta.get('producto_base_id'), receta.get('producto_final_id'),
+                receta.get('cantidad_producida', 1),
+                1 if receta.get('activo', True) else 0,
+                now, receta_id
+            ))
+        else:
+            cursor.execute("""
+                INSERT INTO recetas (nombre, tipo, producto_base_id, producto_final_id,
+                cantidad_producida, activo, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                receta.get('nombre'), receta.get('tipo'),
+                receta.get('producto_base_id'), receta.get('producto_final_id'),
+                receta.get('cantidad_producida', 1),
+                1 if receta.get('activo', True) else 0,
+                now, now
+            ))
+            receta_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return receta_id
+
+    @staticmethod
+    def delete_receta(receta_id: int) -> None:
+        """Elimina una receta y sus componentes."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM receta_componentes WHERE receta_id = ?", (receta_id,))
+        cursor.execute("DELETE FROM recetas WHERE id = ?", (receta_id,))
+        conn.commit()
+        conn.close()
+
+    # ==================== RECETA COMPONENTES ====================
+
+    @staticmethod
+    def get_componentes_by_receta(receta_id: int) -> List[Dict]:
+        """Obtiene los componentes de una receta."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT rc.*, p.nombre as producto_nombre, p.tipo as producto_tipo
+            FROM receta_componentes rc
+            LEFT JOIN productos p ON rc.producto_id = p.id
+            WHERE rc.receta_id = ?
+            ORDER BY rc.tipo_componente, p.nombre
+        """, (receta_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def save_componentes(receta_id: int, componentes: List[Dict]) -> None:
+        """Reemplaza todos los componentes de una receta."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM receta_componentes WHERE receta_id = ?", (receta_id,))
+        for comp in componentes:
+            cursor.execute("""
+                INSERT INTO receta_componentes (receta_id, producto_id, cantidad, unidad, tipo_componente)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                receta_id, comp.get('producto_id'), comp.get('cantidad'),
+                comp.get('unidad', 'unidad'), comp.get('tipo_componente')
+            ))
+        conn.commit()
+        conn.close()
+
+    # ==================== PRODUCCIONES ====================
+
+    @staticmethod
+    def get_producciones(limit: int = 50) -> List[Dict]:
+        """Obtiene el historial de producciones."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.*, r.nombre as receta_nombre, r.tipo as receta_tipo
+            FROM producciones p
+            LEFT JOIN recetas r ON p.receta_id = r.id
+            ORDER BY p.fecha_produccion DESC
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def save_produccion(produccion: Dict) -> int:
+        """Guarda una producción y retorna su ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO producciones (receta_id, cantidad, estado, usuario, observaciones, fecha_produccion, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            produccion.get('receta_id'), produccion.get('cantidad'),
+            produccion.get('estado', 'completado'), produccion.get('usuario'),
+            produccion.get('observaciones'), produccion.get('fecha_produccion', now), now
+        ))
+        prod_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return prod_id
+
+    @staticmethod
+    def save_produccion_detalle(detalle: Dict) -> int:
+        """Guarda un detalle de producción."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO produccion_detalles (produccion_id, producto_id, tipo, cantidad, unidad, movimiento_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            detalle.get('produccion_id'), detalle.get('producto_id'),
+            detalle.get('tipo'), detalle.get('cantidad'),
+            detalle.get('unidad', 'unidad'), detalle.get('movimiento_id')
+        ))
+        det_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return det_id
+
+    @staticmethod
+    def get_detalles_by_produccion(produccion_id: int) -> List[Dict]:
+        """Obtiene los detalles de una producción."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT pd.*, p.nombre as producto_nombre
+            FROM produccion_detalles pd
+            LEFT JOIN productos p ON pd.producto_id = p.id
+            WHERE pd.produccion_id = ?
+            ORDER BY pd.tipo, p.nombre
+        """, (produccion_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
 
 def ensure_local_db():
     """Asegura que la BD local existe. Llamar después de set_db_path()."""
