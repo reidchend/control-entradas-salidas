@@ -1446,7 +1446,7 @@ class ConfiguracionView(ft.Container):
     
     def _confirmar_cambio(self):
         from usr.database.local_replica import LocalReplica
-        from main import main as restart_main
+        from usr.app_launcher import main as restart_main
         
         self._close_dialog()
         LocalReplica.eliminar_usuario_dispositivo()

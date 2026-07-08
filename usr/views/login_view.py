@@ -190,7 +190,7 @@ class LoginView(ft.Container):
                 from usr.database.base import get_engine, get_session, check_connection, init_local_tables
                 from usr.database.sync import init_sync_manager
                 from config.config import get_settings
-                from main import ControlEntradasSalidasApp
+                from usr.app_controller import ControlEntradasSalidasApp
                 
                 # Resetear el engine para que use el path correcto
                 from usr.database import base
