@@ -84,7 +84,7 @@ def mostrar_error_critico(page: ft.Page, error_completo: str):
     page.update()
 
 
-class ControlEntradasSalidasApp:
+class ControlEntradasSalidasAppV2:
     def __init__(self):
         # Type hints para que Pylance entienda el tipo de cada atributo
         self.page: ft.Page = None
@@ -93,21 +93,50 @@ class ControlEntradasSalidasApp:
         self.content_area = None
         self.current_view = None
         self.current_view_index = 0
-        self.views = None
+        self.views = []
         self._layout_row = None
         self.settings = None
-
+        self._switching_view = False
+        
     async def arrancar_interfaz(self, page: ft.Page, settings, vistas_cargadas):
         self.page = page
         self.settings = settings
-        self.views = vistas_cargadas
+        
+        # Asegurar que la base de datos local esté actualizada antes de cargar las vistas
+        from usr.database.base import init_local_tables
+        init_local_tables()
+        
+        # IMPORTANTE: Instanciamos las vistas aquí mismo para evitar que se pierdan
+        from usr.views import InventarioView, ValidacionView, StockView, ProduccionesView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
+        v_inv = InventarioView()
+        v_val = ValidacionView()
+        v_sto = StockView()
+        v_pro = ProduccionesView()
+        v_req = RequisicionesView()
+        v_his = HistorialFacturasView()
+        v_cfg = ConfiguracionView()
+        v_ban = BandejaWhatsAppView()
+        v_req.inventario_view = v_inv
+        v_req.app_controller = self
+        
+        # Usamos una LISTA para garantizar que los índices sean exactos y no falte ninguno
+        self.views = [
+            v_inv,    # 0
+            v_val,    # 1
+            v_sto,    # 2
+            v_pro,    # 3
+            v_req,    # 4
+            v_his,    # 5
+            v_cfg,    # 6
+            v_ban     # 7
+        ]
         
         self.page.title = self.settings.FLET_APP_NAME
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
         self.page.spacing = 0
         self.page.expand = True
-
+        
         self._setup_theme()
         self._create_layout()
         self._handle_responsive_layout(self.page.width)
@@ -200,14 +229,35 @@ class ControlEntradasSalidasApp:
     def _on_navigation_change(self, e):
         if self.page is None:
             return
-            
-        index = int(e.control.selected_index)
-        if isinstance(e.control, ft.NavigationBar) and index == 3:
-            self._show_more_menu()
+        if getattr(self, '_switching_view', False):
             return
             
-        self.current_view_index = index
-        self._show_view(index)
+        if isinstance(e.control, ft.NavigationBar):
+            index = int(e.control.selected_index)
+            if index == 3:
+                self._show_more_menu()
+                return
+            self.current_view_index = index
+            self._show_view(index)
+            return
+
+        if isinstance(e.control, ft.NavigationRail):
+            selected_dest = e.control.destinations[e.control.selected_index]
+            label = selected_dest.label
+            mapping = {
+                "Inventario": 0,
+                "Validación": 1,
+                "Stock": 2,
+                "Producciones": 3,
+                "Requisiciones": 4,
+                "Historial": 5,
+                "Ajustes": 6,
+                "Bandeja": 7
+            }
+            index = mapping.get(label)
+            if index is None: return
+            self.current_view_index = index
+            self._show_view(index)
 
     def _show_more_menu(self):
         if self.page is None:
@@ -248,23 +298,35 @@ class ControlEntradasSalidasApp:
         self.page.open(self.bottom_sheet)
     
     def _show_view(self, index: int):
-        if not self.views or index not in self.views: return
-        view = self.views[index]
-        
-        if self.current_view: 
-            self.current_view.visible = False
+        if getattr(self, '_switching_view', False):
+            return
+        self._switching_view = True
+        try:
+            if not self.views or index < 0 or index >= len(self.views):
+                keys = list(range(len(self.views))) if self.views else "None"
+                self.content_area.content = ft.Container(
+                    content=ft.Text(f"Error: Vista {index} no encontrada. Keys: {keys}", color=ft.Colors.RED),
+                    alignment=ft.alignment.center, expand=True
+                )
+                self.page.update()
+                return
+            view = self.views[index]
             
-        self.content_area.content = view
-        view.visible = True
-        self.current_view = view
-        self.current_view_index = index
-        
-        self.navigation_rail.selected_index = index
-        if self.navigation_bar:
-            if index < 3:
-                self.navigation_bar.selected_index = index
-            else:
-                self.navigation_bar.selected_index = 3 
+            if self.current_view: 
+                self.current_view.visible = False
+                
+            self.content_area.content = view
+            view.visible = True
+            self.current_view = view
+            self.current_view_index = index
+            
+            if self.navigation_bar:
+                if index < 3:
+                    self.navigation_bar.selected_index = index
+                else:
+                    self.navigation_bar.selected_index = 3
+        finally:
+            self._switching_view = False
         
         # LOGICA RESTAURADA: Actualizar indicador de conexión si existe en la vista
         if hasattr(view, '_update_connection_indicator'):
@@ -503,36 +565,9 @@ async def main(page: ft.Page):
         from usr.views import InventarioView, ValidacionView, StockView, ProduccionesView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
         status_text.value = "✓ Cargado"
         page.update()
-
-        # Step Create views
-        await asyncio.sleep(0.5)
-        status_text.value = "Creando..."
-        page.update()
         
-        await asyncio.sleep(0.5)
-        inventario_view = InventarioView()
-        requisiciones_view = RequisicionesView()
-        requisiciones_view.inventario_view = inventario_view
-
-        vistas = {0: inventario_view, 1: ValidacionView(), 2: StockView(), 3: ProduccionesView(), 4: requisiciones_view, 5: HistorialFacturasView(), 6: ConfiguracionView(), 7: BandejaWhatsAppView()}
-        
-        # Registrar callback para notificar vistas cuando termina sync
-        def on_sync_done():
-            for vista in vistas.values():
-                if hasattr(vista, 'on_sync_complete'):
-                    try:
-                        vista.on_sync_complete()
-                    except Exception as e:
-                        print(f"[SYNC] Error notificando vista: {e}")
-        
-        sync_manager.set_sync_complete_callback(on_sync_done)
-        
-        # LUEGO iniciar background sync (después de vistas y callbacks)
-        if is_online:
-            sync_manager.start_background_sync(get_session, interval_seconds=10)
-        
-        app_instance = ControlEntradasSalidasApp()
-        requisiciones_view.app_controller = app_instance
+        # El resto de la creación de vistas y callbacks ahora ocurre dentro de app_instance.arrancar_interfaz
+        app_instance = ControlEntradasSalidasAppV2()
         status_text.value = "✓ Creado"
         page.update()
         
@@ -542,12 +577,12 @@ async def main(page: ft.Page):
         step_text.value = "Listo!!!"
         page.update()
         await asyncio.sleep(0.5)
-
+        
         status_text.value = "Iniciando..."
         page.update()
         await asyncio.sleep(0.5)
         
-        await app_instance.arrancar_interfaz(page, settings, vistas)
+        await app_instance.arrancar_interfaz(page, settings, None)
         
     except Exception as inner_e:
         error_log = traceback.format_exc()

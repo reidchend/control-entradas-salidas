@@ -42,7 +42,8 @@ class ProduccionesView(ft.Container):
     def did_mount(self):
         self._running = True
         self._build_ui()
-        asyncio.create_task(self._load_data())
+        if self.page:
+            self.page.run_task(self._load_data)
         self._update_connection_indicator()
 
     def will_unmount(self):
@@ -108,7 +109,6 @@ class ProduccionesView(ft.Container):
             icon=ft.Icons.ADD,
             text="Nueva Receta",
             bgcolor=colors['accent'],
-            color=colors['white'],
             on_click=lambda _: self._show_receta_dialog(),
         )
 

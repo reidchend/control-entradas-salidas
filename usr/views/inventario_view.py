@@ -97,7 +97,10 @@ class InventarioView(ft.Container):
                         self._create_categoria_card(c)
                         for c in self._categorias_cache
                     ]
-                self.categorias_grid.update()
+                try:
+                    self.categorias_grid.update()
+                except Exception:
+                    pass
             else:
                 self.page.run_task(self._load_categorias)
 
@@ -265,8 +268,8 @@ class InventarioView(ft.Container):
             self._connection_indicator.tooltip = f"Modo offline - {pending} cambios pendientes"
         try:
             self._connection_indicator.update()
-        except Exception as e:
-            show_error("Error updating connection indicator", e, "inventario_view._update_connection_indicator")
+        except Exception:
+            pass
 
     async def _load_categorias(self, force_refresh=False):
         if not self.page:
