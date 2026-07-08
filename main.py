@@ -140,7 +140,10 @@ class ControlEntradasSalidasApp:
         self._setup_theme()
         self._create_layout()
         self._handle_responsive_layout(self.page.width)
+        print(f"[DEBUG] arrancar_interfaz: views={len(self.views)}, content_area={self.content_area is not None}")
         self._show_view(0)
+        print(f"[DEBUG] after _show_view: content_area.content is None? {self.content_area.content is None}")
+        print(f"[DEBUG] views[0] type={type(self.views[0]).__name__}, visible={self.views[0].visible}")
         
         self.page.on_resized = self._on_page_resized
         self.page.update()
@@ -232,6 +235,10 @@ class ControlEntradasSalidasApp:
         if getattr(self, '_switching_view', False):
             return
             
+        ctrl_type = type(e.control).__name__
+        sel_idx = getattr(e.control, 'selected_index', 'N/A')
+        print(f"[DEBUG] _on_navigation_change: control={ctrl_type}, selected_index={sel_idx}")
+            
         if isinstance(e.control, ft.NavigationBar):
             index = int(e.control.selected_index)
             if index == 3:
@@ -301,6 +308,7 @@ class ControlEntradasSalidasApp:
         if getattr(self, '_switching_view', False):
             return
         self._switching_view = True
+        print(f"[DEBUG] _show_view({index}): views_len={len(self.views)}, content_area={self.content_area is not None}")
         try:
             if not self.views or index < 0 or index >= len(self.views):
                 keys = list(range(len(self.views))) if self.views else "None"
