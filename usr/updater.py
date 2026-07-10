@@ -105,11 +105,18 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
         remote_version = remote_info.get("version", "1.0.0")
         zip_url = remote_info.get("zip_url", "")
 
-        if remote_version == local_version or not zip_url:
+        if remote_version == local_version:
             status_text.value = f"Aplicación al día (v{local_version})"
             status_text.color = "#4CAF50"
             page.update()
             await asyncio.sleep(0.5)
+            return
+
+        if not zip_url:
+            status_text.value = f"Nueva versión {remote_version} disponible, pero sin URL de descarga"
+            status_text.color = "#FF9800"
+            page.update()
+            await asyncio.sleep(2)
             return
 
         # 4. Preguntar al usuario
