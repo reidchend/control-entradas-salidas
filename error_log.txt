@@ -1,9 +1,11 @@
 Traceback (most recent call last):
   File "/workspaces/control-entradas-salidas/usr/app_launcher.py", line 217, in main
     from usr.views.login_view import LoginView
-  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 5, in <module>
-    from .historial_facturas_view import HistorialFacturasView
-  File "/workspaces/control-entradas-salidas/usr/views/historial_facturas_view.py", line 589
-    if self.factura_dlg is None:
-    ^^
-SyntaxError: expected 'except' or 'finally' block
+  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 3, in <module>
+    from .stock_view import StockView
+  File "/workspaces/control-entradas-salidas/usr/views/stock_view.py", line 17, in <module>
+    class StockView(ft.Container):
+  File "/workspaces/control-entradas-salidas/usr/views/stock_view.py", line 386, in StockView
+    def _show_producto_details(self, producto: Producto):
+                                               ^^^^^^^^
+NameError: name 'Producto' is not defined

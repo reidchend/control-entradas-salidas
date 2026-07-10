@@ -285,10 +285,14 @@ class ValidacionFields:
 
             fecha = self.fecha_picker.value if self.fecha_picker.value else datetime.now()
 
+            factura_val = self.factura_input.value or ""
+            if not factura_val.strip():
+                factura_val = f"EV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
             return {
                 'proveedor': prov,
                 'rif': rif,
-                'factura': self.factura_input.value or "",
+                'factura': factura_val,
                 'monto': monto,
                 'fecha': fecha,
                 'tipo_documento': next(iter(self.tipo_documento_segmented.selected)) if self.tipo_documento_segmented.selected else 'Factura'
@@ -303,7 +307,7 @@ class ValidacionFields:
             return {
                 'proveedor': 'Varios',
                 'rif': '',
-                'factura': '',
+                'factura': f"EV-{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 'monto': 0,
                 'fecha': datetime.now(),
                 'tipo_documento': 'Factura'

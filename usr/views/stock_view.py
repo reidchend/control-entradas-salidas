@@ -1,6 +1,8 @@
 import flet as ft
 import asyncio
-import traceback
+from sqlalchemy import func
+from usr.database.base import get_db_adaptive
+from usr.models import Producto, Movimiento
 from usr.theme import get_colors
 from usr.notifications import show_success, show_info, show_error
 from usr.logger import get_logger
@@ -242,7 +244,7 @@ class StockView(ft.Container):
     def _load_categorias(self):
         try:
             categorias = load_categories()
-            self.categoria_//filter.options = [ft.dropdown.Option("", "Todas")]
+            self.categoria_filter.options = [ft.dropdown.Option("", "Todas")]
             for cat in categorias:
                 self.categoria_filter.options.append(ft.dropdown.Option(str(cat.id), cat.nombre))
             
@@ -335,21 +337,7 @@ class StockView(ft.Container):
                     if stock_actual <= 0: color = colors['error']
                     elif stock_actual <= (p.stock_minimo or 0): color = colors['warning']
                     else: color = colors['success']
-                    
-                    almacen_info = ft.Container(
-                        content=ft.Column([
-                            ft.Text("Stock por almacén:", size=11, weight="bold", color=colors['text_primary']),
-                            ft.Column([
-                                ft.Text(f"{k.capitalize()}: {v:.0f}", size=10) for k, v in stock_por_almacen.items()
-                            ], spacing=0),
-                        ], spacing=2),
-                        bgcolor=colors['blue_50'],
-                        padding=8,
-                        border_radius=6,
-                        margin=ft.margin.only(top=5)
-                    )
-                    
-                    peso_view = ft.Container()
+
                     es_pesable = getattr(p, 'es_pesable', False)
                     
                     if es_pesable:
@@ -362,19 +350,10 @@ class StockView(ft.Container):
                         ).scalar() or 0.0
                         
                         peso_neto = peso_entrada - peso_salida
-                        
-                        peso_view = ft.Container(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.SCALE_ROUNDED, size=16, color=colors['accent']),
-                                ft.Text(f"Peso en Stock: {peso_neto:.2f} kg", size=14, weight=ft.FontWeight.W_600, color=colors['accent']),
-                            ], spacing=8),
-                            bgcolor=colors['blue_50'],
-                            border_radius=8,
-                            padding=ft.padding.symmetric(horizontal=10, vertical=8),
-                            margin=ft.margin.only(top=5, bottom=5)
-                        )
+                    else:
+                        peso_neto = 0
                     
-                    card = build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto if 'peso_neto' in locals() else 0, colors)
+                    card = build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto, colors)
                     card.on_click = lambda e, prod=p: self._show_producto_details(prod)
                     self.productos_list.controls.append(card)
             finally:

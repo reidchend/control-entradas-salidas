@@ -1,4 +1,5 @@
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from usr.database.base import get_db_adaptive
 from usr.models import Producto, Movimiento, Categoria, Existencia, Factura
 
@@ -19,7 +20,7 @@ def load_warehouses():
 def load_products(limit=50):
     db = next(get_db_adaptive())
     try:
-        return db.query(Producto).filter(Producto.activo == True).order_by(Producto.nombre).limit(limit).all()
+        return db.query(Producto).options(joinedload(Producto.categoria)).filter(Producto.activo == True).order_by(Producto.nombre).limit(limit).all()
     finally:
         db.close()
 
@@ -41,7 +42,7 @@ def get_existencias_map(producto_ids):
 def filter_products_db(search="", categoria=None, almacen=None, limit=50):
     db = next(get_db_adaptive())
     try:
-        query = db.query(Producto).filter(Producto.activo == True)
+        query = db.query(Producto).options(joinedload(Producto.categoria)).filter(Producto.activo == True)
         if categoria and categoria.isdigit():
             query = query.filter(Producto.categoria_id == int(categoria))
         if search:
