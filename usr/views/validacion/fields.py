@@ -50,6 +50,7 @@ class ValidacionFields:
         self.proveedor_dd = ft.Dropdown(
             label="Proveedor",
             options=proveedor_opts,
+            value="Varios",
             border_radius=10,
             expand=True,
             on_change=self._on_proveedor_change
@@ -121,6 +122,8 @@ class ValidacionFields:
             height=45
         )
 
+        self.check_validar_button()
+
     def _on_factura_change(self, e):
         try:
             self.check_validar_button()
@@ -185,8 +188,11 @@ class ValidacionFields:
             # El monto y la factura ya no son obligatorios para habilitar el botón (la factura se asigna por defecto si falta)
             completo = (has_proveedor or has_nuevo_prov)
             self.validar_btn.disabled = not completo
-            if self.page:
-                self.page.update()
+            try:
+                self.validar_btn.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
         except Exception as ex:
             print(f"[ERROR] ValidacionFields.check_validar_button: {ex}")
             try:
