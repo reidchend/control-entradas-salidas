@@ -178,13 +178,12 @@ class ValidacionFields:
 
     def check_validar_button(self):
         try:
-            has_factura = bool(self.factura_input.value and self.factura_input.value.strip())
             has_proveedor = self.proveedor_dd.value and self.proveedor_dd.value != "__nuevo__"
             has_nuevo_prov = (self.proveedor_dd.value == "__nuevo__" and
-                               self.nuevo_proveedor_input.value and self.nuevo_proveedor_input.value.strip())
+                                self.nuevo_proveedor_input.value and self.nuevo_proveedor_input.value.strip())
             
-            # El monto ya no es obligatorio para habilitar el botón
-            completo = has_factura and (has_proveedor or has_nuevo_prov)
+            # El monto y la factura ya no son obligatorios para habilitar el botón (la factura se asigna por defecto si falta)
+            completo = (has_proveedor or has_nuevo_prov)
             self.validar_btn.disabled = not completo
             if self.page:
                 self.page.update()

@@ -3,6 +3,9 @@ import os
 import asyncio
 import sys
 import flet as ft
+from usr.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_theme_colors(page):
@@ -18,53 +21,56 @@ def get_theme_colors(page):
 
 
 def mostrar_error_critico(page: ft.Page, error_completo: str):
-    page.clean()
-    page.bgcolor = "#1a0000"
+    try:
+        page.clean()
+        page.bgcolor = "#1a0000"
 
-    error_container = ft.Column(
-        scroll=ft.ScrollMode.ALWAYS,
-        expand=True,
-        controls=[
-            ft.Text("DETALLES TÉCNICOS:", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_200),
+        error_container = ft.Column(
+            scroll=ft.ScrollMode.ALWAYS,
+            expand=True,
+            controls=[
+                ft.Text("DETALLES TÉCNICOS:", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_200),
+                ft.Container(
+                    content=ft.Text(
+                        error_completo,
+                        size=11,
+                        font_family="monospace",
+                        color=ft.Colors.RED_100,
+                    ),
+                    padding=10,
+                    bgcolor="#330000",
+                    border_radius=5,
+                ),
+            ],
+        )
+
+        page.add(
             ft.Container(
-                content=ft.Text(
-                    error_completo,
-                    size=11,
-                    font_family="monospace",
-                    color=ft.Colors.RED_100,
-                ),
-                padding=10,
-                bgcolor="#330000",
-                border_radius=5,
+                padding=20,
+                content=ft.Column([
+                    ft.Icon(ft.Icons.REPORT_PROBLEM_ROUNDED, color=ft.Colors.RED_400, size=50),
+                    ft.Text("Error de Inicio", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text("La aplicación no pudo arrancar correctamente.", text_align=ft.TextAlign.CENTER),
+                    ft.Divider(color=ft.Colors.RED_900),
+                    ft.Container(content=error_container, height=300),
+                    ft.ElevatedButton(
+                        "Copiar Error al Portapapeles",
+                        icon=ft.Icons.COPY,
+                        on_click=lambda _: page.set_clipboard(error_completo),
+                    ),
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        "Reintentar Inicio",
+                        bgcolor=ft.Colors.RED_700,
+                        color=ft.Colors.WHITE,
+                        on_click=lambda _: page.go("/"),
+                    ),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             ),
-        ],
-    )
-
-    page.add(
-        ft.Container(
-            padding=20,
-            content=ft.Column([
-                ft.Icon(ft.Icons.REPORT_PROBLEM_ROUNDED, color=ft.Colors.RED_400, size=50),
-                ft.Text("Error de Inicio", size=24, weight=ft.FontWeight.BOLD),
-                ft.Text("La aplicación no pudo arrancar correctamente.", text_align=ft.TextAlign.CENTER),
-                ft.Divider(color=ft.Colors.RED_900),
-                ft.Container(content=error_container, height=300),
-                ft.ElevatedButton(
-                    "Copiar Error al Portapapeles",
-                    icon=ft.Icons.COPY,
-                    on_click=lambda _: page.set_clipboard(error_completo),
-                ),
-                ft.Container(height=10),
-                ft.ElevatedButton(
-                    "Reintentar Inicio",
-                    bgcolor=ft.Colors.RED_700,
-                    color=ft.Colors.WHITE,
-                    on_click=lambda _: page.go("/"),
-                ),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        ),
-    )
-    page.update()
+        )
+        page.update()
+    except Exception as e:
+        print(f"CRITICAL ERROR in mostrar_error_critico: {e}")
 
 
 async def main(page: ft.Page):
@@ -300,6 +306,7 @@ async def main(page: ft.Page):
 
     except Exception as inner_e:
         error_log = traceback.format_exc()
+        logger.error(f"Exception in main(): {error_log}")
         db_dir = page.session.get("_db_dir") or "."
         try:
             log_path = os.path.join(db_dir, "error_log.txt")

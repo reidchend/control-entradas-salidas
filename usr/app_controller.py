@@ -1,4 +1,8 @@
 import flet as ft
+from usr.logger import get_logger
+from usr.error_handler import show_error
+
+logger = get_logger(__name__)
 
 
 class ControlEntradasSalidasApp:
@@ -17,46 +21,49 @@ class ControlEntradasSalidasApp:
     async def arrancar_interfaz(self, page: ft.Page, settings, vistas_cargadas):
         self.page = page
         self.settings = settings
+        try:
+            from usr.database.base import init_local_tables
+            init_local_tables()
 
-        from usr.database.base import init_local_tables
-        init_local_tables()
+            from usr.views import InventarioView, ValidacionView, StockView, ProduccionesView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
+            v_inv = InventarioView()
+            v_val = ValidacionView()
+            v_sto = StockView()
+            v_pro = ProduccionesView()
+            v_req = RequisicionesView()
+            v_his = HistorialFacturasView()
+            v_cfg = ConfiguracionView()
+            v_ban = BandejaWhatsAppView()
+            v_req.inventario_view = v_inv
+            v_req.app_controller = self
 
-        from usr.views import InventarioView, ValidacionView, StockView, ProduccionesView, ConfiguracionView, HistorialFacturasView, RequisicionesView, BandejaWhatsAppView
-        v_inv = InventarioView()
-        v_val = ValidacionView()
-        v_sto = StockView()
-        v_pro = ProduccionesView()
-        v_req = RequisicionesView()
-        v_his = HistorialFacturasView()
-        v_cfg = ConfiguracionView()
-        v_ban = BandejaWhatsAppView()
-        v_req.inventario_view = v_inv
-        v_req.app_controller = self
+            self.views = [
+                v_inv,    # 0
+                v_val,    # 1
+                v_sto,    # 2
+                v_pro,    # 3
+                v_req,    # 4
+                v_his,    # 5
+                v_cfg,    # 6
+                v_ban,    # 7
+            ]
 
-        self.views = [
-            v_inv,    # 0
-            v_val,    # 1
-            v_sto,    # 2
-            v_pro,    # 3
-            v_req,    # 4
-            v_his,    # 5
-            v_cfg,    # 6
-            v_ban,    # 7
-        ]
+            self.page.title = self.settings.FLET_APP_NAME
+            self.page.theme_mode = ft.ThemeMode.DARK
+            self.page.padding = 0
+            self.page.spacing = 0
+            self.page.expand = True
 
-        self.page.title = self.settings.FLET_APP_NAME
-        self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.padding = 0
-        self.page.spacing = 0
-        self.page.expand = True
+            self._setup_theme()
+            self._create_layout()
+            self._handle_responsive_layout(self.page.width)
+            self._show_view(0)
 
-        self._setup_theme()
-        self._create_layout()
-        self._handle_responsive_layout(self.page.width)
-        self._show_view(0)
-
-        self.page.on_resized = self._on_page_resized
-        self.page.update()
+            self.page.on_resized = self._on_page_resized
+            self.page.update()
+        except Exception as e:
+            logger.error(f"Error crítico en arrancar_interfaz: {e}", exc_info=True)
+            show_error("Error al iniciar la interfaz", e, "ControlEntradasSalidasApp.arrancar_interfaz")
 
     def _setup_theme(self):
         if not self.page:
@@ -67,61 +74,68 @@ class ControlEntradasSalidasApp:
     def _toggle_theme(self, e=None):
         if not self.page:
             return
+        try:
+            is_dark = self.page.theme_mode != ft.ThemeMode.DARK
+            self.page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
+            self.page.bgcolor = '#1A1A1A' if is_dark else '#F5F5F5'
 
-        is_dark = self.page.theme_mode != ft.ThemeMode.DARK
-        self.page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
-        self.page.bgcolor = '#1A1A1A' if is_dark else '#F5F5F5'
+            if hasattr(self, 'content_area') and self.content_area:
+                self.content_area.bgcolor = '#252525' if is_dark else '#FFFFFF'
 
-        if hasattr(self, 'content_area') and self.content_area:
-            self.content_area.bgcolor = '#252525' if is_dark else '#FFFFFF'
+            if hasattr(self, 'navigation_rail') and self.navigation_rail:
+                self.navigation_rail.bgcolor = '#1E1E1E' if is_dark else '#F3E5F5'
 
-        if hasattr(self, 'navigation_rail') and self.navigation_rail:
-            self.navigation_rail.bgcolor = '#1E1E1E' if is_dark else '#F3E5F5'
+            if hasattr(self, 'theme_toggle') and self.theme_toggle:
+                self.theme_toggle.icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
+                self.theme_toggle.icon_color = ft.Colors.AMBER if is_dark else ft.Colors.BLUE_GREY_700
+                self.theme_toggle.tooltip = "Modo Claro" if is_dark else "Modo Oscuro"
 
-        if hasattr(self, 'theme_toggle') and self.theme_toggle:
-            self.theme_toggle.icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
-            self.theme_toggle.icon_color = ft.Colors.AMBER if is_dark else ft.Colors.BLUE_GREY_700
-            self.theme_toggle.tooltip = "Modo Claro" if is_dark else "Modo Oscuro"
+            if self.current_view and hasattr(self.current_view, 'on_theme_change'):
+                self.current_view.on_theme_change()
 
-        if self.current_view and hasattr(self.current_view, 'on_theme_change'):
-            self.current_view.on_theme_change()
-
-        self.page.update()
+            self.page.update()
+        except Exception as e:
+            logger.error(f"Error en _toggle_theme: {e}", exc_info=True)
+            show_error("Error al cambiar el tema", e, "ControlEntradasSalidasApp._toggle_theme")
 
     def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=0)
+        try:
+            self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=0)
 
-        self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
+            self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
 
-        self.navigation_rail = ft.NavigationRail(
-            selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E',
-            leading=self.theme_toggle,
-            destinations=[
-                ft.NavigationRailDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, selected_icon=ft.Icons.SHOPPING_CART, label="Inventario"),
-                ft.NavigationRailDestination(icon=ft.Icons.CHECKLIST_OUTLINED, selected_icon=ft.Icons.CHECKLIST, label="Validación"),
-                ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Stock"),
-                ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Producciones"),
-                ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Requisiciones"),
-                ft.NavigationRailDestination(icon=ft.Icons.HISTORY_OUTLINED, selected_icon=ft.Icons.HISTORY, label="Historial"),
-                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS_OUTLINED, selected_icon=ft.Icons.SETTINGS, label="Ajustes"),
-                ft.NavigationRailDestination(icon=ft.Icons.MAIL_OUTLINED, selected_icon=ft.Icons.MAIL, label="Bandeja"),
-            ], on_change=self._on_navigation_change,
-        )
+            self.navigation_rail = ft.NavigationRail(
+                selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E',
+                leading=self.theme_toggle,
+                destinations=[
+                    ft.NavigationRailDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, selected_icon=ft.Icons.SHOPPING_CART, label="Inventario"),
+                    ft.NavigationRailDestination(icon=ft.Icons.CHECKLIST_OUTLINED, selected_icon=ft.Icons.CHECKLIST, label="Validación"),
+                    ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Stock"),
+                    ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Producciones"),
+                    ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Requisiciones"),
+                    ft.NavigationRailDestination(icon=ft.Icons.HISTORY_OUTLINED, selected_icon=ft.Icons.HISTORY, label="Historial"),
+                    ft.NavigationRailDestination(icon=ft.Icons.SETTINGS_OUTLINED, selected_icon=ft.Icons.SETTINGS, label="Ajustes"),
+                    ft.NavigationRailDestination(icon=ft.Icons.MAIL_OUTLINED, selected_icon=ft.Icons.MAIL, label="Bandeja"),
+                ], on_change=self._on_navigation_change,
+            )
 
-        self.navigation_bar = ft.NavigationBar(
-            visible=False, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, label="Inventario"),
-                ft.NavigationBarDestination(icon=ft.Icons.CHECKLIST_OUTLINED, label="Validar"),
-                ft.NavigationBarDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, label="Stock"),
-                ft.NavigationBarDestination(icon=ft.Icons.MORE_VERT, label="Más"),
-            ], on_change=self._on_navigation_change,
-        )
+            self.navigation_bar = ft.NavigationBar(
+                visible=False, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                destinations=[
+                    ft.NavigationBarDestination(icon=ft.Icons.SHOPPING_CART_OUTLINED, label="Inventario"),
+                    ft.NavigationBarDestination(icon=ft.Icons.CHECKLIST_OUTLINED, label="Validar"),
+                    ft.NavigationBarDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, label="Stock"),
+                    ft.NavigationBarDestination(icon=ft.Icons.MORE_VERT, label="Más"),
+                ], on_change=self._on_navigation_change,
+            )
 
-        self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
-        self.page.clean()
-        self.page.padding = 5
-        self.page.add(self._layout_row)
+            self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
+            self.page.clean()
+            self.page.padding = 5
+            self.page.add(self._layout_row)
+        except Exception as e:
+            logger.error(f"Error en _create_layout: {e}", exc_info=True)
+            show_error("Error al crear el layout de la app", e, "ControlEntradasSalidasApp._create_layout")
 
     def _on_page_resized(self, e):
         self._handle_responsive_layout(float(e.width))
@@ -142,79 +156,80 @@ class ControlEntradasSalidasApp:
     def _on_navigation_change(self, e):
         if self.page is None:
             return
-        if getattr(self, '_switching_view', False):
-            return
-
-        if isinstance(e.control, ft.NavigationBar):
-            index = int(e.control.selected_index)
-            if index == 3:
-                self._show_more_menu()
+        try:
+            if isinstance(e.control, ft.NavigationBar):
+                index = int(e.control.selected_index)
+                if index == 3:
+                    self._show_more_menu()
+                    return
+                self.current_view_index = index
+                self._show_view(index)
                 return
-            self.current_view_index = index
-            self._show_view(index)
-            return
 
-        if isinstance(e.control, ft.NavigationRail):
-            selected_dest = e.control.destinations[e.control.selected_index]
-            label = selected_dest.label
-            mapping = {
-                "Inventario": 0,
-                "Validación": 1,
-                "Stock": 2,
-                "Producciones": 3,
-                "Requisiciones": 4,
-                "Historial": 5,
-                "Ajustes": 6,
-                "Bandeja": 7,
-            }
-            index = mapping.get(label)
-            if index is None:
-                return
-            self.current_view_index = index
-            self._show_view(index)
+            if isinstance(e.control, ft.NavigationRail):
+                selected_dest = e.control.destinations[e.control.selected_index]
+                label = selected_dest.label
+                mapping = {
+                    "Inventario": 0,
+                    "Validación": 1,
+                    "Stock": 2,
+                    "Producciones": 3,
+                    "Requisiciones": 4,
+                    "Historial": 5,
+                    "Ajustes": 6,
+                    "Bandeja": 7,
+                }
+                index = mapping.get(label)
+                if index is None:
+                    return
+                self.current_view_index = index
+                self._show_view(index)
+        except Exception as e:
+            logger.error(f"Error en _on_navigation_change: {e}", exc_info=True)
+            show_error("Error al cambiar de vista", e, "ControlEntradasSalidasApp._on_navigation_change")
 
     def _show_more_menu(self):
         if self.page is None:
             return
+        try:
+            opciones = [("factory", "Producciones", 3), ("assignment", "Requisiciones", 4), ("history", "Historial", 5), ("settings", "Ajustes", 6), ("mail", "Bandeja", 7)]
 
-        opciones = [("factory", "Producciones", 3), ("assignment", "Requisiciones", 4), ("history", "Historial", 5), ("settings", "Ajustes", 6), ("mail", "Bandeja", 7)]
+            is_dark = self.page.theme_mode == ft.ThemeMode.DARK
+            theme_icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
+            theme_label = "Modo Claro" if is_dark else "Modo Oscuro"
 
-        is_dark = self.page.theme_mode == ft.ThemeMode.DARK
-        theme_icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
-        theme_label = "Modo Claro" if is_dark else "Modo Oscuro"
+            def on_toggle_theme(e):
+                self.page.close(self.bottom_sheet)
+                self._toggle_theme()
 
-        def on_toggle_theme(e):
-            self.page.close(self.bottom_sheet)
-            self._toggle_theme()
+            def on_nav(e, idx):
+                self.page.close(self.bottom_sheet)
+                self._show_view(idx)
 
-        def on_nav(e, idx):
-            self.page.close(self.bottom_sheet)
-            self._show_view(idx)
-
-        menu_content = ft.Column(spacing=0, controls=[
-            ft.Container(
-                content=ft.Row([ft.Icon(theme_icon, size=24), ft.Text(theme_label, size=16)], spacing=15),
-                padding=ft.padding.all(15),
-                on_click=on_toggle_theme,
-            ),
-            ft.Divider(height=1, color='#3D3D3D'),
-            *[
+            menu_content = ft.Column(spacing=0, controls=[
                 ft.Container(
-                    content=ft.Row([ft.Icon(icon, size=24), ft.Text(label, size=16)], spacing=15),
+                    content=ft.Row([ft.Icon(theme_icon, size=24), ft.Text(theme_label, size=16)], spacing=15),
                     padding=ft.padding.all(15),
-                    on_click=lambda e, i=idx: on_nav(e, i),
-                )
-                for icon, label, idx in opciones
-            ],
-        ])
+                    on_click=on_toggle_theme,
+                ),
+                ft.Divider(height=1, color='#3D3D3D'),
+                *[
+                    ft.Container(
+                        content=ft.Row([ft.Icon(icon, size=24), ft.Text(label, size=16)], spacing=15),
+                        padding=ft.padding.all(15),
+                        on_click=lambda e, i=idx: on_nav(e, i),
+                    )
+                    for icon, label, idx in opciones
+                ],
+            ])
 
-        self.bottom_sheet = ft.BottomSheet(content=ft.Container(content=menu_content, padding=ft.padding.only(bottom=20)), open=True)
-        self.page.open(self.bottom_sheet)
+            self.bottom_sheet = ft.BottomSheet(content=ft.Container(content=menu_content, padding=ft.padding.only(bottom=20)), open=True)
+            self.page.open(self.bottom_sheet)
+        except Exception as e:
+            logger.error(f"Error en _show_more_menu: {e}", exc_info=True)
+            show_error("Error al abrir el menú de más opciones", e, "ControlEntradasSalidasApp._show_more_menu")
 
     def _show_view(self, index: int):
-        if getattr(self, '_switching_view', False):
-            return
-        self._switching_view = True
         try:
             if not self.views or index < 0 or index >= len(self.views):
                 keys = list(range(len(self.views))) if self.views else "None"
@@ -239,8 +254,10 @@ class ControlEntradasSalidasApp:
                     self.navigation_bar.selected_index = index
                 else:
                     self.navigation_bar.selected_index = 3
-        finally:
-            self._switching_view = False
+        except Exception as e:
+            logger.error(f"Error en _show_view({index}): {e}", exc_info=True)
+            show_error(f"Error al mostrar la vista {index}", e, "ControlEntradasSalidasApp._show_view")
+            return
 
         if hasattr(view, '_update_connection_indicator'):
             try:

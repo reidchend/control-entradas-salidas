@@ -100,11 +100,14 @@ def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: boo
     )
 
     try:
-        # Cerrar cualquier snackbar anterior
+        # Cerrar cualquier snackbar anterior que esté abierto
         if _page.overlay:
             for item in list(_page.overlay):
-                if isinstance(item, ft.SnackBar):
-                    item.open = False
+                if isinstance(item, ft.SnackBar) and item.open:
+                    try:
+                        item.open = False
+                    except:
+                        pass
 
         _page.overlay.append(snack)
         snack.open = True
