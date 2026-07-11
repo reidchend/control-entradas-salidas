@@ -249,9 +249,8 @@ class StockView(ft.Container):
                 self.filters_spacer,
                 self.filters_section,
                 self.list_container,
-            ], spacing=0, expand=True),
+            ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO),
             expand=True,
-            scroll=ft.ScrollMode.AUTO,
         )
 
         self.content = ft.Column([
