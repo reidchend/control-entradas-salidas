@@ -116,10 +116,11 @@ class InventarioView(ft.Container):
         def check_connection_loop():
             while True:
                 time.sleep(10)
-                if hasattr(self, 'page') and self.page:
+                page = getattr(self, 'page', None)
+                if page:
                     self._update_connection_indicator()
                     try:
-                        self.page.update()
+                        page.update()
                     except Exception as e:
                         show_error("Error updating page", e, "inventario_view.check_connection_loop")
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)

@@ -21,10 +21,8 @@ def build_producto_historial_dialog(producto, movimientos):
             cantidad_valor = m.cantidad
         
         factura_texto = ""
-        if m.factura_id:
-            # Note: Factura lookup should be done in the data layer, 
-            # but for now we keep the logic simple or pass the factura object
-            factura_texto = f" - 📄 {m.factura_id}"
+        if m.factura:
+            factura_texto = f" - 📄 {m.factura.numero_factura}"
         
         mov_list.controls.append(
             ft.Container(
