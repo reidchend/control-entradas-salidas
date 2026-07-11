@@ -39,7 +39,7 @@ def get_existencias_map(producto_ids):
         db.close()
     return existencias_map
 
-def filter_products_db(search="", categoria=None, almacen=None, limit=50):
+def filter_products_db(search="", categoria=None, almacen=None, stock_status="all", limit=50):
     db = next(get_db_adaptive())
     try:
         query = db.query(Producto).options(joinedload(Producto.categoria)).filter(Producto.activo == True)
@@ -52,9 +52,20 @@ def filter_products_db(search="", categoria=None, almacen=None, limit=50):
         producto_ids = [p.id for p in productos]
         existencias_map = get_existencias_map(producto_ids)
         
+        # Filtrar por almacén si aplica (usa el stock real por almacén)
         if almacen:
             productos = [p for p in productos if (existencias_map.get(p.id, {}).get(almacen) or 0) > 0]
-            
+        
+        # Filtrar por estado de stock usando el stock CALCULADO (suma de existencias),
+        # que es exactamente lo que se muestra en la tarjeta.
+        if stock_status != "all":
+            def _stock_calc(p):
+                return sum(existencias_map.get(p.id, {}).values()) or 0
+            if stock_status == "low":
+                productos = [p for p in productos if 0 < _stock_calc(p) <= (p.stock_minimo or 0)]
+            elif stock_status == "out":
+                productos = [p for p in productos if _stock_calc(p) <= 0]
+        
         return productos, existencias_map
     finally:
         db.close()
@@ -62,7 +73,7 @@ def filter_products_db(search="", categoria=None, almacen=None, limit=50):
 def get_producto_historial(producto_id, limit=20):
     db = next(get_db_adaptive())
     try:
-        movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto_id).order_by(Movimiento.fecha_movimiento.desc()).limit(limit).all()
+        movimientos = db.query(Movimiento).options(joinedload(Movimiento.factura)).filter(Movimiento.producto_id == producto_id).order_by(Movimiento.fecha_movimiento.desc()).limit(limit).all()
         return movimientos
     finally:
         db.close()

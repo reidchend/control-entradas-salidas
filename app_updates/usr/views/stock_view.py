@@ -28,6 +28,7 @@ class StockView(ft.Container):
         self.current_almacen_filter = ""
         self.current_categoria_filter = ""
         self.current_search_text = ""
+        self.current_stock_filter = "all"
         
         # Componentes UI persistentes
         self.categoria_filter = None
@@ -180,9 +181,12 @@ class StockView(ft.Container):
         
         self.summary_container = ft.Container(
             content=ft.Row([
-                build_stat_card("Total", self.total_productos_text, ft.Icons.INVENTORY_2, '#2196F3'),
-                build_stat_card("Bajo Stock", self.stock_bajo_text, ft.Icons.WARNING_AMBER, '#FF9800'),
-                build_stat_card("Agotado", self.sin_stock_text, ft.Icons.ERROR_OUTLINE, '#F44336'),
+                build_stat_card("Total", self.total_productos_text, ft.Icons.INVENTORY_2, '#2196F3', 
+                                on_click=lambda _: self._filter_by_stock_status("all"), active=(self.current_stock_filter == "all")),
+                build_stat_card("Bajo Stock", self.stock_bajo_text, ft.Icons.WARNING_AMBER, '#FF9800', 
+                                on_click=lambda _: self._filter_by_stock_status("low"), active=(self.current_stock_filter == "low")),
+                build_stat_card("Agotado", self.sin_stock_text, ft.Icons.ERROR_OUTLINE, '#F44336', 
+                                on_click=lambda _: self._filter_by_stock_status("out"), active=(self.current_stock_filter == "out")),
             ], scroll=ft.ScrollMode.HIDDEN, spacing=12),
             padding=ft.padding.symmetric(horizontal=16)
         )
@@ -213,23 +217,21 @@ class StockView(ft.Container):
         
         filters_section = ft.Container(
             content=ft.ResponsiveRow([
-                ft.Column([self.search_field], col={"xs": 12, "md": 6}),
-                ft.Column([self.categoria_filter], col={"xs": 12, "md": 3}),
-                ft.Column([self.almacen_filter], col={"xs": 12, "md": 3}),
+                ft.Column([self.search_field], col={"xs": 12, "sm": 6}),
+                ft.Column([self.categoria_filter], col={"xs": 6, "sm": 3}),
+                ft.Column([self.almacen_filter], col={"xs": 6, "sm": 3}),
             ], spacing=12),
-            padding=ft.padding.symmetric(horizontal=16, vertical=8),
+            padding=ft.padding.symmetric(horizontal=16, vertical=4),
         )
         
-        self.productos_list = ft.ListView(
-            expand=True,
+        self.productos_list = ft.Column(
             spacing=12,
-            padding=ft.padding.only(left=16, right=16, bottom=80),
         )
         
         self.list_container = ft.Container(
             content=self.productos_list,
-            expand=True,
             bgcolor=colors['bg'],
+            padding=ft.padding.only(left=16, right=16, bottom=20),
         )
         
         self.content = ft.Column([
@@ -238,7 +240,7 @@ class StockView(ft.Container):
             ft.Container(height=8),
             filters_section,
             self.list_container,
-        ], spacing=0, expand=True)
+        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
         self.content.bgcolor = colors['bg']
 
     def _load_categorias(self):
@@ -302,7 +304,9 @@ class StockView(ft.Container):
             categoria = self.categoria_filter.value if self.categoria_filter.value else ""
             almacen = self.almacen_filter.value if self.almacen_filter.value else ""
             
-            productos, existencias_map = filter_products_db(search, categoria, almacen)
+            productos, existencias_map = filter_products_db(
+                search, categoria, almacen, stock_status=self.current_stock_filter
+            )
             self._render_productos(productos, existencias_map)
         except asyncio.CancelledError:
             pass
@@ -330,7 +334,10 @@ class StockView(ft.Container):
         else:
             db = next(get_db_adaptive())
             try:
-                for p in productos:
+                rows = []
+                current_row = ft.Row(spacing=12, alignment=ft.MainAxisAlignment.START)
+                
+                for i, p in enumerate(productos):
                     stock_por_almacen = existencias_map.get(p.id, {})
                     stock_actual = sum(stock_por_almacen.values()) or 0
                     
@@ -353,9 +360,22 @@ class StockView(ft.Container):
                     else:
                         peso_neto = 0
                     
-                    card = build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto, colors)
-                    card.on_click = lambda e, prod=p: self._show_producto_details(prod)
-                    self.productos_list.controls.append(card)
+                    card = build_product_card(
+                        p, stock_actual, color, stock_por_almacen, peso_neto, colors,
+                        on_action=lambda action, prod: self._handle_product_action(action, prod)
+                    )
+                    card.expand = True # Para que las 2 tarjetas midan lo mismo en la fila
+                    
+                    current_row.controls.append(card)
+                    
+                    if len(current_row.controls) == 2:
+                        rows.append(current_row)
+                        current_row = ft.Row(spacing=12, alignment=ft.MainAxisAlignment.START)
+                
+                if current_row.controls:
+                    rows.append(current_row)
+                
+                self.productos_list.controls.extend(rows)
             finally:
                 db.close()
         
@@ -366,11 +386,7 @@ class StockView(ft.Container):
         try:
             from usr.views.stock.dialogs import build_producto_historial_dialog
             
-            db = next(get_db_adaptive())
-            try:
-                movimientos = db.query(Movimiento).filter(Movimiento.producto_id == producto.id).order_by(Movimiento.fecha_movimiento.desc()).limit(20).all()
-            finally:
-                db.close()
+            movimientos = get_producto_historial(producto.id, limit=20)
             
             self.active_dialog = build_producto_historial_dialog(producto, movimientos)
             self.active_dialog.actions[0].on_click = self._close_dialog
@@ -387,3 +403,24 @@ class StockView(ft.Container):
             self.active_dialog.open = False
             if self.page and self.visible:
                 self.page.update()
+            self.active_dialog = None
+
+    def _handle_product_action(self, action, producto):
+        if action == "historial":
+            self._show_producto_details(producto)
+        elif action == "detallado":
+            show_info(f"Próximamente: Stock detallado de {producto.nombre}", duration=2)
+
+    def _filter_by_stock_status(self, status):
+        self.current_stock_filter = status
+        self.summary_container.content = ft.Row([
+            build_stat_card("Total", self.total_productos_text, ft.Icons.INVENTORY_2, '#2196F3', 
+                            on_click=lambda _: self._filter_by_stock_status("all"), active=(self.current_stock_filter == "all")),
+            build_stat_card("Bajo Stock", self.stock_bajo_text, ft.Icons.WARNING_AMBER, '#FF9800', 
+                            on_click=lambda _: self._filter_by_stock_status("low"), active=(self.current_stock_filter == "low")),
+            build_stat_card("Agotado", self.sin_stock_text, ft.Icons.ERROR_OUTLINE, '#F44336', 
+                            on_click=lambda _: self._filter_by_stock_status("out"), active=(self.current_stock_filter == "out")),
+        ], scroll=ft.ScrollMode.HIDDEN, spacing=12)
+        if self.page and self.visible:
+            self.summary_container.update()
+        self.page.run_task(self._buscar_async)
