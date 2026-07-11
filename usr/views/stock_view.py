@@ -215,7 +215,7 @@ class StockView(ft.Container):
             value=""
         )
         
-        filters_section = ft.Container(
+        self.filters_section = ft.Container(
             content=ft.ResponsiveRow([
                 ft.Column([self.search_field], col={"xs": 12, "sm": 6}),
                 ft.Column([self.categoria_filter], col={"xs": 6, "sm": 3}),
@@ -223,12 +223,15 @@ class StockView(ft.Container):
             ], spacing=12),
             padding=ft.padding.symmetric(horizontal=16, vertical=4),
         )
+        self.filters_spacer = ft.Container(height=8)
         
         self.productos_list = ft.Column(
             spacing=12,
             expand=True,
             scroll=ft.ScrollMode.AUTO,
+            on_scroll=self._on_list_scroll,
         )
+        self.header_collapsed = False
         
         self.list_container = ft.Container(
             content=self.productos_list,
@@ -242,8 +245,8 @@ class StockView(ft.Container):
         self.content = ft.Column([
             header,
             self.summary_container,
-            ft.Container(height=8),
-            filters_section,
+            self.filters_spacer,
+            self.filters_section,
             self.list_container,
         ], spacing=0, expand=True)
         self.content.bgcolor = colors['bg']
@@ -380,7 +383,7 @@ class StockView(ft.Container):
                         p, stock_actual, color, stock_por_almacen, peso_neto, colors,
                         on_action=lambda action, prod: self._handle_product_action(action, prod)
                     )
-                    card.expand = (per_row == 2) # ancho completo en móvil (1 columna)
+                    card.expand = True # ancho completo (1 columna en móvil, 2 iguales en escritorio)
                     
                     current_row.controls.append(card)
                     
@@ -420,6 +423,21 @@ class StockView(ft.Container):
             if self.page and self.visible:
                 self.page.update()
             self.active_dialog = None
+
+    def _on_list_scroll(self, e):
+        try:
+            if e.pixels is None:
+                return
+            should_collapse = e.pixels > 40
+            if should_collapse != self.header_collapsed:
+                self.header_collapsed = should_collapse
+                self.summary_container.visible = not should_collapse
+                self.filters_spacer.visible = not should_collapse
+                self.filters_section.visible = not should_collapse
+                if self.page and self.visible:
+                    self.update()
+        except Exception as ex:
+            logger.error(f"Error colapsando encabezado: {ex}")
 
     def _handle_product_action(self, action, producto):
         if action == "historial":
