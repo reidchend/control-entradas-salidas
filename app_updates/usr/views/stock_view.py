@@ -241,15 +241,23 @@ class StockView(ft.Container):
             padding=ft.padding.only(left=16, right=16, bottom=20),
         )
         
-        # Toda la vista se desplaza junta: el encabezado (Gestión de Stock + resumen +
-        # filtros) se oculta naturalmente al hacer scroll, sin saltos.
+        # Título fijo (independiente) arriba; resumen + filtros + lista
+        # se desplazan juntos como un único bloque, sin saltos.
+        self.scroll_body = ft.Container(
+            content=ft.Column([
+                self.summary_container,
+                self.filters_spacer,
+                self.filters_section,
+                self.list_container,
+            ], spacing=0, expand=True),
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
+        )
+
         self.content = ft.Column([
             header,
-            self.summary_container,
-            self.filters_spacer,
-            self.filters_section,
-            self.list_container,
-        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
+            self.scroll_body,
+        ], spacing=0, expand=True)
         self.content.bgcolor = colors['bg']
 
     def _load_categorias(self):
