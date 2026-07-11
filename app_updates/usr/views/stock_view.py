@@ -226,21 +226,26 @@ class StockView(ft.Container):
         
         self.productos_list = ft.Column(
             spacing=12,
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
         )
         
         self.list_container = ft.Container(
             content=self.productos_list,
             bgcolor=colors['bg'],
             padding=ft.padding.only(left=16, right=16, bottom=20),
+            expand=True,
         )
         
+        # El encabezado (Gestión de Stock + resumen + filtros) queda ANCLADO arriba;
+        # solo la lista de productos se desplaza.
         self.content = ft.Column([
             header,
             self.summary_container,
             ft.Container(height=8),
             filters_section,
             self.list_container,
-        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
+        ], spacing=0, expand=True)
         self.content.bgcolor = colors['bg']
 
     def _load_categorias(self):
@@ -345,6 +350,7 @@ class StockView(ft.Container):
             db = next(get_db_adaptive())
             try:
                 rows = []
+                per_row = 1 if (self.page and self.page.width and self.page.width < 720) else 2
                 current_row = ft.Row(spacing=12, alignment=ft.MainAxisAlignment.START)
                 
                 for i, p in enumerate(productos):
@@ -374,11 +380,11 @@ class StockView(ft.Container):
                         p, stock_actual, color, stock_por_almacen, peso_neto, colors,
                         on_action=lambda action, prod: self._handle_product_action(action, prod)
                     )
-                    card.expand = True # Para que las 2 tarjetas midan lo mismo en la fila
+                    card.expand = (per_row == 2) # ancho completo en móvil (1 columna)
                     
                     current_row.controls.append(card)
                     
-                    if len(current_row.controls) == 2:
+                    if len(current_row.controls) == per_row:
                         rows.append(current_row)
                         current_row = ft.Row(spacing=12, alignment=ft.MainAxisAlignment.START)
                 

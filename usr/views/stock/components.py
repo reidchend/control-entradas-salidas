@@ -46,7 +46,7 @@ def build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto, col
         content=ft.Column([
             # Fila Superior: Nombre y Menú
             ft.Row([
-                ft.Text(p.nombre, weight="bold", size=16, color=colors['text_primary'], expand=True, max_lines=2, overflow=ft.TextOverflow.CLIP),
+                ft.Text(p.nombre, weight="bold", size=16, color=colors['text_primary'], expand=True, max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
                 ft.PopupMenuButton(
                     items=[
                         ft.PopupMenuItem(text="Ver historial", icon=ft.Icons.HISTORY, 
