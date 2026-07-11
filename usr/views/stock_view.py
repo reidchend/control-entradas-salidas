@@ -233,28 +233,23 @@ class StockView(ft.Container):
         
         self.productos_list = ft.Column(
             spacing=12,
-            expand=True,
-            scroll=ft.ScrollMode.AUTO,
-            on_scroll=self._on_list_scroll,
         )
-        self.header_collapsed = False
         
         self.list_container = ft.Container(
             content=self.productos_list,
             bgcolor=colors['bg'],
             padding=ft.padding.only(left=16, right=16, bottom=20),
-            expand=True,
         )
         
-        # El encabezado (Gestión de Stock + resumen + filtros) queda ANCLADO arriba;
-        # solo la lista de productos se desplaza.
+        # Toda la vista se desplaza junta: el encabezado (Gestión de Stock + resumen +
+        # filtros) se oculta naturalmente al hacer scroll, sin saltos.
         self.content = ft.Column([
             header,
             self.summary_container,
             self.filters_spacer,
             self.filters_section,
             self.list_container,
-        ], spacing=0, expand=True)
+        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
         self.content.bgcolor = colors['bg']
 
     def _load_categorias(self):
@@ -429,21 +424,6 @@ class StockView(ft.Container):
             if self.page and self.visible:
                 self.page.update()
             self.active_dialog = None
-
-    def _on_list_scroll(self, e):
-        try:
-            if e.pixels is None:
-                return
-            should_collapse = e.pixels > 40
-            if should_collapse != self.header_collapsed:
-                self.header_collapsed = should_collapse
-                for c in (self.summary_container, self.filters_spacer, self.filters_section):
-                    c.opacity = 0 if should_collapse else 1
-                    c.height = 0 if should_collapse else None
-                if self.page and self.visible:
-                    self.update()
-        except Exception as ex:
-            logger.error(f"Error colapsando encabezado: {ex}")
 
     def _handle_product_action(self, action, producto):
         if action == "historial":
