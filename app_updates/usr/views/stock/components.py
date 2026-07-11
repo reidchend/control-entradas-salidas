@@ -49,8 +49,8 @@ def build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto, col
                     items=[
                         ft.PopupMenuItem(text="Ver historial", icon=ft.Icons.HISTORY, 
                                         on_click=lambda _: on_action("historial", p) if on_action else None),
-                        ft.PopupMenuItem(text="Ver stock detallado", icon=ft.Icons.INFO_OUTLINE, 
-                                        on_click=lambda _: on_action("detallado", p) if on_action else None),
+                        ft.PopupMenuItem(text="Existencias", icon=ft.Icons.INVENTORY_2_OUTLINED, 
+                                        on_click=lambda _: on_action("existencias", p) if on_action else None),
                     ],
                     icon=ft.Icons.MORE_VERT,
                     icon_color=colors['text_secondary'],

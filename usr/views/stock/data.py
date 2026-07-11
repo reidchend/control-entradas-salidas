@@ -70,6 +70,16 @@ def filter_products_db(search="", categoria=None, almacen=None, stock_status="al
     finally:
         db.close()
 
+def get_existencias_producto(producto_id):
+    db = next(get_db_adaptive())
+    try:
+        existencias = db.query(Existencia).filter(
+            Existencia.producto_id == producto_id
+        ).order_by(Existencia.almacen).all()
+        return existencias
+    finally:
+        db.close()
+
 def get_producto_historial(producto_id, limit=20):
     db = next(get_db_adaptive())
     try:

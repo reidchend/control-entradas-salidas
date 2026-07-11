@@ -418,8 +418,46 @@ class StockView(ft.Container):
     def _handle_product_action(self, action, producto):
         if action == "historial":
             self._show_producto_details(producto)
-        elif action == "detallado":
-            show_info(f"Próximamente: Stock detallado de {producto.nombre}", duration=2)
+        elif action == "existencias":
+            self._show_existencias(producto)
+
+    def _show_existencias(self, producto: Producto):
+        try:
+            from usr.views.stock.dialogs import build_existencias_dialog, build_ajuste_dialog
+            from usr.views.stock.data import get_existencias_producto
+            from usr.views.inventario.movements import ajustar_existencia
+
+            existencias = get_existencias_producto(producto.id)
+
+            def _on_ajustar(almacen, cantidad_actual, unidad):
+                def _on_confirm(nueva, motivo):
+                    ok = ajustar_existencia(self.page, producto, almacen, nueva, motivo)
+                    if ok:
+                        self._close_dialog()
+                        # Refrescar la lista de productos (el stock puede cambiar)
+                        self.page.run_task(self._buscar_async)
+                        # Reabrir el panel de existencias con los valores actualizados
+                        self._show_existencias(producto)
+
+                def _on_cancel(e):
+                    self._close_dialog()
+
+                ajuste = build_ajuste_dialog(producto, almacen, cantidad_actual, unidad, _on_confirm, _on_cancel)
+                self.active_dialog = ajuste
+                self.page.overlay.append(ajuste)
+                ajuste.open = True
+                self.page.update()
+
+            def _on_close(e):
+                self._close_dialog()
+
+            self.active_dialog = build_existencias_dialog(producto, existencias, _on_ajustar, _on_close)
+            self.page.overlay.append(self.active_dialog)
+            self.active_dialog.open = True
+            self.page.update()
+        except Exception as e:
+            logger.error(f"Error existencias: {e}", exc_info=True)
+            show_error("Error al abrir existencias", e)
 
     def _filter_by_stock_status(self, status):
         self.current_stock_filter = status
