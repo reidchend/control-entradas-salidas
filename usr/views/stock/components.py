@@ -30,10 +30,12 @@ def build_product_card(p, stock_actual, color, stock_por_almacen, peso_neto, col
     unidad = p.unidad_medida if (hasattr(p, 'unidad_medida') and p.unidad_medida) else "uds"
     
     # Sección de Almacenes - Más legible
+    es_pesable = getattr(p, 'es_pesable', False)
     almacen_info = []
     if stock_por_almacen:
         for k, v in stock_por_almacen.items():
-            almacen_info.append(ft.Text(f"{k.capitalize()}: {v:.0f}", size=11, color=colors['text_secondary']))
+            almacen_disp = f"{v:.2f}" if es_pesable else f"{v:.0f}"
+            almacen_info.append(ft.Text(f"{k.capitalize()}: {almacen_disp}", size=11, color=colors['text_secondary']))
     
     almacen_row = ft.Row(almacen_info, wrap=True, spacing=10) if almacen_info else None
 
