@@ -568,21 +568,54 @@ class LocalReplica:
     
     @staticmethod
     def update_existencia(producto_id: int, almacen: str, cantidad: float, unidad: str = None) -> None:
-        """Actualiza o crea existencia."""
+        """Actualiza la existencia existente o la crea si no existe (sin duplicar)."""
         conn = get_local_conn()
         cursor = conn.cursor()
-        
+
+        almacen = (almacen or "principal").strip()
+
         if unidad is None:
-            cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?", 
+            cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?",
                          (producto_id, almacen))
             result = cursor.fetchone()
             unidad = result['unidad'] if result and result['unidad'] else 'unidad'
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO existencias (producto_id, almacen, cantidad, unidad)
-            VALUES (?, ?, ?, ?)
-        """, (producto_id, almacen, cantidad, unidad))
-        
+
+        # Actualizar si ya existe; si no, insertar (evita duplicados por falta de UNIQUE)
+        cursor.execute(
+            "UPDATE existencias SET cantidad = ?, unidad = ? WHERE producto_id = ? AND almacen = ?",
+            (cantidad, unidad, producto_id, almacen)
+        )
+        if cursor.rowcount == 0:
+            cursor.execute(
+                "INSERT INTO existencias (producto_id, almacen, cantidad, unidad) VALUES (?, ?, ?, ?)",
+                (producto_id, almacen, cantidad, unidad)
+            )
+
+        # Limpiar cualquier fila duplicada del mismo (producto_id, almacen)
+        cursor.execute(
+            "DELETE FROM existencias WHERE id NOT IN ("
+            "SELECT MIN(id) FROM existencias WHERE producto_id = ? AND almacen = ?)"
+            " AND producto_id = ? AND almacen = ?",
+            (producto_id, almacen, producto_id, almacen)
+        )
+
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def dedupe_existencias_producto(producto_id: int) -> None:
+        """Elimina filas duplicadas de existencias para un producto, conservando la más reciente."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT almacen FROM existencias WHERE producto_id = ?", (producto_id,))
+        almacenes = [r['almacen'] for r in cursor.fetchall()]
+        for alm in almacenes:
+            cursor.execute(
+                "DELETE FROM existencias WHERE id NOT IN ("
+                "SELECT MAX(id) FROM existencias WHERE producto_id = ? AND almacen = ?)"
+                " AND producto_id = ? AND almacen = ?",
+                (producto_id, alm, producto_id, alm)
+            )
         conn.commit()
         conn.close()
     

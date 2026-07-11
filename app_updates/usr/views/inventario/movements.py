@@ -7,7 +7,7 @@ from usr.views.inventario.helpers import get_attr
 
 def registrar_movimiento(page, producto_seleccionado, tipo, cantidad, peso_total=0.0, almacen=None):
     producto_id = get_attr(producto_seleccionado, 'id')
-    almacen_seleccionado = almacen or get_attr(producto_seleccionado, 'almacen_predeterminado', 'principal') or 'principal'
+    almacen_seleccionado = (almacen or get_attr(producto_seleccionado, "almacen_predeterminado", "principal") or "principal").strip()
 
     try:
         user_id = str(page.session.get("user_id")) if page else None
@@ -132,7 +132,7 @@ def ajustar_existencia(page, producto_seleccionado, almacen, nueva_cantidad, mot
     Registra un movimiento tipo 'ajuste' con la diferencia y actualiza la existencia.
     """
     producto_id = get_attr(producto_seleccionado, 'id')
-    almacen_seleccionado = almacen or get_attr(producto_seleccionado, 'almacen_predeterminado', 'principal') or 'principal'
+    almacen_seleccionado = (almacen or get_attr(producto_seleccionado, "almacen_predeterminado", "principal") or "principal").strip()
 
     try:
         user_id = str(page.session.get("user_id")) if page else None

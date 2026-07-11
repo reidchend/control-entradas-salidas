@@ -426,6 +426,10 @@ class StockView(ft.Container):
             from usr.views.stock.dialogs import build_existencias_dialog, build_ajuste_dialog
             from usr.views.stock.data import get_existencias_producto
             from usr.views.inventario.movements import ajustar_existencia
+            from usr.database.local_replica import LocalReplica
+
+            # Limpiar posibles duplicados (conserva el ajuste más reciente)
+            LocalReplica.dedupe_existencias_producto(producto.id)
 
             existencias = get_existencias_producto(producto.id)
 
