@@ -188,7 +188,10 @@ class StockView(ft.Container):
                 build_stat_card("Agotado", self.sin_stock_text, ft.Icons.ERROR_OUTLINE, '#F44336', 
                                 on_click=lambda _: self._filter_by_stock_status("out"), active=(self.current_stock_filter == "out")),
             ], scroll=ft.ScrollMode.HIDDEN, spacing=12),
-            padding=ft.padding.symmetric(horizontal=16)
+            padding=ft.padding.symmetric(horizontal=16),
+            clip_behavior=ft.ClipBehavior.HARD_EDGES,
+            animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
+            animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         )
         
         self.search_field = ft.TextField(
@@ -222,8 +225,11 @@ class StockView(ft.Container):
                 ft.Column([self.almacen_filter], col={"xs": 6, "sm": 3}),
             ], spacing=12),
             padding=ft.padding.symmetric(horizontal=16, vertical=4),
+            clip_behavior=ft.ClipBehavior.HARD_EDGES,
+            animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
+            animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         )
-        self.filters_spacer = ft.Container(height=8)
+        self.filters_spacer = ft.Container(height=8, animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT))
         
         self.productos_list = ft.Column(
             spacing=12,
@@ -431,9 +437,9 @@ class StockView(ft.Container):
             should_collapse = e.pixels > 40
             if should_collapse != self.header_collapsed:
                 self.header_collapsed = should_collapse
-                self.summary_container.visible = not should_collapse
-                self.filters_spacer.visible = not should_collapse
-                self.filters_section.visible = not should_collapse
+                for c in (self.summary_container, self.filters_spacer, self.filters_section):
+                    c.opacity = 0 if should_collapse else 1
+                    c.height = 0 if should_collapse else None
                 if self.page and self.visible:
                     self.update()
         except Exception as ex:
