@@ -189,7 +189,7 @@ class StockView(ft.Container):
                                 on_click=lambda _: self._filter_by_stock_status("out"), active=(self.current_stock_filter == "out")),
             ], scroll=ft.ScrollMode.HIDDEN, spacing=12),
             padding=ft.padding.symmetric(horizontal=16),
-            clip_behavior=ft.ClipBehavior.HARD_EDGES,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
             animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
             animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         )
@@ -225,7 +225,7 @@ class StockView(ft.Container):
                 ft.Column([self.almacen_filter], col={"xs": 6, "sm": 3}),
             ], spacing=12),
             padding=ft.padding.symmetric(horizontal=16, vertical=4),
-            clip_behavior=ft.ClipBehavior.HARD_EDGES,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
             animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
             animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         )
