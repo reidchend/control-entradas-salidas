@@ -137,7 +137,7 @@ async def main(page: ft.Page):
             pass
 
         page.session.set("_db_dir", db_dir)
-        db_path = os.path.join(db_dir, "lycoris_local.db")
+        db_path = os.path.abspath(os.path.join(db_dir, "lycoris_local.db"))
 
         from usr.database.local_replica import ensure_local_db
 
@@ -193,6 +193,10 @@ async def main(page: ft.Page):
                 for key in list(sys.modules.keys()):
                     if key == "usr" or key.startswith("usr."):
                         sys.modules.pop(key, None)
+                # Re-establecer la ruta de BD en el conn recién cargado desde app_updates
+                # (sys.modules.pop borró _db_path, y la nueva importación lo crea como None)
+                from usr.database.conn import set_db_path as _reset_db_path
+                _reset_db_path(db_path)
             print(f"[LAUNCHER] Cargando código actualizado desde {updates_dir}")
 
         await asyncio.sleep(0.5)

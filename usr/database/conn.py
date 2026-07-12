@@ -40,20 +40,19 @@ def set_db_path(path: str) -> None:
 
 def get_db_path() -> str:
     if _db_path is None:
-        # Forzamos la ruta a la raíz del proyecto para evitar bases de datos duplicadas
-        # si la app se ejecuta desde subcarpetas (como app_updates)
-        import os
-        import sys
         try:
-            # Intentamos encontrar la raíz buscando la carpeta 'usr'
-            cwd = os.getcwd()
-            while cwd != os.path.dirname(cwd):
-                if os.path.exists(os.path.join(cwd, "usr")):
-                    return os.path.join(cwd, "lycoris_local.db")
-                cwd = os.path.dirname(cwd)
+            conn_dir = os.path.dirname(os.path.abspath(__file__))
+            # conn.py está en <root>/usr/database/conn.py
+            # o en <root>/app_updates/usr/database/conn.py
+            candidate = os.path.dirname(os.path.dirname(conn_dir))  # <root>/usr  o  <root>/app_updates
+            # Si el padre del candidato también contiene 'usr', es porque
+            # estamos dentro de app_updates/ y debemos usar el padre como raíz
+            parent = os.path.dirname(candidate)
+            if os.path.exists(os.path.join(parent, 'usr')):
+                candidate = parent
+            return os.path.join(candidate, "lycoris_local.db")
         except Exception:
-            pass
-        return str(Path(".") / "lycoris_local.db")
+            return str(Path(".") / "lycoris_local.db")
     return _db_path
 
 def get_local_conn() -> sqlite3.Connection:
