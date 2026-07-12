@@ -661,6 +661,80 @@ class SyncManager:
                         uploaded += 1
                         print(f"[SYNC] Pago de factura {fact_num} sincronizado")
                         
+                    elif table == 'requisiciones':
+                        num = data.get('numero')
+                        if not num:
+                            continue
+                        
+                        req_vals = {
+                            'numero': num,
+                            'numero_secuencial': int(data.get('numero_secuencial') or 0),
+                            'origen': data.get('origen'),
+                            'destino': data.get('destino'),
+                            'estado': data.get('estado', 'pendiente'),
+                            'observaciones': data.get('observaciones'),
+                            'creada_por': data.get('creada_por'),
+                            'procesada_por': data.get('procesada_por'),
+                            'fecha_procesamiento': data.get('fecha_procesamiento'),
+                            'fecha_creacion': data.get('fecha_creacion'),
+                            'actualizada': data.get('actualizada'),
+                        }
+                        
+                        check = conn.execute(
+                            text("SELECT id FROM requisiciones WHERE numero = :num"),
+                            {'num': num}
+                        ).fetchone()
+                        
+                        if check:
+                            remote_id = check[0]
+                            set_cols = ", ".join([f"{k} = :{k}" for k in req_vals.keys()])
+                            conn.execute(
+                                text(f"UPDATE requisiciones SET {set_cols} WHERE numero = :num"),
+                                req_vals
+                            )
+                        else:
+                            cols = ", ".join(req_vals.keys())
+                            ph = ", ".join([f":{k}" for k in req_vals.keys()])
+                            res = conn.execute(
+                                text(f"INSERT INTO requisiciones ({cols}) VALUES ({ph}) RETURNING id"),
+                                req_vals
+                            )
+                            remote_id = res.fetchone()[0]
+                        conn.commit()
+                        
+                        # Reemplazar detalles en el servidor
+                        conn.execute(
+                            text("DELETE FROM requisicion_detalles WHERE requisicion_id = :rid"),
+                            {'rid': remote_id}
+                        )
+                        for det in data.get('detalles', []):
+                            conn.execute(text("""
+                                INSERT INTO requisicion_detalles
+                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
+                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida)
+                            """), {
+                                'requisicion_id': remote_id,
+                                'producto_id': det.get('producto_id'),
+                                'ingrediente': det.get('ingrediente'),
+                                'cantidad': det.get('cantidad', 0),
+                                'unidad': det.get('unidad', 'unidad'),
+                                'cantidad_surtida': det.get('cantidad_surtida', 0),
+                            })
+                        conn.commit()
+                        
+                        # Mapear id local -> remoto para no duplicar ni perder la requisición
+                        local_id = data.get('id')
+                        if local_id and local_id != remote_id:
+                            try:
+                                from .local_replica import LocalReplica
+                                LocalReplica.remap_requisicion_id(local_id, remote_id)
+                            except Exception as e:
+                                print(f"[SYNC] Error mapeando id de requisición: {e}")
+                        
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        print(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
+                        
                 except Exception as e:
                     queue.mark_failed(item['id'], str(e))
                     print(f"[SYNC] Error subiendo {table}: {e}")

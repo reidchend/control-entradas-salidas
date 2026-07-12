@@ -932,18 +932,44 @@ class LocalReplica:
                 req.get('actualizada')
             ))
             
+            # Reemplazar detalles de forma limpia (evita duplicados en descargas)
+            cursor.execute(
+                "DELETE FROM requisicion_detalles WHERE requisicion_id = ?",
+                (req.get('id'),)
+            )
             if 'detalles' in req:
                 for det in req.get('detalles', []):
                     cursor.execute("""
-                        INSERT OR REPLACE INTO requisicion_detalles 
-                        (id, requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO requisicion_detalles 
+                        (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     """, (
-                        det.get('id'), req.get('id'), det.get('producto_id'),
+                        req.get('id'), det.get('producto_id'),
                         det.get('ingrediente'), det.get('cantidad'),
                         det.get('unidad', 'unidad'), det.get('cantidad_surtida', 0)
                     ))
         
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def remap_requisicion_id(local_id: int, remote_id: int) -> None:
+        """Tras subir una requisición local, actualiza su id local al id remoto
+        para que la descarga y la poda no la dupliquen ni la borren."""
+        if local_id == remote_id:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        # Eliminar posible registro local obsoleto con el id remoto
+        cursor.execute("DELETE FROM requisiciones WHERE id = ?", (remote_id,))
+        cursor.execute(
+            "UPDATE requisicion_detalles SET requisicion_id = ? WHERE requisicion_id = ?",
+            (remote_id, local_id)
+        )
+        cursor.execute(
+            "UPDATE requisiciones SET id = ? WHERE id = ?",
+            (remote_id, local_id)
+        )
         conn.commit()
         conn.close()
     

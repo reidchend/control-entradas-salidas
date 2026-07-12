@@ -78,6 +78,41 @@ def _cantidad_unidad_item(item):
     return (item.get('cantidad') or 0), item.get('unidad', 'unidad')
 
 
+def _encolar_requisicion_sync(req, detalles):
+    """Encola la requisición (y sus detalles) para subirla a Supabase y así
+    poder consultarla desde otros dispositivos, aunque no esté 'completada'."""
+    try:
+        from usr.database.sync_queue import get_sync_queue
+        queue = get_sync_queue()
+        detalles_data = []
+        for item in detalles:
+            cant, uni = _cantidad_unidad_item(item)
+            detalles_data.append({
+                'producto_id': item.get('producto_id'),
+                'ingrediente': _nombre_detalle(item),
+                'cantidad': cant,
+                'unidad': uni,
+            })
+        req_data = {
+            'id': req.id,
+            'numero': req.numero,
+            'numero_secuencial': req.numero_secuencial,
+            'origen': req.origen,
+            'destino': req.destino,
+            'estado': req.estado,
+            'observaciones': req.observaciones,
+            'creada_por': req.creada_por,
+            'procesada_por': req.procesada_por,
+            'fecha_procesamiento': req.fecha_procesamiento.isoformat() if req.fecha_procesamiento else None,
+            'fecha_creacion': req.fecha_creacion.isoformat() if req.fecha_creacion else None,
+            'actualizada': req.actualizada.isoformat() if req.actualizada else None,
+            'detalles': detalles_data,
+        }
+        queue.add_pending('requisiciones', 'upsert', req_data)
+    except Exception as e:
+        print(f"[REQ] Error encolando requisición para sync: {e}")
+
+
 def guardar_requisicion(origen, destino, observaciones, detalles,
                          editando=None, user_id="Admin",
                          estado="pendiente", mover_stock=False):
@@ -106,6 +141,7 @@ def guardar_requisicion(origen, destino, observaciones, detalles,
                     unidad=uni,
                 ))
             db.commit()
+            _encolar_requisicion_sync(editando, detalles)
             return editando
 
         req = Requisicion(
@@ -153,6 +189,7 @@ def guardar_requisicion(origen, destino, observaciones, detalles,
                         ))
 
         db.commit()
+        _encolar_requisicion_sync(req, detalles)
         return req
     except Exception:
         db.rollback()
