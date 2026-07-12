@@ -2,6 +2,8 @@
 Réplica local SQLite para trabajo offline.
 Almacena una copia de los datos de Supabase para acceso offline.
 """
+import os
+print(f"[LOCAL_REPLICA] Cargando módulo local_replica.py desde {os.path.abspath(__file__)}")
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from usr.database.conn import get_local_conn
