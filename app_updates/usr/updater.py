@@ -125,9 +125,6 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
 
         def _cerrar_dialogo():
             page.close(dialog)
-            if dialog in page.overlay:
-                page.overlay.remove(dialog)
-            page.update()
 
         def on_yes(e):
             nonlocal proceed
@@ -172,9 +169,7 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-        page.overlay.append(dialog)
-        dialog.open = True
-        page.update()
+        page.open(dialog)
 
         await response_event.wait()
 
