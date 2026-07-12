@@ -908,6 +908,7 @@ class LocalReplica:
     @staticmethod
     def save_requisiciones(requisiciones: List[Dict]) -> None:
         if not requisiciones:
+            print("[SYNC-DEBUG] save_requisiciones: lista vacía, NO se tocó la tabla")
             return
             
         conn = get_local_conn()
@@ -1180,6 +1181,12 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
 
+        # DEBUG: verificar cuántos registros hay antes de podar
+        if table_name == 'requisiciones':
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {table_name}")
+            debug_cnt = cursor.fetchone()['cnt']
+            print(f"[SYNC-DEBUG] requisiciones antes de podar: {debug_cnt} registros, remote_ids={remote_ids}")
+
         # 1. Obtener valores clave de la cola de sync pendientes para esta tabla
         cursor.execute("SELECT data FROM sync_queue WHERE table_name = ? AND status = 'pending'", (table_name,))
         pending_rows = cursor.fetchall()
@@ -1230,7 +1237,7 @@ class LocalReplica:
         conn.commit()
         conn.close()
 
-        if deleted > 0:
+        if deleted > 0 or table_name == 'requisiciones':
             print(f"[SYNC] {deleted} registros huérfanos eliminados de la tabla local '{table_name}'")
         return deleted
 

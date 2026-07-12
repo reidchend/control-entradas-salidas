@@ -908,6 +908,7 @@ class LocalReplica:
     @staticmethod
     def save_requisiciones(requisiciones: List[Dict]) -> None:
         if not requisiciones:
+            print("[SYNC-DEBUG] save_requisiciones: lista vacía, NO se tocó la tabla")
             return
             
         conn = get_local_conn()
@@ -955,11 +956,20 @@ class LocalReplica:
     @staticmethod
     def remap_requisicion_id(local_id: int, remote_id: int) -> None:
         """Tras subir una requisición local, actualiza su id local al id remoto
-        para que la descarga y la poda no la dupliquen ni la borren."""
+        para que la descarga y la poda no la dupliquen ni la borren.
+        Es seguro si se llama con un id local ya obsoleto (producto de una
+        re-edición): en ese caso no hace nada."""
         if local_id == remote_id:
             return
         conn = get_local_conn()
         cursor = conn.cursor()
+        # ¿Existe aún el registro local con el id local? (puede ya tener el remoto)
+        existe = cursor.execute(
+            "SELECT 1 FROM requisiciones WHERE id = ?", (local_id,)
+        ).fetchone()
+        if not existe:
+            conn.close()
+            return
         # Eliminar posible registro local obsoleto con el id remoto
         cursor.execute("DELETE FROM requisiciones WHERE id = ?", (remote_id,))
         cursor.execute(
@@ -1171,6 +1181,12 @@ class LocalReplica:
         conn = get_local_conn()
         cursor = conn.cursor()
 
+        # DEBUG: verificar cuántos registros hay antes de podar
+        if table_name == 'requisiciones':
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {table_name}")
+            debug_cnt = cursor.fetchone()['cnt']
+            print(f"[SYNC-DEBUG] requisiciones antes de podar: {debug_cnt} registros, remote_ids={remote_ids}")
+
         # 1. Obtener valores clave de la cola de sync pendientes para esta tabla
         cursor.execute("SELECT data FROM sync_queue WHERE table_name = ? AND status = 'pending'", (table_name,))
         pending_rows = cursor.fetchall()
@@ -1221,7 +1237,7 @@ class LocalReplica:
         conn.commit()
         conn.close()
 
-        if deleted > 0:
+        if deleted > 0 or table_name == 'requisiciones':
             print(f"[SYNC] {deleted} registros huérfanos eliminados de la tabla local '{table_name}'")
         return deleted
 
