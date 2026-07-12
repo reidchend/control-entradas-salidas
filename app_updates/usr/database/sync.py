@@ -97,13 +97,14 @@ class SyncManager:
         print("[SYNC] Iniciando sincronización completa...")
         
         try:
-            # Subir pendientes a Supabase
-            self._upload_pending_movimientos()
-            
-            # Procesar cola de sync (facturas, productos, etc.)
+            # 1. Procesar cola de sync primero (categorías, productos, facturas, pagos)
+            #    para garantizar que existan las claves foráneas en el servidor
             self._process_sync_queue()
             
-            # Descargar del servidor
+            # 2. Subir movimientos pendientes (ya con las facturas presentes)
+            self._upload_pending_movimientos()
+            
+            # 3. Descargar del servidor
             self._download_all_from_server()
             
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
@@ -149,12 +150,32 @@ class SyncManager:
         remote_engine = self._create_remote_engine()
         synced_count = 0
 
+        # Mapa local_factura_id -> numero_factura para resolver el id remoto
+        try:
+            facturas_local = {f['id']: f.get('numero_factura') for f in LocalReplica.get_facturas()}
+        except Exception:
+            facturas_local = {}
+
+        def resolver_factura_remota(conn, local_factura_id):
+            """Convierte el id local de factura en el id remoto (Supabase)."""
+            if not local_factura_id:
+                return None
+            num = facturas_local.get(local_factura_id)
+            if not num:
+                return None
+            row = conn.execute(
+                text("SELECT id FROM facturas WHERE numero_factura = :num"),
+                {'num': num}
+            ).fetchone()
+            return row[0] if row else None
+
         try:
             with remote_engine.connect() as conn:
                 for mov in pending_movimientos:
                     try:
                         mov_id = mov.get('id')
-                        factura_id = mov.get('factura_id')
+                        # Resolver factura_id local -> remoto (evita violación de FK)
+                        factura_id = resolver_factura_remota(conn, mov.get('factura_id'))
 
                         # Buscar si el movimiento ya existe en Supabase por campos clave
                         match = conn.execute(text("""
