@@ -197,6 +197,21 @@ async def main(page: ft.Page):
                 # (sys.modules.pop borró _db_path, y la nueva importación lo crea como None)
                 from usr.database.conn import set_db_path as _reset_db_path
                 _reset_db_path(db_path)
+                # DIAGNÓSTICO: verificar el archivo físico en app_updates
+                try:
+                    _updates_usr_dir = os.path.join(updates_dir, "usr", "database", "local_replica.py")
+                    _first_line = open(_updates_usr_dir, encoding='utf-8').readline().strip()
+                    print(f"[LAUNCHER] app_updates/local_replica.py primera línea: {_first_line}")
+                except Exception as _e_read:
+                    print(f"[LAUNCHER] Error leyendo app_updates/local_replica.py: {_e_read}")
+                # Forzar limpieza de requisiciones huérfanas justo después de la
+                # redirección, independientemente de si el código en app_updates
+                # está actualizado o no.
+                try:
+                    from usr.database.local_replica import LocalReplica as _LR
+                    _LR.delete_orphaned_records('requisiciones', [], 'numero')
+                except Exception as _e_orphan:
+                    print(f"[LAUNCHER] Error en limpieza de huérfanos: {_e_orphan}")
             print(f"[LAUNCHER] Cargando código actualizado desde {updates_dir}")
 
         await asyncio.sleep(0.5)
