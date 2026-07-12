@@ -45,7 +45,7 @@ class ValidacionView(ft.Container):
     def did_mount(self):
         self._build_controls()
         if self.page and self.page.client_storage:
-            self._load_entradas_pendientes()
+            self.page.run_task(self._load_entradas_pendientes)
             if self.page:
                 self.update()
         
@@ -57,7 +57,7 @@ class ValidacionView(ft.Container):
 
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
-            self._load_entradas_pendientes()
+            self.page.run_task(self._load_entradas_pendientes)
 
     def _update_connection_indicator(self):
         if not hasattr(self, '_connection_indicator') or not self._connection_indicator:
@@ -212,9 +212,19 @@ class ValidacionView(ft.Container):
             sync_mgr = get_sync_manager()
             if sync_mgr:
                 sync_mgr.force_sync_now()
-        self._load_entradas_pendientes()
+        self.page.run_task(self._load_entradas_pendientes)
 
         show_success("Datos refrescados correctamente")
+
+    async def _send_wa_background(self, img_path, msg):
+        """Tâche de fond pour l'envoi WhatsApp sans bloquer l'UI"""
+        try:
+            if img_path:
+                await asyncio.to_thread(send_whatsapp_image, img_path, msg)
+            else:
+                await asyncio.to_thread(send_whatsapp_message, msg)
+        except Exception as e:
+            logger.error(f"[WA Background] Error: {e}")
 
     def _show_validar_dialog(self, e):
         theme_colors = get_colors(self.page)
@@ -239,8 +249,7 @@ class ValidacionView(ft.Container):
                     pass
                 
                 if wa_status.get('whatsapp_connected'):
-                    self._set_loading_overlay(True, "Sincronizando con servidor y enviando WhatsApp...")
-                    
+                    # Lancement en arrière-plan (non bloquant)
                     img_path = None
                     def get_long_path(short_path):
                         try:
@@ -297,19 +306,15 @@ class ValidacionView(ft.Container):
                         data.get('pagos', []), result.get('usuario', 'Sistema')
                     )
                     
-                    if img_path:
-                        print(f"[WA] Enviando imagen: {img_path}")
-                        await asyncio.to_thread(send_whatsapp_image, img_path, msg)
-                    else:
-                        print("[WA] No se encontró imagen de factura para enviar")
-                        await asyncio.to_thread(send_whatsapp_message, msg)
-
+                    # Envío asíncrono sin esperar la respuesta
+                    self.page.run_task(self._send_wa_background, img_path, msg)
+                
                 if result.get('sync'):
                     print("[SYNC] Factura sincronizada")
                 
                 self._set_loading_overlay(True, "Actualizando lista de pendientes...")
                 self.selected_entradas.clear()
-                self._load_entradas_pendientes()
+                await self._load_entradas_pendientes()
                 
                 self._set_loading_overlay(False)
 
@@ -326,7 +331,7 @@ class ValidacionView(ft.Container):
         dialog.set_on_validate(on_validar_click)
         dialog.show()
 
-    def _load_entradas_pendientes(self):
+    async def _load_entradas_pendientes(self):
         if self.is_loading:
             return
         self.is_loading = True
@@ -335,21 +340,9 @@ class ValidacionView(ft.Container):
         if self.page:
             self.update()
         
-        db = None
         try:
-            db = next(get_db_adaptive())
-            query = db.query(Movimiento).filter(
-                Movimiento.tipo == "entrada",
-                Movimiento.factura_id.is_(None)
-            )
-            
-            search = self.search_field.value.lower().strip() if self.search_field.value else ""
-            if search:
-                from usr.models import Producto
-                query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search}%"))
-            
-            entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
-            self.entradas_data = {e.id: e for e in entradas}
+            # Ejecutamos la consulta en un hilo separado para no bloquear la UI
+            entradas = await asyncio.to_thread(self._fetch_entradas_data)
             
             self.entradas_list.controls.clear()
             if not entradas:
@@ -372,8 +365,26 @@ class ValidacionView(ft.Container):
             logger.error(f"Error cargando entradas: {ex}")
             self.entradas_list.controls = [ft.Text(f"Error: {str(ex)}")]
         finally:
-            if db: db.close()
             self.is_loading = False
+            if self.page:
+                self.update()
+
+    def _fetch_entradas_data(self):
+        db = next(get_db_adaptive())
+        try:
+            query = db.query(Movimiento).filter(
+                Movimiento.tipo == "entrada",
+                Movimiento.factura_id.is_(None)
+            )
+            
+            search = self.search_field.value.lower().strip() if self.search_field.value else ""
+            if search:
+                from usr.models import Producto
+                query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search}%"))
+            
+            return query.order_by(Movimiento.fecha_movimiento.desc()).all()
+        finally:
+            db.close()
 
     def _create_entrada_card(self, entrada):
         colors = get_colors(self.page)

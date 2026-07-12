@@ -45,7 +45,7 @@ class ValidacionView(ft.Container):
     def did_mount(self):
         self._build_controls()
         if self.page and self.page.client_storage:
-            asyncio.create_task(self._load_entradas_pendientes())
+            self.page.run_task(self._load_entradas_pendientes)
             if self.page:
                 self.update()
         
@@ -57,7 +57,7 @@ class ValidacionView(ft.Container):
 
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
-            asyncio.create_task(self._load_entradas_pendientes())
+            self.page.run_task(self._load_entradas_pendientes)
 
     def _update_connection_indicator(self):
         if not hasattr(self, '_connection_indicator') or not self._connection_indicator:
@@ -212,7 +212,7 @@ class ValidacionView(ft.Container):
             sync_mgr = get_sync_manager()
             if sync_mgr:
                 sync_mgr.force_sync_now()
-        asyncio.create_task(self._load_entradas_pendientes())
+        self.page.run_task(self._load_entradas_pendientes)
 
         show_success("Datos refrescados correctamente")
 
@@ -306,8 +306,8 @@ class ValidacionView(ft.Container):
                         data.get('pagos', []), result.get('usuario', 'Sistema')
                     )
                     
-                    # Envío asynchrone sans attendre la réponse
-                    asyncio.create_task(self._send_wa_background(img_path, msg))
+                    # Envío asíncrono sin esperar la respuesta
+                    self.page.run_task(self._send_wa_background, img_path, msg)
                 
                 if result.get('sync'):
                     print("[SYNC] Factura sincronizada")
