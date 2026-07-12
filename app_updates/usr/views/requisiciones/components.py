@@ -1,6 +1,25 @@
 import flet as ft
+from datetime import datetime
 
 from usr.views.requisiciones.data import contar_detalles
+
+
+def _parse_dt(val):
+    """Convierte fecha (datetime o string ISO) a datetime de forma segura."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        s = val.replace('Z', '').strip()
+        for fmt in ('%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S.%f',
+                    '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+                    '%Y-%m-%d'):
+            try:
+                return datetime.strptime(s[:len(fmt) + 6] if '.' in fmt else s[:19], fmt)
+            except Exception:
+                continue
+    return None
 
 
 def build_requisicion_card(req, callbacks, colors):
@@ -43,7 +62,7 @@ def build_requisicion_card(req, callbacks, colors):
             ft.Divider(height=1, color=colors['border']),
             ft.Row([
                 ft.Text(
-                    f"Creada: {req.fecha_creacion.strftime('%d/%m/%Y %H:%M') if req.fecha_creacion else '-'}",
+                    f"Creada: {_parse_dt(req.fecha_creacion).strftime('%d/%m/%Y %H:%M') if _parse_dt(req.fecha_creacion) else '-'}",
                     size=11, color=colors['text_secondary'], expand=True,
                 ),
                 ft.Row([

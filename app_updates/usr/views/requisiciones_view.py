@@ -11,7 +11,7 @@ from usr.database.base import get_db_adaptive
 from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
 from usr.theme import get_colors
-from usr.notifications import show_success, show_error, show_warning
+from usr.notifications import show_success, show_error, show_warning, show_info
 
 from usr.views.requisiciones.helpers import _colors, _c
 from usr.views.requisiciones.data import load_requisiciones, guardar_requisicion
@@ -67,6 +67,13 @@ class RequisicionesView(ft.Container):
                     ft.Text("Gestión de traslados", size=13, color=colors['text_secondary']),
                 ], expand=True, spacing=0),
                 ft.IconButton(
+                    ft.Icons.REFRESH_ROUNDED,
+                    icon_color=colors['white'],
+                    bgcolor=colors['surface'],
+                    on_click=lambda _: self._on_refresh(),
+                    tooltip="Actualizar desde Supabase",
+                ),
+                ft.IconButton(
                     ft.Icons.ADD_ROUNDED,
                     icon_color=colors['white'],
                     bgcolor=colors['accent'],
@@ -113,6 +120,30 @@ class RequisicionesView(ft.Container):
 
     def on_sync_complete(self):
         self._on_sync_complete()
+
+    def _on_refresh(self):
+        """Fuerza una sincronización con Supabase y recarga la lista."""
+        try:
+            show_info("Actualizando requisiciones...", duration=1)
+            self.page.run_task(self._do_refresh)
+        except Exception as e:
+            show_error("Error al refrescar", e)
+
+    async def _do_refresh(self):
+        try:
+            from usr.database.base import is_online as base_is_online
+            from usr.database import get_sync_manager
+
+            if base_is_online():
+                sync_mgr = get_sync_manager()
+                if sync_mgr:
+                    await asyncio.to_thread(sync_mgr.force_sync_now)
+
+            await asyncio.to_thread(self._load_requisiciones)
+            show_success("Requisiciones actualizadas")
+        except Exception as e:
+            logger.error(f"Error en _do_refresh de RequisicionesView: {e}")
+            show_error("Error al actualizar requisiciones", e)
 
     def _load_requisiciones(self):
         try:
