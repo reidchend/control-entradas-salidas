@@ -40,7 +40,19 @@ def set_db_path(path: str) -> None:
 
 def get_db_path() -> str:
     if _db_path is None:
-        # Fallback si no se inicializó
+        # Forzamos la ruta a la raíz del proyecto para evitar bases de datos duplicadas
+        # si la app se ejecuta desde subcarpetas (como app_updates)
+        import os
+        import sys
+        try:
+            # Intentamos encontrar la raíz buscando la carpeta 'usr'
+            cwd = os.getcwd()
+            while cwd != os.path.dirname(cwd):
+                if os.path.exists(os.path.join(cwd, "usr")):
+                    return os.path.join(cwd, "lycoris_local.db")
+                cwd = os.path.dirname(cwd)
+        except Exception:
+            pass
         return str(Path(".") / "lycoris_local.db")
     return _db_path
 
@@ -51,15 +63,11 @@ def get_local_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.OperationalError:
-        # Fallback: guardar en directorio actual
+        # Si falla, intentamos la ruta relativa como último recurso
         fallback_path = str(Path(".") / "lycoris_local.db")
-        if db_path != fallback_path:
-            global _db_path
-            _db_path = fallback_path
-            conn = sqlite3.connect(fallback_path)
-            conn.row_factory = sqlite3.Row
-            return conn
-        raise
+        conn = sqlite3.connect(fallback_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def get_cache_conn() -> sqlite3.Connection:
     try:
