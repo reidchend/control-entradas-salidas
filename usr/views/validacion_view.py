@@ -2,6 +2,7 @@ import flet as ft
 import asyncio
 import os
 import tempfile
+from sqlalchemy.orm import joinedload
 from usr.database.base import get_db_adaptive, is_online
 from usr.models import Movimiento
 from usr.logger import get_logger
@@ -372,7 +373,7 @@ class ValidacionView(ft.Container):
     def _fetch_entradas_data(self):
         db = next(get_db_adaptive())
         try:
-            query = db.query(Movimiento).filter(
+            query = db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(
                 Movimiento.tipo == "entrada",
                 Movimiento.factura_id.is_(None)
             )
