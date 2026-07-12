@@ -1140,18 +1140,15 @@ class LocalReplica:
         Elimina registros locales que no están en la lista de IDs remotos
         y no están pendientes de sincronización en la cola.
         """
-        if not remote_ids:
-            return 0
-        
+        import json
+
         conn = get_local_conn()
         cursor = conn.cursor()
-        
-        import json
-        
+
         # 1. Obtener valores clave de la cola de sync pendientes para esta tabla
         cursor.execute("SELECT data FROM sync_queue WHERE table_name = ? AND status = 'pending'", (table_name,))
         pending_rows = cursor.fetchall()
-        
+
         pending_keys = []
         if key_column:
             for row in pending_rows:
@@ -1161,27 +1158,43 @@ class LocalReplica:
                         pending_keys.append(p_data[key_column])
                 except:
                     pass
-        
-        # 2. Construir la consulta de eliminación
-        placeholders = ','.join(['?' for _ in remote_ids])
-        query = f"DELETE FROM {table_name} WHERE id NOT IN ({placeholders})"
-        params = list(remote_ids)
-        
+
+        # Si el servidor devolvió 0 filas:
+        #  - Tablas con creación local (productos, categorías, facturas, etc.):
+        #    NO podamos, para no borrar datos locales no sincronados por un fallo
+        #    transitorio de lectura.
+        #  - 'requisiciones' es una tabla de SOLO DESCARGA: si ya no existen en el
+        #    servidor, deben desaparecer también en local.
+        if not remote_ids:
+            if table_name != 'requisiciones':
+                conn.close()
+                return 0
+            query = f"DELETE FROM {table_name} WHERE 1=1"
+            params = []
+        else:
+            placeholders = ','.join(['?' for _ in remote_ids])
+            query = f"DELETE FROM {table_name} WHERE id NOT IN ({placeholders})"
+            params = list(remote_ids)
+
         if key_column and pending_keys:
             key_placeholders = ','.join(['?' for _ in pending_keys])
             query += f" AND {key_column} NOT IN ({key_placeholders})"
             params.extend(pending_keys)
-            
+
         cursor.execute(query, params)
         deleted = cursor.rowcount
-        
+
         # Caso especial para requisiciones: también eliminar detalles huérfanos
         if table_name == 'requisiciones':
-            cursor.execute(f"DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN ({placeholders})", list(remote_ids))
-            
+            if remote_ids:
+                dph = ','.join(['?' for _ in remote_ids])
+                cursor.execute(f"DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN ({dph})", list(remote_ids))
+            else:
+                cursor.execute("DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN (SELECT id FROM requisiciones)")
+
         conn.commit()
         conn.close()
-        
+
         if deleted > 0:
             print(f"[SYNC] {deleted} registros huérfanos eliminados de la tabla local '{table_name}'")
         return deleted

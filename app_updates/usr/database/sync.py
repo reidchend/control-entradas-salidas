@@ -353,18 +353,25 @@ class SyncManager:
         from .sync_callbacks import notify_sync_complete as notify_global
         
         while not self._stop_event.is_set():
-            try:
-                if self.check_connection():
+            if self.check_connection():
+                try:
                     # Subir movimientos pendientes (sincronizado=0)
                     self._upload_pending_movimientos()
+                except Exception as e:
+                    print(f"[SYNC] Error subiendo movimientos (loop): {e}")
+                try:
                     # Subir pendientes de la cola
                     self._process_sync_queue()
-                    # Descargar cambios del servidor
+                except Exception as e:
+                    print(f"[SYNC] Error procesando cola (loop): {e}")
+                try:
+                    # Descargar cambios del servidor (también PODA registros
+                    # eliminados remotamente, p.ej. requisiciones)
                     self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
-            except Exception as e:
-                print(f"[SYNC] Error en loop: {e}")
+                except Exception as e:
+                    print(f"[SYNC] Error descargando (loop): {e}")
             
             self._stop_event.wait(interval)
     
