@@ -200,8 +200,11 @@ async def main(page: ft.Page):
                 # DIAGNÓSTICO: verificar el archivo físico en app_updates
                 try:
                     _updates_usr_dir = os.path.join(updates_dir, "usr", "database", "local_replica.py")
-                    _first_line = open(_updates_usr_dir, encoding='utf-8').readline().strip()
-                    print(f"[LAUNCHER] app_updates/local_replica.py primera línea: {_first_line}")
+                    _content = open(_updates_usr_dir, encoding='utf-8').read()
+                    _has_debug = '[LOCAL_REPLICA]' in _content
+                    _has_sync_debug = '[SYNC-DEBUG]' in _content
+                    _size = len(_content)
+                    print(f"[LAUNCHER] app_updates/local_replica.py: {_size}B, [LOCAL_REPLICA]={'SÍ' if _has_debug else 'NO'}, [SYNC-DEBUG]={'SÍ' if _has_sync_debug else 'NO'}")
                 except Exception as _e_read:
                     print(f"[LAUNCHER] Error leyendo app_updates/local_replica.py: {_e_read}")
                 # Forzar limpieza de requisiciones huérfanas justo después de la
