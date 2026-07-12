@@ -207,14 +207,6 @@ async def main(page: ft.Page):
                     print(f"[LAUNCHER] app_updates/local_replica.py: {_size}B, [LOCAL_REPLICA]={'SÍ' if _has_debug else 'NO'}, [SYNC-DEBUG]={'SÍ' if _has_sync_debug else 'NO'}")
                 except Exception as _e_read:
                     print(f"[LAUNCHER] Error leyendo app_updates/local_replica.py: {_e_read}")
-                # Forzar limpieza de requisiciones huérfanas justo después de la
-                # redirección, independientemente de si el código en app_updates
-                # está actualizado o no.
-                try:
-                    from usr.database.local_replica import LocalReplica as _LR
-                    _LR.delete_orphaned_records('requisiciones', [], 'numero')
-                except Exception as _e_orphan:
-                    print(f"[LAUNCHER] Error en limpieza de huérfanos: {_e_orphan}")
             print(f"[LAUNCHER] Cargando código actualizado desde {updates_dir}")
 
         await asyncio.sleep(0.5)
