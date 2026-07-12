@@ -96,35 +96,32 @@ class SyncManager:
         
         print("[SYNC] Iniciando sincronización completa...")
         
+        # Cada paso es independiente: un fallo en uno no debe bloquear a los demás
+        # (p.ej. un error subiendo movimientos no debe impedir la descarga/poda de
+        #  requisiciones que ya fueron eliminadas en el servidor).
         try:
             # 1. Procesar cola de sync primero (categorías, productos, facturas, pagos)
             #    para garantizar que existan las claves foráneas en el servidor
             self._process_sync_queue()
-            
+        except Exception as e:
+            print(f"[SYNC] Error procesando cola de sync: {e}")
+        
+        try:
             # 2. Subir movimientos pendientes (ya con las facturas presentes)
             self._upload_pending_movimientos()
-            
-            # 3. Descargar del servidor
+        except Exception as e:
+            print(f"[SYNC] Error subiendo movimientos: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        download_ok = False
+        try:
+            # 3. Descargar del servidor (esta etapa también PODA registros eliminados
+            #    remotamente, como requisiciones, así que debe ejecutarse siempre)
             self._download_all_from_server()
-            
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
             print("[SYNC] Sincronización completa finalizada")
-            
-            # Notificar callback
-            if self._on_sync_complete:
-                try:
-                    self._on_sync_complete()
-                except Exception as e:
-                    print(f"[SYNC] Error en callback: {e}")
-            
-            # Notificar también al sistema global de vistas
-            try:
-                from .sync_callbacks import notify_sync_complete as notify_global
-                notify_global()
-            except Exception as e:
-                print(f"[SYNC] Error en notify_global: {e}")
-            
-            return True
+            download_ok = True
         except Exception as e:
             print(f"[SYNC] Error en sincronización: {e}")
             import traceback
@@ -134,7 +131,22 @@ class SyncManager:
                 show_sync_error(f"Error de sincronización: {type(e).__name__}")
             except:
                 pass
-            return False
+        
+        # Notificar callback (siempre, para refrescar vistas) si la descarga fue bien
+        if download_ok:
+            if self._on_sync_complete:
+                try:
+                    self._on_sync_complete()
+                except Exception as e:
+                    print(f"[SYNC] Error en callback: {e}")
+            
+            try:
+                from .sync_callbacks import notify_sync_complete as notify_global
+                notify_global()
+            except Exception as e:
+                print(f"[SYNC] Error en notify_global: {e}")
+        
+        return download_ok
     
     def _upload_pending_movimientos(self) -> int:
         from .local_replica import LocalReplica
