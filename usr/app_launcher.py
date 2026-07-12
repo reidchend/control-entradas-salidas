@@ -189,6 +189,10 @@ async def main(page: ft.Page):
             if os.path.exists(updates_usr):
                 import usr
                 usr.__path__ = [os.path.abspath(updates_usr)]
+                # Forzar recarga de cualquier módulo de 'usr' ya cargado (evita caché viejo)
+                for key in list(sys.modules.keys()):
+                    if key == "usr" or key.startswith("usr."):
+                        sys.modules.pop(key, None)
             print(f"[LAUNCHER] Cargando código actualizado desde {updates_dir}")
 
         await asyncio.sleep(0.5)
