@@ -9,10 +9,30 @@ import flet as ft
 _page = None
 
 def _get_page():
-    """Obtiene la página activa desde sys (sobrevive recargas de sys.modules)."""
+    """Obtiene la página activa desde sys o desde la pila de llamadas."""
+    global _page
     if _page is not None:
         return _page
-    return getattr(sys, '_opencode_notif_page', None)
+    saved = getattr(sys, '_opencode_notif_page', None)
+    if saved is not None:
+        _page = saved
+        return saved
+    # Fallback: buscar page en la pila de llamadas (compilado sin fix)
+    try:
+        frame = sys._getframe()
+        while frame:
+            for val in frame.f_locals.values():
+                if isinstance(val, ft.Page):
+                    _page = val
+                    return val
+                if isinstance(val, ft.View):
+                    if hasattr(val, 'page') and isinstance(val.page, ft.Page):
+                        _page = val.page
+                        return val.page
+            frame = frame.f_back
+    except:
+        pass
+    return None
 
 # Banner activo
 _active_banner = None
