@@ -217,7 +217,7 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
             shutil.copytree(src_config, dest_config)
 
         with open(version_path, "w", encoding="utf-8") as f:
-            json.dump({"version": remote_version}, f)
+            json.dump({"version": remote_version, "zip_url": zip_url}, f)
 
         shutil.rmtree(temp_extract_dir)
         if os.path.exists(zip_temp):
