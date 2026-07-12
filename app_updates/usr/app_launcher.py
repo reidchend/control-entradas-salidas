@@ -197,6 +197,9 @@ async def main(page: ft.Page):
                 # (sys.modules.pop borró _db_path, y la nueva importación lo crea como None)
                 from usr.database.conn import set_db_path as _reset_db_path
                 _reset_db_path(db_path)
+                # Re-registrar la página en notifications (sys.modules.pop borró el módulo anterior)
+                import usr.notifications
+                usr.notifications.set_page(page)
                 # DIAGNÓSTICO: verificar el archivo físico en app_updates
                 try:
                     _updates_usr_dir = os.path.join(updates_dir, "usr", "database", "local_replica.py")
