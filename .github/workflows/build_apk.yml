@@ -67,6 +67,9 @@ jobs:
           pydantic-settings
           python-dotenv
           certifi
+          Pillow
+          openpyxl
+          requests
           EOF
 
           # 1. Creamos el archivo de extensión de Flet (La llave maestra)
