@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "/workspaces/control-entradas-salidas/app_updates/usr/app_launcher.py", line 128, in main
-    from usr.database.conn import set_db_path, get_db_path
-  File "/workspaces/control-entradas-salidas/app_updates/usr/database/__init__.py", line 10, in <module>
-    from .sync import (
-  File "/workspaces/control-entradas-salidas/app_updates/usr/database/sync.py", line 308
-    elif local_table == 'facturas':
-                                   ^
-IndentationError: unindent does not match any outer indentation level
