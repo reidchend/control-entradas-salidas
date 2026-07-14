@@ -14,7 +14,7 @@ from usr.theme import get_colors
 from usr.notifications import show_success, show_error, show_warning, show_info
 
 from usr.views.requisiciones.helpers import _colors, _c
-from usr.views.requisiciones.data import load_requisiciones, guardar_requisicion
+from usr.views.requisiciones.data import load_requisiciones, guardar_requisicion, eliminar_requisicion
 from usr.views.requisiciones.components import (
     build_requisicion_card, build_empty_state, build_producto_busqueda_item
 )
@@ -22,6 +22,8 @@ from usr.views.requisiciones.dialogs import (
     build_crear_dialog, build_agregar_producto_dialog, build_detalles_dialog,
     build_crear_vista, build_buscador_productos, build_agregar_producto_req_dialog,
 )
+from usr.views.requisiciones.visualize_view import VisualizeView
+from usr.views.requisiciones.audit_view import AuditView
 
 logger = logging.getLogger(__name__)
 
@@ -54,48 +56,47 @@ class RequisicionesView(ft.Container):
         self.bgcolor = colors['bg']
         try:
             self._build_ui()
-            self._load_requisiciones()
         except Exception:
             pass
 
     def _build_ui(self):
-        colors = _colors(self.page)
+        self.colors = _colors(self.page)
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
-                    ft.Text("Requisiciones", size=26, weight="bold", color=colors['text_primary']),
-                    ft.Text("Gestión de traslados", size=13, color=colors['text_secondary']),
+                    ft.Text("Requisiciones", size=26, weight="bold", color=self.colors['text_primary']),
+                    ft.Text("Gestión de traslados", size=13, color=self.colors['text_secondary']),
                 ], expand=True, spacing=0),
                 ft.IconButton(
                     ft.Icons.REFRESH_ROUNDED,
-                    icon_color=colors['white'],
-                    bgcolor=colors['surface'],
+                    icon_color=self.colors['white'],
+                    bgcolor=self.colors['surface'],
                     on_click=lambda _: self._on_refresh(),
                     tooltip="Actualizar desde Supabase",
                 ),
                 ft.IconButton(
                     ft.Icons.ADD_ROUNDED,
-                    icon_color=colors['white'],
-                    bgcolor=colors['accent'],
+                    icon_color=self.colors['white'],
+                    bgcolor=self.colors['accent'],
                     on_click=lambda _: self._show_crear_vista(),
                     tooltip="Nueva requisición",
                 ),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=ft.padding.only(left=20, right=20, top=20, bottom=10),
-            bgcolor=colors['surface'],
+            bgcolor=self.colors['surface'],
         )
 
         self.list_container = ft.Container(
             content=self.requisiciones_list,
             expand=True,
-            bgcolor=colors['bg'],
+            bgcolor=self.colors['bg'],
         )
 
         self.content = ft.Column([
             header,
             self.list_container,
         ], expand=True, spacing=0)
-        self.content.bgcolor = colors['bg']
+        self.content.bgcolor = self.colors['bg']
         self.update()
 
         self._load_requisiciones()
@@ -138,9 +139,9 @@ class RequisicionesView(ft.Container):
                 sync_mgr = get_sync_manager()
                 if sync_mgr:
                     await asyncio.to_thread(sync_mgr.force_sync_now)
-
-            await asyncio.to_thread(self._load_requisiciones)
-            show_success("Requisiciones actualizadas")
+            else:
+                await asyncio.to_thread(self._load_requisiciones)
+                show_success("Requisiciones actualizadas")
         except Exception as e:
             logger.error(f"Error en _do_refresh de RequisicionesView: {e}")
             show_error("Error al actualizar requisiciones", e)
@@ -159,19 +160,24 @@ class RequisicionesView(ft.Container):
                         build_requisicion_card(
                             req,
                             {
-                                "on_ver": lambda _=None, r=req: self._show_detalles(r),
+                                "on_visualizar": lambda _=None, r=req: self._visualizar_requisicion(r),
                                 "on_editar": lambda _=None, r=req: self._editar_requisicion(r),
+                                "on_auditar": lambda _=None, r=req: self._auditar_requisicion(r),
+                                "on_eliminar": lambda _=None, r=req: self._eliminar_requisicion(r),
                             },
                             _colors(self.page),
                         )
                     )
 
-            self.requisiciones_list.update()
-            self.list_container.update()
+            if self.requisiciones_list.page:
+                self.requisiciones_list.update()
+            if self.list_container and self.list_container.page:
+                self.list_container.update()
             if self.page:
                 self.page.update()
         except Exception as e:
-            show_error("Error cargando requisiciones", e, "requisiciones_view._load_requisiciones")
+            import traceback
+            traceback.print_exc()
 
     def _editar_requisicion(self, req: Requisicion):
         if not self.page:
@@ -180,6 +186,44 @@ class RequisicionesView(ft.Container):
             show_warning("No se puede editar una requisición completada")
             return
         self._show_crear_vista(requisicion=req)
+
+    def _eliminar_requisicion(self, req: Requisicion):
+        if not self.page:
+            return
+            
+        def confirm_delete(_):
+            if eliminar_requisicion(req.id):
+                show_success(f"Requisición {req.numero} eliminada")
+                self._load_requisiciones()
+            else:
+                show_error("Error al eliminar la requisición")
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Eliminar Requisición"),
+            content=ft.Text(f"¿Estás seguro de que deseas eliminar la requisición {req.numero}? Esta acción no se puede deshacer."),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: setattr(dlg, 'open', False)),
+                ft.ElevatedButton("Eliminar", on_click=confirm_delete, bgcolor=self.colors['error'], color=self.colors['white']),
+            ]
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _visualizar_requisicion(self, req: Requisicion):
+        self._vista_actual = "visualizar"
+        self.content = VisualizeView(req, on_back=self._volver_lista)
+        self.update()
+
+    def _auditar_requisicion(self, req: Requisicion):
+        if req.estado != "pendiente":
+            show_warning("Solo se pueden auditar requisiciones pendientes")
+            return
+        self._vista_actual = "auditar"
+        self.content = AuditView(req.id, on_back=self._volver_lista)
+        self.update()
 
     def _show_crear_dialog(self):
         build_crear_dialog(self)

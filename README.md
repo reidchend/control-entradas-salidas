@@ -1,219 +1,110 @@
-# Control de Entradas y Salidas
+# 📦 Control de Entradas y Salidas - Guía Técnica
 
-Aplicacion de escritorio para gestion de inventario desarrollada con Flet y SQLAlchemy.
-
-## Version Actual - Sistema Offline-First con Auto-Updates
-
-### Caracteristicas Principales
-
-- **Modo Offline**: Trabaja sin conexion - los datos se guardan localmente en SQLite
-- **Sincronizacion Automatica**: Se sincroniza con Supabase (PostgreSQL) cuando hay conexion
-- **Auto-Update**: El cargador inteligente descarga actualizaciones de `usr/` y `config/` desde GitHub sin necesidad de recompilar el `.exe`
-- **WhatsApp Bot**: Envio de notificaciones via WhatsApp usando Baileys
-- **Productos Pesables**: Registro de productos por peso (kg) con calculo automatico
-- **Cola de Operaciones**: Las operaciones offline se procesan cuando hay conexion
-- **OCR de Facturas**: Extraccion automatica de datos de facturas desde imagenes del portapapeles usando Gemini API
-- **Lista de Compras**: Gestion de productos pendientes por ingresar al inventario
-- **Requisiciones**: Solicitudes internas de productos
-- **Gestion de Proveedores**: Administracion del catalogo de proveedores
+Sistema de gestión de inventario **Offline-First** desarrollado con Flet y SQLAlchemy, diseñado para operar en entornos con conexión intermitente y actualizarse dinámicamente sin recompilar el ejecutable.
 
 ---
 
-## Requisitos
+## 🚀 Arquitectura del Sistema
 
-- Python 3.11 o superior
-- pip (gestor de paquetes de Python)
+### 1. Smart Launcher & Dynamic Updates
+El sistema no carga el código directamente desde el ejecutable, sino que utiliza un mecanismo de **Inyección de Rutas**:
+- **Lanzador**: El `.exe` actúa como un contenedor de entorno (Python + Librerías).
+- **Carga Dinámica**: Al iniciar, `main.py` verifica la versión en un `version.json` remoto.
+- **app_updates/**: Si hay una actualización, descarga un `update.zip`, lo extrae en `app_updates/` e inserta esta carpeta al inicio de `sys.path`.
+- **Prioridad**: El código en `app_updates/usr/` tiene prioridad sobre el código empaquetado en el `.exe`.
 
----
+### 2. Motor de Sincronización (Offline-First)
+El sistema utiliza una arquitectura de **Réplica Local**:
+- **LocalReplica**: Una base de datos SQLite local que imita el esquema de Supabase.
+- **SyncQueue**: Cuando el usuario realiza un cambio offline, la operación se guarda en `pending_operations`.
+- **Bidireccionalidad**: 
+  - **Subida**: Procesa la cola de pendientes $\rightarrow$ Supabase.
+  - **Descarga**: Descarga cambios remotos $\rightarrow$ SQLite $\rightarrow$ Poda de registros huérfanos.
 
-## Instalacion
-
-1. **Clonar o descargar el proyecto**
-
-2. **Crear entorno virtual (recomendado)**
-```bash
-python -m venv .venv
-source .venv/bin/activate  # En Linux/Mac
-.venv\Scripts\activate     # En Windows
-```
-
-3. **Instalar dependencias**
-```bash
-pip install -r requirements.txt
-```
-
-4. **Configurar variables de entorno**
-
-Crea un archivo `.env` en la raiz del proyecto:
-```env
-DB_TYPE=postgresql
-DB_HOST=your-supabase-host.pooler.supabase.com
-DB_PORT=6543
-DB_NAME=postgres
-DB_USER=postgres.your_project
-DB_PASSWORD=your-supabase-password
-
-FLET_APP_NAME=Lycoris_Control
-FLET_APP_VERSION=1.0.0
-
-UPDATE_URL=https://raw.githubusercontent.com/tu_usuario/tu_repo/main/version.json
-```
-
-5. **Ejecutar la aplicacion**
-```bash
-python main.py
-```
+### 3. Flujo de Requisiciones (Audit Workflow)
+El módulo de requisiciones implementa un proceso de control de calidad:
+- **Pendiente**: Registro inicial de solicitud.
+- **Auditoría**: Vista de verificación donde se compara el stock físico vs sistema. Permite realizar **Ajustes de Stock** inmediatos.
+- **Totalización**: Traslada físicamente el stock (Origen $\rightarrow$ Destino) y marca la requisición como `completada`, registrando la validación en el `kardex_validaciones`.
 
 ---
 
-## Auto-Update (Actualizaciones Automaticas)
+## 📂 Mapa del Proyecto
 
-El sistema cuenta con un cargador inteligente que permite actualizar la logica de la app sin recompilar el `.exe`.
-
-### Como funciona
-1. El ejecutable actua como **Launcher**: contiene Python, Flet y las librerias.
-2. Al iniciar, consulta un `version.json` remoto (ej: en GitHub).
-3. Si la version remota es diferente a la local, descarga `update.zip`.
-4. Extrae las carpetas `usr/` y `config/` en `app_updates/`.
-5. Inyecta `app_updates/` en `sys.path` y carga el codigo nuevo.
-
-### Para publicar una actualizacion
-1. Modifica el codigo en `usr/` o `config/`.
-2. Sube los cambios a GitHub (rama `main`).
-3. El **GitHub Action** genera automaticamente el `update.zip`.
-4. Edita `version.json` en GitHub con el nuevo numero de version.
-5. Los usuarios recibiran la actualizacion al reiniciar la app.
-
-**Nota**: Solo es necesario recompilar el `.exe` si se agregan nuevas librerias externas.
-
----
-
-## OCR de Facturas
-
-La aplicacion extrae automaticamente datos de facturas desde imagenes del portapapeles usando **Gemini API**.
-
-### Como usar
-1. En cualquier aplicacion (WhatsApp, correo, etc.), copia la imagen de la factura
-2. En la app, ve a **Validacion** y presiona `Ctrl+V`
-3. La imagen se procesa automaticamente y se extraen los datos
-
----
-
-## Navegacion
-
-### Desktop
-```
-📦 INVENTARIO      → Registro de entradas + Lista de Compras
-✓  VALIDACION      → Validar facturas (con OCR automatico)
-📊 STOCK           → Consultar inventario
-📋 REQUISICIONES   → Solicitudes internas de productos
-🕒 HISTORIAL       → Ver facturas historicas
-⚙️ CONFIGURACION   → Gestion de catalogo y sistema
-✉️ BANDEJA        → Notificaciones WhatsApp
-```
-
-### Mobile
-El mismo menu aparece en la barra inferior con iconos intuitivos y un boton "Mas" para las opciones adicionales.
-
----
-
-## Estructura del Proyecto
-
-```
+```text
 control-entradas-salidas/
-├── main.py                    # Punto de entrada (Smart Launcher)
-├── requirements.txt           # Dependencias
-├── .env                       # Configuracion (no incluir en git)
-├── .gitignore                 # Archivos ignorados
-├── version.json               # Version actual para auto-update
-├── update.zip                 # Paquete de actualizacion (generado por CI)
-├── assets/
-│   └── icono.ico              # Icono de la aplicacion
-├── config/
-│   ├── config.py              # Configuracion con Pydantic
-│   └── __init__.py
-├── migrations/
-│   └── 001_add_tipo_to_productos.sql  # Migraciones SQL
+├── main.py                    # Entry point: Maneja la redirección a app_updates/
 ├── usr/
 │   ├── database/
-│   │   ├── conn.py            # Conexion SQLite local
-│   │   ├── base.py            # Configuracion SQLAlchemy
-│   │   ├── local_replica.py   # Replica local SQLite
-│   │   ├── sync.py            # Sincronizacion con Supabase
-│   │   ├── sync_queue.py      # Cola de operaciones offline
-│   │   ├── sync_callbacks.py  # Callbacks de sincronizacion
-│   │   └── cache.py           # Cache de consultas
-│   ├── models/
-│   │   ├── categoria.py       # Modelo Categoria
-│   │   ├── producto.py        # Modelo Producto (es_pesable, tipo)
-│   │   ├── factura.py         # Modelo Factura
-│   │   ├── factura_pago.py    # Modelo Pagos de Factura
-│   │   ├── movimiento.py      # Modelo Movimiento
-│   │   ├── existencia.py      # Modelo Existencia
-│   │   ├── compra_lista.py    # Modelo Lista de Compras
-│   │   ├── proveedor.py       # Modelo Proveedor
-│   │   ├── requisicion.py     # Modelo Requisicion
-│   │   └── __init__.py
-│   ├── views/
-│   │   ├── inventario_view.py       # Vista de inventario
-│   │   ├── validacion_view.py       # Vista de facturas
-│   │   ├── stock_view.py            # Vista de stock
-│   │   ├── historial_facturas_view.py
-│   │   ├── requisiciones_view.py    # Vista de requisiciones
-│   │   ├── configuracion_view.py    # Vista de configuracion
-│   │   ├── whatsapp_bandeja_view.py # Bandeja de WhatsApp
-│   │   ├── login_view.py            # Login/PIN
-│   │   └── __init__.py
-│   └── views/inventario/
-│       ├── helpers.py
-│       ├── categories.py
-│       ├── products.py
-│       ├── dialogs.py
-│       ├── movements.py
-│       └── shopping_list.py
-├── whatsapp_bot/
-│   └── server.js              # Servidor del bot de WhatsApp
-├── .github/
-│   └── workflows/
-│       └── update.yml         # CI para auto-update
-└── lycoris_local.db           # Base de datos local SQLite
+│   │   ├── conn.py            # Conexiones SQLite/Supabase
+│   │   ├── local_replica.py   # Definición de tablas SQLite y migraciones locales
+│   │   ├── sync.py            # Lógica core de sincronización y poda de huérfanos
+│   │   └── sync_queue.py      # Gestión de operaciones pendientes
+│   ├── models/                # Definiciones de SQLAlchemy (Esquema de datos)
+│   │   ├── producto.py        # Atributos: es_pesable, tipo, etc.
+│   │   └── requisicion.py     # Modelos de Requisición y Detalle (incluye verificado)
+│   └── views/                 # UI desarrollada con Flet
+│       ├── requisiciones/
+│       │   ├── data.py        # Lógica de negocio de requisiciones (CRUD + Audit)
+│       │   ├── audit_view.py  # Vista de verificación y totalización
+│       │   └── visualize_view.py # Vista de solo lectura simplificada
+│       └── ...                # Otras vistas (Inventario, Stock, etc.)
+└── config/
+    └── config.py              # Configuración centralizada con Pydantic
 ```
 
 ---
 
-## Stack Tecnologico
+## 🛠️ Guía de Depuración y Mantenimiento
 
-- **Frontend**: Flet (Python UI Framework)
-- **Backend**: SQLAlchemy ORM
-- **Base de datos local**: SQLite
-- **Base de datos central**: Supabase (PostgreSQL via pg8000)
-- **OCR**: Google Gemini API (google-genai)
-- **WhatsApp**: Baileys (Node.js)
-- **Auto-Update**: GitHub Actions + raw.githubusercontent.com
-- **Configuracion**: Pydantic + python-dotenv
+### Problemas Comunes y Soluciones
 
-### Arquitectura
-- Smart Launcher con carga dinamica de modulos
-- Sistema offline-first con replica local
-- Sync bidireccional con cola de operaciones
-- Actualizaciones OTA via GitHub
+#### 1. El código actualizado no se refleja en el App
+- **Causa**: Windows mantiene caché de bytecode (`.pyc`) en carpetas `__pycache__` que puede tener prioridad sobre los archivos `.py` actualizados.
+- **Solución**: Borrar manualmente todas las carpetas `__pycache__` en el directorio de instalación.
+
+#### 2. Fallo en Notificaciones tras Actualización
+- **Causa**: Al limpiar `sys.modules` para cargar la nueva versión, se pierde la referencia a la página de Flet (`_page`) en el módulo de notificaciones.
+- **Solución**: Se implementó un **Stack Walker** en `usr/notifications.py` que busca la instancia de `ft.Page` recorriendo la pila de llamadas si la referencia directa es `None`.
+
+#### 3. Bases de Datos Duplicadas
+- **Causa**: Uso de rutas relativas que crean una DB en la raíz y otra en `app_updates/`.
+- **Solución**: Siempre utilizar rutas absolutas obtenidas mediante `os.path.abspath` en `usr/database/conn.py`.
 
 ---
 
-## Produccion
+## 📈 Flujo de Trabajo para Desarrolladores
 
-Para compilar el ejecutable para Windows:
+### Para agregar una nueva funcionalidad:
+1. **Modelo**: Definir la tabla en `usr/models/` y agregar el `CREATE TABLE` en `usr/database/local_replica.py`.
+2. **Data Layer**: Crear funciones de acceso a datos en `usr/views/[modulo]/data.py`.
+3. **UI**: Implementar la vista en `usr/views/` usando componentes reutilizables.
+4. **Sync**: Si la tabla debe sincronizarse, agregarla a `tables_to_sync` en `usr/database/sync.py`.
+
+### Para publicar un parche (Hotfix):
+1. Subir los cambios a la rama `main` de GitHub.
+2. El GitHub Action generará el `update.zip` automáticamente.
+3. Actualizar el número de versión en `version.json`.
+4. El cliente descargará el parche al reiniciar.
+
+---
+
+## 📦 Compilación del Ejecutable
+
+Si se agregan nuevas dependencias en `requirements.txt`, se debe recompilar:
 
 ```bash
-pyinstaller --noconfirm --onefile --windowed --name "Lycoris_Control" --icon "assets/icono.ico" --add-data "assets;assets" --add-data ".env;." --collect-all "supabase" --collect-all "pydantic_settings" --collect-submodules "sqlalchemy" --hidden-import "sqlalchemy.dialects.postgresql" --hidden-import "pg8000" main.py
+pyinstaller --noconfirm --onefile --windowed --name "Lycoris_Control" \
+--icon "assets/icono.ico" \
+--add-data "assets;assets" \
+--add-data ".env;." \
+--collect-all "supabase" \
+--collect-all "pydantic_settings" \
+--collect-submodules "sqlalchemy" \
+--hidden-import "sqlalchemy.dialects.postgresql" \
+--hidden-import "pg8000" \
+main.py
 ```
 
 ---
-
-## Licencia
-
-Libre uso.
-
----
-
-**Desarrollado con** ❤️ **usando Flet + SQLAlchemy + Supabase**
+**Soporte**: Reportar errores en [Issues de GitHub](https://github.com/anomalyco/opencode/issues)

@@ -271,7 +271,9 @@ class SyncManager:
             ('movimientos', 'movimientos'), 
             ('facturas', 'facturas'), 
             ('factura_pagos', 'factura_pagos'),
-            ('requisiciones', 'requisiciones')
+            ('requisiciones', 'requisiciones'),
+            ('requisicion_detalles', 'requisicion_detalles'),
+            ('kardex_validaciones', 'kardex_validaciones')
         ]
         
         from sqlalchemy import create_engine
@@ -313,13 +315,25 @@ class SyncManager:
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
                         LocalReplica.delete_orphaned_records('requisiciones', remote_ids, 'numero')
+                    elif local_table == 'requisicion_detalles':
+                        LocalReplica.save_requisicion_detalles(data)
+                        LocalReplica.delete_orphaned_records('requisicion_detalles', remote_ids)
+                    elif local_table == 'kardex_validaciones':
+                        LocalReplica.save_kardex_validaciones(data)
+                        LocalReplica.delete_orphaned_records('kardex_validaciones', remote_ids)
                     
                     print(f"[SYNC] {len(data)} {local_table} baixats")
+
+
+
+
                 except Exception as e:
                     print(f"[SYNC] Error descargando {local_table}: {e}")
         
         remote_engine.dispose()
         
+        # Recalcular existencias después de la descarga
+        LocalReplica.recalculate_existencias()
         print("[SYNC] Descarga completada")
         return True
     
@@ -355,15 +369,15 @@ class SyncManager:
         while not self._stop_event.is_set():
             if self.check_connection():
                 try:
+                    # Subir pendientes de la cola primero (facturas, etc.)
+                    self._process_sync_queue()
+                except Exception as e:
+                    print(f"[SYNC] Error procesando cola (loop): {e}")
+                try:
                     # Subir movimientos pendientes (sincronizado=0)
                     self._upload_pending_movimientos()
                 except Exception as e:
                     print(f"[SYNC] Error subiendo movimientos (loop): {e}")
-                try:
-                    # Subir pendientes de la cola
-                    self._process_sync_queue()
-                except Exception as e:
-                    print(f"[SYNC] Error procesando cola (loop): {e}")
                 try:
                     # Descargar cambios del servidor (también PODA registros
                     # eliminados remotamente, p.ej. requisiciones)
@@ -407,7 +421,6 @@ class SyncManager:
             finally:
                 remote_engine.dispose()
         
-        LocalReplica.recalculate_existencias()
         queue.set_last_sync(datetime.now().isoformat())
         print("[SYNC] Ciclo de sync completado")
     
@@ -662,6 +675,41 @@ class SyncManager:
                         print(f"[SYNC] Pago de factura {fact_num} sincronizado")
                         
                     elif table == 'requisiciones':
+                        if operation == 'delete':
+                            num = data.get('numero')
+                            if num:
+                                # 1. Obtener el ID remoto usando el numero
+                                res = conn.execute(
+                                    text("SELECT id FROM requisiciones WHERE numero = :num"),
+                                    {'num': num}
+                                ).fetchone()
+                                
+                                if res:
+                                    remote_id = res[0]
+                                    # 2. Borrar primero los detalles para evitar errores de FK
+                                    conn.execute(
+                                        text("DELETE FROM requisicion_detalles WHERE requisicion_id = :rid"),
+                                        {'rid': remote_id}
+                                    )
+                                    # 3. Borrar la requisición
+                                    conn.execute(
+                                        text("DELETE FROM requisiciones WHERE id = :id"),
+                                        {'id': remote_id}
+                                    )
+                                    conn.commit()
+                                    queue.mark_completed(item['id'])
+                                    uploaded += 1
+                                    print(f"[SYNC] Requisición {num} y sus detalles eliminados en Supabase")
+                                else:
+                                    # Si no existe en el servidor, marcamos como completado igualmente
+                                    queue.mark_completed(item['id'])
+                                    uploaded += 1
+                                    print(f"[SYNC] Requisición {num} no encontrada en servidor, marcada como eliminada")
+                            else:
+                                print(f"[SYNC] Error: No se proporcionó número para eliminar requisición")
+                                queue.mark_completed(item['id'])
+                            continue
+
                         num = data.get('numero')
                         if not num:
                             continue
@@ -690,7 +738,7 @@ class SyncManager:
                             set_cols = ", ".join([f"{k} = :{k}" for k in req_vals.keys()])
                             conn.execute(
                                 text(f"UPDATE requisiciones SET {set_cols} WHERE numero = :num"),
-                                req_vals
+                                req_vals | {'num': num}
                             )
                         else:
                             cols = ", ".join(req_vals.keys())
@@ -734,6 +782,25 @@ class SyncManager:
                         queue.mark_completed(item['id'])
                         uploaded += 1
                         print(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
+                    
+                    elif table == 'kardex_validaciones' and operation == 'insert':
+                        reg_data = {
+                            'producto_id': data.get('producto_id'),
+                            'requisicion_id': data.get('requisicion_id'),
+                            'fecha': data.get('fecha'),
+                            'usuario': data.get('usuario'),
+                            'cantidad_fisica': data.get('cantidad_fisica'),
+                            'observacion': data.get('observacion'),
+                        }
+                        conn.execute(text("""
+                            INSERT INTO kardex_validaciones
+                            (producto_id, requisicion_id, fecha, usuario, cantidad_fisica, observacion)
+                            VALUES (:producto_id, :requisicion_id, :fecha, :usuario, :cantidad_fisica, :observacion)
+                        """), reg_data)
+                        conn.commit()
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        print(f"[SYNC] Kardex validación sincronizada")
                         
                 except Exception as e:
                     queue.mark_failed(item['id'], str(e))

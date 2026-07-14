@@ -116,11 +116,10 @@ class InventarioView(ft.Container):
         def check_connection_loop():
             while True:
                 time.sleep(10)
-                page = getattr(self, 'page', None)
-                if page:
+                if hasattr(self, 'page') and self.page:
                     self._update_connection_indicator()
                     try:
-                        page.update()
+                        self.page.update()
                     except Exception as e:
                         show_error("Error updating page", e, "inventario_view.check_connection_loop")
         self._connection_thread = threading.Thread(target=check_connection_loop, daemon=True)
@@ -500,11 +499,11 @@ class InventarioView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             if self.page:
+                self.page.update()
                 try:
                     self.page.overlay.remove(self.active_dialog)
                 except ValueError:
                     pass
-                self.page.update()
             self.active_dialog = None
 
     def _toggle_lista_compra(self):

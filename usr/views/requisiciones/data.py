@@ -1,8 +1,32 @@
 from datetime import datetime
 
 from usr.database.base import get_db_adaptive
-from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia
+from usr.models import Requisicion, RequisicionDetalle, Producto, Existencia, Movimiento
 
+
+def eliminar_requisicion(req_id):
+    """Elimina una requisición y sus detalles."""
+    db = next(get_db_adaptive())
+    try:
+        req = db.query(Requisicion).filter(Requisicion.id == req_id).first()
+        if req:
+            num = req.numero
+            db.delete(req)
+            db.commit()
+            
+            # Encolar eliminación para el servidor usando el numero (llave de negocio)
+            from usr.database.sync_queue import get_sync_queue
+            queue = get_sync_queue()
+            queue.add_pending('requisiciones', 'delete', {'numero': num})
+            
+            return True
+        return False
+    except Exception as e:
+        print(f"[REQ] Error eliminando requisición: {e}")
+        db.rollback()
+        return False
+    finally:
+        db.close()
 
 def get_almacenes():
     db = next(get_db_adaptive())
@@ -25,10 +49,12 @@ def get_productos_activos(limit=200):
         db.close()
 
 
+from sqlalchemy.orm import joinedload
+
 def load_requisiciones():
     db = next(get_db_adaptive())
     try:
-        return db.query(Requisicion).order_by(Requisicion.fecha_creacion.desc()).all()
+        return db.query(Requisicion).options(joinedload(Requisicion.detalles)).order_by(Requisicion.fecha_creacion.desc()).all()
     finally:
         db.close()
 
@@ -60,6 +86,253 @@ def buscar_productos(texto, limit=30):
         if texto:
             query = query.filter(Producto.nombre.ilike(f"%{texto}%"))
         return query.limit(limit).all()
+    finally:
+        db.close()
+
+
+from sqlalchemy import text
+
+def marcar_detalle_verificado(detalle_id, estado):
+    db = next(get_db_adaptive())
+    try:
+        detalle = db.query(RequisicionDetalle).filter(RequisicionDetalle.id == detalle_id).first()
+        if detalle:
+            detalle.verificado = estado
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+def crear_ajuste_stock(producto_id, almacen, nueva_cantidad, motivo, usuario="Admin"):
+    """Crea un movimiento de ajuste para corregir la cantidad inicial."""
+    db = next(get_db_adaptive())
+    try:
+        # 1. Obtener cantidad actual
+        exist = db.query(Existencia).filter(
+            Existencia.producto_id == producto_id,
+            Existencia.almacen == almacen
+        ).first()
+        
+        cant_anterior = exist.cantidad if exist else 0
+        diff = nueva_cantidad - cant_anterior
+        
+        # 2. Crear movimiento de ajuste
+        mov = Movimiento(
+            producto_id=producto_id,
+            tipo='ajuste',
+            cantidad=diff,
+            cantidad_anterior=cant_anterior,
+            cantidad_nueva=nueva_cantidad,
+            almacen=almacen,
+            observaciones=f"Ajuste auditoría: {motivo}",
+            registrado_por=usuario,
+            fecha_movimiento=datetime.now()
+        )
+        db.add(mov)
+        
+        # 3. Actualizar Existencia
+        if exist:
+            exist.cantidad = nueva_cantidad
+        else:
+            db.add(Existencia(producto_id=producto_id, almacen=almacen, cantidad=nueva_cantidad))
+            
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"[REQ] Error creando ajuste: {e}")
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+def get_requisicion_audit_data(req_id):
+    """Obtiene los datos necesarios para la vista de auditoría."""
+    db = next(get_db_adaptive())
+    try:
+        req = db.query(Requisicion).filter(Requisicion.id == req_id).first()
+        if not req:
+            return None
+            
+        detalles = db.query(RequisicionDetalle).filter(RequisicionDetalle.requisicion_id == req_id).all()
+        
+        audit_items = []
+        for det in detalles:
+            # Stock actual
+            exist_orig = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.origen
+            ).first()
+            exist_dest = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.destino
+            ).first()
+            
+            s_orig = exist_orig.cantidad if exist_orig else 0
+            s_dest = exist_dest.cantidad if exist_dest else 0
+            cant_tras = det.cantidad
+            
+            audit_items.append({
+                'detalle_id': det.id,
+                'producto_id': det.producto_id,
+                'ingrediente': det.ingrediente,
+                'verificado': det.verificado,
+                'origen': {
+                    'inicial': s_orig,
+                    'trasladada': cant_tras,
+                    'final': s_orig - cant_tras
+                },
+                'destino': {
+                    'inicial': s_dest,
+                    'trasladada': cant_tras,
+                    'final': s_dest + cant_tras
+                }
+            })
+            
+        return {
+            'requisicion': req,
+            'items': audit_items
+        }
+    finally:
+        db.close()
+
+def totalizar_requisicion(req_id, usuario="Admin"):
+    """
+    1. Lee stock local desde SQLite.
+    2. Crea movimientos de salida (origen) y entrada (destino).
+    3. Actualiza existencias localmente.
+    4. Cambia estado a 'completada'.
+    5. Registra en kardex_validaciones.
+    6. Sincroniza cambios a Supabase via sync queue.
+    (Todo sobre una sola conexión SQLite para evitar "database is locked".)
+    """
+    from config.config import get_settings
+    device_id = get_settings().DEVICE_IDENTIFIER
+
+    db = next(get_db_adaptive())
+    try:
+        req = db.query(Requisicion).filter(Requisicion.id == req_id).first()
+        if not req:
+            raise ValueError("Requisición no encontrada")
+
+        detalles = db.query(RequisicionDetalle).filter(RequisicionDetalle.requisicion_id == req_id).all()
+
+        for det in detalles:
+            # Leer stock actual (misma sesión db)
+            exist_orig = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.origen
+            ).first()
+            exist_dest = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.destino
+            ).first()
+
+            cant_orig_actual = exist_orig.cantidad if exist_orig else 0
+            cant_dest_actual = exist_dest.cantidad if exist_dest else 0
+            cant_orig_nueva = max(0, cant_orig_actual - det.cantidad)
+            cant_dest_nueva = cant_dest_actual + det.cantidad
+            now_iso = datetime.now().isoformat()
+
+            # Movimiento salida (origen)
+            db.execute(
+                text("""INSERT INTO movimientos
+(producto_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
+ peso_total, registrado_por, observaciones,
+ almacen, fecha_movimiento, created_at, device_id, sincronizado)
+VALUES (:p, :t, :c, :ca, :cn, :pt, :rp, :obs, :al, :fm, :ca2, :dv, 0)"""),
+                {"p": det.producto_id, "t": "tr_salida", "c": det.cantidad,
+                 "ca": cant_orig_actual, "cn": cant_orig_nueva,
+                 "pt": 0.0, "rp": usuario,
+                 "obs": f"Traslado req #{req.numero} → {req.destino}",
+                 "al": req.origen, "fm": now_iso, "ca2": now_iso, "dv": device_id}
+            )
+
+            # Movimiento entrada (destino)
+            db.execute(
+                text("""INSERT INTO movimientos
+(producto_id, tipo, cantidad, cantidad_anterior, cantidad_nueva,
+ peso_total, registrado_por, observaciones,
+ almacen, fecha_movimiento, created_at, device_id, sincronizado)
+VALUES (:p, :t, :c, :ca, :cn, :pt, :rp, :obs, :al, :fm, :ca2, :dv, 0)"""),
+                {"p": det.producto_id, "t": "tr_entrada", "c": det.cantidad,
+                 "ca": cant_dest_actual, "cn": cant_dest_nueva,
+                 "pt": 0.0, "rp": usuario,
+                 "obs": f"Traslado req #{req.numero} ← {req.origen}",
+                 "al": req.destino, "fm": now_iso, "ca2": now_iso, "dv": device_id}
+            )
+
+            # Actualizar existencias (misma sesión)
+            if exist_orig:
+                exist_orig.cantidad = cant_orig_nueva
+            if exist_dest:
+                exist_dest.cantidad = cant_dest_nueva
+            else:
+                db.add(Existencia(producto_id=det.producto_id, almacen=req.destino, cantidad=det.cantidad))
+
+            # kardex_validaciones
+            db.execute(
+                text("INSERT INTO kardex_validaciones (producto_id, requisicion_id, fecha, usuario, cantidad_fisica) VALUES (:p, :r, :f, :u, :c)"),
+                {"p": det.producto_id, "r": req.id, "f": now_iso, "u": usuario, "c": det.cantidad}
+            )
+
+        req.estado = 'completada'
+        req.procesada_por = usuario
+        req.fecha_procesamiento = datetime.now()
+
+        # Leer existencias finales para sync (antes de commit, ORM aún accesible)
+        detalles_data = []
+        stocks_sync = []  # (producto_id, almacen_origen, stock_origen, almacen_destino, stock_destino)
+        for det in detalles:
+            exist_orig = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.origen
+            ).first()
+            exist_dest = db.query(Existencia).filter(
+                Existencia.producto_id == det.producto_id,
+                Existencia.almacen == req.destino
+            ).first()
+            coa = exist_orig.cantidad if exist_orig else 0
+            cda = exist_dest.cantidad if exist_dest else 0
+            con = max(0, coa - det.cantidad)
+            cdn = cda + det.cantidad
+
+            detalles_data.append({
+                'producto_id': det.producto_id, 'ingrediente': det.ingrediente,
+                'cantidad': det.cantidad, 'unidad': det.unidad, 'es_pesable': False,
+            })
+            stocks_sync.append((det.producto_id, req.origen, con, req.destino, cdn))
+
+        # Sincronizar existencias a Supabase ANTES de commit.
+        # Si Supabase está online y falla, se revierte todo.
+        _sync_existencias_supabase_batch(stocks_sync)
+
+        db.commit()
+
+        # Post-commit: encolar sync (best-effort, no revierte)
+        try:
+            from usr.database.sync_queue import get_sync_queue
+            for det in detalles:
+                get_sync_queue().add_pending('kardex_validaciones', 'insert', {
+                    'producto_id': det.producto_id,
+                    'requisicion_id': req.id,
+                    'fecha': datetime.now().isoformat(),
+                    'usuario': usuario,
+                    'cantidad_fisica': det.cantidad,
+                })
+        except Exception as e:
+            print(f"[REQ] Error encolando kardex sync: {e}")
+
+        try:
+            _encolar_requisicion_sync(req, detalles_data)
+        except Exception as e:
+            print(f"[REQ] Error encolando requisicion sync: {e}")
+
+        return True
+    except Exception as e:
+        print(f"[REQ] Error totalizando: {e}")
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -152,6 +425,7 @@ def guardar_requisicion(origen, destino, observaciones, detalles,
             estado=estado,
             observaciones=observaciones,
             creada_por=user_id,
+            fecha_creacion=datetime.now(),
         )
         db.add(req)
         db.flush()
@@ -196,3 +470,45 @@ def guardar_requisicion(origen, destino, observaciones, detalles,
         raise
     finally:
         db.close()
+
+
+def _sync_existencias_supabase_batch(stocks):
+    """Sincroniza existencias a Supabase antes de commit local.
+    
+    Args:
+        stocks: list of (producto_id, almacen_origen, stock_origen, almacen_destino, stock_destino)
+    
+    Si está online y falla, levanta excepción para que el caller haga rollback.
+    Si está offline, retorna sin error (sync async lo recupera).
+    """
+    from usr.database.base import is_online
+    if not is_online():
+        return
+    from sqlalchemy import create_engine
+    from config.config import get_settings
+    settings = get_settings()
+    engine = create_engine(settings.DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            for producto_id, almacen_origen, stock_origen, almacen_destino, stock_destino in stocks:
+                conn.execute(
+                    text("""INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
+VALUES (:p, :a, :c, :u)
+ON CONFLICT (producto_id, almacen)
+DO UPDATE SET cantidad = :c2, unidad = :u2"""),
+                    {"p": producto_id, "a": almacen_origen, "c": stock_origen, "u": "unidad",
+                     "c2": stock_origen, "u2": "unidad"}
+                )
+                conn.execute(
+                    text("""INSERT INTO existencias (producto_id, almacen, cantidad, unidad)
+VALUES (:p, :a, :c, :u)
+ON CONFLICT (producto_id, almacen)
+DO UPDATE SET cantidad = :c2, unidad = :u2"""),
+                    {"p": producto_id, "a": almacen_destino, "c": stock_destino, "u": "unidad",
+                     "c2": stock_destino, "u2": "unidad"}
+                )
+            conn.commit()
+    except Exception as e:
+        raise RuntimeError(f"Sync existencias a Supabase falló (transacción local revertida): {e}") from e
+    finally:
+        engine.dispose()

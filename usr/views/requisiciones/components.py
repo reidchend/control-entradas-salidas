@@ -37,6 +37,20 @@ def build_requisicion_card(req, callbacks, colors):
     except Exception:
         pass
 
+    # Botones de acción según el estado
+    actions = []
+    
+    # 1. Visualizar siempre disponible
+    actions.append(ft.TextButton("Visualizar", on_click=callbacks["on_visualizar"]))
+    
+    # 2. Editar, Auditar y Eliminar solo si está pendiente
+    if req.estado == "pendiente":
+        actions.append(ft.TextButton("Editar", on_click=callbacks["on_editar"]))
+        actions.append(ft.TextButton("Auditar", on_click=callbacks["on_auditar"], 
+                                     style=ft.ButtonStyle(color=colors['accent'])))
+        actions.append(ft.TextButton("Eliminar", on_click=callbacks["on_eliminar"], 
+                                     style=ft.ButtonStyle(color=colors['error'])))
+
     return ft.Container(
         content=ft.Column([
             ft.Row([
@@ -47,8 +61,8 @@ def build_requisicion_card(req, callbacks, colors):
                     alignment=ft.alignment.center,
                 ),
                 ft.Column([
-                    ft.Text(f"#{req.numero}", weight="bold", size=16, color=colors['text_primary']),
-                    ft.Text(f"{req.origen} → {req.destino}", size=12, color=colors['text_secondary']),
+                    ft.Text(f"#{req.numero}", weight="bold", size=16, color=colors['text_primary'], max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                    ft.Text(f"{req.origen} → {req.destino}", size=12, color=colors['text_secondary'], max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                 ], expand=True, spacing=0),
                 ft.Column([
                     ft.Container(
@@ -63,19 +77,16 @@ def build_requisicion_card(req, callbacks, colors):
             ft.Row([
                 ft.Text(
                     f"Creada: {_parse_dt(req.fecha_creacion).strftime('%d/%m/%Y %H:%M') if _parse_dt(req.fecha_creacion) else '-'}",
-                    size=11, color=colors['text_secondary'], expand=True,
+                    size=11, color=colors['text_secondary'], expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
                 ),
-                ft.Row([
-                    ft.TextButton("Ver", on_click=callbacks["on_ver"]),
-                    ft.TextButton("Editar", on_click=callbacks["on_editar"]),
-                ], spacing=5),
-            ]),
+                ft.Row(actions, spacing=5, wrap=True),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=8),
         padding=15,
         bgcolor=colors['card'],
         border_radius=12,
         border=ft.border.all(1, colors['border']),
-        on_click=callbacks["on_ver"],
+        on_click=callbacks["on_visualizar"],
     )
 
 

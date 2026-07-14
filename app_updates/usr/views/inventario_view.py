@@ -499,11 +499,11 @@ class InventarioView(ft.Container):
         if self.active_dialog:
             self.active_dialog.open = False
             if self.page:
+                self.page.update()
                 try:
                     self.page.overlay.remove(self.active_dialog)
                 except ValueError:
                     pass
-                self.page.update()
             self.active_dialog = None
 
     def _toggle_lista_compra(self):

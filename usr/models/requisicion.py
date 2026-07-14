@@ -37,6 +37,7 @@ class RequisicionDetalle(Base):
     cantidad = Column(Float, nullable=False)
     unidad = Column(String(50), default="unidad")
     cantidad_surtida = Column(Float, default=0)
+    verificado = Column(Boolean, default=False)
 
     requisicion = relationship("Requisicion", back_populates="detalles")
     producto = relationship("Producto")

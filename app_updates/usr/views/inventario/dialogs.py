@@ -125,14 +125,18 @@ def show_cantidad_dialog(view, producto, tipo, on_success=None):
 
         almacen = almacen_dropdown.value or "principal"
         view._close_dialog()
-        if es_pesable:
-            from usr.views.inventario.movements import registrar_movimiento
-            registrar_movimiento(view.page, producto, tipo, cant_und, peso_total=peso_total, almacen=almacen)
-        else:
-            from usr.views.inventario.movements import registrar_movimiento
-            registrar_movimiento(view.page, producto, tipo, cantidad_a_guardar, almacen=almacen)
-        if on_success:
-            on_success()
+        try:
+            if es_pesable:
+                from usr.views.inventario.movements import registrar_movimiento
+                registrar_movimiento(view.page, producto, tipo, cant_und, peso_total=peso_total, almacen=almacen)
+            else:
+                from usr.views.inventario.movements import registrar_movimiento
+                registrar_movimiento(view.page, producto, tipo, cantidad_a_guardar, almacen=almacen)
+            if on_success:
+                on_success()
+        finally:
+            if view.page:
+                view.page.update()
 
     tipo_color = colors['success'] if tipo == "entrada" else colors['error']
     tipo_icon = "📥" if tipo == "entrada" else "📤"

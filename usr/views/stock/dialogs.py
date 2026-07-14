@@ -6,9 +6,10 @@ def build_producto_historial_dialog(producto, movimientos):
     
     mov_list = ft.ListView(height=400, spacing=8)
     for m in movimientos:
-        is_entrada = m.tipo == "entrada"
+        is_entrada = m.tipo in ("entrada", "tr_entrada")
+        is_traslado = m.tipo in ("tr_entrada", "tr_salida")
         icon = ft.Icons.ADD_CIRCLE_OUTLINE if is_entrada else ft.Icons.REMOVE_CIRCLE_OUTLINE
-        color = colors['success'] if is_entrada else colors['error']
+        color = colors['info'] if is_traslado else (colors['success'] if is_entrada else colors['error'])
         
         es_pesable = producto.es_pesable if producto else False
         unidad_prod = producto.unidad_medida if producto else 'unidad'
@@ -35,6 +36,13 @@ def build_producto_historial_dialog(producto, movimientos):
                         ft.Row([
                             ft.Text(f"{m.tipo.upper()}{factura_texto}", weight="bold", size=14, selectable=True),
                         ], alignment=ft.MainAxisAlignment.START, spacing=2),
+                        ft.Row([
+                            ft.Icon(ft.Icons.WAREHOUSE, size=12, color="#757575"),
+                            ft.Text(
+                                (m.almacen or 'principal').title(),
+                                size=11, color="#9E9E9E", selectable=True
+                            ),
+                        ], spacing=4),
                         ft.Text(
                             cantidad_display, 
                             size=12, 

@@ -520,7 +520,8 @@ class ValidacionView(ft.Container):
                 card.bgcolor = get_colors(self.page)['card']
                 card.border = ft.border.all(1, get_colors(self.page)['border'])
                 card.update()
-        self._load_entradas_pendientes()
+        if self.page:
+            self.page.run_task(self._load_entradas_pendientes)
 
     def _eliminar_entrada(self, entrada):
         db = next(get_db_adaptive())
@@ -528,7 +529,8 @@ class ValidacionView(ft.Container):
             db.delete(entrada)
             db.commit()
             show_success(f"Eliminado: {entrada.cantidad}")
-            self._load_entradas_pendientes()
+            if self.page:
+                self.page.run_task(self._load_entradas_pendientes)
         except Exception as ex:
             db.rollback()
             show_error(f"Error: {str(ex)}")

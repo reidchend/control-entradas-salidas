@@ -170,7 +170,26 @@ def init_local_db():
             ingrediente TEXT NOT NULL,
             cantidad REAL NOT NULL,
             unidad TEXT DEFAULT 'unidad',
-            cantidad_surtida REAL DEFAULT 0
+            cantidad_surtida REAL DEFAULT 0,
+            verificado INTEGER DEFAULT 0
+        )
+    """)
+    
+    # Migración: agregar columna verificado a requisicion_detalles si no existe
+    try:
+        cursor.execute("ALTER TABLE requisicion_detalles ADD COLUMN verificado INTEGER DEFAULT 0")
+    except Exception:
+        pass  # Ya existe
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS kardex_validaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            requisicion_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            cantidad_fisica REAL,
+            observacion TEXT
         )
     """)
     
@@ -934,24 +953,35 @@ class LocalReplica:
                 req.get('fecha_procesamiento'), req.get('fecha_creacion'),
                 req.get('actualizada')
             ))
-            
-            # Reemplazar detalles de forma limpia (evita duplicados en descargas)
-            cursor.execute(
-                "DELETE FROM requisicion_detalles WHERE requisicion_id = ?",
-                (req.get('id'),)
-            )
-            if 'detalles' in req:
-                for det in req.get('detalles', []):
-                    cursor.execute("""
-                        INSERT INTO requisicion_detalles 
-                        (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        req.get('id'), det.get('producto_id'),
-                        det.get('ingrediente'), det.get('cantidad'),
-                        det.get('unidad', 'unidad'), det.get('cantidad_surtida', 0)
-                    ))
         
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def save_requisicion_detalles(detalles: List[Dict]) -> None:
+        """Guarda los detalles de las requisiciones (upsert).
+        No sobreescribe la columna local `verificado`."""
+        if not detalles:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        for det in detalles:
+            cursor.execute("""
+                INSERT INTO requisicion_detalles 
+                (id, requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    requisicion_id = excluded.requisicion_id,
+                    producto_id = excluded.producto_id,
+                    ingrediente = excluded.ingrediente,
+                    cantidad = excluded.cantidad,
+                    unidad = excluded.unidad,
+                    cantidad_surtida = excluded.cantidad_surtida
+            """, (
+                det.get('id'), det.get('requisicion_id'), det.get('producto_id'),
+                det.get('ingrediente'), det.get('cantidad'), det.get('unidad', 'unidad'),
+                det.get('cantidad_surtida', 0)
+            ))
         conn.commit()
         conn.close()
     
@@ -1001,57 +1031,56 @@ class LocalReplica:
     
     @staticmethod
     def recalculate_existencias() -> None:
-        """Recalcula las existencias basándose en todos los movimientos."""
+        """Recalcula las existencias basándose en todos los movimientos.
+        
+        Los movimientos de tipo 'ajuste' representan un conteo físico real:
+        se usa cantidad_nueva como valor definitivo de stock en ese momento.
+        Los movimientos posteriores (entrada/salida) se aplican sobre ese valor.
+        """
         conn = get_local_conn()
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT producto_id, almacen, tipo, SUM(cantidad) as total_cantidad, SUM(peso_total) as total_peso
+            SELECT producto_id, almacen, tipo, cantidad, cantidad_nueva
             FROM movimientos
-            GROUP BY producto_id, almacen, tipo
+            ORDER BY id
         """)
-        
-        movimientos_agrupados = cursor.fetchall()
+        todos = cursor.fetchall()
         
         cursor.execute("DELETE FROM existencias")
         
         stock_por_producto_almacen = {}
         
-        for mov in movimientos_agrupados:
+        for mov in todos:
             producto_id = mov['producto_id']
-            almacen = mov['almacen']
+            almacen = mov['almacen'] or 'principal'
             tipo = mov['tipo']
-            total_cantidad = mov['total_cantidad'] or 0
-            total_peso = mov['total_peso'] or 0
+            cantidad = mov['cantidad'] or 0
+            cantidad_nueva = mov['cantidad_nueva']
             
             if not producto_id:
                 continue
-            if not almacen:
-                almacen = 'principal'
             
-            cursor.execute("SELECT es_pesable, unidad_medida FROM productos WHERE id = ?", (producto_id,))
+            cursor.execute("SELECT unidad_medida FROM productos WHERE id = ?", (producto_id,))
             prod_row = cursor.fetchone()
-            es_pesable = prod_row['es_pesable'] if prod_row else 0
             unidad = prod_row['unidad_medida'] if prod_row else 'unidad'
-            
-            if es_pesable:
-                cantidad = total_peso
-            else:
-                cantidad = total_cantidad
             
             key = (producto_id, almacen)
             if key not in stock_por_producto_almacen:
                 stock_por_producto_almacen[key] = {'cantidad': 0, 'unidad': unidad}
             
-            if tipo == 'entrada':
+            if tipo in ('entrada', 'tr_entrada'):
                 stock_por_producto_almacen[key]['cantidad'] += cantidad
-            elif tipo == 'salida':
+            elif tipo in ('salida', 'tr_salida'):
                 stock_por_producto_almacen[key]['cantidad'] -= cantidad
+            elif tipo == 'ajuste':
+                if cantidad_nueva is not None:
+                    stock_por_producto_almacen[key]['cantidad'] = cantidad_nueva
         
         for (producto_id, almacen), data in stock_por_producto_almacen.items():
-            if producto_id and almacen and data['cantidad'] is not None:
-                final_stock = data['cantidad']
-                
+            final_stock = data['cantidad']
+            
+            if producto_id and almacen and final_stock is not None:
                 if final_stock < 0:
                     print(f"[WARN] Stock negativo detectado: producto={producto_id}, almacen={almacen}, stock={final_stock}")
                 
@@ -1063,6 +1092,25 @@ class LocalReplica:
         conn.commit()
         conn.close()
     
+    @staticmethod
+    def save_kardex_validaciones(registros: List[Dict]) -> None:
+        if not registros:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        for reg in registros:
+            cursor.execute("""
+                INSERT OR REPLACE INTO kardex_validaciones
+                (id, producto_id, requisicion_id, fecha, usuario, cantidad_fisica, observacion)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                reg.get('id'), reg.get('producto_id'), reg.get('requisicion_id'),
+                reg.get('fecha'), reg.get('usuario'), reg.get('cantidad_fisica'),
+                reg.get('observacion')
+            ))
+        conn.commit()
+        conn.close()
+
 # ==================== METADATOS DE SYNC ====================
     # Delegamos en sync_queue.py para mantener un solo source of truth
     
