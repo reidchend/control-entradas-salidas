@@ -1403,11 +1403,11 @@ class ConfiguracionView(ft.Container):
                                 weight=ft.FontWeight.BOLD, 
                                 size=14
                             ),
-                        ], spacing=15, scroll=ft.ScrollMode.AUTO),
+                        ], spacing=15),
                         padding=20,
                     )
                 ),
-            ], spacing=15, scroll=ft.ScrollMode.AUTO),
+            ], spacing=15, scroll=ft.ScrollMode.AUTO, expand=True),
             padding=20,
             expand=True,
         )
