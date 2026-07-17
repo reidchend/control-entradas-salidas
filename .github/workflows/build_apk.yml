@@ -50,6 +50,8 @@ jobs:
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           FLET_APP_NAME="Lycoris Control"
+          UPDATE_URL=https://raw.githubusercontent.com/reidchend/control-entradas-salidas/main/version.json
+          WHATSAPP_API_KEY=${{ secrets.WHATSAPP_API_KEY }}
           EOF
 
           mkdir -p config

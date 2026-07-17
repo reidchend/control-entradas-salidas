@@ -26,21 +26,22 @@ def _ssl_context():
 
 
 def _read_env(var_name: str) -> str:
-    """Lee UPDATE_URL desde .env. Busca en _get_app_dir() y en sys._MEIPASS (fallback compilado)."""
+    """Lee UPDATE_URL desde .env. Busca en _get_app_dir() (y config/), y en sys._MEIPASS."""
     locations = [_get_app_dir()]
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         locations.append(sys._MEIPASS)
 
     for base in locations:
-        path = os.path.join(base, ".env")
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.strip().startswith(f"{var_name}="):
-                            return line.split("=")[1].strip().strip('"').strip("'")
-            except Exception as e:
-                print(f"[UPDATER] Error leyendo {path}: {e}")
+        for candidate in (".env", "config/.env"):
+            path = os.path.join(base, candidate)
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            if line.strip().startswith(f"{var_name}="):
+                                return line.split("=")[1].strip().strip('"').strip("'")
+                except Exception as e:
+                    print(f"[UPDATER] Error leyendo {path}: {e}")
     return ""
 
 
