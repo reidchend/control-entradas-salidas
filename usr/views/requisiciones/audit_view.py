@@ -234,29 +234,29 @@ class AuditView(ft.Container):
 
             cant_x_unidad_input = ft.TextField(
                 label="Und.", value="1", keyboard_type=ft.KeyboardType.NUMBER,
-                border_radius=10, text_size=14, width=100,
+                border_radius=10, text_size=14, expand=1,
                 on_change=_calcular_desde_unidades,
             )
             peso_x_unidad_input = ft.TextField(
                 label="Kg/unidad", value="0.100", keyboard_type=ft.KeyboardType.NUMBER,
-                border_radius=10, text_size=14, width=100,
+                border_radius=10, text_size=14, expand=1,
                 on_change=_calcular_desde_unidades,
             )
             peso_total_input = ft.TextField(
                 label="Peso Inicial", value=f"{current_qty:.3f}", keyboard_type=ft.KeyboardType.NUMBER,
-                border_radius=10, text_size=14, width=120,
+                border_radius=10, text_size=14, expand=1,
                 suffix_text="kg", on_change=_calcular_desde_total,
             )
             final_input = ft.TextField(
                 label="Stock Final", value=f"{final_actual:.3f}", keyboard_type=ft.KeyboardType.NUMBER,
-                border_radius=10, text_size=14, width=120,
+                border_radius=10, text_size=14, expand=1,
                 suffix_text="kg", on_change=_on_final_change,
             )
 
             campos = ft.Column([
                 ft.Text(f"Trasladada: {trasladada:.3f} kg", size=13, color=colors['text_secondary']),
-                ft.Row([cant_x_unidad_input, peso_x_unidad_input, peso_total_input], spacing=8),
-                ft.Row([final_input], spacing=8),
+                ft.Row([cant_x_unidad_input, peso_x_unidad_input], spacing=8),
+                ft.Row([peso_total_input, final_input], spacing=8),
             ], spacing=8, tight=True)
 
             def accept_adjust(_):
@@ -296,12 +296,12 @@ class AuditView(ft.Container):
 
             inicial_input = ft.TextField(
                 label="Stock Inicial", value=str(int(current_qty)),
-                keyboard_type=ft.KeyboardType.NUMBER, width=120,
+                keyboard_type=ft.KeyboardType.NUMBER, expand=1,
                 border_radius=10, text_size=14, on_change=_on_inicial_change,
             )
             final_input = ft.TextField(
                 label="Stock Final", value=str(int(final_actual)),
-                keyboard_type=ft.KeyboardType.NUMBER, width=120,
+                keyboard_type=ft.KeyboardType.NUMBER, expand=1,
                 border_radius=10, text_size=14, on_change=_on_final_change,
             )
 
