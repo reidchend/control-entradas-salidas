@@ -526,11 +526,24 @@ class ValidacionView(ft.Container):
     def _eliminar_entrada(self, entrada):
         db = next(get_db_adaptive())
         try:
+            match_data = {
+                'producto_id': entrada.producto_id,
+                'tipo': entrada.tipo,
+                'cantidad': entrada.cantidad,
+                'fecha_movimiento': str(entrada.fecha_movimiento) if entrada.fecha_movimiento else None,
+                'almacen': entrada.almacen,
+            }
             db.delete(entrada)
             db.commit()
             show_success(f"Eliminado: {entrada.cantidad}")
             if self.page:
                 self.page.run_task(self._load_entradas_pendientes)
+            # Encolar eliminación para que Supabase también lo borre
+            try:
+                from usr.database.sync_queue import get_sync_queue
+                get_sync_queue().add_pending('movimientos', 'delete', match_data)
+            except Exception as e:
+                print(f"[VALIDACION] Error encolando delete movimiento: {e}")
         except Exception as ex:
             db.rollback()
             show_error(f"Error: {str(ex)}")

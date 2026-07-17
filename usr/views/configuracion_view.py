@@ -78,10 +78,11 @@ class ConfiguracionView(ft.Container):
         colors = _colors(None)  # Default for __init__
 
     def did_mount(self):
-        self._build_ui()
         if self.page:
             self.is_mobile = self.page.width < 768
             self.page.on_resize = self._on_resize
+        self._build_ui()
+        if self.page:
             self._load_data()
 
     def on_theme_change(self):
@@ -95,6 +96,13 @@ class ConfiguracionView(ft.Container):
 
     def _on_resize(self, e):
         self.is_mobile = self.page.width < 768
+        # Reconstruir el tab sistema para ajustar textos de botones
+        if hasattr(self, 'tabs') and len(self.tabs.tabs) >= 4:
+            self.tabs.tabs[3] = ft.Tab(
+                text="Sistema",
+                icon=ft.Icons.DASHBOARD_CUSTOMIZE,
+                content=self._build_sistema_tab(),
+            )
         self.update()
 
     def _build_ui(self):
@@ -1295,13 +1303,13 @@ class ConfiguracionView(ft.Container):
                                         self.version_label,
                                     ], spacing=2, expand=True),
                                     ft.ElevatedButton(
-                                        "Buscar actualizaciones",
+                                        "Actualizar" if self.is_mobile else "Buscar actualizaciones",
                                         on_click=lambda e: self.page.run_task(self._check_for_updates, e),
                                         icon=ft.Icons.UPDATE,
                                         bgcolor=colors['accent'],
                                         color=colors['white'],
                                     ),
-                                ], spacing=15),
+                                ], spacing=15, wrap=True, run_spacing=10),
                                 self.update_status_container,
                             ], spacing=10),
                             ft.Divider(height=20, color=colors['border']),
@@ -1327,7 +1335,7 @@ class ConfiguracionView(ft.Container):
                                 color="#424242",
                             ),
                             ft.ElevatedButton(
-                                "Probar Conexión", 
+                                "Probar Conexión" if not self.is_mobile else "Probar",
                                 on_click=self._test_connection_action,
                                 icon=ft.Icons.STORAGE,
                                 bgcolor="#7B1FA2",
@@ -1347,7 +1355,7 @@ class ConfiguracionView(ft.Container):
                                 color=colors['text_secondary'],
                             ),
                             ft.ElevatedButton(
-                                "Habilitar Notificaciones", 
+                                "Notificaciones" if self.is_mobile else "Habilitar Notificaciones",
                                 on_click=self._request_notifications_action,
                                 icon=ft.Icons.NOTIFICATIONS_ACTIVE,
                                 bgcolor=colors['accent_dark'],
@@ -1381,7 +1389,7 @@ class ConfiguracionView(ft.Container):
                             ], spacing=10),
                             ft.Container(height=10),
                             ft.ElevatedButton(
-                                "Cambiar Modo", 
+                                "Cambiar Modo" if not self.is_mobile else "Cambiar",
                                 on_click=self._toggle_offline_mode,
                                 icon=ft.Icons.WIFI_OFF,
                                 bgcolor=colors['accent'],
@@ -1395,11 +1403,11 @@ class ConfiguracionView(ft.Container):
                                 weight=ft.FontWeight.BOLD, 
                                 size=14
                             ),
-                        ], spacing=15),
+                        ], spacing=15, scroll=ft.ScrollMode.AUTO),
                         padding=20,
                     )
                 ),
-            ], spacing=15),
+            ], spacing=15, scroll=ft.ScrollMode.AUTO),
             padding=20,
             expand=True,
         )

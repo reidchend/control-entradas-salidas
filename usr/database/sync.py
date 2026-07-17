@@ -403,8 +403,9 @@ class SyncManager:
         
         pending = queue.get_pending()
         
-        # Los movimientos se sincronizan via _upload_pending_movimientos (sincronizado=0)
-        pending = [p for p in pending if p.get('table_name') != 'movimientos']
+        # Los movimientos se sincronizan via _upload_pending_movimientos (sincronizado=0),
+        # excepto las eliminaciones que van por sync_queue con operation='delete'
+        pending = [p for p in pending if not (p.get('table_name') == 'movimientos' and p.get('operation') != 'delete')]
         
         if pending:
             # Usar conexión a Supabase para subir datos
@@ -561,20 +562,22 @@ class SyncManager:
                         print(f"[SYNC] Movimiento sincronizado")
                     
                     elif table == 'movimientos' and operation == 'delete':
-                        # Eliminar movimiento por ID
-                        mov_id = data.get('id')
-                        if mov_id:
-                            conn.execute(text("DELETE FROM movimientos WHERE id = :id"), {"id": mov_id})
+                        # Eliminar movimiento por campos coincidentes (ID local != ID remoto)
+                        match_cond = "1=1"
+                        match_params = {}
+                        for key in ('producto_id', 'tipo', 'cantidad', 'fecha_movimiento', 'almacen'):
+                            val = data.get(key)
+                            if val is not None:
+                                match_cond += f" AND {key} = :{key}"
+                                match_params[key] = val
+                        if match_params:
+                            conn.execute(text(f"DELETE FROM movimientos WHERE {match_cond}"), match_params)
                             conn.commit()
-                            
-                            # Verificar eliminación
-                            verify = conn.execute(text("SELECT id FROM movimientos WHERE id = :id"), {"id": mov_id}).fetchone()
-                            if verify:
-                                raise Exception("Error: Movimiento aún existe tras eliminación")
-                            
                             queue.mark_completed(item['id'])
                             uploaded += 1
                             print(f"[SYNC] Movimiento eliminado en Supabase")
+                        else:
+                            print(f"[SYNC] WARN: delete movimiento sin datos coincidentes — {data}")
                     
                     elif table == 'facturas':
                         num_fact = data.get('numero_factura')
