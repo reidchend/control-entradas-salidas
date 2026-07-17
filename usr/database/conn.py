@@ -15,6 +15,8 @@ def set_db_path(path: str) -> None:
     """Llamar desde main() antes de cualquier import de BD."""
     global _db_path
     
+    os.environ['LYCORIS_DB_PATH'] = path
+
     parent = Path(path).parent
     
     # Intentar crear directorio
@@ -39,6 +41,9 @@ def set_db_path(path: str) -> None:
     _db_path = path
 
 def get_db_path() -> str:
+    env_path = os.environ.get('LYCORIS_DB_PATH')
+    if env_path:
+        return env_path
     if _db_path is None:
         try:
             conn_dir = os.path.dirname(os.path.abspath(__file__))

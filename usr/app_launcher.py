@@ -125,8 +125,6 @@ async def main(page: ft.Page):
         page.bgcolor = "#121212"
         page.update()
 
-        from usr.database.conn import set_db_path, get_db_path
-
         db_dir = "."
         try:
             platform = getattr(page, 'platform', None)
@@ -139,7 +137,10 @@ async def main(page: ft.Page):
         page.session.set("_db_dir", db_dir)
         db_path = os.path.abspath(os.path.join(db_dir, "lycoris_local.db"))
 
-        from usr.database.local_replica import ensure_local_db
+        # Fijar ruta de BD ANTES de cualquier import de usr.database
+        os.environ['LYCORIS_DB_PATH'] = db_path
+
+        from usr.database.conn import set_db_path, get_db_path
 
         try:
             set_db_path(db_path)
