@@ -96,13 +96,6 @@ class ConfiguracionView(ft.Container):
 
     def _on_resize(self, e):
         self.is_mobile = self.page.width < 768
-        # Reconstruir el tab sistema para ajustar textos de botones
-        if hasattr(self, 'tabs') and len(self.tabs.tabs) >= 4:
-            self.tabs.tabs[3] = ft.Tab(
-                text="Sistema",
-                icon=ft.Icons.DASHBOARD_CUSTOMIZE,
-                content=self._build_sistema_tab(),
-            )
         self.update()
 
     def _build_ui(self):
@@ -1283,135 +1276,131 @@ class ConfiguracionView(ft.Container):
             visible=False,
         )
         
-        sistema_content = ft.Column([
-            # --- SECCIÓN DE VERSIÓN ---
-            ft.Column([
-                ft.Row([
-                    ft.Container(
-                        content=ft.Icon(ft.Icons.SYSTEM_UPDATE, color=colors['white'], size=28),
-                        bgcolor=colors['accent'],
-                        padding=12,
-                        border_radius=12,
-                    ),
-                    ft.Column([
-                        ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
-                        self.version_label,
-                    ], spacing=2, expand=True),
-                    ft.ElevatedButton(
-                        "Actualizar" if self.is_mobile else "Buscar actualizaciones",
-                        on_click=lambda e: self.page.run_task(self._check_for_updates, e),
-                        icon=ft.Icons.UPDATE,
-                        bgcolor=colors['accent'],
-                        color=colors['white'],
-                    ),
-                ], spacing=15, wrap=True, run_spacing=10),
-                self.update_status_container,
-            ], spacing=10),
-            ft.Divider(height=20, color=colors['border']),
-            
-            # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
-            ft.Row([
-                ft.Container(
-                    content=ft.Icon(ft.Icons.DASHBOARD, color=colors['white'], size=28),
-                    bgcolor=colors['accent_dark'],
-                    padding=12,
-                    border_radius=12,
-                ),
-                ft.Column([
-                    ft.Text("Mantenimiento del Sistema", weight=ft.FontWeight.BOLD, size=16),
-                    ft.Text("Herramientas de diagnóstico y configuración", size=12, color=colors['text_secondary']),
-                ], spacing=2),
-            ], spacing=15),
-            ft.Divider(height=20, color=colors['border']),
-            
-            ft.Text(
-                "Si experimenta errores tras actualizaciones o cambios de configuración, use 'Probar Conexión' para verificar la base de datos.",
-                size=13,
-                color="#424242",
-            ),
-            ft.ElevatedButton(
-                "Probar Conexión" if not self.is_mobile else "Probar",
-                on_click=self._test_connection_action,
-                icon=ft.Icons.STORAGE,
-                bgcolor="#7B1FA2",
-                color=colors['white'],
-            ),
-            
-            # --- NUEVA SECCIÓN: NOTIFICACIONES PUSH (2026 Fix) ---
-            ft.Divider(height=20, color=colors['border']),
-            ft.Text(
-                "Configuración de Alertas", 
-                weight=ft.FontWeight.BOLD, 
-                size=14
-            ),
-            ft.Text(
-                "Habilite las notificaciones para recibir alertas de stock bajo y validaciones en tiempo real.",
-                size=12,
-                color=colors['text_secondary'],
-            ),
-            ft.ElevatedButton(
-                "Notificaciones" if self.is_mobile else "Habilitar Notificaciones",
-                on_click=self._request_notifications_action,
-                icon=ft.Icons.NOTIFICATIONS_ACTIVE,
-                bgcolor=colors['accent_dark'],
-                color=colors['white'],
-            ),
-            
-            ft.Container(
-                content=self.test_result_text,
-                padding=10,
-                bgcolor=colors['bg'],
-                border_radius=8,
-                visible=False,
-            ),
-            
-            # --- NUEVA SECCIÓN: MODO OFFLINE ---
-            ft.Divider(height=30, color=colors['border']),
-            ft.Text(
-                "Modo Offline", 
-                weight=ft.FontWeight.BOLD, 
-                size=14
-            ),
-            ft.Text(
-                "Active el modo offline para usar la aplicación sin conexión a internet. Los datos se guardarán localmente y se sincronizarán al reconectar.",
-                size=12,
-                color=colors['text_secondary'],
-            ),
-            ft.Container(height=10),
-            ft.Row([
-                ft.Text("Estado:", size=14, color=colors['text_secondary']),
-                self.offline_status_indicator,
-            ], spacing=10),
-            ft.Container(height=10),
-            ft.ElevatedButton(
-                "Cambiar Modo" if not self.is_mobile else "Cambiar",
-                on_click=self._toggle_offline_mode,
-                icon=ft.Icons.WIFI_OFF,
-                bgcolor=colors['accent'],
-                color=colors['white'],
-            ),
-            
-            ft.Divider(height=30, color=colors['border']),
-            
-            ft.Text(
-                "Gestion de Operador", 
-                weight=ft.FontWeight.BOLD, 
-                size=14
-            ),
-        ], spacing=15, scroll=ft.ScrollMode.AUTO, expand=True)
-
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=20),
-                ft.Container(
-                    content=sistema_content,
-                    border_radius=15,
-                    bgcolor=colors['card'],
-                    padding=20,
-                    expand=True,
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            # --- SECCIÓN DE VERSIÓN ---
+                            ft.Column([
+                                ft.Row([
+                                    ft.Container(
+                                        content=ft.Icon(ft.Icons.SYSTEM_UPDATE, color=colors['white'], size=28),
+                                        bgcolor=colors['accent'],
+                                        padding=12,
+                                        border_radius=12,
+                                    ),
+                                    ft.Column([
+                                        ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
+                                        self.version_label,
+                                    ], spacing=2, expand=True),
+                                    ft.ElevatedButton(
+                                        "Buscar actualizaciones",
+                                        on_click=lambda e: self.page.run_task(self._check_for_updates, e),
+                                        icon=ft.Icons.UPDATE,
+                                        bgcolor=colors['accent'],
+                                        color=colors['white'],
+                                    ),
+                                ], spacing=15),
+                                self.update_status_container,
+                            ], spacing=10),
+                            ft.Divider(height=20, color=colors['border']),
+                            
+                            # --- SECCIÓN DE DIAGNÓSTICO (Existente) ---
+                            ft.Row([
+                                ft.Container(
+                                    content=ft.Icon(ft.Icons.DASHBOARD, color=colors['white'], size=28),
+                                    bgcolor=colors['accent_dark'],
+                                    padding=12,
+                                    border_radius=12,
+                                ),
+                                ft.Column([
+                                    ft.Text("Mantenimiento del Sistema", weight=ft.FontWeight.BOLD, size=16),
+                                    ft.Text("Herramientas de diagnóstico y configuración", size=12, color=colors['text_secondary']),
+                                ], spacing=2),
+                            ], spacing=15),
+                            ft.Divider(height=20, color=colors['border']),
+                            
+                            ft.Text(
+                                "Si experimenta errores tras actualizaciones o cambios de configuración, use 'Probar Conexión' para verificar la base de datos.",
+                                size=13,
+                                color="#424242",
+                            ),
+                            ft.ElevatedButton(
+                                "Probar Conexión", 
+                                on_click=self._test_connection_action,
+                                icon=ft.Icons.STORAGE,
+                                bgcolor="#7B1FA2",
+                                color=colors['white'],
+                            ),
+                            
+                            # --- NUEVA SECCIÓN: NOTIFICACIONES PUSH (2026 Fix) ---
+                            ft.Divider(height=20, color=colors['border']),
+                            ft.Text(
+                                "Configuración de Alertas", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Habilite las notificaciones para recibir alertas de stock bajo y validaciones en tiempo real.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.ElevatedButton(
+                                "Habilitar Notificaciones", 
+                                on_click=self._request_notifications_action,
+                                icon=ft.Icons.NOTIFICATIONS_ACTIVE,
+                                bgcolor=colors['accent_dark'],
+                                color=colors['white'],
+                            ),
+                            
+                            ft.Container(
+                                content=self.test_result_text,
+                                padding=10,
+                                bgcolor=colors['bg'],
+                                border_radius=8,
+                                visible=False,
+                            ),
+                            
+                            # --- NUEVA SECCIÓN: MODO OFFLINE ---
+                            ft.Divider(height=30, color=colors['border']),
+                            ft.Text(
+                                "Modo Offline", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                            ft.Text(
+                                "Active el modo offline para usar la aplicación sin conexión a internet. Los datos se guardarán localmente y se sincronizarán al reconectar.",
+                                size=12,
+                                color=colors['text_secondary'],
+                            ),
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.Text("Estado:", size=14, color=colors['text_secondary']),
+                                self.offline_status_indicator,
+                            ], spacing=10),
+                            ft.Container(height=10),
+                            ft.ElevatedButton(
+                                "Cambiar Modo", 
+                                on_click=self._toggle_offline_mode,
+                                icon=ft.Icons.WIFI_OFF,
+                                bgcolor=colors['accent'],
+                                color=colors['white'],
+                            ),
+                            
+                            ft.Divider(height=30, color=colors['border']),
+                            
+                            ft.Text(
+                                "Gestion de Operador", 
+                                weight=ft.FontWeight.BOLD, 
+                                size=14
+                            ),
+                        ], spacing=15),
+                        padding=20,
+                    )
                 ),
-            ], spacing=15, expand=True),
-            bgcolor=colors['bg'],
+            ], spacing=15),
             padding=20,
             expand=True,
         )
@@ -1514,35 +1503,14 @@ class ConfiguracionView(ft.Container):
         self.update()
         
         try:
-            from usr.updater import (
-                comprobar_y_aplicar_actualizaciones,
-                _read_env,
-                _get_app_dir,
-            )
-            update_url = _read_env("UPDATE_URL")
-            app_dir = _get_app_dir()
-            import json, os
-            version_path = os.path.join(app_dir, "version.json")
-            local_v = "1.0.0"
-            if os.path.exists(version_path):
-                with open(version_path) as f:
-                    local_v = json.load(f).get("version", "1.0.0")
-            self.update_status_text.value = (
-                f"URL: {'✓' if update_url else '✗'} | Local: v{local_v}"
-            )
-            if not update_url:
-                self.update_status_text.value += " — Sin URL configurada"
-                self.update_status_text.color = "#FF9800"
-                self.update()
-                return
-            self.update()
-            
+            from usr.updater import comprobar_y_aplicar_actualizaciones
             await comprobar_y_aplicar_actualizaciones(self.page, self.update_status_text)
             
             # Refrescar la versión mostrada
             version = "1.0.0"
             if os.path.exists("version.json"):
                 try:
+                    import json
                     with open("version.json", "r", encoding="utf-8") as f:
                         version = json.load(f).get("version", "1.0.0")
                 except:
