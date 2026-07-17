@@ -1510,14 +1510,35 @@ class ConfiguracionView(ft.Container):
         self.update()
         
         try:
-            from usr.updater import comprobar_y_aplicar_actualizaciones
+            from usr.updater import (
+                comprobar_y_aplicar_actualizaciones,
+                _read_env,
+                _get_app_dir,
+            )
+            update_url = _read_env("UPDATE_URL")
+            app_dir = _get_app_dir()
+            import json, os
+            version_path = os.path.join(app_dir, "version.json")
+            local_v = "1.0.0"
+            if os.path.exists(version_path):
+                with open(version_path) as f:
+                    local_v = json.load(f).get("version", "1.0.0")
+            self.update_status_text.value = (
+                f"URL: {'✓' if update_url else '✗'} | Local: v{local_v}"
+            )
+            if not update_url:
+                self.update_status_text.value += " — Sin URL configurada"
+                self.update_status_text.color = "#FF9800"
+                self.update()
+                return
+            self.update()
+            
             await comprobar_y_aplicar_actualizaciones(self.page, self.update_status_text)
             
             # Refrescar la versión mostrada
             version = "1.0.0"
             if os.path.exists("version.json"):
                 try:
-                    import json
                     with open("version.json", "r", encoding="utf-8") as f:
                         version = json.load(f).get("version", "1.0.0")
                 except:

@@ -124,19 +124,20 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
         response_event = asyncio.Event()
         proceed = False
 
-        def _cerrar_dialogo():
-            page.close(dialog)
+        def cerrar_dialogo():
+            dialog.open = False
+            page.update()
 
         def on_yes(e):
             nonlocal proceed
             proceed = True
-            _cerrar_dialogo()
+            cerrar_dialogo()
             response_event.set()
 
         def on_no(e):
             nonlocal proceed
             proceed = False
-            _cerrar_dialogo()
+            cerrar_dialogo()
             response_event.set()
 
         dialog = ft.AlertDialog(
@@ -170,7 +171,9 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-        page.open(dialog)
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
 
         await response_event.wait()
 
