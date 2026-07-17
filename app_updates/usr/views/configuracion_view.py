@@ -1294,15 +1294,15 @@ class ConfiguracionView(ft.Container):
                                     ft.Column([
                                         ft.Text("Versión del Sistema", weight=ft.FontWeight.BOLD, size=16),
                                         self.version_label,
-                                    ], spacing=2, expand=True),
+                                    ], spacing=2, expand=not self.is_mobile),
                                     ft.ElevatedButton(
-                                        "Buscar actualizaciones",
+                                        "Actualizar" if self.is_mobile else "Buscar actualizaciones",
                                         on_click=lambda e: self.page.run_task(self._check_for_updates, e),
                                         icon=ft.Icons.UPDATE,
                                         bgcolor=colors['accent'],
                                         color=colors['white'],
                                     ),
-                                ], spacing=15),
+                                ], spacing=15, wrap=self.is_mobile, run_spacing=10),
                                 self.update_status_container,
                             ], spacing=10),
                             ft.Divider(height=20, color=colors['border']),
