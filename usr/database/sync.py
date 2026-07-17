@@ -20,6 +20,20 @@ class SyncManager:
         self._background_sync_enabled = False
         self._on_sync_complete_callbacks = []
         self._on_sync_complete = None  # Callback simple para sync completo
+        self._on_sync_progress = None  # Callback(msg: str) para progreso visual
+    
+    def set_sync_progress_callback(self, callback):
+        """Registra función a llamar con cada paso del sync (msg: str)."""
+        self._on_sync_progress = callback
+    
+    def _log(self, msg: str):
+        """Print + notificar progreso visual."""
+        print(msg)
+        if self._on_sync_progress:
+            try:
+                self._on_sync_progress(msg)
+            except Exception:
+                pass
     
     @property
     def engine(self):
@@ -48,7 +62,7 @@ class SyncManager:
             try:
                 callback()
             except Exception as e:
-                print(f"[SYNC] Error en callback: {e}")
+                self._log(f"[SYNC] Error en callback: {e}")
     
     def _get_session_maker(self):
         if self._session_local_getter:
@@ -95,10 +109,10 @@ class SyncManager:
         from .local_replica import LocalReplica
         
         if not self.check_connection():
-            print("[SYNC] Sin conexión, usando datos locales")
+            self._log("[SYNC] Sin conexión, usando datos locales")
             return False
         
-        print("[SYNC] Iniciando sincronización completa...")
+        self._log("[SYNC] Iniciando sincronización completa...")
         
         # Cada paso es independiente: un fallo en uno no debe bloquear a los demás
         # (p.ej. un error subiendo movimientos no debe impedir la descarga/poda de
@@ -108,13 +122,13 @@ class SyncManager:
             #    para garantizar que existan las claves foráneas en el servidor
             self._process_sync_queue()
         except Exception as e:
-            print(f"[SYNC] Error procesando cola de sync: {e}")
+            self._log(f"[SYNC] Error procesando cola de sync: {e}")
         
         try:
             # 2. Subir movimientos pendientes (ya con las facturas presentes)
             self._upload_pending_movimientos()
         except Exception as e:
-            print(f"[SYNC] Error subiendo movimientos: {e}")
+            self._log(f"[SYNC] Error subiendo movimientos: {e}")
             import traceback
             traceback.print_exc()
         
@@ -124,10 +138,10 @@ class SyncManager:
             #    remotamente, como requisiciones, así que debe ejecutarse siempre)
             self._download_all_from_server()
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
-            print("[SYNC] Sincronización completa finalizada")
+            self._log("[SYNC] Sincronización completa finalizada")
             download_ok = True
         except Exception as e:
-            print(f"[SYNC] Error en sincronización: {e}")
+            self._log(f"[SYNC] Error en sincronización: {e}")
             import traceback
             traceback.print_exc()
             try:
@@ -142,13 +156,13 @@ class SyncManager:
                 try:
                     self._on_sync_complete()
                 except Exception as e:
-                    print(f"[SYNC] Error en callback: {e}")
+                    self._log(f"[SYNC] Error en callback: {e}")
             
             try:
                 from .sync_callbacks import notify_sync_complete as notify_global
                 notify_global()
             except Exception as e:
-                print(f"[SYNC] Error en notify_global: {e}")
+                self._log(f"[SYNC] Error en notify_global: {e}")
         
         return download_ok
     
@@ -159,7 +173,7 @@ class SyncManager:
 
         pending_movimientos = LocalReplica.get_movimientos_pendientes()
         if not pending_movimientos:
-            print("[SYNC] No hay movimientos pendientes")
+            self._log("[SYNC] No hay movimientos pendientes")
             return 0
 
         settings = get_settings()
@@ -215,7 +229,7 @@ class SyncManager:
                                     {'fid': factura_id, 'id': remote_mov_id}
                                 )
                                 conn.commit()
-                                print(f"[SYNC] Movimiento {mov_id} → factura_id={factura_id} actualizado en Supabase (ID remoto: {remote_mov_id})")
+                                self._log(f"[SYNC] Movimiento {mov_id} → factura_id={factura_id} actualizado en Supabase (ID remoto: {remote_mov_id})")
                         else:
                             mov_data = {
                                 'producto_id': mov.get('producto_id'),
@@ -240,11 +254,11 @@ class SyncManager:
                         LocalReplica.mark_movimiento_sincronizado(mov_id)
                         synced_count += 1
                     except Exception as e:
-                        print(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
+                        self._log(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
         finally:
             remote_engine.dispose()
 
-        print(f"[SYNC] {synced_count} movimientos subidos al servidor")
+        self._log(f"[SYNC] {synced_count} movimientos subidos al servidor")
         return synced_count
     
     def _download_all_from_server(self) -> bool:
@@ -333,26 +347,26 @@ class SyncManager:
                         LocalReplica.save_kardex_validaciones(data)
                         LocalReplica.delete_orphaned_records('kardex_validaciones', remote_ids)
                     
-                    print(f"[SYNC] {len(data)} {local_table} baixats")
+                    self._log(f"[SYNC] {len(data)} {local_table} baixats")
 
 
 
 
                 except Exception as e:
-                    print(f"[SYNC] Error descargando {local_table}: {e}")
+                    self._log(f"[SYNC] Error descargando {local_table}: {e}")
         
         remote_engine.dispose()
         
         # Recalcular existencias después de la descarga
         LocalReplica.recalculate_existencias()
-        print("[SYNC] Descarga completada")
+        self._log("[SYNC] Descarga completada")
         return True
     
     def start_background_sync(self, session_getter, interval_seconds: int = 20):
         """Inicia sincronización en segundo plano cada interval_seconds."""
-        print(f"[SYNC] start_background_sync() llamado con interval={interval_seconds}s")
+        self._log(f"[SYNC] start_background_sync() llamado con interval={interval_seconds}s")
         if self._sync_thread and self._sync_thread.is_alive():
-            print("[SYNC] Hilo ya está corriendo, no se inicia nuevo")
+            self._log("[SYNC] Hilo ya está corriendo, no se inicia nuevo")
             return
         
         self._session_local_getter = session_getter
@@ -364,14 +378,14 @@ class SyncManager:
             daemon=True
         )
         self._sync_thread.start()
-        print(f"[SYNC] Sync en segundo plano iniciado (intervalo: {interval_seconds}s)")
+        self._log(f"[SYNC] Sync en segundo plano iniciado (intervalo: {interval_seconds}s)")
     
     def stop_background_sync(self):
         self._stop_event.set()
         self._background_sync_enabled = False
         if self._sync_thread:
             self._sync_thread.join(timeout=2)
-        print("[SYNC] Sync en segundo plano detenido")
+        self._log("[SYNC] Sync en segundo plano detenido")
     
     def _background_sync_loop(self, interval):
         """Loop de sync en background."""
@@ -383,12 +397,12 @@ class SyncManager:
                     # Subir pendientes de la cola primero (facturas, etc.)
                     self._process_sync_queue()
                 except Exception as e:
-                    print(f"[SYNC] Error procesando cola (loop): {e}")
+                    self._log(f"[SYNC] Error procesando cola (loop): {e}")
                 try:
                     # Subir movimientos pendientes (sincronizado=0)
                     self._upload_pending_movimientos()
                 except Exception as e:
-                    print(f"[SYNC] Error subiendo movimientos (loop): {e}")
+                    self._log(f"[SYNC] Error subiendo movimientos (loop): {e}")
                 try:
                     # Descargar cambios del servidor (también PODA registros
                     # eliminados remotamente, p.ej. requisiciones)
@@ -396,7 +410,7 @@ class SyncManager:
                     self._notify_sync_complete()
                     notify_global()
                 except Exception as e:
-                    print(f"[SYNC] Error descargando (loop): {e}")
+                    self._log(f"[SYNC] Error descargando (loop): {e}")
             
             self._stop_event.wait(interval)
     
@@ -407,7 +421,7 @@ class SyncManager:
         
         # Verificar conexión antes de procesar
         if not self.check_connection():
-            print("[SYNC] Sin conexión, saltando procesamiento de cola")
+            self._log("[SYNC] Sin conexión, saltando procesamiento de cola")
             return
         
         queue = get_sync_queue()
@@ -427,14 +441,14 @@ class SyncManager:
             
             try:
                 uploaded = self._upload_to_remote(remote_engine, pending)
-                print(f"[SYNC] {uploaded} operaciones subidas a Supabase")
+                self._log(f"[SYNC] {uploaded} operaciones subidas a Supabase")
             except Exception as e:
-                print(f"[SYNC] Error al subir a Supabase: {e}")
+                self._log(f"[SYNC] Error al subir a Supabase: {e}")
             finally:
                 remote_engine.dispose()
         
         queue.set_last_sync(datetime.now().isoformat())
-        print("[SYNC] Ciclo de sync completado")
+        self._log("[SYNC] Ciclo de sync completado")
     
     def _upload_to_remote(self, remote_engine, pending_items) -> int:
         """Sube elementos de la cola a Supabase usando SQL directo."""
@@ -497,7 +511,7 @@ class SyncManager:
                         if verify:
                             queue.mark_completed(item['id'])
                             uploaded += 1
-                            print(f"[SYNC] Categoría sincronizada")
+                            self._log(f"[SYNC] Categoría sincronizada")
                         else:
                             raise Exception("Error: Categoría no encontrada tras commit")
                         
@@ -552,7 +566,7 @@ class SyncManager:
                         conn.commit()
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Producto sincronizado")
+                        self._log(f"[SYNC] Producto sincronizado")
                     
                     elif table == 'movimientos' and operation == 'insert':
                         mov_data = {k: v for k, v in data.items() 
@@ -570,7 +584,7 @@ class SyncManager:
                         conn.execute(text("SELECT 1")).fetchone()
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Movimiento sincronizado")
+                        self._log(f"[SYNC] Movimiento sincronizado")
                     
                     elif table == 'movimientos' and operation == 'delete':
                         # Eliminar movimiento por campos coincidentes (ID local != ID remoto)
@@ -586,9 +600,9 @@ class SyncManager:
                             conn.commit()
                             queue.mark_completed(item['id'])
                             uploaded += 1
-                            print(f"[SYNC] Movimiento eliminado en Supabase")
+                            self._log(f"[SYNC] Movimiento eliminado en Supabase")
                         else:
-                            print(f"[SYNC] WARN: delete movimiento sin datos coincidentes — {data}")
+                            self._log(f"[SYNC] WARN: delete movimiento sin datos coincidentes — {data}")
                     
                     elif table == 'facturas':
                         num_fact = data.get('numero_factura')
@@ -658,7 +672,7 @@ class SyncManager:
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Factura {num_fact} sincronizada (ID remoto: {remote_id})")
+                        self._log(f"[SYNC] Factura {num_fact} sincronizada (ID remoto: {remote_id})")
                     
                     elif table == 'factura_pagos':
                         fact_num = data.get('factura_numero')
@@ -686,7 +700,7 @@ class SyncManager:
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Pago de factura {fact_num} sincronizado")
+                        self._log(f"[SYNC] Pago de factura {fact_num} sincronizado")
                         
                     elif table == 'requisiciones':
                         if operation == 'delete':
@@ -713,14 +727,14 @@ class SyncManager:
                                     conn.commit()
                                     queue.mark_completed(item['id'])
                                     uploaded += 1
-                                    print(f"[SYNC] Requisición {num} y sus detalles eliminados en Supabase")
+                                    self._log(f"[SYNC] Requisición {num} y sus detalles eliminados en Supabase")
                                 else:
                                     # Si no existe en el servidor, marcamos como completado igualmente
                                     queue.mark_completed(item['id'])
                                     uploaded += 1
-                                    print(f"[SYNC] Requisición {num} no encontrada en servidor, marcada como eliminada")
+                                    self._log(f"[SYNC] Requisición {num} no encontrada en servidor, marcada como eliminada")
                             else:
-                                print(f"[SYNC] Error: No se proporcionó número para eliminar requisición")
+                                self._log(f"[SYNC] Error: No se proporcionó número para eliminar requisición")
                                 queue.mark_completed(item['id'])
                             continue
 
@@ -791,11 +805,11 @@ class SyncManager:
                                 from .local_replica import LocalReplica
                                 LocalReplica.remap_requisicion_id(local_id, remote_id)
                             except Exception as e:
-                                print(f"[SYNC] Error mapeando id de requisición: {e}")
+                                self._log(f"[SYNC] Error mapeando id de requisición: {e}")
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
+                        self._log(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
                     
                     elif table == 'requisicion_detalles' and operation == 'update':
                         verificado = 1 if data.get('verificado') else 0
@@ -839,9 +853,9 @@ class SyncManager:
                         if matched:
                             queue.mark_completed(item['id'])
                             uploaded += 1
-                            print(f"[SYNC] Detalle requisición verificado={verificado} sincronizado")
+                            self._log(f"[SYNC] Detalle requisición verificado={verificado} sincronizado")
                         else:
-                            print(f"[SYNC] No se encontró detalle de requisición en Supabase para actualizar verificado")
+                            self._log(f"[SYNC] No se encontró detalle de requisición en Supabase para actualizar verificado")
                     
                     elif table == 'kardex_validaciones' and operation == 'insert':
                         reg_data = {
@@ -860,7 +874,7 @@ class SyncManager:
                         conn.commit()
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Kardex validación sincronizada")
+                        self._log(f"[SYNC] Kardex validación sincronizada")
                         
                 except Exception as e:
                     try:
@@ -868,7 +882,7 @@ class SyncManager:
                     except:
                         pass
                     queue.mark_failed(item['id'], str(e))
-                    print(f"[SYNC] Error subiendo {table}: {e}")
+                    self._log(f"[SYNC] Error subiendo {table}: {e}")
         
         return uploaded
     

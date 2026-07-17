@@ -57,6 +57,7 @@ class ControlEntradasSalidasApp:
             self._setup_theme()
             self._create_layout()
             self._handle_responsive_layout(self.page.width)
+            self._register_sync_callback()
             self._show_view(0)
 
             self.page.on_resized = self._on_page_resized
@@ -129,13 +130,96 @@ class ControlEntradasSalidasApp:
                 ], on_change=self._on_navigation_change,
             )
 
+            self.sync_status_bar = ft.Container(
+                height=0, visible=False,
+                bgcolor='#2D2D2D',
+                padding=ft.padding.symmetric(horizontal=12, vertical=0),
+                border_radius=ft.border_radius.all(8),
+                content=ft.Row([
+                    ft.ProgressRing(width=14, height=14, stroke_width=2, color='#BB86FC'),
+                    ft.Text("", size=12, color='#BBBBBB', expand=True, no_wrap=False),
+                ], spacing=8, alignment=ft.MainAxisAlignment.START),
+            )
+
             self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
             self.page.clean()
             self.page.padding = 5
-            self.page.add(self._layout_row)
+            self.page.add(ft.Column([self._layout_row, self.sync_status_bar], spacing=4, expand=True))
         except Exception as e:
             logger.error(f"Error en _create_layout: {e}", exc_info=True)
             show_error("Error al crear el layout de la app", e, "ControlEntradasSalidasApp._create_layout")
+
+    def _on_sync_progress(self, msg: str):
+        """Recibe mensajes de progreso del SyncManager."""
+        try:
+            if not self.page or not hasattr(self, 'sync_status_bar'):
+                return
+
+            is_error = 'Error' in msg and 'Error en' not in msg
+            is_done = msg.endswith('finalizada') or msg.endswith('completada') or msg.endswith('completado')
+            is_start = msg.endswith('completa...')
+            is_empty = 'No hay' in msg or '0 registros' in msg or '0 requisiciones' in msg
+
+            bar = self.sync_status_bar
+            text = bar.content.controls[1]
+            spinner = bar.content.controls[0]
+
+            clean = msg.replace('[SYNC] ', '').replace('[SYNC-DEBUG] ', '').strip()
+
+            if is_start:
+                bar.height = 30
+                bar.visible = True
+                spinner.visible = True
+                text.value = clean
+                text.color = '#BBBBBB'
+                bar.bgcolor = '#2D2D2D'
+            elif is_done:
+                text.value = f"✓ {clean}"
+                text.color = '#4CAF50'
+                spinner.visible = False
+                bar.bgcolor = '#1B3D1B'
+                # Auto-ocultar tras 4s
+                import threading
+                threading.Thread(target=self._hide_sync_bar, args=(4,), daemon=True).start()
+            elif is_error:
+                text.value = f"✗ {clean}"
+                text.color = '#F44336'
+                spinner.visible = False
+                bar.bgcolor = '#3D1B1B'
+                threading.Thread(target=self._hide_sync_bar, args=(6,), daemon=True).start()
+            else:
+                bar.height = 30
+                bar.visible = True
+                spinner.visible = True
+                text.value = clean
+                text.color = '#BBBBBB'
+                bar.bgcolor = '#2D2D2D'
+
+            if self.page:
+                self.page.update()
+        except Exception:
+            pass
+
+    def _hide_sync_bar(self, delay: float = 4):
+        import time
+        time.sleep(delay)
+        try:
+            if self.page and hasattr(self, 'sync_status_bar'):
+                self.sync_status_bar.visible = False
+                self.sync_status_bar.height = 0
+                self.page.update()
+        except Exception:
+            pass
+
+    def _register_sync_callback(self):
+        """Registra el callback de progreso en el SyncManager."""
+        try:
+            from usr.database.sync import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                sync_mgr.set_sync_progress_callback(self._on_sync_progress)
+        except Exception as e:
+            print(f"[APP] Error registrando callback sync: {e}")
 
     def _on_page_resized(self, e):
         self._handle_responsive_layout(float(e.width))
