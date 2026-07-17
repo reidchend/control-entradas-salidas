@@ -12,11 +12,15 @@ def resource_path(relative_path: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
-# Redirigir a app_updates si existe (ANTES de importar usr.app_launcher)
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 _updates_dir = os.path.join(_app_dir, "app_updates")
 if os.path.exists(_updates_dir):
     sys.path.insert(0, _updates_dir)
+
+# Fijar ruta de BD por defecto ANTES de que cualquier import de usr.*
+# cree el engine de SQLAlchemy. En Android, app_launcher.py la sobreescribe
+# con page.app_data_dir una vez que inicia Flet.
+os.environ['LYCORIS_DB_PATH'] = os.path.join(_app_dir, "lycoris_local.db")
 
 import flet as ft
 from usr.app_launcher import main
