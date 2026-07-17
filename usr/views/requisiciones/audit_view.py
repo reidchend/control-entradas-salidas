@@ -10,6 +10,17 @@ from usr.views.requisiciones.data import (
 )
 from usr.notifications import show_success, show_error, show_warning
 
+def _forzar_sync():
+    try:
+        from usr.database.sync import get_sync_manager
+        sync_mgr = get_sync_manager()
+        if sync_mgr and sync_mgr.check_connection():
+            import threading
+            thread = threading.Thread(target=sync_mgr.full_sync, daemon=True)
+            thread.start()
+    except Exception as e:
+        print(f"[AUDIT] Error al forzar sync: {e}")
+
 class AuditView(ft.Container):
     def __init__(self, req_id, on_back):
         super().__init__()
@@ -349,17 +360,7 @@ class AuditView(ft.Container):
 
     def _on_guardar(self, _):
         show_success("Progreso de auditoría guardado")
-        # Forzar sync inmediato para subir cambios a Supabase
-        try:
-            from usr.database.sync import get_sync_manager
-            sync_mgr = get_sync_manager()
-            if sync_mgr and sync_mgr.check_connection():
-                import threading
-                thread = threading.Thread(target=sync_mgr.full_sync, daemon=True)
-                thread.start()
-                print("[AUDIT] Sync forzado tras guardar auditoría")
-        except Exception as e:
-            print(f"[AUDIT] Error al forzar sync: {e}")
+        _forzar_sync()
 
     def _on_totalizar(self, _):
         # Check if all verified
@@ -371,6 +372,7 @@ class AuditView(ft.Container):
         try:
             if totalizar_requisicion(self.req_id):
                 show_success("Requisición totalizada y stock trasladado")
+                _forzar_sync()
                 self.on_back()
         except Exception as e:
             show_error(f"Error al totalizar: {e}")

@@ -503,7 +503,9 @@ def _sync_existencias_supabase_batch(stocks):
     from sqlalchemy import create_engine
     from config.config import get_settings
     settings = get_settings()
-    engine = create_engine(settings.DATABASE_URL)
+    url = settings.DATABASE_URL
+    connect_args = {'timeout': 15} if 'pg8000' in url else {'connect_timeout': 15}
+    engine = create_engine(url, connect_args=connect_args)
     try:
         with engine.connect() as conn:
             for producto_id, almacen_origen, stock_origen, almacen_destino, stock_destino in stocks:
