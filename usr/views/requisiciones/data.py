@@ -105,7 +105,7 @@ def marcar_detalle_verificado(detalle_id, estado):
             queue = get_sync_queue()
             queue.add_pending('requisicion_detalles', 'update', {
                 'id': detalle.id,
-                'verificado': estado,
+                'verificado': 1 if estado else 0,
                 'requisicion_id': detalle.requisicion_id,
                 'producto_id': detalle.producto_id,
                 'ingrediente': detalle.ingrediente,

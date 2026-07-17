@@ -798,7 +798,7 @@ class SyncManager:
                         print(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
                     
                     elif table == 'requisicion_detalles' and operation == 'update':
-                        verificado = data.get('verificado', False)
+                        verificado = 1 if data.get('verificado') else 0
                         det_id = data.get('id')
                         req_id = data.get('requisicion_id')
                         prod_id = data.get('producto_id')
@@ -863,6 +863,10 @@ class SyncManager:
                         print(f"[SYNC] Kardex validación sincronizada")
                         
                 except Exception as e:
+                    try:
+                        conn.rollback()  # Reset transacción para que el siguiente item funcione
+                    except:
+                        pass
                     queue.mark_failed(item['id'], str(e))
                     print(f"[SYNC] Error subiendo {table}: {e}")
         
