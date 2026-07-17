@@ -9,6 +9,7 @@ from config.config import get_settings
 _base = None
 _local_engine = None
 _local_session_local = None
+_last_engine_url = None
 
 def get_base():
     global _base
@@ -17,11 +18,15 @@ def get_base():
     return _base
 
 def get_local_engine():
-    """Obtiene el motor de la base de datos local SQLite."""
-    global _local_engine
-    if _local_engine is None:
-        settings = get_settings()
-        _local_engine = create_engine(settings.LOCAL_DATABASE_URL, future=True)
+    """Obtiene el motor de la base de datos local SQLite.
+    Recrea el motor si la ruta de la BD cambió (set_db_path)."""
+    global _local_engine, _local_session_local, _last_engine_url
+    settings = get_settings()
+    current_url = settings.LOCAL_DATABASE_URL
+    if _local_engine is None or current_url != _last_engine_url:
+        _local_engine = create_engine(current_url, future=True)
+        _local_session_local = None
+        _last_engine_url = current_url
     return _local_engine
 
 def get_session():

@@ -15,6 +15,7 @@ def set_db_path(path: str) -> None:
     """Llamar desde main() antes de cualquier import de BD."""
     global _db_path
     
+    prev = os.environ.get('LYCORIS_DB_PATH')
     os.environ['LYCORIS_DB_PATH'] = path
 
     parent = Path(path).parent
@@ -39,6 +40,12 @@ def set_db_path(path: str) -> None:
                 continue
     
     _db_path = path
+    
+    # Si el path cambió, forzar recreación del engine local
+    if prev != path:
+        import usr.database.base as base_mod
+        base_mod._local_engine = None
+        base_mod._local_session_local = None
 
 def get_db_path() -> str:
     env_path = os.environ.get('LYCORIS_DB_PATH')

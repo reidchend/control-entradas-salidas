@@ -62,7 +62,11 @@ class SyncManager:
     def _create_remote_engine(self):
         from sqlalchemy import create_engine
         from config.config import get_settings
-        return create_engine(get_settings().DATABASE_URL)
+        url = get_settings().DATABASE_URL
+        # Timeout de 15s para no bloquear si Supabase no responde
+        if 'pg8000' in url:
+            return create_engine(url, connect_args={'timeout': 15})
+        return create_engine(url, connect_args={'connect_timeout': 15})
     
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos remota."""
@@ -287,7 +291,7 @@ class SyncManager:
                 conn.execute(text("ALTER TABLE requisicion_detalles ADD COLUMN verificado INTEGER DEFAULT 0"))
                 conn.commit()
             except Exception:
-                pass  # Columna ya existe
+                conn.rollback()  # Resetear transacción para que SELECTs siguientes funcionen
             
             for local_table, server_table in tables_to_sync:
                 try:
