@@ -74,6 +74,13 @@ def check_connection() -> bool:
         socket.create_connection(('8.8.8.8', 53), timeout=3)
         return True
     except:
+        pass
+    # Fallback: intentar conexión HTTP (más fiable en Android)
+    try:
+        import urllib.request
+        urllib.request.urlopen('https://www.google.com', timeout=3)
+        return True
+    except:
         return False
 
 def is_online() -> bool:

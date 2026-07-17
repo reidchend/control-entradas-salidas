@@ -294,15 +294,15 @@ async def main(page: ft.Page):
         status_text.value = "Sincronizando..."
         page.update()
 
-        if check_connection():
-            try:
-                await asyncio.to_thread(sync_manager.full_sync)
+        try:
+            ok = await asyncio.to_thread(sync_manager.full_sync)
+            if ok:
                 status_text.value = "✓ Sincronizado"
-            except Exception as e:
-                print(f"Error en sync inicial: {e}")
-                status_text.value = " Sin sync"
-        else:
-            status_text.value = " Modo offline"
+            else:
+                status_text.value = " Sin conexión remota"
+        except Exception as e:
+            print(f"Error en sync inicial: {e}")
+            status_text.value = " Error de sync"
         page.update()
 
         await asyncio.sleep(0.5)
