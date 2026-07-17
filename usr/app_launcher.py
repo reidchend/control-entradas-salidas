@@ -198,6 +198,13 @@ async def main(page: ft.Page):
                 # (sys.modules.pop borró _db_path, y la nueva importación lo crea como None)
                 from usr.database.conn import set_db_path as _reset_db_path
                 _reset_db_path(db_path)
+                # Re-inicializar la BD con el módulo recién cargado desde app_updates
+                # (asegura que las tablas existan en la ruta correcta)
+                from usr.database.local_replica import ensure_local_db as _ensure_local_db_updates
+                try:
+                    _ensure_local_db_updates()
+                except Exception as e_eldu:
+                    print(f"[LAUNCHER] Error ensure_local_db tras override: {e_eldu}")
                 # Re-registrar la página en notifications (sys.modules.pop borró el módulo anterior)
                 import usr.notifications
                 usr.notifications.set_page(page)

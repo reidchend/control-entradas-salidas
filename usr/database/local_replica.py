@@ -1181,8 +1181,17 @@ class LocalReplica:
         import hashlib
         conn = get_local_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
-        row = cursor.fetchone()
+        try:
+            cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
+            row = cursor.fetchone()
+        except Exception:
+            # La tabla no existe: inicializar BD y reintentar
+            conn.close()
+            init_local_db()
+            conn = get_local_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
+            row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
     
