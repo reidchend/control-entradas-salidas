@@ -77,10 +77,10 @@ def build_requisicion_card(req, callbacks, colors):
             ft.Row([
                 ft.Text(
                     f"Creada: {_parse_dt(req.fecha_creacion).strftime('%d/%m/%Y %H:%M') if _parse_dt(req.fecha_creacion) else '-'}",
-                    size=11, color=colors['text_secondary'], expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+                    size=11, color=colors['text_secondary'], expand=True,
                 ),
-                ft.Row(actions, spacing=5, wrap=True),
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ]),
+            ft.Row(actions, alignment=ft.MainAxisAlignment.END, spacing=5, wrap=True),
         ], spacing=8),
         padding=15,
         bgcolor=colors['card'],
