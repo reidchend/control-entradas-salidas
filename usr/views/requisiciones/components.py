@@ -41,15 +41,49 @@ def build_requisicion_card(req, callbacks, colors):
     actions = []
     
     # 1. Visualizar siempre disponible
-    actions.append(ft.TextButton("Visualizar", on_click=callbacks["on_visualizar"]))
+    actions.append(
+        ft.IconButton(
+            icon=ft.Icons.VISIBILITY_OUTLINED,
+            tooltip="Visualizar",
+            icon_size=18,
+            icon_color=colors['text_secondary'],
+            padding=4,
+            on_click=callbacks["on_visualizar"],
+        )
+    )
     
     # 2. Editar, Auditar y Eliminar solo si está pendiente
     if req.estado == "pendiente":
-        actions.append(ft.TextButton("Editar", on_click=callbacks["on_editar"]))
-        actions.append(ft.TextButton("Auditar", on_click=callbacks["on_auditar"], 
-                                     style=ft.ButtonStyle(color=colors['accent'])))
-        actions.append(ft.TextButton("Eliminar", on_click=callbacks["on_eliminar"], 
-                                     style=ft.ButtonStyle(color=colors['error'])))
+        actions.append(
+            ft.IconButton(
+                icon=ft.Icons.EDIT_OUTLINED,
+                tooltip="Editar",
+                icon_size=18,
+                icon_color=colors['text_secondary'],
+                padding=4,
+                on_click=callbacks["on_editar"],
+            )
+        )
+        actions.append(
+            ft.IconButton(
+                icon=ft.Icons.FACT_CHECK_OUTLINED,
+                tooltip="Auditar",
+                icon_size=18,
+                icon_color=colors['accent'],
+                padding=4,
+                on_click=callbacks["on_auditar"],
+            )
+        )
+        actions.append(
+            ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE,
+                tooltip="Eliminar",
+                icon_size=18,
+                icon_color=colors['error'],
+                padding=4,
+                on_click=callbacks["on_eliminar"],
+            )
+        )
 
     return ft.Container(
         content=ft.Column([
@@ -80,7 +114,7 @@ def build_requisicion_card(req, callbacks, colors):
                     size=11, color=colors['text_secondary'], expand=True,
                 ),
             ]),
-            ft.Row(actions, alignment=ft.MainAxisAlignment.END, spacing=5, wrap=True),
+            ft.Row(actions, alignment=ft.MainAxisAlignment.END, spacing=5),
         ], spacing=8),
         padding=15,
         bgcolor=colors['card'],

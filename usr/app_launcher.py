@@ -141,6 +141,7 @@ async def main(page: ft.Page):
         os.environ['LYCORIS_DB_PATH'] = db_path
 
         from usr.database.conn import set_db_path, get_db_path
+        from usr.database.local_replica import ensure_local_db
 
         try:
             set_db_path(db_path)

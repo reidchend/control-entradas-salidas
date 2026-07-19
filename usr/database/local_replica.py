@@ -1079,7 +1079,8 @@ class LocalReplica:
                     stock_por_producto_almacen[key]['cantidad'] = cantidad_nueva
         
         for (producto_id, almacen), data in stock_por_producto_almacen.items():
-            final_stock = data['cantidad']
+            # Redondear a 4 decimales para eliminar el ruido de punto flotante de Python/IEEE 754
+            final_stock = round(data['cantidad'], 4) if data['cantidad'] is not None else 0
             
             if producto_id and almacen and final_stock is not None:
                 if final_stock < 0:
