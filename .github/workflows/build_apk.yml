@@ -50,6 +50,8 @@ jobs:
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           FLET_APP_NAME="Lycoris Control"
+          UPDATE_URL=https://raw.githubusercontent.com/reidchend/control-entradas-salidas/main/version.json
+          WHATSAPP_API_KEY=${{ secrets.WHATSAPP_API_KEY }}
           EOF
 
           mkdir -p config
@@ -67,6 +69,9 @@ jobs:
           pydantic-settings
           python-dotenv
           certifi
+          Pillow
+          openpyxl
+          requests
           EOF
 
           # 1. Creamos el archivo de extensión de Flet (La llave maestra)
@@ -88,7 +93,7 @@ jobs:
             --product "Lycoris Control" \
             --org "com.reidchend.lycoris" \
             --build-number 7 \
-            --build-version "1.0.6" \
+            --build-version "1.1.27" \
             --no-rich-output 
         env:
           CI: true

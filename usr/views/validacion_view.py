@@ -2,6 +2,7 @@ import flet as ft
 import asyncio
 import os
 import tempfile
+from sqlalchemy.orm import joinedload
 from usr.database.base import get_db_adaptive, is_online
 from usr.models import Movimiento
 from usr.logger import get_logger
@@ -36,6 +37,7 @@ class ValidacionView(ft.Container):
         self.cards_dict = {}
         self._connection_indicator = None
         self._connection_thread = None
+        self.loading_overlay = None
 
     def build(self):
         self._build_controls()
@@ -44,7 +46,7 @@ class ValidacionView(ft.Container):
     def did_mount(self):
         self._build_controls()
         if self.page and self.page.client_storage:
-            self._load_entradas_pendientes()
+            self.page.run_task(self._load_entradas_pendientes)
             if self.page:
                 self.update()
         
@@ -56,7 +58,7 @@ class ValidacionView(ft.Container):
 
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
-            self._load_entradas_pendientes()
+            self.page.run_task(self._load_entradas_pendientes)
 
     def _update_connection_indicator(self):
         if not hasattr(self, '_connection_indicator') or not self._connection_indicator:
@@ -87,6 +89,44 @@ class ValidacionView(ft.Container):
                         pass
         self._connection_thread = threading.Thread(target=loop, daemon=True)
         self._connection_thread.start()
+
+    def _set_loading_overlay(self, visible: bool, message: str = "Procesando..."):
+        if not self.page: return
+        
+        if visible:
+            if self.loading_overlay:
+                # Actualizar solo el texto del mensaje
+                try:
+                    self.loading_overlay.content.content.controls[1].value = message
+                    self.page.update()
+                    return
+                except Exception:
+                    pass
+
+            colors = get_colors(self.page)
+            self.loading_overlay = ft.Container(
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.ProgressBar(width=200, color=colors.get('primary', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                        ft.Text(message, size=13, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                    ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor=colors.get('surface', '#252525'),
+                    padding=20,
+                    border_radius=15,
+                    border=ft.border.all(1, colors.get('border')),
+                    width=250,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self.page.overlay.append(self.loading_overlay)
+            self.page.update()
+        else:
+            if self.loading_overlay:
+                self.page.overlay.remove(self.loading_overlay)
+                self.loading_overlay = None
+                self.page.update()
 
     def _build_controls(self):
         colors = get_colors(self.page)
@@ -173,22 +213,34 @@ class ValidacionView(ft.Container):
             sync_mgr = get_sync_manager()
             if sync_mgr:
                 sync_mgr.force_sync_now()
-        self._load_entradas_pendientes()
+        self.page.run_task(self._load_entradas_pendientes)
 
         show_success("Datos refrescados correctamente")
+
+    async def _send_wa_background(self, img_path, msg):
+        """Tâche de fond pour l'envoi WhatsApp sans bloquer l'UI"""
+        try:
+            if img_path:
+                await asyncio.to_thread(send_whatsapp_image, img_path, msg)
+            else:
+                await asyncio.to_thread(send_whatsapp_message, msg)
+        except Exception as e:
+            logger.error(f"[WA Background] Error: {e}")
 
     def _show_validar_dialog(self, e):
         theme_colors = get_colors(self.page)
         dialog = ValidacionDialog(self.page, self.selected_entradas, theme_colors)
-        
-        def on_validar_click(btn_event):
+        async def on_validar_click(btn_event):
             try:
                 data = dialog.get_data()
                 dialog.dialog.open = False
                 self.page.update()
 
+                self._set_loading_overlay(True, "Validando datos...")
+
                 from usr.views.validacion.service import ValidacionService
-                result = ValidacionService.procesar(data, self.selected_entradas)
+                result = await asyncio.to_thread(ValidacionService.procesar, data, self.selected_entradas)
+                
                 show_success(f"✅ Validadas {result.get('movimientos_count', 0)} entradas")
 
                 wa_status = {}
@@ -196,9 +248,10 @@ class ValidacionView(ft.Container):
                     wa_status = get_whatsapp_status()
                 except Exception:
                     pass
+                
                 if wa_status.get('whatsapp_connected'):
+                    # Lancement en arrière-plan (non bloquant)
                     img_path = None
-                    
                     def get_long_path(short_path):
                         try:
                             import ctypes
@@ -227,6 +280,7 @@ class ValidacionView(ft.Container):
                             if os.path.exists(c):
                                 img_path = c
                                 break
+                    
                     productos_str = "Productos variados"
                     if self.selected_entradas:
                         try:
@@ -246,23 +300,27 @@ class ValidacionView(ft.Container):
                                 db.close()
                         except Exception:
                             productos_str = "Productos variados"
+                    
                     msg = format_validation_message(
                         productos_str, 0, data.get('factura', ''),
                         data.get('proveedor', ''), data.get('monto', 0),
                         data.get('pagos', []), result.get('usuario', 'Sistema')
                     )
-                    if img_path:
-                        print(f"[WA] Enviando imagen: {img_path}")
-                        send_whatsapp_image(img_path, msg)
-                    else:
-                        print("[WA] No se encontró imagen de factura para enviar")
-                        send_whatsapp_message(msg)
-
+                    
+                    # Envío asíncrono sin esperar la respuesta
+                    self.page.run_task(self._send_wa_background, img_path, msg)
+                
                 if result.get('sync'):
                     print("[SYNC] Factura sincronizada")
+                
+                self._set_loading_overlay(True, "Actualizando lista de pendientes...")
                 self.selected_entradas.clear()
-                self._load_entradas_pendientes()
+                await self._load_entradas_pendientes()
+                
+                self._set_loading_overlay(False)
+
             except Exception as ex:
+                self._set_loading_overlay(False)
                 print(f"[ERROR] on_validar_click: {ex}")
                 import traceback; traceback.print_exc()
                 try:
@@ -274,7 +332,7 @@ class ValidacionView(ft.Container):
         dialog.set_on_validate(on_validar_click)
         dialog.show()
 
-    def _load_entradas_pendientes(self):
+    async def _load_entradas_pendientes(self):
         if self.is_loading:
             return
         self.is_loading = True
@@ -283,21 +341,9 @@ class ValidacionView(ft.Container):
         if self.page:
             self.update()
         
-        db = None
         try:
-            db = next(get_db_adaptive())
-            query = db.query(Movimiento).filter(
-                Movimiento.tipo == "entrada",
-                Movimiento.factura_id.is_(None)
-            )
-            
-            search = self.search_field.value.lower().strip() if self.search_field.value else ""
-            if search:
-                from usr.models import Producto
-                query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search}%"))
-            
-            entradas = query.order_by(Movimiento.fecha_movimiento.desc()).all()
-            self.entradas_data = {e.id: e for e in entradas}
+            # Ejecutamos la consulta en un hilo separado para no bloquear la UI
+            entradas = await asyncio.to_thread(self._fetch_entradas_data)
             
             self.entradas_list.controls.clear()
             if not entradas:
@@ -320,8 +366,26 @@ class ValidacionView(ft.Container):
             logger.error(f"Error cargando entradas: {ex}")
             self.entradas_list.controls = [ft.Text(f"Error: {str(ex)}")]
         finally:
-            if db: db.close()
             self.is_loading = False
+            if self.page:
+                self.update()
+
+    def _fetch_entradas_data(self):
+        db = next(get_db_adaptive())
+        try:
+            query = db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(
+                Movimiento.tipo == "entrada",
+                Movimiento.factura_id.is_(None)
+            )
+            
+            search = self.search_field.value.lower().strip() if self.search_field.value else ""
+            if search:
+                from usr.models import Producto
+                query = query.join(Producto).filter(Producto.nombre.ilike(f"%{search}%"))
+            
+            return query.order_by(Movimiento.fecha_movimiento.desc()).all()
+        finally:
+            db.close()
 
     def _create_entrada_card(self, entrada):
         colors = get_colors(self.page)
@@ -456,15 +520,30 @@ class ValidacionView(ft.Container):
                 card.bgcolor = get_colors(self.page)['card']
                 card.border = ft.border.all(1, get_colors(self.page)['border'])
                 card.update()
-        self._load_entradas_pendientes()
+        if self.page:
+            self.page.run_task(self._load_entradas_pendientes)
 
     def _eliminar_entrada(self, entrada):
         db = next(get_db_adaptive())
         try:
+            match_data = {
+                'producto_id': entrada.producto_id,
+                'tipo': entrada.tipo,
+                'cantidad': entrada.cantidad,
+                'fecha_movimiento': str(entrada.fecha_movimiento) if entrada.fecha_movimiento else None,
+                'almacen': entrada.almacen,
+            }
             db.delete(entrada)
             db.commit()
             show_success(f"Eliminado: {entrada.cantidad}")
-            self._load_entradas_pendientes()
+            if self.page:
+                self.page.run_task(self._load_entradas_pendientes)
+            # Encolar eliminación para que Supabase también lo borre
+            try:
+                from usr.database.sync_queue import get_sync_queue
+                get_sync_queue().add_pending('movimientos', 'delete', match_data)
+            except Exception as e:
+                print(f"[VALIDACION] Error encolando delete movimiento: {e}")
         except Exception as ex:
             db.rollback()
             show_error(f"Error: {str(ex)}")

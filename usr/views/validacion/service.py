@@ -33,31 +33,37 @@ class ValidacionService:
             except Exception as ex:
                 print(f"[WARN] ALTER TABLE factura_pagos: {ex}")
 
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(db.bind)
+                columnas = [c['name'] for c in inspector.get_columns('facturas')]
+                if 'tipo_documento' not in columnas:
+                    db.execute(text("ALTER TABLE facturas ADD COLUMN tipo_documento TEXT DEFAULT 'Factura'"))
+                    db.commit()
+            except Exception as ex:
+                print(f"[WARN] ALTER TABLE facturas (tipo_documento): {ex}")
+
             fecha_factura = data.get('fecha') or datetime.now()
             rif = data.get('rif', '')
-            proveedor = data.get('proveedor', 'Varios')
+            proveedor = data.get('proveedor') or 'Varios'
+            tipo_documento = data.get('tipo_documento', 'Factura')
 
             proveedor_obj = None
-            if rif and proveedor != "Varios":
+            if proveedor and proveedor != "Varios":
                 try:
                     proveedor_obj = db.query(Proveedor).filter(Proveedor.nombre == proveedor).first()
                     if not proveedor_obj:
                         try:
-                            proveedor_obj = Proveedor(nombre=proveedor, rif=rif, estado="Activo")
+                            proveedor_obj = Proveedor(nombre=proveedor, rif=rif or "", estado="Activo")
                             db.add(proveedor_obj)
                             db.flush()
-                            print(f"[NUEVO PROVEEDOR] Creado: {proveedor} (RIF: {rif})")
+                            print(f"[NUEVO PROVEEDOR] Creado: {proveedor} (RIF: {rif or 'No prov'})")
                         except Exception as ex:
                             print(f"[WARN] Crear proveedor: {ex}")
                 except Exception as ex:
                     print(f"[WARN] Buscar proveedor: {ex}")
 
-            try:
-                from usr.database.local_replica import LocalReplica
-                usuario = LocalReplica.get_usuario_dispositivo()
-                usuario_val = usuario['nombre'] if usuario else 'Sistema'
-            except Exception:
-                usuario_val = 'Sistema'
+            usuario_val = data.get('validada_por', 'Sistema')
 
             ref_fact = data.get('factura') or f"V-REF-{datetime.now().strftime('%H%M%S')}"
 
@@ -99,6 +105,7 @@ class ValidacionService:
                         fact_data = {
                             'numero_factura': existente.numero_factura,
                             'proveedor': existente.proveedor,
+                            'tipo_documento': existente.tipo_documento,
                             'fecha_factura': _s(existente.fecha_factura),
                             'fecha_recepcion': _s(existente.fecha_recepcion),
                             'total_bruto': existente.total_bruto,
@@ -146,7 +153,8 @@ class ValidacionService:
                     total_neto=monto_val,
                     estado="Validada",
                     validada_por=usuario_val,
-                    fecha_validacion=datetime.now()
+                    fecha_validacion=datetime.now(),
+                    tipo_documento=tipo_documento
                 )
                 db.add(nueva_fac)
                 db.flush()
@@ -208,6 +216,7 @@ class ValidacionService:
                 fact_data = {
                     'numero_factura': nueva_fac.numero_factura,
                     'proveedor': nueva_fac.proveedor,
+                    'tipo_documento': nueva_fac.tipo_documento,
                     'fecha_factura': _serialize(nueva_fac.fecha_factura),
                     'fecha_recepcion': _serialize(nueva_fac.fecha_recepcion),
                     'total_bruto': nueva_fac.total_bruto,

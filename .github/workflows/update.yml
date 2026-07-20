@@ -1,0 +1,32 @@
+name: Auto-Update App Logic
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'version.json'
+      - 'update.zip'
+      - '.github/**'
+
+jobs:
+  build-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Update Zip
+        run: |
+          zip -r update.zip usr config
+
+      - name: Commit and Push zip
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add update.zip
+          git commit -m "chore: rebuild update.zip [skip ci]"
+          git push

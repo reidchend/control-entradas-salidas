@@ -2,6 +2,8 @@
 Réplica local SQLite para trabajo offline.
 Almacena una copia de los datos de Supabase para acceso offline.
 """
+import os
+print(f"[LOCAL_REPLICA] Cargando módulo local_replica.py desde {os.path.abspath(__file__)}")
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from usr.database.conn import get_local_conn
@@ -65,6 +67,12 @@ def init_local_db():
          )
      """)
     
+    # Migración: agregar columna tipo a productos si no existe
+    try:
+        cursor.execute("ALTER TABLE productos ADD COLUMN tipo TEXT")
+    except Exception:
+        pass  # Ya existe
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS existencias (
             id INTEGER PRIMARY KEY,
@@ -127,6 +135,12 @@ def init_local_db():
         )
     """)
     
+    # Migración: agregar columna tipo_documento a facturas si no existe
+    try:
+        cursor.execute("ALTER TABLE facturas ADD COLUMN tipo_documento TEXT DEFAULT 'Factura'")
+    except Exception:
+        pass  # Ya existe
+    
     # Tabla de pagos de facturas
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS factura_pagos (
@@ -166,7 +180,26 @@ def init_local_db():
             ingrediente TEXT NOT NULL,
             cantidad REAL NOT NULL,
             unidad TEXT DEFAULT 'unidad',
-            cantidad_surtida REAL DEFAULT 0
+            cantidad_surtida REAL DEFAULT 0,
+            verificado INTEGER DEFAULT 0
+        )
+    """)
+    
+    # Migración: agregar columna verificado a requisicion_detalles si no existe
+    try:
+        cursor.execute("ALTER TABLE requisicion_detalles ADD COLUMN verificado INTEGER DEFAULT 0")
+    except Exception:
+        pass  # Ya existe
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS kardex_validaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            requisicion_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            cantidad_fisica REAL,
+            observacion TEXT
         )
     """)
     
@@ -544,12 +577,14 @@ class LocalReplica:
     
     @staticmethod
     def update_existencia(producto_id: int, almacen: str, cantidad: float, unidad: str = None) -> None:
-        """Actualiza o crea existencia."""
+        """Actualiza la existencia existente o la crea si no existe (sin duplicar)."""
         conn = get_local_conn()
         cursor = conn.cursor()
-        
+
+        almacen = (almacen or "principal").strip()
+
         if unidad is None:
-            cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?", 
+            cursor.execute("SELECT unidad FROM existencias WHERE producto_id = ? AND almacen = ?",
                          (producto_id, almacen))
             result = cursor.fetchone()
             unidad = result['unidad'] if result and result['unidad'] else 'unidad'
@@ -821,6 +856,7 @@ class LocalReplica:
     @staticmethod
     def save_requisiciones(requisiciones: List[Dict]) -> None:
         if not requisiciones:
+            print("[SYNC-DEBUG] save_requisiciones: lista vacía, NO se tocó la tabla")
             return
             
         conn = get_local_conn()
@@ -844,19 +880,66 @@ class LocalReplica:
                 req.get('fecha_procesamiento'), req.get('fecha_creacion'),
                 req.get('actualizada')
             ))
-            
-            if 'detalles' in req:
-                for det in req.get('detalles', []):
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO requisicion_detalles 
-                        (id, requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        det.get('id'), req.get('id'), det.get('producto_id'),
-                        det.get('ingrediente'), det.get('cantidad'),
-                        det.get('unidad', 'unidad'), det.get('cantidad_surtida', 0)
-                    ))
         
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def save_requisicion_detalles(detalles: List[Dict]) -> None:
+        """Guarda los detalles de las requisiciones (upsert).
+        Incluye verificado para propagar cambios entre dispositivos."""
+        if not detalles:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        for det in detalles:
+            cursor.execute("""
+                INSERT INTO requisicion_detalles 
+                (id, requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida, verificado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    requisicion_id = excluded.requisicion_id,
+                    producto_id = excluded.producto_id,
+                    ingrediente = excluded.ingrediente,
+                    cantidad = excluded.cantidad,
+                    unidad = excluded.unidad,
+                    cantidad_surtida = excluded.cantidad_surtida,
+                    verificado = excluded.verificado
+            """, (
+                det.get('id'), det.get('requisicion_id'), det.get('producto_id'),
+                det.get('ingrediente'), det.get('cantidad'), det.get('unidad', 'unidad'),
+                det.get('cantidad_surtida', 0), det.get('verificado', False)
+            ))
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def remap_requisicion_id(local_id: int, remote_id: int) -> None:
+        """Tras subir una requisición local, actualiza su id local al id remoto
+        para que la descarga y la poda no la dupliquen ni la borren.
+        Es seguro si se llama con un id local ya obsoleto (producto de una
+        re-edición): en ese caso no hace nada."""
+        if local_id == remote_id:
+            return
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        # ¿Existe aún el registro local con el id local? (puede ya tener el remoto)
+        existe = cursor.execute(
+            "SELECT 1 FROM requisiciones WHERE id = ?", (local_id,)
+        ).fetchone()
+        if not existe:
+            conn.close()
+            return
+        # Eliminar posible registro local obsoleto con el id remoto
+        cursor.execute("DELETE FROM requisiciones WHERE id = ?", (remote_id,))
+        cursor.execute(
+            "UPDATE requisicion_detalles SET requisicion_id = ? WHERE requisicion_id = ?",
+            (remote_id, local_id)
+        )
+        cursor.execute(
+            "UPDATE requisiciones SET id = ? WHERE id = ?",
+            (remote_id, local_id)
+        )
         conn.commit()
         conn.close()
     
@@ -876,57 +959,57 @@ class LocalReplica:
     
     @staticmethod
     def recalculate_existencias() -> None:
-        """Recalcula las existencias basándose en todos los movimientos."""
+        """Recalcula las existencias basándose en todos los movimientos.
+        
+        Los movimientos de tipo 'ajuste' representan un conteo físico real:
+        se usa cantidad_nueva como valor definitivo de stock en ese momento.
+        Los movimientos posteriores (entrada/salida) se aplican sobre ese valor.
+        """
         conn = get_local_conn()
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT producto_id, almacen, tipo, SUM(cantidad) as total_cantidad, SUM(peso_total) as total_peso
+            SELECT producto_id, almacen, tipo, cantidad, cantidad_nueva
             FROM movimientos
-            GROUP BY producto_id, almacen, tipo
+            ORDER BY id
         """)
-        
-        movimientos_agrupados = cursor.fetchall()
+        todos = cursor.fetchall()
         
         cursor.execute("DELETE FROM existencias")
         
         stock_por_producto_almacen = {}
         
-        for mov in movimientos_agrupados:
+        for mov in todos:
             producto_id = mov['producto_id']
-            almacen = mov['almacen']
+            almacen = mov['almacen'] or 'principal'
             tipo = mov['tipo']
-            total_cantidad = mov['total_cantidad'] or 0
-            total_peso = mov['total_peso'] or 0
+            cantidad = mov['cantidad'] or 0
+            cantidad_nueva = mov['cantidad_nueva']
             
             if not producto_id:
                 continue
-            if not almacen:
-                almacen = 'principal'
             
-            cursor.execute("SELECT es_pesable, unidad_medida FROM productos WHERE id = ?", (producto_id,))
+            cursor.execute("SELECT unidad_medida FROM productos WHERE id = ?", (producto_id,))
             prod_row = cursor.fetchone()
-            es_pesable = prod_row['es_pesable'] if prod_row else 0
             unidad = prod_row['unidad_medida'] if prod_row else 'unidad'
-            
-            if es_pesable:
-                cantidad = total_peso
-            else:
-                cantidad = total_cantidad
             
             key = (producto_id, almacen)
             if key not in stock_por_producto_almacen:
                 stock_por_producto_almacen[key] = {'cantidad': 0, 'unidad': unidad}
             
-            if tipo == 'entrada':
+            if tipo in ('entrada', 'tr_entrada'):
                 stock_por_producto_almacen[key]['cantidad'] += cantidad
-            elif tipo == 'salida':
+            elif tipo in ('salida', 'tr_salida'):
                 stock_por_producto_almacen[key]['cantidad'] -= cantidad
+            elif tipo == 'ajuste':
+                if cantidad_nueva is not None:
+                    stock_por_producto_almacen[key]['cantidad'] = cantidad_nueva
         
         for (producto_id, almacen), data in stock_por_producto_almacen.items():
-            if producto_id and almacen and data['cantidad'] is not None:
-                final_stock = data['cantidad']
-                
+            # Redondear a 4 decimales para eliminar el ruido de punto flotante de Python/IEEE 754
+            final_stock = round(data['cantidad'], 4) if data['cantidad'] is not None else 0
+            
+            if producto_id and almacen and final_stock is not None:
                 if final_stock < 0:
                     print(f"[WARN] Stock negativo detectado: producto={producto_id}, almacen={almacen}, stock={final_stock}")
                 
@@ -1038,8 +1121,17 @@ class LocalReplica:
         import hashlib
         conn = get_local_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
-        row = cursor.fetchone()
+        try:
+            cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
+            row = cursor.fetchone()
+        except Exception:
+            # La tabla no existe: inicializar BD y reintentar
+            conn.close()
+            init_local_db()
+            conn = get_local_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM dispositivo_usuario LIMIT 1")
+            row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
     
@@ -1079,6 +1171,77 @@ class LocalReplica:
         return row and row['pin_hash'] == pin_hash
     
     @staticmethod
+    def delete_orphaned_records(table_name: str, remote_ids: List[int], key_column: str = None) -> int:
+        """
+        Elimina registros locales que no están en la lista de IDs remotos
+        y no están pendientes de sincronización en la cola.
+        """
+        import json
+
+        conn = get_local_conn()
+        cursor = conn.cursor()
+
+        # DEBUG: verificar cuántos registros hay antes de podar
+        if table_name == 'requisiciones':
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {table_name}")
+            debug_cnt = cursor.fetchone()['cnt']
+            print(f"[SYNC-DEBUG] requisiciones antes de podar: {debug_cnt} registros, remote_ids={remote_ids}")
+
+        # 1. Obtener valores clave de la cola de sync pendientes para esta tabla
+        cursor.execute("SELECT data FROM sync_queue WHERE table_name = ? AND status = 'pending'", (table_name,))
+        pending_rows = cursor.fetchall()
+
+        pending_keys = []
+        if key_column:
+            for row in pending_rows:
+                try:
+                    p_data = json.loads(row[0])
+                    if key_column in p_data:
+                        pending_keys.append(p_data[key_column])
+                except:
+                    pass
+
+        # Si el servidor devolvió 0 filas:
+        #  - Tablas con creación local (productos, categorías, facturas, etc.):
+        #    NO podamos, para no borrar datos locales no sincronados por un fallo
+        #    transitorio de lectura.
+        #  - 'requisiciones' es una tabla de SOLO DESCARGA: si ya no existen en el
+        #    servidor, deben desaparecer también en local.
+        if not remote_ids:
+            if table_name != 'requisiciones':
+                conn.close()
+                return 0
+            query = f"DELETE FROM {table_name} WHERE 1=1"
+            params = []
+        else:
+            placeholders = ','.join(['?' for _ in remote_ids])
+            query = f"DELETE FROM {table_name} WHERE id NOT IN ({placeholders})"
+            params = list(remote_ids)
+
+        if key_column and pending_keys:
+            key_placeholders = ','.join(['?' for _ in pending_keys])
+            query += f" AND {key_column} NOT IN ({key_placeholders})"
+            params.extend(pending_keys)
+
+        cursor.execute(query, params)
+        deleted = cursor.rowcount
+
+        # Caso especial para requisiciones: también eliminar detalles huérfanos
+        if table_name == 'requisiciones':
+            if remote_ids:
+                dph = ','.join(['?' for _ in remote_ids])
+                cursor.execute(f"DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN ({dph})", list(remote_ids))
+            else:
+                cursor.execute("DELETE FROM requisicion_detalles WHERE requisicion_id NOT IN (SELECT id FROM requisiciones)")
+
+        conn.commit()
+        conn.close()
+
+        if deleted > 0 or table_name == 'requisiciones':
+            print(f"[SYNC] {deleted} registros huérfanos eliminados de la tabla local '{table_name}'")
+        return deleted
+
+    @staticmethod
     def eliminar_usuario_dispositivo() -> None:
         """Resetea el usuario (para cambio de operador)."""
         conn = get_local_conn()
@@ -1086,6 +1249,184 @@ class LocalReplica:
         cursor.execute("DELETE FROM dispositivo_usuario")
         conn.commit()
         conn.close()
+
+    # ==================== RECETAS ====================
+
+    @staticmethod
+    def get_recetas(activo: bool = True) -> List[Dict]:
+        """Obtiene todas las recetas."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        if activo:
+            cursor.execute("SELECT * FROM recetas WHERE activo = 1 ORDER BY nombre")
+        else:
+            cursor.execute("SELECT * FROM recetas ORDER BY nombre")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def get_receta_by_id(receta_id: int) -> Optional[Dict]:
+        """Obtiene una receta por ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM recetas WHERE id = ?", (receta_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    @staticmethod
+    def save_receta(receta: Dict) -> int:
+        """Guarda una receta y retorna su ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        receta_id = receta.get('id')
+        if receta_id:
+            cursor.execute("""
+                UPDATE recetas SET nombre=?, tipo=?, producto_base_id=?, producto_final_id=?,
+                cantidad_producida=?, activo=?, updated_at=?
+                WHERE id=?
+            """, (
+                receta.get('nombre'), receta.get('tipo'),
+                receta.get('producto_base_id'), receta.get('producto_final_id'),
+                receta.get('cantidad_producida', 1),
+                1 if receta.get('activo', True) else 0,
+                now, receta_id
+            ))
+        else:
+            cursor.execute("""
+                INSERT INTO recetas (nombre, tipo, producto_base_id, producto_final_id,
+                cantidad_producida, activo, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                receta.get('nombre'), receta.get('tipo'),
+                receta.get('producto_base_id'), receta.get('producto_final_id'),
+                receta.get('cantidad_producida', 1),
+                1 if receta.get('activo', True) else 0,
+                now, now
+            ))
+            receta_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return receta_id
+
+    @staticmethod
+    def delete_receta(receta_id: int) -> None:
+        """Elimina una receta y sus componentes."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM receta_componentes WHERE receta_id = ?", (receta_id,))
+        cursor.execute("DELETE FROM recetas WHERE id = ?", (receta_id,))
+        conn.commit()
+        conn.close()
+
+    # ==================== RECETA COMPONENTES ====================
+
+    @staticmethod
+    def get_componentes_by_receta(receta_id: int) -> List[Dict]:
+        """Obtiene los componentes de una receta."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT rc.*, p.nombre as producto_nombre, p.tipo as producto_tipo
+            FROM receta_componentes rc
+            LEFT JOIN productos p ON rc.producto_id = p.id
+            WHERE rc.receta_id = ?
+            ORDER BY rc.tipo_componente, p.nombre
+        """, (receta_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def save_componentes(receta_id: int, componentes: List[Dict]) -> None:
+        """Reemplaza todos los componentes de una receta."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM receta_componentes WHERE receta_id = ?", (receta_id,))
+        for comp in componentes:
+            cursor.execute("""
+                INSERT INTO receta_componentes (receta_id, producto_id, cantidad, unidad, tipo_componente)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                receta_id, comp.get('producto_id'), comp.get('cantidad'),
+                comp.get('unidad', 'unidad'), comp.get('tipo_componente')
+            ))
+        conn.commit()
+        conn.close()
+
+    # ==================== PRODUCCIONES ====================
+
+    @staticmethod
+    def get_producciones(limit: int = 50) -> List[Dict]:
+        """Obtiene el historial de producciones."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.*, r.nombre as receta_nombre, r.tipo as receta_tipo
+            FROM producciones p
+            LEFT JOIN recetas r ON p.receta_id = r.id
+            ORDER BY p.fecha_produccion DESC
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def save_produccion(produccion: Dict) -> int:
+        """Guarda una producción y retorna su ID."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO producciones (receta_id, cantidad, estado, usuario, observaciones, fecha_produccion, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            produccion.get('receta_id'), produccion.get('cantidad'),
+            produccion.get('estado', 'completado'), produccion.get('usuario'),
+            produccion.get('observaciones'), produccion.get('fecha_produccion', now), now
+        ))
+        prod_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return prod_id
+
+    @staticmethod
+    def save_produccion_detalle(detalle: Dict) -> int:
+        """Guarda un detalle de producción."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO produccion_detalles (produccion_id, producto_id, tipo, cantidad, unidad, movimiento_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            detalle.get('produccion_id'), detalle.get('producto_id'),
+            detalle.get('tipo'), detalle.get('cantidad'),
+            detalle.get('unidad', 'unidad'), detalle.get('movimiento_id')
+        ))
+        det_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return det_id
+
+    @staticmethod
+    def get_detalles_by_produccion(produccion_id: int) -> List[Dict]:
+        """Obtiene los detalles de una producción."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT pd.*, p.nombre as producto_nombre
+            FROM produccion_detalles pd
+            LEFT JOIN productos p ON pd.producto_id = p.id
+            WHERE pd.produccion_id = ?
+            ORDER BY pd.tipo, p.nombre
+        """, (produccion_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
 
 def ensure_local_db():
     """Asegura que la BD local existe. Llamar después de set_db_path()."""

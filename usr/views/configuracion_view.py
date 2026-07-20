@@ -12,6 +12,15 @@ from usr.views.configuracion.proveedores import build_proveedores_tab, load_prov
 from usr.views.configuracion.sistema import build_sistema_tab
 
 
+def _get_tipo_label(tipo):
+    labels = {
+        "PRODUCTO PARA USO INTERNO": "Uso Interno",
+        "PRODUCTOS PARA LA VENTA": "Venta",
+        "INSUMOS": "Insumo",
+    }
+    return labels.get(tipo)
+
+
 class ConfiguracionView(ft.Container):
     def __init__(self):
         super().__init__()
@@ -39,10 +48,11 @@ class ConfiguracionView(ft.Container):
         )
 
     def did_mount(self):
-        self._build_ui()
         if self.page:
             self.is_mobile = self.page.width < 768
             self.page.on_resize = self._on_resize
+        self._build_ui()
+        if self.page:
             self._load_data()
 
     def on_theme_change(self):

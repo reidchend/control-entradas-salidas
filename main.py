@@ -1,152 +1,26 @@
-import flet as ft
-import traceback
 import os
+import sys
 import ssl
 import certifi
-import glob
-import asyncio
-import sys
 
-# Esto le dice a Python exactamente dónde encontrar los certificados
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
 def resource_path(relative_path: str) -> str:
-    """Obtiene ruta absoluta de recursos para PyInstaller y desarrollo."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 
-def get_theme_colors(page):
-    is_dark = page.theme_mode == ft.ThemeMode.DARK
-    return {
-        'bg': '#121212' if is_dark else '#F5F5F5',
-        'surface': '#1E1E1E' if is_dark else '#FFFFFF',
-        'surface_container': '#2D2D2D' if is_dark else '#FAFAFA',
-        'text_primary': '#FFFFFF' if is_dark else '#1A1A1A',
-        'text_secondary': '#B0B0B0' if is_dark else '#666666',
-        'accent': '#BB86FC' if is_dark else '#6200EE',
-    }
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+_updates_dir = os.path.join(_app_dir, "app_updates")
+if os.path.exists(_updates_dir):
+    sys.path.insert(0, _updates_dir)
 
-
-def mostrar_error_critico(page: ft.Page, error_completo: str):
-    """Pantalla de error profesional compatible con versiones 0.2x de Flet."""
-    page.clean()
-    page.bgcolor = "#1a0000"
-    
-    error_container = ft.Column(
-        scroll=ft.ScrollMode.ALWAYS,
-        expand=True,
-        controls=[
-            ft.Text("DETALLES TÉCNICOS:", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_200),
-            ft.Container(
-                content=ft.Text(
-                    error_completo,
-                    size=11,
-                    font_family="monospace",
-                    color=ft.Colors.RED_100,
-                ),
-                padding=10,
-                bgcolor="#330000",
-                border_radius=5,
-            ),
-        ]
-    )
-
-    page.add(
-        ft.Container(
-            padding=20,
-            content=ft.Column([
-                ft.Icon(ft.Icons.REPORT_PROBLEM_ROUNDED, color=ft.Colors.RED_400, size=50),
-                ft.Text("Error de Inicio", size=24, weight=ft.FontWeight.BOLD),
-                ft.Text("La aplicación no pudo arrancar correctamente.", text_align=ft.TextAlign.CENTER),
-                ft.Divider(color=ft.Colors.RED_900),
-                ft.Container(content=error_container, height=300),
-                ft.ElevatedButton(
-                    "Copiar Error al Portapapeles",
-                    icon=ft.Icons.COPY,
-                    on_click=lambda _: page.set_clipboard(error_completo)
-                ),
-                ft.Container(height=10),
-                ft.ElevatedButton(
-                    "Reintentar Inicio",
-                    bgcolor=ft.Colors.RED_700,
-                    color=ft.Colors.WHITE,
-                    on_click=lambda _: page.go("/") 
-                )
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-        )
-    )
-    page.update()
-
-
-class ControlEntradasSalidasApp:
-    def __init__(self):
-        # Type hints para que Pylance entienda el tipo de cada atributo
-        self.page: ft.Page = None
-        self.navigation_rail = None
-        self.navigation_bar = None
-        self.content_area = None
-        self.current_view = None
-        self.current_view_index = 0
-        self.views = None
-        self._layout_row = None
-        self.settings = None
-
-    async def arrancar_interfaz(self, page: ft.Page, settings, vistas_cargadas):
-        self.page = page
-        self.settings = settings
-        self.views = vistas_cargadas
-        
-        self.page.title = self.settings.FLET_APP_NAME
-        self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.padding = 0
-        self.page.spacing = 0
-        self.page.expand = True
-
-        self._setup_theme()
-        self._create_layout()
-        self._handle_responsive_layout(self.page.width)
-        self._show_view(0)
-        
-        self.page.on_resized = self._on_page_resized
-        self.page.update()
-
-    def _setup_theme(self):
-        if not self.page:
-            return
-        self.page.theme = ft.Theme(color_scheme_seed=ft.Colors.DEEP_PURPLE_700, visual_density=ft.VisualDensity.COMFORTABLE, use_material3=True)
-        self.page.bgcolor = '#1A1A1A'
-    
-    def _toggle_theme(self, e=None):
-        if not self.page:
-            return
-
-        is_dark = self.page.theme_mode != ft.ThemeMode.DARK
-        self.page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
-        self.page.bgcolor = '#1A1A1A' if is_dark else '#F5F5F5'
-
-        if hasattr(self, 'content_area') and self.content_area:
-            self.content_area.bgcolor = '#252525' if is_dark else '#FFFFFF'
-
-        if hasattr(self, 'navigation_rail') and self.navigation_rail:
-            self.navigation_rail.bgcolor = '#1E1E1E' if is_dark else '#F3E5F5'
-
-        if hasattr(self, 'theme_toggle') and self.theme_toggle:
-            self.theme_toggle.icon = ft.Icons.LIGHT_MODE if is_dark else ft.Icons.DARK_MODE
-            self.theme_toggle.icon_color = ft.Colors.AMBER if is_dark else ft.Colors.BLUE_GREY_700
-            self.theme_toggle.tooltip = "Modo Claro" if is_dark else "Modo Oscuro"
-
-        if self.current_view and hasattr(self.current_view, 'on_theme_change'):
-            self.current_view.on_theme_change()
-
-        self.page.update()
-
-    def _create_layout(self):
-        self.content_area = ft.Container(expand=True, padding=0, bgcolor='#252525', border_radius=0)
-
-        self.theme_toggle = ft.IconButton(icon=ft.Icons.LIGHT_MODE, tooltip="Modo Claro", on_click=self._toggle_theme, icon_color=ft.Colors.AMBER)
+# Fijar ruta de BD por defecto ANTES de que cualquier import de usr.*
+# cree el engine de SQLAlchemy. En Android, app_launcher.py la sobreescribe
+# con page.app_data_dir una vez que inicia Flet.
+os.environ['LYCORIS_DB_PATH'] = os.path.join(_app_dir, "lycoris_local.db")
 
         self.navigation_rail = ft.NavigationRail(
             selected_index=0, extended=False, label_type=ft.NavigationRailLabelType.ALL, min_width=100, bgcolor='#1E1E1E', 

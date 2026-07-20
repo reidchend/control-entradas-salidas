@@ -2,10 +2,37 @@
 Sistema centralizado de notificaciones para la aplicación.
 Proporciona funciones unificadas para mostrar mensajes al usuario.
 """
+import sys
 import flet as ft
 
-# Página activa
+# Página activa (almacenada en sys para sobrevivir recargas de módulos)
 _page = None
+
+def _get_page():
+    """Obtiene la página activa desde sys o desde la pila de llamadas."""
+    global _page
+    if _page is not None:
+        return _page
+    saved = getattr(sys, '_opencode_notif_page', None)
+    if saved is not None:
+        _page = saved
+        return saved
+    # Fallback: buscar page en la pila de llamadas (compilado sin fix)
+    try:
+        frame = sys._getframe()
+        while frame:
+            for val in frame.f_locals.values():
+                if isinstance(val, ft.Page):
+                    _page = val
+                    return val
+                if isinstance(val, ft.View):
+                    if hasattr(val, 'page') and isinstance(val.page, ft.Page):
+                        _page = val.page
+                        return val.page
+            frame = frame.f_back
+    except:
+        pass
+    return None
 
 # Banner activo
 _active_banner = None
@@ -39,11 +66,13 @@ def set_page(page: ft.Page):
     """Registrar la página activa para mostrar notificaciones."""
     global _page
     _page = page
+    sys._opencode_notif_page = page
 
 
 def _get_colors():
     """Obtener colores del tema (soporta tema claro/oscuro)."""
-    if _page and hasattr(_page, 'theme_mode') and _page.theme_mode == ft.ThemeMode.LIGHT:
+    page = _get_page()
+    if page and hasattr(page, 'theme_mode') and page.theme_mode == ft.ThemeMode.LIGHT:
         return {
             'success': '#388E3C',
             'error': '#D32F2F',
@@ -69,7 +98,7 @@ def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: boo
         action_text: Texto para botón de acción (ej: "Copiar")
         action_callback: Función callback al presionar botón
     """
-    if not _page:
+    if not _get_page():
         print(f"[NOTIF] {tipo.upper()}: {message}")
         return
 
@@ -100,15 +129,19 @@ def _show_snackbar(message: str, tipo: str, duration: int = None, with_icon: boo
     )
 
     try:
-        # Cerrar cualquier snackbar anterior
-        if _page.overlay:
-            for item in list(_page.overlay):
-                if isinstance(item, ft.SnackBar):
-                    item.open = False
+        page = _get_page()
+        # Cerrar cualquier snackbar anterior que esté abierto
+        if page.overlay:
+            for item in list(page.overlay):
+                if isinstance(item, ft.SnackBar) and item.open:
+                    try:
+                        item.open = False
+                    except:
+                        pass
 
-        _page.overlay.append(snack)
+        page.overlay.append(snack)
         snack.open = True
-        _page.update()
+        page.update()
     except Exception as e:
         print(f"[NOTIF] Error mostrando SnackBar: {e}")
 
@@ -135,8 +168,9 @@ def show_error_with_copy(message: str, ex: Exception = None, duration: int = 6):
 
     def _copy(e):
         try:
-            if _page:
-                _page.set_clipboard(full_detail)
+            p = _get_page()
+            if p:
+                p.set_clipboard(full_detail)
         except Exception:
             pass
 
@@ -161,7 +195,8 @@ def show_banner(message: str, tipo: str = 'info'):
     """
     global _active_banner
 
-    if not _page:
+    page = _get_page()
+    if not page:
         print(f"[NOTIF BANNER] {tipo.upper()}: {message}")
         return
 
@@ -183,9 +218,10 @@ def show_banner(message: str, tipo: str = 'info'):
     icon = icon_map.get(tipo, ft.Icons.INFO)
 
     def close_banner(e):
-        if _page and _page.banner:
-            _page.banner.open = False
-            _page.update()
+        p = _get_page()
+        if p and p.banner:
+            p.banner.open = False
+            p.update()
 
     banner = ft.Banner(
         bgcolor=bgcolor,
@@ -201,13 +237,14 @@ def show_banner(message: str, tipo: str = 'info'):
     )
 
     try:
+        p = _get_page()
         # Cerrar banner anterior si existe
-        if _page.banner:
-            _page.banner.open = False
+        if p.banner:
+            p.banner.open = False
 
-        _page.banner = banner
-        _page.banner.open = True
-        _page.update()
+        p.banner = banner
+        p.banner.open = True
+        p.update()
         _active_banner = banner
     except Exception as e:
         print(f"[NOTIF] Error mostrando Banner: {e}")
@@ -215,20 +252,21 @@ def show_banner(message: str, tipo: str = 'info'):
 
 def clear_notifications():
     """Limpiar todas las notificaciones activas."""
-    if not _page:
+    page = _get_page()
+    if not page:
         return
 
     try:
         # Cerrar SnackBars
-        for item in list(_page.overlay):
+        for item in list(page.overlay):
             if isinstance(item, ft.SnackBar):
                 item.open = False
 
         # Cerrar Banner
-        if _page.banner:
-            _page.banner.open = False
-            _page.banner = None
+        if page.banner:
+            page.banner.open = False
+            page.banner = None
 
-        _page.update()
+        page.update()
     except Exception as e:
         print(f"[NOTIF] Error limpiando notificaciones: {e}")

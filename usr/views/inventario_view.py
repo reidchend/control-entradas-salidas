@@ -100,7 +100,10 @@ class InventarioView(ft.Container):
                         self._create_categoria_card(c)
                         for c in self._categorias_cache
                     ]
-                self.categorias_grid.update()
+                try:
+                    self.categorias_grid.update()
+                except Exception:
+                    pass
             else:
                 self.page.run_task(self._load_categorias)
 
@@ -215,7 +218,9 @@ class InventarioView(ft.Container):
         self.page.run_task(self._load_categorias, True)
         if self.categoria_seleccionada:
             self._load_productos()
-        self.page.overlay.clear()
+        for control in self.page.overlay[:]:
+            if isinstance(control, ft.SnackBar):
+                self.page.overlay.remove(control)
         snack = ft.SnackBar(
             content=ft.Text("🔄 Actualizando..."),
             bgcolor=ft.Colors.BLUE_600, duration=1,

@@ -15,6 +15,9 @@ def set_db_path(path: str) -> None:
     """Llamar desde main() antes de cualquier import de BD."""
     global _db_path
     
+    prev = os.environ.get('LYCORIS_DB_PATH')
+    os.environ['LYCORIS_DB_PATH'] = path
+
     parent = Path(path).parent
     
     # Intentar crear directorio
@@ -37,11 +40,31 @@ def set_db_path(path: str) -> None:
                 continue
     
     _db_path = path
+    
+    # Si el path cambió, forzar recreación del engine local
+    if prev != path:
+        import usr.database.base as base_mod
+        base_mod._local_engine = None
+        base_mod._local_session_local = None
 
 def get_db_path() -> str:
+    env_path = os.environ.get('LYCORIS_DB_PATH')
+    if env_path:
+        return env_path
     if _db_path is None:
-        # Fallback si no se inicializó
-        return str(Path(".") / "lycoris_local.db")
+        try:
+            conn_dir = os.path.dirname(os.path.abspath(__file__))
+            # conn.py está en <root>/usr/database/conn.py
+            # o en <root>/app_updates/usr/database/conn.py
+            candidate = os.path.dirname(os.path.dirname(conn_dir))  # <root>/usr  o  <root>/app_updates
+            # Si el padre del candidato también contiene 'usr', es porque
+            # estamos dentro de app_updates/ y debemos usar el padre como raíz
+            parent = os.path.dirname(candidate)
+            if os.path.exists(os.path.join(parent, 'usr')):
+                candidate = parent
+            return os.path.join(candidate, "lycoris_local.db")
+        except Exception:
+            return str(Path(".") / "lycoris_local.db")
     return _db_path
 
 def get_local_conn() -> sqlite3.Connection:
@@ -51,15 +74,11 @@ def get_local_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.OperationalError:
-        # Fallback: guardar en directorio actual
+        # Si falla, intentamos la ruta relativa como último recurso
         fallback_path = str(Path(".") / "lycoris_local.db")
-        if db_path != fallback_path:
-            global _db_path
-            _db_path = fallback_path
-            conn = sqlite3.connect(fallback_path)
-            conn.row_factory = sqlite3.Row
-            return conn
-        raise
+        conn = sqlite3.connect(fallback_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def get_cache_conn() -> sqlite3.Connection:
     try:

@@ -10,10 +10,13 @@ from usr.models import Factura, Movimiento, MovimientoArchivo, Producto, Factura
 from sqlalchemy.orm import joinedload
 from usr.theme import get_theme, get_colors
 from usr.notifications import show_error, show_success
+from usr.logger import get_logger
 import os
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+
+logger = get_logger(__name__)
 
 
 def _colors(page):
@@ -92,10 +95,11 @@ class HistorialFacturasView(ft.Container):
         )
 
         self.fecha_seleccionada_txt = ft.Text("", size=12, weight="bold")
+        self._conn_check_active = False
+        self.factura_dlg = None
 
     def on_theme_change(self):
         if not self.page: return
-        self._build_ui()
         self._load_facturas()
         self._load_entradas_por_fecha()
 
@@ -326,32 +330,51 @@ class HistorialFacturasView(ft.Container):
         except Exception as e:
             show_error("Error al montar vista", e, "historial_facturas_view.did_mount")
         
-        # Hilo de monitoreo
-        import threading
-        import time
-        def check_conn():
-            while True:
-                time.sleep(10)
-                if self.page:
+        # Loop de monitoreo asíncrono
+        async def check_conn_loop():
+            self._conn_check_active = True
+            while self._conn_check_active:
+                await asyncio.sleep(10)
+                if self.page and self._conn_check_active:
                     self._update_connection_indicator()
                     try: self.page.update()
                     except Exception:
                         pass
         
-        t = threading.Thread(target=check_conn, daemon=True)
-        t.start()
+        self.page.run_task(check_conn_loop)
         
         # Registrar callback para sync automático
         register_sync_callback(self._on_sync_complete)
     
     def will_unmount(self):
+        self._conn_check_active = False
         unregister_sync_callback(self._on_sync_complete)
+        
+        # LIMPIEZA CRÍTICA: Eliminar controles del overlay para evitar AssertionError en page.update()
+        if self.page and self.page.overlay:
+            try:
+                if self.factura_dlg in self.page.overlay:
+                    self.page.overlay.remove(self.factura_dlg)
+                if self.file_picker in self.page.overlay:
+                    self.page.overlay.remove(self.file_picker)
+                # self.page.update() # No updatemos aquí para evitar recursión en el desmontaje
+            except Exception as e:
+                logger.error(f"Error limpiando overlay en will_unmount: {e}")
     
     def _on_sync_complete(self):
         if hasattr(self, 'page') and self.page and self.visible:
             async def _reload():
-                await asyncio.to_thread(self._load_facturas)
-                await asyncio.to_thread(self._load_entradas_por_fecha)
+                try:
+                    await asyncio.to_thread(self._load_facturas)
+                    await asyncio.to_thread(self._load_entradas_por_fecha)
+                    if self.page and self.visible:
+                        try:
+                            self.page.update()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.error(f"Error en _reload de sync: {e}")
+
             self.page.run_task(_reload)
     
     def on_sync_complete(self):
@@ -366,19 +389,22 @@ class HistorialFacturasView(ft.Container):
         if is_online():
             sync = get_sync_manager()
             if sync: sync.force_sync_now()
-        self._load_facturas()
-        self._load_entradas_por_fecha()
-        self._show_snack("Actualizado", ft.Colors.GREEN_700)
+        
+        try:
+            self._load_facturas()
+            self._load_entradas_por_fecha()
+            show_success("Actualizado")
+            if self.page and self.visible:
+                try:
+                    self.page.update()
+                except Exception:
+                    pass
+        except Exception as ex:
+            logger.error(f"Error en _on_refresh: {ex}")
+
 
     def _on_sync_indicator_click(self, e):
         self._update_connection_indicator()
-        self.page.update()
-
-    def _show_snack(self, msg, color):
-        if not self.page: return
-        snack = ft.SnackBar(content=ft.Text(msg, weight="bold"), bgcolor=color)
-        self.page.overlay.append(snack)
-        snack.open = True
         self.page.update()
 
     def _update_connection_indicator(self):
@@ -446,7 +472,8 @@ class HistorialFacturasView(ft.Container):
                 card = ft.Container(
                     padding=15, bgcolor=colors['card'], border_radius=12,
                     border=ft.border.all(1, _c(self.page, 'GREY_200')),
-                    ink=True, on_click=lambda _, fact=f: self._show_factura_detalle(fact),
+                                    ink=True, on_click=lambda _, fact=f: self.page.run_task(self._show_factura_detalle, fact),
+
                     content=ft.Column([
                         ft.Row([
                             ft.Icon(ft.Icons.RECEIPT_ROUNDED, color=colors['accent'], size=20),
@@ -461,7 +488,8 @@ class HistorialFacturasView(ft.Container):
                     ], spacing=5),
                 )
                 self.facturas_list.controls.append(card)
-        if self.page: self.page.update()
+            # if self.page and self.visible: self.page.update()
+
 
     # ─── ENTRADAS POR FECHA ─────────────────────────────────────────
     def _select_periodo(self, key: str):
@@ -558,7 +586,7 @@ class HistorialFacturasView(ft.Container):
                     )
                     for m in movs:
                         self.entradas_list.controls.append(self._create_entrada_card(m, colors))
-            self.update()
+            # if self.visible: self.update()
         except Exception as e:
             show_error(f"Error al cargar movimientos: {str(e)}")
         finally:
@@ -648,13 +676,19 @@ class HistorialFacturasView(ft.Container):
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ], spacing=10, tight=True),
                 width=450
-            ),
-            actions=[ft.TextButton("Cerrar", on_click=close_dlg)],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+            )
+            self.factura_dlg.actions = [ft.TextButton("Cerrar", on_click=close_dlg)]
+            
+            if self.factura_dlg and self.page and self.visible:
+                self.factura_dlg.open = True
+                try:
+                    self.page.update()
+                except AssertionError:
+                    pass
+        except Exception as e:
+            logger.error(f"Error en _show_factura_detalle: {e}", exc_info=True)
+
+
     
     def _show_export_dialog(self, e):
         colors = _colors(self.page)
@@ -681,10 +715,23 @@ class HistorialFacturasView(ft.Container):
             keyboard_type=ft.KeyboardType.NUMBER
         )
         
+        tipo_dd = ft.Dropdown(
+            label="Tipo de Documento",
+            options=[
+                ft.dropdown.Option("", "Todos"),
+                ft.dropdown.Option("Factura", "Factura"),
+                ft.dropdown.Option("Nota de Entrega", "Nota de Entrega"),
+                ft.dropdown.Option("Entrada", "Entrada"),
+            ],
+            value="",
+            width=200
+        )
+        
         def on_exportar(e):
             try:
                 mes = int(mes_dd.value) + 1
                 año = int(año_input.value or año_actual)
+                tipo = tipo_dd.value or None
                 
                 fecha_inicio = datetime(año, mes, 1)
                 if mes == 12:
@@ -692,7 +739,7 @@ class HistorialFacturasView(ft.Container):
                 else:
                     fecha_fin = datetime(año, mes + 1, 1) - timedelta(days=1)
                 
-                self._exportar_excel(fecha_inicio, fecha_fin)
+                self._exportar_excel(fecha_inicio, fecha_fin, tipo)
                 
                 dlg.open = False
                 self.page.update()
@@ -708,7 +755,8 @@ class HistorialFacturasView(ft.Container):
             content=ft.Column([
                 ft.Text("Seleccione el período a exportar:", size=14),
                 ft.Row([mes_dd, año_input], spacing=10),
-                ft.Text("Se exportarán todas las facturas del mes seleccionado.", size=12, color=colors['text_secondary']),
+                tipo_dd,
+                ft.Text("Se exportarán las facturas del mes seleccionado.", size=12, color=colors['text_secondary']),
             ], spacing=15),
             actions=[
                 ft.TextButton("Cancelar", on_click=close_dlg),
@@ -721,17 +769,20 @@ class HistorialFacturasView(ft.Container):
         dlg.open = True
         self.page.update()
     
-    def _exportar_excel(self, fecha_inicio, fecha_fin):
+    def _exportar_excel(self, fecha_inicio, fecha_fin, tipo_doc=None):
         colors = _colors(self.page)
         
         try:
             db = next(get_db_adaptive())
             
-            facturas = db.query(Factura).filter(
+            q = db.query(Factura).filter(
                 Factura.fecha_factura >= fecha_inicio,
                 Factura.fecha_factura <= fecha_fin,
                 Factura.estado == "Validada"
-            ).order_by(Factura.fecha_factura).all()
+            )
+            if tipo_doc:
+                q = q.filter(Factura.tipo_documento == tipo_doc)
+            facturas = q.order_by(Factura.fecha_factura).all()
             
             if not facturas:
                 show_error(f"No hay facturas validadas en {fecha_inicio.strftime('%B %Y')}")
@@ -795,11 +846,9 @@ class HistorialFacturasView(ft.Container):
             mes_nombre = fecha_inicio.strftime("%Y-%m").lower()
             nombre_archivo = f"libro_compras_{mes_nombre}.xlsx"
             
-            # Guardar workbook y nombre
             self._workbook = wb
             self._nombre_archivo = nombre_archivo
             
-            # Cerrar dialogo anterior
             for overlay in list(self.page.overlay):
                 if isinstance(overlay, ft.AlertDialog):
                     overlay.open = False

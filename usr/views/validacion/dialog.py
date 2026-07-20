@@ -19,10 +19,7 @@ class ValidacionDialog:
         self._build_ui()
     
     def _build_ui(self):
-        from usr.database.local_replica import LocalReplica
-        
-        usuario = LocalReplica.get_usuario_dispositivo()
-        nombre_usuario = usuario['nombre'] if usuario else "Sistema"
+        nombre_usuario = self.page.session.get("username") or "Sistema"
         
         dialog_width = 400 if self.is_mobile else 650
         
@@ -42,13 +39,13 @@ class ValidacionDialog:
             ft.Text(f"Se validarán {len(self.selected_entradas)} entrada(s)", weight="bold", size=14),
             ft.Container(height=5),
             self.ocr.get_ui(),
-            ft.Container(height=10),
+            ft.Container(height=5),
             self.fields.get_doc_section(),
-            ft.Container(height=10),
+            ft.Container(height=5),
             self.fields.get_monto_section(),
-            ft.Container(height=10),
+            ft.Container(height=5),
             self.payments.get_ui(),
-            ft.Container(height=10),
+            ft.Container(height=5),
             self.payments.get_resumen(),
             ft.Container(height=5),
             self.fields.get_validar_btn(),
@@ -74,7 +71,10 @@ class ValidacionDialog:
         return data
     
     def get_data(self):
-        return self.fields.get_data() | {'pagos': self.payments.get_pagos()}
+        return self.fields.get_data() | {
+            'pagos': self.payments.get_pagos(),
+            'validada_por': self.page.session.get("username") or 'Sistema'
+        }
     
     def set_on_validate(self, callback):
         self.fields.validar_btn.on_click = callback

@@ -10,6 +10,7 @@ class Factura(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     numero_factura = Column(String(50), nullable=False, index=True)
+    tipo_documento = Column(String(50), default="Factura", comment="Factura, Nota de Entrega, Entrada")
     proveedor = Column(String(200), nullable=True)
     
     # Fecha de la factura

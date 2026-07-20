@@ -73,34 +73,40 @@ class RequisicionesView(ft.Container):
         self.bgcolor = colors['bg']
         try:
             self._build_ui()
-            self._load_requisiciones()
-        except:
+        except Exception:
             pass
 
     def _build_ui(self):
-        colors = _colors(self.page)
+        self.colors = _colors(self.page)
         header = ft.Container(
             content=ft.Row([
                 ft.Column([
-                    ft.Text("Requisiciones", size=26, weight="bold", color=colors['text_primary']),
-                    ft.Text("Gestión de traslados", size=13, color=colors['text_secondary']),
+                    ft.Text("Requisiciones", size=26, weight="bold", color=self.colors['text_primary']),
+                    ft.Text("Gestión de traslados", size=13, color=self.colors['text_secondary']),
                 ], expand=True, spacing=0),
                 ft.IconButton(
+                    ft.Icons.REFRESH_ROUNDED,
+                    icon_color=self.colors['white'],
+                    bgcolor=self.colors['surface'],
+                    on_click=lambda _: self._on_refresh(),
+                    tooltip="Actualizar desde Supabase",
+                ),
+                ft.IconButton(
                     ft.Icons.ADD_ROUNDED,
-                    icon_color=colors['white'],
-                    bgcolor=colors['accent'],
+                    icon_color=self.colors['white'],
+                    bgcolor=self.colors['accent'],
                     on_click=lambda _: self._show_crear_vista(),
                     tooltip="Nueva requisición",
                 ),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=ft.padding.only(left=20, right=20, top=20, bottom=10),
-            bgcolor=colors['surface'],
+            bgcolor=self.colors['surface'],
         )
 
         self.list_container = ft.Container(
             content=self.requisiciones_list,
             expand=True,
-            bgcolor=colors['bg'],
+            bgcolor=self.colors['bg'],
         )
 
         self.content = ft.Column([
@@ -133,25 +139,38 @@ class RequisicionesView(ft.Container):
     def on_sync_complete(self):
         self._on_sync_complete()
 
+    def _on_refresh(self):
+        """Fuerza una sincronización con Supabase y recarga la lista."""
+        try:
+            show_info("Actualizando requisiciones...", duration=1)
+            self.page.run_task(self._do_refresh)
+        except Exception as e:
+            show_error("Error al refrescar", e)
+
+    async def _do_refresh(self):
+        try:
+            from usr.database.base import is_online as base_is_online
+            from usr.database import get_sync_manager
+
+            if base_is_online():
+                sync_mgr = get_sync_manager()
+                if sync_mgr:
+                    await asyncio.to_thread(sync_mgr.force_sync_now)
+            else:
+                await asyncio.to_thread(self._load_requisiciones)
+                show_success("Requisiciones actualizadas")
+        except Exception as e:
+            logger.error(f"Error en _do_refresh de RequisicionesView: {e}")
+            show_error("Error al actualizar requisiciones", e)
+
     def _load_requisiciones(self):
-        db = next(get_db_adaptive())
         try:
             reqs = RequisicionService.get_all_requisiciones(db)
 
             self.requisiciones_list.controls.clear()
 
             if not reqs:
-                colors = _colors(self.page)
-                self.requisiciones_list.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=50, color=colors['text_hint']),
-                            ft.Text("No hay requisiciones", color=colors['text_secondary']),
-                        ], horizontal_alignment="center"),
-                        padding=ft.padding.only(top=80),
-                        alignment=ft.alignment.top_center,
-                    )
-                )
+                self.requisiciones_list.controls.append(build_empty_state(_colors(self.page)))
             else:
                 for req in reqs:
                     card = build_requisicion_card(
@@ -167,9 +186,8 @@ class RequisicionesView(ft.Container):
             if self.page:
                 self.page.update()
         except Exception as e:
-            show_error("Error cargando requisiciones", e, "requisiciones_view._load_requisiciones")
-        finally:
-            db.close()
+            import traceback
+            traceback.print_exc()
 
     def _show_crear_vista(self, requisicion=None):
         self._vista_actual = "crear"

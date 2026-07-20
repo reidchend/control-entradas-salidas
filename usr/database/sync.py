@@ -20,6 +20,20 @@ class SyncManager:
         self._background_sync_enabled = False
         self._on_sync_complete_callbacks = []
         self._on_sync_complete = None  # Callback simple para sync completo
+        self._on_sync_progress = None  # Callback(msg: str) para progreso visual
+    
+    def set_sync_progress_callback(self, callback):
+        """Registra función a llamar con cada paso del sync (msg: str)."""
+        self._on_sync_progress = callback
+    
+    def _log(self, msg: str):
+        """Print + notificar progreso visual."""
+        print(msg)
+        if self._on_sync_progress:
+            try:
+                self._on_sync_progress(msg)
+            except Exception:
+                pass
     
     @property
     def engine(self):
@@ -48,7 +62,7 @@ class SyncManager:
             try:
                 callback()
             except Exception as e:
-                print(f"[SYNC] Error en callback: {e}")
+                self._log(f"[SYNC] Error en callback: {e}")
     
     def _get_session_maker(self):
         if self._session_local_getter:
@@ -62,7 +76,11 @@ class SyncManager:
     def _create_remote_engine(self):
         from sqlalchemy import create_engine
         from config.config import get_settings
-        return create_engine(get_settings().DATABASE_URL)
+        url = get_settings().DATABASE_URL
+        # Timeout de 15s para no bloquear si Supabase no responde
+        if 'pg8000' in url:
+            return create_engine(url, connect_args={'timeout': 15})
+        return create_engine(url, connect_args={'connect_timeout': 15})
     
     def check_connection(self) -> bool:
         """Verifica si hay conexión a la base de datos remota."""
@@ -91,11 +109,14 @@ class SyncManager:
         from .local_replica import LocalReplica
         
         if not self.check_connection():
-            print("[SYNC] Sin conexión, usando datos locales")
+            self._log("[SYNC] Sin conexión, usando datos locales")
             return False
         
-        print("[SYNC] Iniciando sincronización completa...")
+        self._log("[SYNC] Iniciando sincronización completa...")
         
+        # Cada paso es independiente: un fallo en uno no debe bloquear a los demás
+        # (p.ej. un error subiendo movimientos no debe impedir la descarga/poda de
+        #  requisiciones que ya fueron eliminadas en el servidor).
         try:
             # 1. Procesar cola de sync primero (facturas, pagos, etc.)
             #    Las facturas deben existir en Supabase antes de que los movimientos
@@ -109,27 +130,11 @@ class SyncManager:
             
             # 3. Descargar del servidor para alinear IDs
             self._download_all_from_server()
-            
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
-            print("[SYNC] Sincronización completa finalizada")
-            
-            # Notificar callback
-            if self._on_sync_complete:
-                try:
-                    self._on_sync_complete()
-                except Exception as e:
-                    print(f"[SYNC] Error en callback: {e}")
-            
-            # Notificar también al sistema global de vistas
-            try:
-                from .sync_callbacks import notify_sync_complete as notify_global
-                notify_global()
-            except Exception as e:
-                print(f"[SYNC] Error en notify_global: {e}")
-            
-            return True
+            self._log("[SYNC] Sincronización completa finalizada")
+            download_ok = True
         except Exception as e:
-            print(f"[SYNC] Error en sincronización: {e}")
+            self._log(f"[SYNC] Error en sincronización: {e}")
             import traceback
             traceback.print_exc()
             try:
@@ -137,7 +142,22 @@ class SyncManager:
                 show_sync_error(f"Error de sincronización: {type(e).__name__}")
             except:
                 pass
-            return False
+        
+        # Notificar callback (siempre, para refrescar vistas) si la descarga fue bien
+        if download_ok:
+            if self._on_sync_complete:
+                try:
+                    self._on_sync_complete()
+                except Exception as e:
+                    self._log(f"[SYNC] Error en callback: {e}")
+            
+            try:
+                from .sync_callbacks import notify_sync_complete as notify_global
+                notify_global()
+            except Exception as e:
+                self._log(f"[SYNC] Error en notify_global: {e}")
+        
+        return download_ok
     
     def _upload_pending_movimientos(self) -> int:
         from .local_replica import LocalReplica
@@ -147,12 +167,31 @@ class SyncManager:
 
         pending_movimientos = LocalReplica.get_movimientos_pendientes()
         if not pending_movimientos:
-            print("[SYNC] No hay movimientos pendientes")
+            self._log("[SYNC] No hay movimientos pendientes")
             return 0
 
         settings = get_settings()
         remote_engine = self._create_remote_engine()
         synced_count = 0
+
+        # Mapa local_factura_id -> numero_factura para resolver el id remoto
+        try:
+            facturas_local = {f['id']: f.get('numero_factura') for f in LocalReplica.get_facturas()}
+        except Exception:
+            facturas_local = {}
+
+        def resolver_factura_remota(conn, local_factura_id):
+            """Convierte el id local de factura en el id remoto (Supabase)."""
+            if not local_factura_id:
+                return None
+            num = facturas_local.get(local_factura_id)
+            if not num:
+                return None
+            row = conn.execute(
+                text("SELECT id FROM facturas WHERE numero_factura = :num"),
+                {'num': num}
+            ).fetchone()
+            return row[0] if row else None
 
         try:
             with remote_engine.connect() as conn:
@@ -237,11 +276,11 @@ class SyncManager:
                         LocalReplica.mark_movimiento_sincronizado(mov_id)
                         synced_count += 1
                     except Exception as e:
-                        print(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
+                        self._log(f"[SYNC] Error al subir movimiento {mov.get('id')}: {e}")
         finally:
             remote_engine.dispose()
 
-        print(f"[SYNC] {synced_count} movimientos subidos al servidor")
+        self._log(f"[SYNC] {synced_count} movimientos subidos al servidor")
         return synced_count
     
     def _download_all_from_server(self) -> bool:
@@ -282,19 +321,31 @@ class SyncManager:
         remote_engine = self._create_remote_engine()
         
         with remote_engine.connect() as conn:
+            # Migración remota: asegurar columna verificado en requisicion_detalles
+            try:
+                conn.execute(text("ALTER TABLE requisicion_detalles ADD COLUMN verificado INTEGER DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Resetear transacción para que SELECTs siguientes funcionen
+            
             for local_table, server_table in tables_to_sync:
                 try:
                     result = conn.execute(text(f"SELECT * FROM {server_table}"))
                     rows = result.fetchall()
                     data = [dict_to_serializable(dict(row._mapping)) for row in rows]
                     
+                    remote_ids = [r['id'] for r in data if r.get('id') is not None]
+                    
                     # Usar INSERT OR REPLACE para no perder datos locales sin sincronizar
                     if local_table == 'categorias':
                         LocalReplica.save_categorias(data)
+                        LocalReplica.delete_orphaned_records('categorias', remote_ids, 'nombre')
                     elif local_table == 'productos':
                         LocalReplica.save_productos(data)
+                        LocalReplica.delete_orphaned_records('productos', remote_ids, 'codigo')
                     elif local_table == 'proveedores':
                         LocalReplica.save_proveedores(data)
+                        LocalReplica.delete_orphaned_records('proveedores', remote_ids, 'nombre')
                     elif local_table == 'existencias':
                         LocalReplica.save_existencias(data)
                     elif local_table == 'movimientos':
@@ -303,28 +354,36 @@ class SyncManager:
                         LocalReplica.save_movimientos(data)
                     elif local_table == 'facturas':
                         LocalReplica.save_facturas(data)
+                        LocalReplica.delete_orphaned_records('facturas', remote_ids, 'numero_factura')
                     elif local_table == 'factura_pagos':
                         LocalReplica.save_factura_pagos(data)
+                        LocalReplica.delete_orphaned_records('factura_pagos', remote_ids)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
                     elif local_table == 'movimientos_archivo':
                         LocalReplica.clear_movimientos_archivo()
                         LocalReplica.save_movimientos_archivo(data)
                     
-                    print(f"[SYNC] {len(data)} {local_table} baixats")
+                    self._log(f"[SYNC] {len(data)} {local_table} baixats")
+
+
+
+
                 except Exception as e:
-                    print(f"[SYNC] Error descargando {local_table}: {e}")
+                    self._log(f"[SYNC] Error descargando {local_table}: {e}")
         
         remote_engine.dispose()
         
-        print("[SYNC] Descarga completada")
+        # Recalcular existencias después de la descarga
+        LocalReplica.recalculate_existencias()
+        self._log("[SYNC] Descarga completada")
         return True
     
     def start_background_sync(self, session_getter, interval_seconds: int = 20):
         """Inicia sincronización en segundo plano cada interval_seconds."""
-        print(f"[SYNC] start_background_sync() llamado con interval={interval_seconds}s")
+        self._log(f"[SYNC] start_background_sync() llamado con interval={interval_seconds}s")
         if self._sync_thread and self._sync_thread.is_alive():
-            print("[SYNC] Hilo ya está corriendo, no se inicia nuevo")
+            self._log("[SYNC] Hilo ya está corriendo, no se inicia nuevo")
             return
         
         self._session_local_getter = session_getter
@@ -336,14 +395,14 @@ class SyncManager:
             daemon=True
         )
         self._sync_thread.start()
-        print(f"[SYNC] Sync en segundo plano iniciado (intervalo: {interval_seconds}s)")
+        self._log(f"[SYNC] Sync en segundo plano iniciado (intervalo: {interval_seconds}s)")
     
     def stop_background_sync(self):
         self._stop_event.set()
         self._background_sync_enabled = False
         if self._sync_thread:
             self._sync_thread.join(timeout=2)
-        print("[SYNC] Sync en segundo plano detenido")
+        self._log("[SYNC] Sync en segundo plano detenido")
     
     def _background_sync_loop(self, interval):
         """Loop de sync en background."""
@@ -360,8 +419,8 @@ class SyncManager:
                     self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
-            except Exception as e:
-                print(f"[SYNC] Error en loop: {e}")
+                except Exception as e:
+                    self._log(f"[SYNC] Error descargando (loop): {e}")
             
             self._stop_event.wait(interval)
     
@@ -372,15 +431,16 @@ class SyncManager:
         
         # Verificar conexión antes de procesar
         if not self.check_connection():
-            print("[SYNC] Sin conexión, saltando procesamiento de cola")
+            self._log("[SYNC] Sin conexión, saltando procesamiento de cola")
             return
         
         queue = get_sync_queue()
         
         pending = queue.get_pending()
         
-        # Los movimientos se sincronizan via _upload_pending_movimientos (sincronizado=0)
-        pending = [p for p in pending if p.get('table_name') != 'movimientos']
+        # Los movimientos se sincronizan via _upload_pending_movimientos (sincronizado=0),
+        # excepto las eliminaciones que van por sync_queue con operation='delete'
+        pending = [p for p in pending if not (p.get('table_name') == 'movimientos' and p.get('operation') != 'delete')]
         
         if pending:
             # Usar conexión a Supabase para subir datos
@@ -391,15 +451,14 @@ class SyncManager:
             
             try:
                 uploaded = self._upload_to_remote(remote_engine, pending)
-                print(f"[SYNC] {uploaded} operaciones subidas a Supabase")
+                self._log(f"[SYNC] {uploaded} operaciones subidas a Supabase")
             except Exception as e:
-                print(f"[SYNC] Error al subir a Supabase: {e}")
+                self._log(f"[SYNC] Error al subir a Supabase: {e}")
             finally:
                 remote_engine.dispose()
         
-        LocalReplica.recalculate_existencias()
         queue.set_last_sync(datetime.now().isoformat())
-        print("[SYNC] Ciclo de sync completado")
+        self._log("[SYNC] Ciclo de sync completado")
     
     def _upload_to_remote(self, remote_engine, pending_items) -> int:
         """Sube elementos de la cola a Supabase usando SQL directo."""
@@ -462,7 +521,7 @@ class SyncManager:
                         if verify:
                             queue.mark_completed(item['id'])
                             uploaded += 1
-                            print(f"[SYNC] Categoría sincronizada")
+                            self._log(f"[SYNC] Categoría sincronizada")
                         else:
                             raise Exception("Error: Categoría no encontrada tras commit")
                         
@@ -517,7 +576,7 @@ class SyncManager:
                         conn.commit()
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Producto sincronizado")
+                        self._log(f"[SYNC] Producto sincronizado")
                     
                     elif table == 'movimientos' and operation == 'insert':
                         mov_data = {k: v for k, v in data.items() 
@@ -535,23 +594,25 @@ class SyncManager:
                         conn.execute(text("SELECT 1")).fetchone()
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Movimiento sincronizado")
+                        self._log(f"[SYNC] Movimiento sincronizado")
                     
                     elif table == 'movimientos' and operation == 'delete':
-                        # Eliminar movimiento por ID
-                        mov_id = data.get('id')
-                        if mov_id:
-                            conn.execute(text("DELETE FROM movimientos WHERE id = :id"), {"id": mov_id})
+                        # Eliminar movimiento por campos coincidentes (ID local != ID remoto)
+                        match_cond = "1=1"
+                        match_params = {}
+                        for key in ('producto_id', 'tipo', 'cantidad', 'fecha_movimiento', 'almacen'):
+                            val = data.get(key)
+                            if val is not None:
+                                match_cond += f" AND {key} = :{key}"
+                                match_params[key] = val
+                        if match_params:
+                            conn.execute(text(f"DELETE FROM movimientos WHERE {match_cond}"), match_params)
                             conn.commit()
-                            
-                            # Verificar eliminación
-                            verify = conn.execute(text("SELECT id FROM movimientos WHERE id = :id"), {"id": mov_id}).fetchone()
-                            if verify:
-                                raise Exception("Error: Movimiento aún existe tras eliminación")
-                            
                             queue.mark_completed(item['id'])
                             uploaded += 1
-                            print(f"[SYNC] Movimiento eliminado en Supabase")
+                            self._log(f"[SYNC] Movimiento eliminado en Supabase")
+                        else:
+                            self._log(f"[SYNC] WARN: delete movimiento sin datos coincidentes — {data}")
                     
                     elif table == 'facturas':
                         num_fact = data.get('numero_factura')
@@ -615,7 +676,7 @@ class SyncManager:
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Factura {num_fact} sincronizada (ID remoto: {remote_id})")
+                        self._log(f"[SYNC] Factura {num_fact} sincronizada (ID remoto: {remote_id})")
                     
                     elif table == 'factura_pagos':
                         fact_num = data.get('factura_numero')
@@ -643,11 +704,189 @@ class SyncManager:
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
-                        print(f"[SYNC] Pago de factura {fact_num} sincronizado")
+                        self._log(f"[SYNC] Pago de factura {fact_num} sincronizado")
+                        
+                    elif table == 'requisiciones':
+                        if operation == 'delete':
+                            num = data.get('numero')
+                            if num:
+                                # 1. Obtener el ID remoto usando el numero
+                                res = conn.execute(
+                                    text("SELECT id FROM requisiciones WHERE numero = :num"),
+                                    {'num': num}
+                                ).fetchone()
+                                
+                                if res:
+                                    remote_id = res[0]
+                                    # 2. Borrar primero los detalles para evitar errores de FK
+                                    conn.execute(
+                                        text("DELETE FROM requisicion_detalles WHERE requisicion_id = :rid"),
+                                        {'rid': remote_id}
+                                    )
+                                    # 3. Borrar la requisición
+                                    conn.execute(
+                                        text("DELETE FROM requisiciones WHERE id = :id"),
+                                        {'id': remote_id}
+                                    )
+                                    conn.commit()
+                                    queue.mark_completed(item['id'])
+                                    uploaded += 1
+                                    self._log(f"[SYNC] Requisición {num} y sus detalles eliminados en Supabase")
+                                else:
+                                    # Si no existe en el servidor, marcamos como completado igualmente
+                                    queue.mark_completed(item['id'])
+                                    uploaded += 1
+                                    self._log(f"[SYNC] Requisición {num} no encontrada en servidor, marcada como eliminada")
+                            else:
+                                self._log(f"[SYNC] Error: No se proporcionó número para eliminar requisición")
+                                queue.mark_completed(item['id'])
+                            continue
+
+                        num = data.get('numero')
+                        if not num:
+                            continue
+                        
+                        req_vals = {
+                            'numero': num,
+                            'numero_secuencial': int(data.get('numero_secuencial') or 0),
+                            'origen': data.get('origen'),
+                            'destino': data.get('destino'),
+                            'estado': data.get('estado', 'pendiente'),
+                            'observaciones': data.get('observaciones'),
+                            'creada_por': data.get('creada_por'),
+                            'procesada_por': data.get('procesada_por'),
+                            'fecha_procesamiento': data.get('fecha_procesamiento'),
+                            'fecha_creacion': data.get('fecha_creacion'),
+                            'actualizada': data.get('actualizada'),
+                        }
+                        
+                        check = conn.execute(
+                            text("SELECT id FROM requisiciones WHERE numero = :num"),
+                            {'num': num}
+                        ).fetchone()
+                        
+                        if check:
+                            remote_id = check[0]
+                            set_cols = ", ".join([f"{k} = :{k}" for k in req_vals.keys()])
+                            conn.execute(
+                                text(f"UPDATE requisiciones SET {set_cols} WHERE numero = :num"),
+                                req_vals | {'num': num}
+                            )
+                        else:
+                            cols = ", ".join(req_vals.keys())
+                            ph = ", ".join([f":{k}" for k in req_vals.keys()])
+                            res = conn.execute(
+                                text(f"INSERT INTO requisiciones ({cols}) VALUES ({ph}) RETURNING id"),
+                                req_vals
+                            )
+                            remote_id = res.fetchone()[0]
+                        conn.commit()
+                        
+                        # Reemplazar detalles en el servidor
+                        conn.execute(
+                            text("DELETE FROM requisicion_detalles WHERE requisicion_id = :rid"),
+                            {'rid': remote_id}
+                        )
+                        for det in data.get('detalles', []):
+                            conn.execute(text("""
+                                INSERT INTO requisicion_detalles
+                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
+                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida)
+                            """), {
+                                'requisicion_id': remote_id,
+                                'producto_id': det.get('producto_id'),
+                                'ingrediente': det.get('ingrediente'),
+                                'cantidad': det.get('cantidad', 0),
+                                'unidad': det.get('unidad', 'unidad'),
+                                'cantidad_surtida': det.get('cantidad_surtida', 0),
+                            })
+                        conn.commit()
+                        
+                        # Mapear id local -> remoto para no duplicar ni perder la requisición
+                        local_id = data.get('id')
+                        if local_id and local_id != remote_id:
+                            try:
+                                from .local_replica import LocalReplica
+                                LocalReplica.remap_requisicion_id(local_id, remote_id)
+                            except Exception as e:
+                                self._log(f"[SYNC] Error mapeando id de requisición: {e}")
+                        
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        self._log(f"[SYNC] Requisición {num} sincronizada (ID remoto: {remote_id})")
+                    
+                    elif table == 'requisicion_detalles' and operation == 'update':
+                        verificado = 1 if data.get('verificado') else 0
+                        det_id = data.get('id')
+                        req_id = data.get('requisicion_id')
+                        prod_id = data.get('producto_id')
+                        ingred = data.get('ingrediente')
+                        cant = data.get('cantidad')
+                        
+                        matched = False
+                        # Intentar por id (registros ya existentes en Supabase)
+                        if det_id:
+                            res = conn.execute(
+                                text("SELECT id FROM requisicion_detalles WHERE id = :id"),
+                                {'id': det_id}
+                            ).fetchone()
+                            if res:
+                                conn.execute(
+                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
+                                    {'v': verificado, 'id': det_id}
+                                )
+                                conn.commit()
+                                matched = True
+                        
+                        if not matched and req_id and prod_id and ingred:
+                            # Fallback: buscar por requisicion_id + producto_id + ingrediente + cantidad
+                            res = conn.execute(
+                                text("""SELECT id FROM requisicion_detalles 
+                                    WHERE requisicion_id = :rid AND producto_id = :pid 
+                                    AND ingrediente = :ing AND cantidad = :cant"""),
+                                {'rid': req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
+                            ).fetchone()
+                            if res:
+                                conn.execute(
+                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
+                                    {'v': verificado, 'id': res[0]}
+                                )
+                                conn.commit()
+                                matched = True
+                        
+                        if matched:
+                            queue.mark_completed(item['id'])
+                            uploaded += 1
+                            self._log(f"[SYNC] Detalle requisición verificado={verificado} sincronizado")
+                        else:
+                            self._log(f"[SYNC] No se encontró detalle de requisición en Supabase para actualizar verificado")
+                    
+                    elif table == 'kardex_validaciones' and operation == 'insert':
+                        reg_data = {
+                            'producto_id': data.get('producto_id'),
+                            'requisicion_id': data.get('requisicion_id'),
+                            'fecha': data.get('fecha'),
+                            'usuario': data.get('usuario'),
+                            'cantidad_fisica': data.get('cantidad_fisica'),
+                            'observacion': data.get('observacion'),
+                        }
+                        conn.execute(text("""
+                            INSERT INTO kardex_validaciones
+                            (producto_id, requisicion_id, fecha, usuario, cantidad_fisica, observacion)
+                            VALUES (:producto_id, :requisicion_id, :fecha, :usuario, :cantidad_fisica, :observacion)
+                        """), reg_data)
+                        conn.commit()
+                        queue.mark_completed(item['id'])
+                        uploaded += 1
+                        self._log(f"[SYNC] Kardex validación sincronizada")
                         
                 except Exception as e:
+                    try:
+                        conn.rollback()  # Reset transacción para que el siguiente item funcione
+                    except:
+                        pass
                     queue.mark_failed(item['id'], str(e))
-                    print(f"[SYNC] Error subiendo {table}: {e}")
+                    self._log(f"[SYNC] Error subiendo {table}: {e}")
         
         return uploaded
     

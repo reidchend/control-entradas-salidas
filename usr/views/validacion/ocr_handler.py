@@ -46,15 +46,15 @@ class OCRHandler:
     def _build_ui(self):
         self.image_preview = ft.Container(
             content=ft.Column([
-                ft.Icon(ft.Icons.IMAGE_OUTLINED, size=40, color=self.theme_colors.get('text_hint')),
-                ft.Text("Vista previa de factura", size=12, color=self.theme_colors.get('text_hint'))
+                ft.Icon(ft.Icons.IMAGE_OUTLINED, size=30, color=self.theme_colors.get('text_hint')),
+                ft.Text("Vista previa", size=11, color=self.theme_colors.get('text_hint'))
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             width=350,
-            height=180,
+            height=140,
             bgcolor=self.theme_colors.get('surface_variant', '#1e1e1e'),
             border=ft.border.all(1, self.theme_colors.get('border')),
             border_radius=12,
-            margin=ft.margin.only(bottom=10)
+            margin=ft.margin.only(bottom=5)
         )
 
         self.loading_bar = ft.ProgressBar(
@@ -242,8 +242,17 @@ class OCRHandler:
 
             if self.fields:
                 try:
+                    tipo_ocr = datos.get('tipo_documento', 'Factura')
+                    if tipo_ocr not in self.fields.tipo_documento_segmented.selected:
+                        self.fields.tipo_documento_segmented.selected = {tipo_ocr}
+                except Exception as ex:
+                    print(f"[WARN] Error llenando tipo_documento: {ex}")
+
+                try:
                     if datos.get('nro_factura'):
                         self.fields.factura_input.value = datos['nro_factura']
+                        if hasattr(self.fields, '_apply_tipo_prefix'):
+                            self.fields._apply_tipo_prefix()
                         if hasattr(self.fields, 'check_validar_button'):
                             self.fields.check_validar_button()
                 except Exception as ex:
@@ -266,6 +275,18 @@ class OCRHandler:
                             self.status_text.value = "✨ Nuevo proveedor detectado"
                 except Exception as ex:
                     print(f"[WARN] Error llenando proveedor: {ex}")
+
+                try:
+                    if not datos.get('proveedor') and datos.get('tipo_documento') == 'Entrada':
+                        existing_keys = [o.key for o in self.fields.proveedor_dd.options]
+                        if "Varios" not in existing_keys:
+                            self.fields.proveedor_dd.options.insert(
+                                0, ft.dropdown.Option("Varios", "Varios (Entrada sin proveedor)")
+                            )
+                        self.fields.proveedor_dd.value = "Varios"
+                        self.status_text.value = "✅ Proveedor asignado: Varios (Entrada sin proveedor)"
+                except Exception as ex:
+                    print(f"[WARN] Error asignando proveedor Varios: {ex}")
 
                 try:
                     if hasattr(self.fields, 'check_validar_button'):
