@@ -342,19 +342,17 @@ class StockView(ft.Container):
         if hasattr(self, 'list_container') and self.list_container.content is not self.productos_list:
             self.list_container.content = self.productos_list
 
-        total = len(productos)
+        self.total_productos_text.value = str(len(productos))
         bajo = 0
-        sin_stock = 0
+        sin = 0
         for p in productos:
-            stock_actual = sum(existencias_map.get(p.id, {}).values()) or 0
-            stock_minimo = p.stock_minimo or 0
-            if stock_actual <= 0:
-                sin_stock += 1
-            elif stock_actual <= stock_minimo:
+            stock_total = sum(existencias_map.get(p.id, {}).values()) or 0
+            if stock_total <= 0:
+                sin += 1
+            elif stock_total <= (p.stock_minimo or 0):
                 bajo += 1
-        self.total_productos_text.value = str(total)
         self.stock_bajo_text.value = str(bajo)
-        self.sin_stock_text.value = str(sin_stock)
+        self.sin_stock_text.value = str(sin)
 
         self.productos_list.controls.clear()
         

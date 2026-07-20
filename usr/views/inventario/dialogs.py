@@ -196,16 +196,20 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
     colors = get_safe_colors(view.page)
     producto_id = item["producto_id"]
     nombre = item["nombre"]
+    unidad = "unidad"
     try:
         existencia = LocalReplica.get_existencias_by_producto_almacen(producto_id, almacen)
         stock_actual = existencia.get("cantidad", 0) if existencia else 0
+        unidad = existencia.get("unidad", "unidad") if existencia else "unidad"
     except Exception as ex:
         show_error_notif(f"Error cargando datos de corrección: {ex}")
         return
 
+    es_kg = unidad == 'kg'
+
     cantidad_input = ft.TextField(
-        label="Cantidad física real",
-        value=str(int(stock_actual)),
+        label=f"Cantidad física real ({unidad})",
+        value=f"{stock_actual:.2f}" if es_kg else str(int(stock_actual)),
         keyboard_type=ft.KeyboardType.NUMBER,
         autofocus=True, border_radius=10, text_size=16,
         border_color=colors['input_border'],
@@ -213,7 +217,8 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
 
     def _al_confirmar(e):
         try:
-            cantidad_fisica = int(float(cantidad_input.value.replace(",", "").replace(" ", "")))
+            valor_limpio = cantidad_input.value.replace(",", ".").replace(" ", "")
+            cantidad_fisica = float(valor_limpio) if es_kg else int(float(valor_limpio))
             if cantidad_fisica < 0:
                 raise ValueError()
         except (ValueError, AttributeError):
@@ -228,14 +233,21 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
             show_success("Sin diferencia, no se crea movimiento.")
             return
 
+        fmt_val = ".2f" if es_kg else ".0f"
+        fmt_diff = ".2f" if es_kg else ".0f"
+
         if diferencia > 0:
             tipo = "ajuste"
             cantidad = diferencia
-            msg = f"Stock físico ({cantidad_fisica:.0f}) > Sistema ({stock_actual:.0f})\n¿Crear ajuste de +{diferencia:.0f} unidades?"
+            msg = (f"Stock físico ({format(cantidad_fisica, fmt_val)}) > "
+                   f"Sistema ({format(stock_actual, fmt_val)}) {unidad}\n"
+                   f"¿Crear ajuste de +{format(diferencia, fmt_diff)} {unidad}?")
         else:
             tipo = "salida"
             cantidad = abs(diferencia)
-            msg = f"Stock físico ({cantidad_fisica:.0f}) < Sistema ({stock_actual:.0f})\n¿Crear salida de {cantidad:.0f} unidades?"
+            msg = (f"Stock físico ({format(cantidad_fisica, fmt_val)}) < "
+                   f"Sistema ({format(stock_actual, fmt_val)}) {unidad}\n"
+                   f"¿Crear salida de {format(cantidad, fmt_diff)} {unidad}?")
 
         def _confirmar_correccion(e2):
             try:
@@ -243,7 +255,10 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
                 from usr.views.inventario.movements import registrar_movimiento
                 prod_obj = LocalReplica.get_producto_by_id(producto_id)
                 producto = type("Producto", (), prod_obj)() if isinstance(prod_obj, dict) else prod_obj
-                registrar_movimiento(view.page, producto, tipo, cantidad, almacen=almacen)
+                if es_kg:
+                    registrar_movimiento(view.page, producto, tipo, cantidad, peso_total=cantidad, almacen=almacen)
+                else:
+                    registrar_movimiento(view.page, producto, tipo, cantidad, almacen=almacen)
                 if on_success:
                     on_success()
             except Exception as ex:
@@ -270,7 +285,7 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
             ft.Container(height=8),
             ft.Container(
                 content=ft.Column([
-                    ft.Text(f"Stock actual (sistema): {stock_actual:.0f}", size=13, color=colors['text_secondary']),
+                    ft.Text(f"Stock actual (sistema): {format(stock_actual, '.2f' if es_kg else '.0f')} {unidad}", size=13, color=colors['text_secondary']),
                     ft.Text("Ingresa la cantidad real en físico:", size=12, color=colors['text_secondary']),
                 ]),
                 bgcolor=colors['card_hover'], padding=12, border_radius=8,
@@ -292,10 +307,14 @@ def show_correccion_dialog(view, item, almacen, on_success=None):
 
 
 def show_agregar_producto_dialog(view):
-    from usr.database.local_replica import LocalReplica
-    from usr.database.conn import get_local_conn
-    colors = get_safe_colors(view.page)
-    productos_cache = LocalReplica.get_productos()
+    try:
+        from usr.database.local_replica import LocalReplica
+        from usr.database.conn import get_local_conn
+        colors = get_safe_colors(view.page)
+        productos_cache = LocalReplica.get_productos()
+    except Exception as ex:
+        show_error_notif(f"Error cargando productos: {ex}")
+        return
 
     search_input = ft.TextField(
         label="Buscar producto...",

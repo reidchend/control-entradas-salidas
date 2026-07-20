@@ -6,7 +6,7 @@ from usr.database.base import get_db, get_db_adaptive
 from usr.database.sync import get_sync_manager
 from usr.database.sync_callbacks import register_sync_callback, unregister_sync_callback
 from usr.database.cache import get_cache
-from usr.models import Factura, Movimiento, Producto, FacturaPago
+from usr.models import Factura, Movimiento, MovimientoArchivo, Producto, FacturaPago
 from sqlalchemy.orm import joinedload
 from usr.theme import get_theme, get_colors
 from usr.notifications import show_error, show_success
@@ -69,6 +69,8 @@ class HistorialFacturasView(ft.Container):
         self._periodo_seleccionado = "hoy"
         self._periodo_buttons = {}
         self._fecha_especifica = None
+        self._filtro_fecha_inicio = None
+        self._filtro_fecha_fin = None
         
         # FilePicker para exportar
         self.file_picker = ft.FilePicker(on_result=self._on_file_save)
@@ -161,8 +163,8 @@ class HistorialFacturasView(ft.Container):
 
         self.content = ft.Column([header, tabs], expand=True, spacing=0)
         
-        # Agregar file_picker a la página
-        if self.page:
+        # Agregar file_picker a la página (solo si no está ya)
+        if self.page and self.file_picker not in self.page.overlay:
             self.page.overlay.append(self.file_picker)
     
     def _on_file_save(self, e: ft.FilePickerResultEvent):
@@ -176,11 +178,74 @@ class HistorialFacturasView(ft.Container):
 
     def _build_facturas_tab(self):
         colors = _colors(self.page)
+
+        def _pick_inicio(e):
+            def on_pick(e):
+                if e.control.value:
+                    self._filtro_fecha_inicio = e.control.value
+                    self._btn_fecha_inicio.text = f"📅 {e.control.value.strftime('%d/%m/%Y')}"
+                    self._btn_fecha_inicio.update()
+                    self._load_facturas()
+            self.page.overlay.append(ft.DatePicker(on_change=on_pick))
+            self.page.overlay[-1].open = True
+            self.page.update()
+
+        def _pick_fin(e):
+            def on_pick(e):
+                if e.control.value:
+                    self._filtro_fecha_fin = e.control.value
+                    self._btn_fecha_fin.text = f"📅 {e.control.value.strftime('%d/%m/%Y')}"
+                    self._btn_fecha_fin.update()
+                    self._load_facturas()
+            self.page.overlay.append(ft.DatePicker(on_change=on_pick))
+            self.page.overlay[-1].open = True
+            self.page.update()
+
+        def _limpiar_filtro_fecha(e):
+            self._filtro_fecha_inicio = None
+            self._filtro_fecha_fin = None
+            self._btn_fecha_inicio.text = "📅 Inicio"
+            self._btn_fecha_fin.text = "📅 Fin"
+            self._btn_fecha_inicio.update()
+            self._btn_fecha_fin.update()
+            self._load_facturas()
+
+        self._btn_fecha_inicio = ft.TextButton(
+            text="📅 Inicio",
+            on_click=_pick_inicio,
+            style=ft.ButtonStyle(color=colors['accent']),
+        )
+        self._btn_fecha_fin = ft.TextButton(
+            text="📅 Fin",
+            on_click=_pick_fin,
+            style=ft.ButtonStyle(color=colors['accent']),
+        )
+
+        fecha_filtro_row = ft.Container(
+            content=ft.Row([
+                self._btn_fecha_inicio,
+                ft.Text("→", color=colors['text_secondary'], size=14),
+                self._btn_fecha_fin,
+                ft.IconButton(
+                    ft.Icons.CLOSE,
+                    icon_size=16,
+                    icon_color=colors['text_secondary'],
+                    on_click=_limpiar_filtro_fecha,
+                    tooltip="Limpiar filtro",
+                ),
+            ], spacing=2),
+            padding=ft.padding.symmetric(horizontal=4, vertical=0),
+        )
+
         filtros = ft.Container(
-            content=ft.Row(
-                [self.search_field, self.clear_search_btn], 
-                spacing=5,
-            ),
+            content=ft.Column([
+                ft.Row([self.search_field, self.clear_search_btn], spacing=5),
+                ft.Divider(height=1, color=colors['border']),
+                ft.Row([
+                    ft.Text("Filtrar por fecha:", size=11, color=colors['text_secondary']),
+                    fecha_filtro_row,
+                ], spacing=5, vertical_alignment="center"),
+            ], spacing=4),
             padding=ft.padding.symmetric(horizontal=15, vertical=8),
             bgcolor=colors['card'],
             margin=ft.margin.symmetric(horizontal=10),
@@ -363,7 +428,14 @@ class HistorialFacturasView(ft.Container):
         db = None
         try:
             db = next(get_db_adaptive())
-            self.facturas_data = db.query(Factura).order_by(Factura.fecha_factura.desc()).all()
+            query = db.query(Factura)
+            if self._filtro_fecha_inicio:
+                query = query.filter(Factura.fecha_factura >= self._filtro_fecha_inicio)
+            if self._filtro_fecha_fin:
+                from datetime import timedelta
+                fin = self._filtro_fecha_fin + timedelta(days=1)
+                query = query.filter(Factura.fecha_factura < fin)
+            self.facturas_data = query.order_by(Factura.fecha_factura.desc()).all()
             self._apply_filters()
         except Exception as e:
             show_error(f"Error cargando facturas: {str(e)}")
@@ -556,46 +628,43 @@ class HistorialFacturasView(ft.Container):
         )
 
     # ─── DIÁLOGOS Y DETALLES ────────────────────────────────────────
-    async def _show_factura_detalle(self, f):
-        try:
-            colors = _colors(self.page)
-            
-            def fetch_items():
-                db = next(get_db_adaptive())
-                try:
-                    return db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(Movimiento.factura_id == f.id).all()
-                finally:
-                    db.close()
-            
-            items = await asyncio.to_thread(fetch_items)
-            
-            lista_items = ft.ListView(expand=True, spacing=5)
-            for i in items:
-                lista_items.controls.append(
-                    ft.ListTile(
-                        leading=ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=20, color=colors['accent']),
-                        title=ft.Text(i.producto.nombre if i.producto else "Producto", size=13, weight="bold"),
-                        subtitle=ft.Text(f"Cant: {int(i.cantidad)} | Peso: {i.peso_total or 0:.2f} kg", size=11),
-                        dense=True
-                    )
+    def _show_factura_detalle(self, f):
+        colors = _colors(self.page)
+        db = next(get_db_adaptive())
+        items_mov = db.query(Movimiento).options(joinedload(Movimiento.producto)).filter(Movimiento.factura_id == f.id).all()
+        items_arch = db.query(MovimientoArchivo).filter(MovimientoArchivo.factura_id == f.id).all()
+        prod_ids = {i.producto_id for i in items_arch}
+        prods = {p.id: p for p in db.query(Producto).filter(Producto.id.in_(prod_ids)).all()} if prod_ids else {}
+        db.close()
+
+        lista_items = ft.ListView(expand=True, spacing=5)
+        for i in items_mov:
+            lista_items.controls.append(
+                ft.ListTile(
+                    leading=ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=20, color=colors['accent']),
+                    title=ft.Text(i.producto.nombre if i.producto else "Producto", size=13, weight="bold"),
+                    subtitle=ft.Text(f"Cant: {int(i.cantidad)} | Peso: {i.peso_total or 0:.2f} kg", size=11),
+                    dense=True
                 )
-            
-            def close_dlg(e):
-                if self.factura_dlg:
-                    self.factura_dlg.open = False
-                    if self.page and self.visible:
-                        self.page.update()
-            
-            if self.factura_dlg is None:
-                self.factura_dlg = ft.AlertDialog(
-                    actions_alignment=ft.MainAxisAlignment.END,
+            )
+        for i in items_arch:
+            prod = prods.get(i.producto_id)
+            lista_items.controls.append(
+                ft.ListTile(
+                    leading=ft.Icon(ft.Icons.ARCHIVE_OUTLINED, size=20, color=colors.get('warning', colors['text_hint'])),
+                    title=ft.Text(prod.nombre if prod else "Producto", size=13, weight="bold"),
+                    subtitle=ft.Text(f"Cant: {int(i.cantidad)} | Peso: {i.peso_total or 0:.2f} kg (archivado)", size=11),
+                    dense=True
                 )
-            
-            if self.factura_dlg not in self.page.overlay:
-                self.page.overlay.append(self.factura_dlg)
-            
-            self.factura_dlg.title = ft.Text(f"Detalle Factura #{f.numero_factura}")
-            self.factura_dlg.content = ft.Container(
+            )
+
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text(f"Detalle Factura #{f.numero_factura}"),
+            content=ft.Container(
                 content=ft.Column([
                     ft.Text(f"Proveedor: {f.proveedor or 'N/A'}", size=14, weight="w500"),
                     ft.Divider(height=20, color=_c(self.page, 'GREY_200')),
@@ -785,9 +854,10 @@ class HistorialFacturasView(ft.Container):
                     overlay.open = False
             self.page.update()
             
+            # Abrir diálogo nativo para elegir ruta de guardado
             self.file_picker.save_file(
+                allowed_extensions=["xlsx"],
                 file_name=nombre_archivo,
-                allowed_extensions=["xlsx"]
             )
             
             db.close()
@@ -825,11 +895,42 @@ class HistorialFacturasView(ft.Container):
         dlg.open = True
         self.page.update()
     
-    def _on_file_save(self, e: ft.FilePickerResultEvent):
-        if e.path:
-            try:
-                self._workbook.save(e.path)
-                show_success(f"Archivo guardado: {e.path}")
-            except Exception as ex:
-                show_error(f"Error: {ex}")
+    def _mostrar_descarga(self, workbook, nombre):
+        colors = _colors(self.page)
+        
+        # Guardar en carpeta exports (ruta fija)
+        exports_dir = "/workspaces/control-entradas-salidas/exports"
+        os.makedirs(exports_dir, exist_ok=True)
+        export_path = os.path.join(exports_dir, nombre)
+        
+        try:
+            workbook.save(export_path)
+            msg = f"Archivo guardado en:\nexports/{nombre}"
+            show_msg = f"✅ Archivo guardado\nexports/{nombre}"
+        except Exception as e:
+            msg = f"Error: {str(e)}"
+            show_msg = f"❌ Error: {str(e)}"
+        
+        show_success(show_msg)
+        
+        # Mostrar diálogo con info
+        def close_and_update(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("📥 Excel Exportado"),
+            content=ft.Column([
+                ft.Text(f"Archivo: {nombre}", weight="bold", size=14),
+                ft.Text(msg, color=colors['success'], size=12),
+                ft.Divider(),
+                ft.Text("El archivo se encuentra en la carpeta 'exports' del proyecto.", 
+                     color=colors['text_hint'], size=11),
+            ], spacing=10),
+            actions=[
+                ft.TextButton("Cerrar", on_click=close_and_update),
+            ]
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
         self.page.update()
