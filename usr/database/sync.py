@@ -419,8 +419,8 @@ class SyncManager:
                     self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
-                except Exception as e:
-                    self._log(f"[SYNC] Error descargando (loop): {e}")
+            except Exception as e:
+                self._log(f"[SYNC] Error descargando (loop): {e}")
             
             self._stop_event.wait(interval)
     
