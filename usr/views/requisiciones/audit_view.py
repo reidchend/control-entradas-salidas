@@ -34,9 +34,6 @@ class AuditView(ft.Container):
     def _build_ui(self):
         self.colors = _colors(self.page)
         
-    def _build_ui(self):
-        self.colors = _colors(self.page)
-        
         # Header - Rediseñado para evitar desbordamiento en móvil
         self.header = ft.Column([
             ft.Row([
@@ -363,16 +360,31 @@ class AuditView(ft.Container):
         _forzar_sync()
 
     def _on_totalizar(self, _):
-        # Check if all verified
+        if getattr(self, '_totalizando', False):
+            return
         unverified = [i['ingrediente'] for i in self.audit_data['items'] if not i['verificado']]
         if unverified:
             show_warning(f"Hay productos no verificados: {', '.join(unverified[:3])}...")
             return
-            
+
+        self._totalizando = True
+        btn = None
+        for c in self.header.controls[1].controls:
+            if isinstance(c, ft.ElevatedButton) and c.text == "Totalizar":
+                btn = c
+                break
+        if btn:
+            btn.disabled = True
+            self.page.update()
+
         try:
             if totalizar_requisicion(self.req_id):
                 show_success("Requisición totalizada y stock trasladado")
                 _forzar_sync()
                 self.on_back()
         except Exception as e:
+            self._totalizando = False
+            if btn:
+                btn.disabled = False
+                self.page.update()
             show_error(f"Error al totalizar: {e}")

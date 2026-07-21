@@ -312,6 +312,7 @@ class SyncManager:
             ('facturas', 'facturas'), 
             ('factura_pagos', 'factura_pagos'),
             ('requisiciones', 'requisiciones'),
+            ('requisicion_detalles', 'requisicion_detalles'),
             ('movimientos_archivo', 'movimientos_archivo')
         ]
         
@@ -360,6 +361,8 @@ class SyncManager:
                         LocalReplica.delete_orphaned_records('factura_pagos', remote_ids)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
+                    elif local_table == 'requisicion_detalles':
+                        LocalReplica.save_requisicion_detalles(data)
                     elif local_table == 'movimientos_archivo':
                         LocalReplica.clear_movimientos_archivo()
                         LocalReplica.save_movimientos_archivo(data)
@@ -790,8 +793,8 @@ class SyncManager:
                         for det in data.get('detalles', []):
                             conn.execute(text("""
                                 INSERT INTO requisicion_detalles
-                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
-                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida)
+                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida, verificado)
+                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida, :verificado)
                             """), {
                                 'requisicion_id': remote_id,
                                 'producto_id': det.get('producto_id'),
@@ -799,6 +802,7 @@ class SyncManager:
                                 'cantidad': det.get('cantidad', 0),
                                 'unidad': det.get('unidad', 'unidad'),
                                 'cantidad_surtida': det.get('cantidad_surtida', 0),
+                                'verificado': 1 if det.get('verificado') else 0,
                             })
                         conn.commit()
                         
@@ -817,49 +821,43 @@ class SyncManager:
                     
                     elif table == 'requisicion_detalles' and operation == 'update':
                         verificado = 1 if data.get('verificado') else 0
-                        det_id = data.get('id')
-                        req_id = data.get('requisicion_id')
+                        req_num = data.get('numero')
                         prod_id = data.get('producto_id')
                         ingred = data.get('ingrediente')
                         cant = data.get('cantidad')
                         
-                        matched = False
-                        # Intentar por id (registros ya existentes en Supabase)
-                        if det_id:
-                            res = conn.execute(
-                                text("SELECT id FROM requisicion_detalles WHERE id = :id"),
-                                {'id': det_id}
-                            ).fetchone()
-                            if res:
-                                conn.execute(
-                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
-                                    {'v': verificado, 'id': det_id}
-                                )
-                                conn.commit()
-                                matched = True
+                        if not req_num or not prod_id or not ingred:
+                            queue.mark_failed(item['id'], "Faltan datos (numero/producto/ingrediente)")
+                            continue
                         
-                        if not matched and req_id and prod_id and ingred:
-                            # Fallback: buscar por requisicion_id + producto_id + ingrediente + cantidad
-                            res = conn.execute(
-                                text("""SELECT id FROM requisicion_detalles 
-                                    WHERE requisicion_id = :rid AND producto_id = :pid 
-                                    AND ingrediente = :ing AND cantidad = :cant"""),
-                                {'rid': req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
-                            ).fetchone()
-                            if res:
-                                conn.execute(
-                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
-                                    {'v': verificado, 'id': res[0]}
-                                )
-                                conn.commit()
-                                matched = True
+                        # Buscar requisición en Supabase por número (business key única)
+                        req_res = conn.execute(
+                            text("SELECT id FROM requisiciones WHERE numero = :num"),
+                            {'num': req_num}
+                        ).fetchone()
+                        if not req_res:
+                            queue.mark_failed(item['id'], f"Requisición {req_num} no existe en Supabase")
+                            continue
+                        remote_req_id = req_res[0]
                         
-                        if matched:
+                        res = conn.execute(
+                            text("""SELECT id FROM requisicion_detalles 
+                                WHERE requisicion_id = :rid AND producto_id = :pid 
+                                AND ingrediente = :ing AND cantidad = :cant"""),
+                            {'rid': remote_req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
+                        ).fetchone()
+                        if res:
+                            conn.execute(
+                                text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
+                                {'v': verificado, 'id': res[0]}
+                            )
+                            conn.commit()
                             queue.mark_completed(item['id'])
                             uploaded += 1
                             self._log(f"[SYNC] Detalle requisición verificado={verificado} sincronizado")
                         else:
-                            self._log(f"[SYNC] No se encontró detalle de requisición en Supabase para actualizar verificado")
+                            queue.mark_failed(item['id'], "Detalle no encontrado en Supabase")
+                            self._log(f"[SYNC] Detalle no encontrado en Supabase para req={req_num}")
                     
                     elif table == 'kardex_validaciones' and operation == 'insert':
                         reg_data = {
