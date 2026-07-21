@@ -18,14 +18,14 @@ El sistema utiliza una arquitectura de **Réplica Local**:
 - **LocalReplica**: Una base de datos SQLite local que imita el esquema de Supabase.
 - **SyncQueue**: Cuando el usuario realiza un cambio offline, la operación se guarda en `pending_operations`.
 - **Bidireccionalidad**: 
-  - **Subida**: Procesa la cola de pendientes $\rightarrow$ Supabase.
-  - **Descarga**: Descarga cambios remotos $\rightarrow$ SQLite $\rightarrow$ Poda de registros huérfanos.
+  - **Subida**: Procesa la cola de pendientes → Supabase.
+  - **Descarga**: Descarga cambios remotos → SQLite → Poda de registros huérfanos.
 
 ### 3. Flujo de Requisiciones (Audit Workflow)
 El módulo de requisiciones implementa un proceso de control de calidad:
 - **Pendiente**: Registro inicial de solicitud.
 - **Auditoría**: Vista de verificación donde se compara el stock físico vs sistema. Permite realizar **Ajustes de Stock** inmediatos.
-- **Totalización**: Traslada físicamente el stock (Origen $\rightarrow$ Destino) y marca la requisición como `completada`, registrando la validación en el `kardex_validaciones`.
+- **Totalización**: Traslada físicamente el stock (Origen → Destino) y marca la requisición como `completada`, registrando la validación en el `kardex_validaciones`.
 
 ---
 
@@ -33,24 +33,55 @@ El módulo de requisiciones implementa un proceso de control de calidad:
 
 ```text
 control-entradas-salidas/
-├── main.py                    # Entry point: Maneja la redirección a app_updates/
+├── main.py                              # Entry point: Maneja la redirección a app_updates/
 ├── usr/
 │   ├── database/
-│   │   ├── conn.py            # Conexiones SQLite/Supabase
-│   │   ├── local_replica.py   # Definición de tablas SQLite y migraciones locales
-│   │   ├── sync.py            # Lógica core de sincronización y poda de huérfanos
-│   │   └── sync_queue.py      # Gestión de operaciones pendientes
-│   ├── models/                # Definiciones de SQLAlchemy (Esquema de datos)
-│   │   ├── producto.py        # Atributos: es_pesable, tipo, etc.
-│   │   └── requisicion.py     # Modelos de Requisición y Detalle (incluye verificado)
-│   └── views/                 # UI desarrollada con Flet
-│       ├── requisiciones/
-│       │   ├── data.py        # Lógica de negocio de requisiciones (CRUD + Audit)
-│       │   ├── audit_view.py  # Vista de verificación y totalización
-│       │   └── visualize_view.py # Vista de solo lectura simplificada
-│       └── ...                # Otras vistas (Inventario, Stock, etc.)
+│   │   ├── conn.py                      # Conexiones SQLite/Supabase + gestión de ruta BD
+│   │   ├── local_replica.py             # Definición de tablas SQLite y migraciones locales
+│   │   ├── sync.py                      # Lógica core de sincronización, poda de huérfanos, timeout 15s
+│   │   └── sync_queue.py                # Gestión de operaciones pendientes
+│   ├── models/                          # Definiciones de SQLAlchemy (Esquema de datos)
+│   │   ├── producto.py                  # Atributos: es_pesable, tipo, etc.
+│   │   └── requisicion.py               # Modelos de Requisición y Detalle (incluye verificado)
+│   ├── views/                           # UI desarrollada con Flet
+│   │   ├── requisiciones/
+│   │   │   ├── data.py                  # Lógica de negocio de requisiciones (CRUD + Audit)
+│   │   │   ├── audit_view.py            # Vista de verificación y totalización
+│   │   │   ├── visualize_view.py        # Vista de solo lectura + compartir (copiar/guardar .txt)
+│   │   │   ├── components.py            # Tarjetas de requisición (iconos compactos)
+│   │   │   ├── dialogs.py               # Diálogos de creación/edición
+│   │   │   └── helpers.py               # Utilidades de color/tema
+│   │   ├── stock/
+│   │   │   ├── data.py                  # Operaciones de stock/movimientos
+│   │   │   ├── helpers.py               # Utilidades de stock
+│   │   │   ├── components.py            # Componentes reutilizables de stock
+│   │   │   └── dialogs.py               # Diálogos de ajuste/entrada/salida
+│   │   ├── validacion/
+│   │   │   ├── service.py               # Servicio de validación/kardex
+│   │   │   ├── payments.py              # Gestión de pagos
+│   │   │   ├── fields.py                # Campos personalizados
+│   │   │   ├── dialog.py                # Diálogos de validación
+│   │   │   ├── ocr_handler.py           # Procesamiento OCR
+│   │   │   └── __init__.py
+│   │   ├── inventario/
+│   │   │   ├── data.py                  # Operaciones de inventario
+│   │   │   ├── helpers.py               # Utilidades de inventario
+│   │   │   ├── components.py            # Componentes reutilizables
+│   │   │   ├── dialogs.py               # Diálogos de inventario
+│   │   │   ├── shopping_list.py         # Lista de compras
+│   │   │   └── movements.py             # Movimientos de stock
+│   │   ├── login_view.py                # Login / Registro / PIN
+│   │   ├── configuracion_view.py        # Configuración + test conexión + sync manual
+│   │   ├── historial_facturas_view.py   # Historial de facturas
+│   │   ├── producciones_view.py         # Módulo de producciones
+│   │   ├── requisiciones_view.py        # Vista principal (lista + navegación)
+│   │   ├── stock_view.py                # Vista de stock/almacenes
+│   │   ├── validacion_view.py           # Vista de validaciones/kardex
+│   │   └── whatsapp_bandeja_view.py     # Bandeja WhatsApp
+│   └── widgets/
+│       └── sync_status_bar.py           # Barra visual de progreso del sync
 └── config/
-    └── config.py              # Configuración centralizada con Pydantic
+    └── config.py                        # Configuración centralizada con Pydantic
 ```
 
 ---
@@ -71,6 +102,10 @@ control-entradas-salidas/
 - **Causa**: Uso de rutas relativas que crean una DB en la raíz y otra en `app_updates/`.
 - **Solución**: Siempre utilizar rutas absolutas obtenidas mediante `os.path.abspath` en `usr/database/conn.py`.
 
+#### 4. Stock con decimales infinitos (ej. -4.4399999999999995)
+- **Causa**: Error de precisión de punto flotante IEEE 754 al sumar/restar movimientos sucesivamente.
+- **Solución**: `recalculate_existencias()` en `local_replica.py` redondea el resultado final a 4 decimales antes de guardar.
+
 ---
 
 ## 📈 Flujo de Trabajo para Desarrolladores
@@ -83,7 +118,7 @@ control-entradas-salidas/
 
 ### Para publicar un parche (Hotfix):
 1. Subir los cambios a la rama `main` de GitHub.
-2. El GitHub Action generará el `update.zip` automáticamente.
+2. El GitHub Action (configurar en `.github/workflows/`) generará el `update.zip` automáticamente.
 3. Actualizar el número de versión en `version.json`.
 4. El cliente descargará el parche al reiniciar.
 
@@ -107,4 +142,17 @@ main.py
 ```
 
 ---
-**Soporte**: Reportar errores en [Issues de GitHub](https://github.com/anomalyco/opencode/issues)
+
+## 🔧 Estado Actual / Pendientes
+
+- [x] Sincronización bidireccional con timeout 15s y rollback en ALTER TABLE
+- [x] Barra de progreso visual del sync (`SyncStatusBar`)
+- [x] Engine SQLite se regenera solo si cambia la ruta de la BD
+- [x] Redondeo de stock a 4 decimales (elimina ruido flotante)
+- [x] Compartir requisición: copiar al portapapeles + guardar .txt nativo
+- [ ] Workflow GitHub Actions para build automático de `update.zip`
+- [ ] Tests unitarios para motor de sincronización
+
+---
+
+**Soporte**: Reportar errores en [Issues de GitHub](https://github.com/reidchend/control-entradas-salidas/issues)
