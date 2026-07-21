@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/workspaces/control-entradas-salidas/main.py", line 417, in main
+    from usr.views.login_view import LoginView
+  File "/workspaces/control-entradas-salidas/usr/views/__init__.py", line 5, in <module>
+    from .historial_facturas_view import HistorialFacturasView
+  File "/workspaces/control-entradas-salidas/usr/views/historial_facturas_view.py", line 14, in <module>
+    import openpyxl
+ModuleNotFoundError: No module named 'openpyxl'

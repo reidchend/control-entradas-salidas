@@ -118,24 +118,17 @@ class SyncManager:
         # (p.ej. un error subiendo movimientos no debe impedir la descarga/poda de
         #  requisiciones que ya fueron eliminadas en el servidor).
         try:
-            # 1. Procesar cola de sync primero (categorías, productos, facturas, pagos)
-            #    para garantizar que existan las claves foráneas en el servidor
+            # 1. Procesar cola de sync primero (facturas, pagos, etc.)
+            #    Las facturas deben existir en Supabase antes de que los movimientos
+            #    intenten referenciarlas via factura_id.
             self._process_sync_queue()
-        except Exception as e:
-            self._log(f"[SYNC] Error procesando cola de sync: {e}")
-        
-        try:
-            # 2. Subir movimientos pendientes (ya con las facturas presentes)
+            
+            # 2. Subir movimientos pendientes (sincronizado=0)
+            #    Ahora las facturas ya existen en Supabase y podemos resolver
+            #    factura_id local → remoto via numero_factura.
             self._upload_pending_movimientos()
-        except Exception as e:
-            self._log(f"[SYNC] Error subiendo movimientos: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        download_ok = False
-        try:
-            # 3. Descargar del servidor (esta etapa también PODA registros eliminados
-            #    remotamente, como requisiciones, así que debe ejecutarse siempre)
+            
+            # 3. Descargar del servidor para alinear IDs
             self._download_all_from_server()
             LocalReplica.set_last_sync("full_sync", datetime.now().isoformat())
             self._log("[SYNC] Sincronización completa finalizada")
@@ -168,6 +161,7 @@ class SyncManager:
     
     def _upload_pending_movimientos(self) -> int:
         from .local_replica import LocalReplica
+        from .conn import get_local_conn
         from sqlalchemy import create_engine
         from config.config import get_settings
 
@@ -204,8 +198,30 @@ class SyncManager:
                 for mov in pending_movimientos:
                     try:
                         mov_id = mov.get('id')
-                        # Resolver factura_id local -> remoto (evita violación de FK)
-                        factura_id = resolver_factura_remota(conn, mov.get('factura_id'))
+                        local_factura_id = mov.get('factura_id')
+
+                        # Resolver factura_id local → remoto via numero_factura
+                        remote_factura_id = None
+                        if local_factura_id:
+                            try:
+                                local_conn = get_local_conn()
+                                cur = local_conn.cursor()
+                                cur.execute(
+                                    "SELECT numero_factura FROM facturas WHERE id = ?",
+                                    (local_factura_id,)
+                                )
+                                row = cur.fetchone()
+                                local_conn.close()
+                                if row:
+                                    num_fact = row['numero_factura']
+                                    result = conn.execute(
+                                        text("SELECT id FROM facturas WHERE numero_factura = :num"),
+                                        {'num': num_fact}
+                                    ).fetchone()
+                                    if result:
+                                        remote_factura_id = result[0]
+                            except Exception as ex:
+                                print(f"[SYNC] Error resolviendo factura_id {local_factura_id}: {ex}")
 
                         # Buscar si el movimiento ya existe en Supabase por campos clave
                         match = conn.execute(text("""
@@ -223,17 +239,17 @@ class SyncManager:
 
                         if match:
                             remote_mov_id = match[0]
-                            if factura_id:
+                            if remote_factura_id:
                                 conn.execute(
                                     text("UPDATE movimientos SET factura_id = :fid WHERE id = :id"),
-                                    {'fid': factura_id, 'id': remote_mov_id}
+                                    {'fid': remote_factura_id, 'id': remote_mov_id}
                                 )
                                 conn.commit()
-                                self._log(f"[SYNC] Movimiento {mov_id} → factura_id={factura_id} actualizado en Supabase (ID remoto: {remote_mov_id})")
+                                print(f"[SYNC] Movimiento {mov_id} → factura_id={remote_factura_id} (remoto) actualizado (ID remoto: {remote_mov_id})")
                         else:
                             mov_data = {
                                 'producto_id': mov.get('producto_id'),
-                                'factura_id': factura_id,
+                                'factura_id': remote_factura_id,
                                 'tipo': mov.get('tipo'),
                                 'cantidad': mov.get('cantidad'),
                                 'cantidad_anterior': mov.get('cantidad_anterior', 0),
@@ -250,6 +266,12 @@ class SyncManager:
                             placeholders = ", ".join([f":{k}" for k in mov_data.keys()])
                             conn.execute(text(f"INSERT INTO movimientos ({columns}) VALUES ({placeholders})"), mov_data)
                             conn.commit()
+
+                        # Si el movimiento tiene factura_id pero no se pudo resolver
+                        # el ID remoto, no lo marcamos como sincronizado para reintentar
+                        if local_factura_id and not remote_factura_id:
+                            print(f"[SYNC] Movimiento {mov_id} postergado: factura_id={local_factura_id} no resuelto en Supabase")
+                            continue
 
                         LocalReplica.mark_movimiento_sincronizado(mov_id)
                         synced_count += 1
@@ -291,7 +313,7 @@ class SyncManager:
             ('factura_pagos', 'factura_pagos'),
             ('requisiciones', 'requisiciones'),
             ('requisicion_detalles', 'requisicion_detalles'),
-            ('kardex_validaciones', 'kardex_validaciones')
+            ('movimientos_archivo', 'movimientos_archivo')
         ]
         
         from sqlalchemy import create_engine
@@ -339,13 +361,11 @@ class SyncManager:
                         LocalReplica.delete_orphaned_records('factura_pagos', remote_ids)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
-                        LocalReplica.delete_orphaned_records('requisiciones', remote_ids, 'numero')
                     elif local_table == 'requisicion_detalles':
                         LocalReplica.save_requisicion_detalles(data)
-                        LocalReplica.delete_orphaned_records('requisicion_detalles', remote_ids)
-                    elif local_table == 'kardex_validaciones':
-                        LocalReplica.save_kardex_validaciones(data)
-                        LocalReplica.delete_orphaned_records('kardex_validaciones', remote_ids)
+                    elif local_table == 'movimientos_archivo':
+                        LocalReplica.clear_movimientos_archivo()
+                        LocalReplica.save_movimientos_archivo(data)
                     
                     self._log(f"[SYNC] {len(data)} {local_table} baixats")
 
@@ -392,25 +412,18 @@ class SyncManager:
         from .sync_callbacks import notify_sync_complete as notify_global
         
         while not self._stop_event.is_set():
-            if self.check_connection():
-                try:
-                    # Subir pendientes de la cola primero (facturas, etc.)
+            try:
+                if self.check_connection():
+                    # 1. Procesar cola de sync primero (facturas deben existir en Supabase)
                     self._process_sync_queue()
-                except Exception as e:
-                    self._log(f"[SYNC] Error procesando cola (loop): {e}")
-                try:
-                    # Subir movimientos pendientes (sincronizado=0)
+                    # 2. Subir movimientos pendientes (pueden referenciar facturas ya subidas)
                     self._upload_pending_movimientos()
-                except Exception as e:
-                    self._log(f"[SYNC] Error subiendo movimientos (loop): {e}")
-                try:
-                    # Descargar cambios del servidor (también PODA registros
-                    # eliminados remotamente, p.ej. requisiciones)
+                    # 3. Descargar cambios del servidor
                     self._download_all_from_server()
                     self._notify_sync_complete()
                     notify_global()
-                except Exception as e:
-                    self._log(f"[SYNC] Error descargando (loop): {e}")
+            except Exception as e:
+                self._log(f"[SYNC] Error descargando (loop): {e}")
             
             self._stop_event.wait(interval)
     
@@ -524,21 +537,21 @@ class SyncManager:
                         
                         if has_codigo:
                             vals = {
-                                'nombre': data.get('nombre'),
-                                'codigo': data.get('codigo'),
-                                'descripcion': data.get('descripcion', ''),
-                                'categoria_id': int(data.get('categoria_id')) if data.get('categoria_id') else None,
-                                'es_pesable': data.get('es_pesable', 0),
-                                'requiere_foto_peso': data.get('requiere_foto_peso', 0),
-                                'peso_unitario': float(data.get('peso_unitario', 0)),
-                                'unidad_medida': data.get('unidad_medida', 'unidad'),
-                                'stock_actual': float(data.get('stock_actual', 0)),
-                                'stock_minimo': float(data.get('stock_minimo', 0)),
-                                'activo': data.get('activo', 1),
-                                'tipo': data.get('tipo'),
-                                'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
-                                'updated_at': data.get('updated_at')
-                            }
+                                 'nombre': data.get('nombre'),
+                                 'codigo': data.get('codigo'),
+                                 'descripcion': data.get('descripcion', ''),
+                                 'categoria_id': int(data.get('categoria_id')) if data.get('categoria_id') else None,
+                                 'es_pesable': data.get('es_pesable', 0),
+                                 'requiere_foto_peso': data.get('requiere_foto_peso', 0),
+                                 'peso_unitario': float(data.get('peso_unitario', 0)),
+                                 'unidad_medida': data.get('unidad_medida', 'unidad'),
+                                 'stock_actual': float(data.get('stock_actual', 0)),
+                                 'stock_minimo': float(data.get('stock_minimo', 0)),
+                                 'activo': data.get('activo', 1),
+                                 'almacen_predeterminado': data.get('almacen_predeterminado', 'principal'),
+                                 'tipo': data.get('tipo', 'ninguno'),
+                                 'updated_at': data.get('updated_at')
+                             }
                             
                             # Upsert por código
                             check_sql = text("SELECT id FROM productos WHERE codigo = :codigo")
@@ -661,14 +674,8 @@ class SyncManager:
                         
                         conn.commit()
                         
-                        mov_ids = data.get('movimiento_ids', [])
-                        for mov_id in mov_ids:
-                            conn.execute(
-                                text("UPDATE movimientos SET factura_id = :factura_id WHERE id = :id"),
-                                {'factura_id': remote_id, 'id': mov_id}
-                            )
-                        if mov_ids:
-                            conn.commit()
+                        # Los movimientos se vinculan via _upload_pending_movimientos()
+                        # que resuelve factura_id local → remoto por numero_factura
                         
                         queue.mark_completed(item['id'])
                         uploaded += 1
@@ -786,8 +793,8 @@ class SyncManager:
                         for det in data.get('detalles', []):
                             conn.execute(text("""
                                 INSERT INTO requisicion_detalles
-                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida)
-                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida)
+                                (requisicion_id, producto_id, ingrediente, cantidad, unidad, cantidad_surtida, verificado)
+                                VALUES (:requisicion_id, :producto_id, :ingrediente, :cantidad, :unidad, :cantidad_surtida, :verificado)
                             """), {
                                 'requisicion_id': remote_id,
                                 'producto_id': det.get('producto_id'),
@@ -795,6 +802,7 @@ class SyncManager:
                                 'cantidad': det.get('cantidad', 0),
                                 'unidad': det.get('unidad', 'unidad'),
                                 'cantidad_surtida': det.get('cantidad_surtida', 0),
+                                'verificado': 1 if det.get('verificado') else 0,
                             })
                         conn.commit()
                         
@@ -813,49 +821,43 @@ class SyncManager:
                     
                     elif table == 'requisicion_detalles' and operation == 'update':
                         verificado = 1 if data.get('verificado') else 0
-                        det_id = data.get('id')
-                        req_id = data.get('requisicion_id')
+                        req_num = data.get('numero')
                         prod_id = data.get('producto_id')
                         ingred = data.get('ingrediente')
                         cant = data.get('cantidad')
                         
-                        matched = False
-                        # Intentar por id (registros ya existentes en Supabase)
-                        if det_id:
-                            res = conn.execute(
-                                text("SELECT id FROM requisicion_detalles WHERE id = :id"),
-                                {'id': det_id}
-                            ).fetchone()
-                            if res:
-                                conn.execute(
-                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
-                                    {'v': verificado, 'id': det_id}
-                                )
-                                conn.commit()
-                                matched = True
+                        if not req_num or not prod_id or not ingred:
+                            queue.mark_failed(item['id'], "Faltan datos (numero/producto/ingrediente)")
+                            continue
                         
-                        if not matched and req_id and prod_id and ingred:
-                            # Fallback: buscar por requisicion_id + producto_id + ingrediente + cantidad
-                            res = conn.execute(
-                                text("""SELECT id FROM requisicion_detalles 
-                                    WHERE requisicion_id = :rid AND producto_id = :pid 
-                                    AND ingrediente = :ing AND cantidad = :cant"""),
-                                {'rid': req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
-                            ).fetchone()
-                            if res:
-                                conn.execute(
-                                    text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
-                                    {'v': verificado, 'id': res[0]}
-                                )
-                                conn.commit()
-                                matched = True
+                        # Buscar requisición en Supabase por número (business key única)
+                        req_res = conn.execute(
+                            text("SELECT id FROM requisiciones WHERE numero = :num"),
+                            {'num': req_num}
+                        ).fetchone()
+                        if not req_res:
+                            queue.mark_failed(item['id'], f"Requisición {req_num} no existe en Supabase")
+                            continue
+                        remote_req_id = req_res[0]
                         
-                        if matched:
+                        res = conn.execute(
+                            text("""SELECT id FROM requisicion_detalles 
+                                WHERE requisicion_id = :rid AND producto_id = :pid 
+                                AND ingrediente = :ing AND cantidad = :cant"""),
+                            {'rid': remote_req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
+                        ).fetchone()
+                        if res:
+                            conn.execute(
+                                text("UPDATE requisicion_detalles SET verificado = :v WHERE id = :id"),
+                                {'v': verificado, 'id': res[0]}
+                            )
+                            conn.commit()
                             queue.mark_completed(item['id'])
                             uploaded += 1
                             self._log(f"[SYNC] Detalle requisición verificado={verificado} sincronizado")
                         else:
-                            self._log(f"[SYNC] No se encontró detalle de requisición en Supabase para actualizar verificado")
+                            queue.mark_failed(item['id'], "Detalle no encontrado en Supabase")
+                            self._log(f"[SYNC] Detalle no encontrado en Supabase para req={req_num}")
                     
                     elif table == 'kardex_validaciones' and operation == 'insert':
                         reg_data = {
