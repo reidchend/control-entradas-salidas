@@ -662,25 +662,27 @@ class HistorialFacturasView(ft.Container):
             dlg.open = False
             self.page.update()
 
-        dlg = ft.AlertDialog(
-            title=ft.Text(f"Detalle Factura #{f.numero_factura}"),
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text(f"Proveedor: {f.proveedor or 'N/A'}", size=14, weight="w500"),
-                    ft.Divider(height=20, color=_c(self.page, 'GREY_200')),
-                    ft.Text("Productos registrados:", size=12, color=colors['text_secondary']),
-                    ft.Container(lista_items, height=300, border=ft.border.all(1, _c(self.page, 'GREY_200')), border_radius=8, padding=5),
-                    ft.Row([
-                        ft.Text("TOTAL NETO:", weight="bold", color=colors['text_primary']),
-                        ft.Text(f"${f.total_neto:,.2f}", weight="bold", color=colors['success'], size=18)
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                ], spacing=10, tight=True),
-                width=450
+        try:
+            dlg = ft.AlertDialog(
+                title=ft.Text(f"Detalle Factura #{f.numero_factura}"),
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Text(f"Proveedor: {f.proveedor or 'N/A'}", size=14, weight="w500"),
+                        ft.Divider(height=20, color=_c(self.page, 'GREY_200')),
+                        ft.Text("Productos registrados:", size=12, color=colors['text_secondary']),
+                        ft.Container(lista_items, height=300, border=ft.border.all(1, _c(self.page, 'GREY_200')), border_radius=8, padding=5),
+                        ft.Row([
+                            ft.Text("TOTAL NETO:", weight="bold", color=colors['text_primary']),
+                            ft.Text(f"${f.total_neto:,.2f}", weight="bold", color=colors['success'], size=18)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                    ], spacing=10, tight=True),
+                    width=450
+                ),
+                actions=[ft.TextButton("Cerrar", on_click=close_dlg)]
             )
-            self.factura_dlg.actions = [ft.TextButton("Cerrar", on_click=close_dlg)]
-            
-            if self.factura_dlg and self.page and self.visible:
-                self.factura_dlg.open = True
+
+            if self.page and self.visible:
+                dlg.open = True
                 try:
                     self.page.update()
                 except AssertionError:
