@@ -144,7 +144,10 @@ class ControlEntradasSalidasApp:
             self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
             self.page.clean()
             self.page.padding = 5
-            self.page.add(ft.Column([self.sync_status_bar, self._layout_row], spacing=4, expand=True))
+            self.page.add(ft.Column([
+                ft.SafeArea(content=self.sync_status_bar, top=True, bottom=False, left=True, right=True),
+                self._layout_row,
+            ], spacing=4, expand=True))
         except Exception as e:
             logger.error(f"Error en _create_layout: {e}", exc_info=True)
             show_error("Error al crear el layout de la app", e, "ControlEntradasSalidasApp._create_layout")

@@ -394,6 +394,7 @@ def _encolar_requisicion_sync(req, detalles):
                 'ingrediente': _nombre_detalle(item),
                 'cantidad': cant,
                 'unidad': uni,
+                'verificado': bool(item.get('verificado', False)),
             })
         req_data = {
             'id': req.id,
