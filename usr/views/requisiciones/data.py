@@ -232,6 +232,17 @@ def totalizar_requisicion(req_id, usuario="Admin"):
         req = db.query(Requisicion).filter(Requisicion.id == req_id).first()
         if not req:
             raise ValueError("Requisición no encontrada")
+        if req.estado == 'completada':
+            raise ValueError("La requisición ya fue totalizada")
+        existentes = db.execute(
+            text("""SELECT 1 FROM movimientos
+                    WHERE observaciones LIKE :pat1
+                       OR observaciones LIKE :pat2
+                    LIMIT 1"""),
+            {"pat1": f"%req #{req.numero} →%", "pat2": f"%req #{req.numero} ←%"},
+        ).fetchone()
+        if existentes:
+            raise ValueError("La requisición ya tiene traslados registrados")
 
         detalles = db.query(RequisicionDetalle).filter(RequisicionDetalle.requisicion_id == req_id).all()
 
