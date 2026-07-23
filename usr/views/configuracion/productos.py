@@ -319,6 +319,8 @@ def save_producto(view, n, c, d, cat_id, rf, pu, u, sm, a, p_id, es_p=False, alm
 
 def create_producto_item(view, p):
     colors = _colors(view.page)
+    is_mobile = view.page.width < 600
+
     tag = ft.Container(
         content=ft.Text("PESABLE", size=9, weight=ft.FontWeight.BOLD, color=colors['white']),
         bgcolor=colors['warning'],
@@ -348,49 +350,73 @@ def create_producto_item(view, p):
         border_radius=4,
     )
 
+    nombre_row = ft.Row([
+        ft.Text(p.nombre, weight=ft.FontWeight.BOLD, size=14, color=colors['text_primary'],
+                expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+        tag if tag else ft.Container(),
+    ], spacing=8)
+
+    info_col = ft.Column([
+        nombre_row,
+        ft.Text(
+            f"Cat: {p.categoria.nombre if p.categoria else 'N/A'}  SKU: {p.codigo}",
+            size=11, color=colors['text_secondary'],
+            max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+        ),
+        desc_text,
+    ], expand=True, spacing=2)
+
+    if is_mobile:
+        top_row = ft.Row([
+            ft.Container(
+                content=ft.Icon(ft.Icons.INVENTORY_2, color=colors['white'], size=24),
+                bgcolor=colors['accent'],
+                padding=10,
+                border_radius=10,
+            ),
+            info_col,
+        ], alignment=ft.MainAxisAlignment.START)
+        badges_row = ft.Row([almacen_badge, tipo_badge], spacing=6)
+    else:
+        top_row = ft.Row([
+            ft.Container(
+                content=ft.Icon(ft.Icons.INVENTORY_2, color=colors['white'], size=24),
+                bgcolor=colors['accent'],
+                padding=10,
+                border_radius=10,
+            ),
+            info_col,
+            almacen_badge,
+            tipo_badge,
+        ], alignment=ft.MainAxisAlignment.START)
+        badges_row = None
+
+    bottom_row = ft.Row([
+        ft.Row([
+            ft.Icon(ft.Icons.LIST, size=14, color=colors['text_secondary']),
+            ft.Text(f"Min: {p.stock_minimo} {p.unidad_medida}", size=11, color=colors['text_secondary']),
+        ], spacing=5),
+        ft.Row([
+            ft.IconButton(
+                ft.Icons.EDIT,
+                icon_size=18,
+                on_click=lambda _, prod=p: show_producto_dialog(view, prod),
+            ),
+            ft.IconButton(
+                ft.Icons.DELETE,
+                icon_size=18,
+                on_click=lambda _, prod=p: confirm_delete(view, prod, "producto"),
+            ),
+        ], spacing=0),
+    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+
+    col_controls = [top_row]
+    if is_mobile and badges_row:
+        col_controls.append(badges_row)
+    col_controls.append(bottom_row)
+
     return ft.Container(
-        content=ft.Column([
-            ft.Row([
-                ft.Container(
-                    content=ft.Icon(ft.Icons.INVENTORY_2, color=colors['white'], size=24),
-                    bgcolor=colors['accent'],
-                    padding=10,
-                    border_radius=10,
-                ),
-                ft.Column([
-                    ft.Row([
-                        ft.Text(p.nombre, weight=ft.FontWeight.BOLD, size=14, color=colors['text_primary']),
-                        tag if tag else ft.Container(),
-                    ], spacing=8),
-                    ft.Text(
-                        f"Cat: {p.categoria.nombre if p.categoria else 'N/A'}  SKU: {p.codigo}",
-                        size=11,
-                        color=colors['text_secondary'],
-                    ),
-                    desc_text,
-                ], expand=True, spacing=2),
-                almacen_badge,
-                tipo_badge,
-            ], alignment=ft.MainAxisAlignment.START),
-            ft.Row([
-                ft.Row([
-                    ft.Icon(ft.Icons.LIST, size=14, color=colors['text_secondary']),
-                    ft.Text(f"Min: {p.stock_minimo} {p.unidad_medida}", size=11, color=colors['text_secondary']),
-                ], spacing=5),
-                ft.Row([
-                    ft.IconButton(
-                        ft.Icons.EDIT,
-                        icon_size=18,
-                        on_click=lambda _, prod=p: show_producto_dialog(view, prod),
-                    ),
-                    ft.IconButton(
-                        ft.Icons.DELETE,
-                        icon_size=18,
-                        on_click=lambda _, prod=p: confirm_delete(view, prod, "producto"),
-                    ),
-                ], spacing=0),
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        ], spacing=8),
+        content=ft.Column(col_controls, spacing=8),
         padding=12,
         bgcolor=colors['card'],
         border_radius=12,

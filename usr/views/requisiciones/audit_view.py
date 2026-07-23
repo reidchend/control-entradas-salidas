@@ -11,15 +11,16 @@ from usr.views.requisiciones.data import (
 from usr.notifications import show_success, show_error, show_warning
 
 def _forzar_sync():
+    """Ejecuta sync sincrónico (bloqueante). Retorna True si OK, False si falló."""
     try:
         from usr.database.sync import get_sync_manager
         sync_mgr = get_sync_manager()
         if sync_mgr and sync_mgr.check_connection():
-            import threading
-            thread = threading.Thread(target=sync_mgr.full_sync, daemon=True)
-            thread.start()
+            return bool(sync_mgr.full_sync())
+        return True
     except Exception as e:
         print(f"[AUDIT] Error al forzar sync: {e}")
+        return False
 
 class AuditView(ft.Container):
     def __init__(self, req_id, on_back):
@@ -396,11 +397,52 @@ class AuditView(ft.Container):
         self.page.update()
 
     def _on_guardar(self, _):
+        self.page.run_task(self._do_guardar)
+
+    async def _do_guardar(self):
         self._set_loading_overlay(True, "Guardando auditoría...")
-        self._set_loading_overlay(True, "Sincronizando...")
-        show_success("Progreso de auditoría guardado")
-        _forzar_sync()
+        import asyncio
+        ok = await asyncio.to_thread(_forzar_sync)
+        if ok:
+            self._set_loading_overlay(False)
+            show_success("Progreso de auditoría guardado y sincronizado")
+        else:
+            await self._preguntar_reintentar("guardar")
+
+    async def _preguntar_reintentar(self, accion: str):
         self._set_loading_overlay(False)
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Error de sincronización"),
+            content=ft.Text("No se pudo sincronizar. ¿Reintentar?"),
+            actions=[
+                ft.TextButton("No", on_click=lambda e: self._cerrar_dialogo(dlg)),
+                ft.ElevatedButton("Reintentar", bgcolor=ft.Colors.BLUE_600, color="white",
+                    on_click=lambda e: self._cerrar_dialogo(dlg) or self.page.run_task(self._reintentar_sync, accion)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _cerrar_dialogo(self, dlg):
+        dlg.open = False
+        try:
+            self.page.overlay.remove(dlg)
+        except Exception:
+            pass
+        self.page.update()
+
+    async def _reintentar_sync(self, accion: str):
+        self._set_loading_overlay(True, "Reintentando sincronización...")
+        import asyncio
+        ok = await asyncio.to_thread(_forzar_sync)
+        if ok:
+            self._set_loading_overlay(False)
+            show_success("Sincronización completada")
+        else:
+            await self._preguntar_reintentar(accion)
 
     def _on_totalizar(self, _):
         if getattr(self, '_totalizando', False):
@@ -411,27 +453,27 @@ class AuditView(ft.Container):
             return
 
         self._totalizando = True
-        self._set_loading_overlay(True, "Totalizando requisición...")
-        btn = None
-        for c in self.header.controls[1].controls:
-            if isinstance(c, ft.ElevatedButton) and c.text == "Totalizar":
-                btn = c
-                break
-        if btn:
-            btn.disabled = True
-            self.page.update()
+        self.page.run_task(self._do_totalizar)
 
+    async def _do_totalizar(self):
+        self._set_loading_overlay(True, "Totalizando requisición...")
+        import asyncio
         try:
-            if totalizar_requisicion(self.req_id):
-                self._set_loading_overlay(True, "Sincronizando...")
+            result = await asyncio.to_thread(totalizar_requisicion, self.req_id)
+            if result:
                 show_success("Requisición totalizada y stock trasladado")
-                _forzar_sync()
+                self._set_loading_overlay(True, "Sincronizando...")
+                ok = await asyncio.to_thread(_forzar_sync)
+                if ok:
+                    self._set_loading_overlay(False)
+                    self.on_back()
+                else:
+                    await self._preguntar_reintentar("totalizar")
+            else:
+                self._totalizando = False
                 self._set_loading_overlay(False)
-                self.on_back()
+                show_error("No se pudo totalizar la requisición")
         except Exception as e:
             self._totalizando = False
             self._set_loading_overlay(False)
-            if btn:
-                btn.disabled = False
-                self.page.update()
             show_error(f"Error al totalizar: {e}")

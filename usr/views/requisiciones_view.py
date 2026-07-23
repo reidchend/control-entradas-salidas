@@ -424,51 +424,101 @@ class RequisicionesView(ft.Container):
         if not self.lista_productos_req:
             show_warning("Agregue al menos un producto")
             return
+        self.page.run_task(self._do_crear_requisicion, origen_dropdown, destino_dropdown, observaciones)
 
+    async def _do_crear_requisicion(self, origen_dropdown, destino_dropdown, observaciones):
+        import asyncio
         origen = origen_dropdown.value or "principal"
         destino = destino_dropdown.value or "restaurante"
         user_id = (self.page.session.get("user_id") or "Admin") if self.page else "Admin"
 
         req_editando = getattr(self, '_requisicion_editando', None)
         try:
-            self._set_loading_overlay(True, "Guardando requisición..." if not req_editando else "Actualizando requisición...")
+            self._set_loading_overlay(True, "Actualizando requisición..." if req_editando else "Guardando requisición...")
             if req_editando:
-                guardar_requisicion(
+                await asyncio.to_thread(
+                    guardar_requisicion,
                     origen=origen, destino=destino,
                     observaciones=observaciones.value or "",
                     detalles=self.lista_productos_req,
                     editando=req_editando, user_id=user_id,
                 )
-                self._set_loading_overlay(True, "Sincronizando...")
-                show_success("Requisición actualizada")
             else:
-                guardar_requisicion(
+                await asyncio.to_thread(
+                    guardar_requisicion,
                     origen=origen, destino=destino,
                     observaciones=observaciones.value or "",
                     detalles=self.lista_productos_req,
                     user_id=user_id, estado="pendiente", mover_stock=False,
                 )
-                self._set_loading_overlay(True, "Sincronizando...")
+
+            if req_editando:
+                show_success("Requisición actualizada")
+            else:
                 show_success(f"Requisición creada: {origen} → {destino}")
 
-            import threading
-            try:
-                from usr.database import get_sync_manager
-                sync_mgr = get_sync_manager()
-                if sync_mgr:
-                    threading.Thread(target=sync_mgr.force_sync_now, daemon=True).start()
-            except Exception:
-                pass
-
-            self._set_loading_overlay(False)
-            self.lista_productos_req = []
-            self._requisicion_editando = None
-            self._volver_lista()
+            self._set_loading_overlay(True, "Sincronizando...")
+            ok = await asyncio.to_thread(self._sync_bloqueante)
+            if ok:
+                self._set_loading_overlay(False)
+                self.lista_productos_req = []
+                self._requisicion_editando = None
+                self._volver_lista()
+            else:
+                await self._preguntar_reintentar(req_editando, origen, destino, observaciones, user_id)
 
         except Exception as ex:
             self._set_loading_overlay(False)
             logger.error(f"Error guardando requisición: {ex}")
             show_error(f"Error: {ex}")
+
+    def _sync_bloqueante(self):
+        try:
+            from usr.database import get_sync_manager
+            sync_mgr = get_sync_manager()
+            if sync_mgr:
+                return bool(sync_mgr.full_sync())
+            return True
+        except Exception:
+            return False
+
+    async def _preguntar_reintentar(self, req_editando, origen, destino, observaciones, user_id):
+        self._set_loading_overlay(False)
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Error de sincronización"),
+            content=ft.Text("No se pudo sincronizar. ¿Reintentar?"),
+            actions=[
+                ft.TextButton("No", on_click=lambda e: self._cerrar_dlg(dlg) or self._volver_lista()),
+                ft.ElevatedButton("Reintentar", bgcolor=ft.Colors.BLUE_600, color="white",
+                    on_click=lambda e: self._cerrar_dlg(dlg) or self.page.run_task(self._reintentar_sync_req, req_editando, user_id)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    async def _reintentar_sync_req(self, req_editando, user_id):
+        import asyncio
+        self._set_loading_overlay(True, "Reintentando sincronización...")
+        ok = await asyncio.to_thread(self._sync_bloqueante)
+        if ok:
+            self._set_loading_overlay(False)
+            show_success("Sincronización completada")
+            self.lista_productos_req = []
+            self._requisicion_editando = None
+            self._volver_lista()
+        else:
+            await self._preguntar_reintentar(req_editando, None, None, None, user_id)
+
+    def _cerrar_dlg(self, dlg):
+        dlg.open = False
+        try:
+            self.page.overlay.remove(dlg)
+        except Exception:
+            pass
+        self.page.update()
 
     def _volver_lista(self):
         self._vista_actual = "lista"

@@ -1,7 +1,9 @@
 import flet as ft
+from urllib.parse import quote
 from usr.theme import get_colors
 from usr.views.requisiciones.helpers import _colors, _c
 from usr.views.requisiciones.data import get_detalles
+from usr.notifications import show_success, show_error
 
 class VisualizeView(ft.Container):
     def __init__(self, req, on_back):
@@ -11,6 +13,41 @@ class VisualizeView(ft.Container):
         self.expand = True
         self.padding = 20
         self._build_ui()
+
+    def _build_mensaje(self):
+        """Construye el texto de la requisición para compartir por WhatsApp."""
+        detalles = get_detalles(self.req.id)
+        lines = [
+            f"*Requisición #{self.req.numero}*",
+            f"Estado: {self.req.estado.upper()}",
+            f"Origen: {self.req.origen}",
+            f"Destino: {self.req.destino}",
+        ]
+        if self.req.observaciones:
+            lines.append(f"Observaciones: {self.req.observaciones}")
+        lines.append("")
+        lines.append("*Detalles:*")
+        for d in detalles:
+            lines.append(f"• {d.ingrediente}: {d.cantidad:.2f} {d.unidad}")
+        return "\n".join(lines)
+
+    def _on_compartir(self, _):
+        try:
+            msg = self._build_mensaje()
+            if self.page:
+                self.page.launch_url(f"https://wa.me/?text={quote(msg)}")
+                show_success("Abriendo WhatsApp...")
+        except Exception as e:
+            show_error(f"Error al compartir: {e}")
+
+    def _on_copiar(self, _):
+        try:
+            msg = self._build_mensaje()
+            if self.page:
+                self.page.set_clipboard(msg)
+                show_success("Requisición copiada al portapapeles")
+        except Exception as e:
+            show_error(f"Error al copiar: {e}")
 
     def _build_ui(self):
         colors = _colors(self.page)
@@ -22,6 +59,23 @@ class VisualizeView(ft.Container):
                 ft.Text(f"Requisición #{self.req.numero}", size=22, weight="bold", color=colors['text_primary']),
                 ft.Text(f"Estado: {self.req.estado.upper()}", size=14, color=colors['text_secondary']),
             ], spacing=0, expand=True),
+            ft.PopupMenuButton(
+                icon=ft.Icons.SHARE_ROUNDED,
+                icon_color=colors['accent'],
+                tooltip="Compartir",
+                items=[
+                    ft.PopupMenuItem(
+                        text="Compartir por WhatsApp",
+                        icon=ft.Icons.CHAT,
+                        on_click=self._on_compartir,
+                    ),
+                    ft.PopupMenuItem(
+                        text="Copiar al portapapeles",
+                        icon=ft.Icons.CONTENT_COPY,
+                        on_click=self._on_copiar,
+                    ),
+                ],
+            ),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         info_card = ft.Container(
