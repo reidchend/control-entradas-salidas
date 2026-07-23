@@ -29,7 +29,47 @@ class AuditView(ft.Container):
         self.expand = True
         self.padding = 20
         self.audit_data = None
+        self.loading_overlay = None
         self._build_ui()
+
+    def _set_loading_overlay(self, visible: bool, message: str = "Procesando..."):
+        if not self.page:
+            return
+        if visible:
+            if self.loading_overlay:
+                try:
+                    self.loading_overlay.content.content.controls[1].value = message
+                    self.page.update()
+                    return
+                except Exception:
+                    pass
+            colors = _colors(self.page)
+            self.loading_overlay = ft.Container(
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.ProgressBar(width=200, color=colors.get('accent', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                        ft.Text(message, size=13, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                    ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor=colors.get('card', '#252525'),
+                    padding=20,
+                    border_radius=15,
+                    border=ft.border.all(1, colors.get('border')),
+                    width=250,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self.page.overlay.append(self.loading_overlay)
+            self.page.update()
+        else:
+            if self.loading_overlay:
+                try:
+                    self.page.overlay.remove(self.loading_overlay)
+                except Exception:
+                    pass
+                self.loading_overlay = None
+                self.page.update()
 
     def _build_ui(self):
         self.colors = _colors(self.page)
@@ -356,8 +396,11 @@ class AuditView(ft.Container):
         self.page.update()
 
     def _on_guardar(self, _):
+        self._set_loading_overlay(True, "Guardando auditoría...")
+        self._set_loading_overlay(True, "Sincronizando...")
         show_success("Progreso de auditoría guardado")
         _forzar_sync()
+        self._set_loading_overlay(False)
 
     def _on_totalizar(self, _):
         if getattr(self, '_totalizando', False):
@@ -368,6 +411,7 @@ class AuditView(ft.Container):
             return
 
         self._totalizando = True
+        self._set_loading_overlay(True, "Totalizando requisición...")
         btn = None
         for c in self.header.controls[1].controls:
             if isinstance(c, ft.ElevatedButton) and c.text == "Totalizar":
@@ -379,11 +423,14 @@ class AuditView(ft.Container):
 
         try:
             if totalizar_requisicion(self.req_id):
+                self._set_loading_overlay(True, "Sincronizando...")
                 show_success("Requisición totalizada y stock trasladado")
                 _forzar_sync()
+                self._set_loading_overlay(False)
                 self.on_back()
         except Exception as e:
             self._totalizando = False
+            self._set_loading_overlay(False)
             if btn:
                 btn.disabled = False
                 self.page.update()

@@ -541,6 +541,23 @@ class LocalReplica:
     # ==================== EXISTENCIAS ====================
     
     @staticmethod
+    def dedupe_existencias_producto(producto_id: int) -> None:
+        """Elimina duplicados de existencias para un producto específico.
+        Conserva el registro con el id más alto (ajuste más reciente)."""
+        conn = get_local_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM existencias
+            WHERE producto_id = ? AND id NOT IN (
+                SELECT MAX(id) FROM existencias
+                WHERE producto_id = ?
+                GROUP BY almacen
+            )
+        """, (producto_id, producto_id))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
     def save_existencias(existencias: List[Dict]) -> None:
         """Guarda existencias en la base de datos local."""
         if not existencias:

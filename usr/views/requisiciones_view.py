@@ -48,6 +48,7 @@ class RequisicionesView(ft.Container):
         self._origen_dropdown = None
         self._productos_lista_req = None
         self._bs_buscador = None
+        self.loading_overlay = None
 
     def on_theme_change(self):
         if not self.page:
@@ -380,6 +381,45 @@ class RequisicionesView(ft.Container):
             self.lista_productos_req.pop(idx)
             self._actualizar_lista_productos()
 
+    def _set_loading_overlay(self, visible: bool, message: str = "Procesando..."):
+        if not self.page:
+            return
+        if visible:
+            if self.loading_overlay:
+                try:
+                    self.loading_overlay.content.content.controls[1].value = message
+                    self.page.update()
+                    return
+                except Exception:
+                    pass
+            colors = _colors(self.page)
+            self.loading_overlay = ft.Container(
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.ProgressBar(width=200, color=colors.get('accent', ft.Colors.PURPLE), bgcolor=ft.Colors.TRANSPARENT),
+                        ft.Text(message, size=13, color=colors.get('text_primary'), weight="w500", text_align=ft.TextAlign.CENTER),
+                    ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor=colors.get('card', '#252525'),
+                    padding=20,
+                    border_radius=15,
+                    border=ft.border.all(1, colors.get('border')),
+                    width=250,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self.page.overlay.append(self.loading_overlay)
+            self.page.update()
+        else:
+            if self.loading_overlay:
+                try:
+                    self.page.overlay.remove(self.loading_overlay)
+                except Exception:
+                    pass
+                self.loading_overlay = None
+                self.page.update()
+
     def _crear_requisicion_vista(self, origen_dropdown, destino_dropdown, observaciones):
         if not self.lista_productos_req:
             show_warning("Agregue al menos un producto")
@@ -391,6 +431,7 @@ class RequisicionesView(ft.Container):
 
         req_editando = getattr(self, '_requisicion_editando', None)
         try:
+            self._set_loading_overlay(True, "Guardando requisición..." if not req_editando else "Actualizando requisición...")
             if req_editando:
                 guardar_requisicion(
                     origen=origen, destino=destino,
@@ -398,6 +439,7 @@ class RequisicionesView(ft.Container):
                     detalles=self.lista_productos_req,
                     editando=req_editando, user_id=user_id,
                 )
+                self._set_loading_overlay(True, "Sincronizando...")
                 show_success("Requisición actualizada")
             else:
                 guardar_requisicion(
@@ -406,6 +448,7 @@ class RequisicionesView(ft.Container):
                     detalles=self.lista_productos_req,
                     user_id=user_id, estado="pendiente", mover_stock=False,
                 )
+                self._set_loading_overlay(True, "Sincronizando...")
                 show_success(f"Requisición creada: {origen} → {destino}")
 
             import threading
@@ -417,11 +460,13 @@ class RequisicionesView(ft.Container):
             except Exception:
                 pass
 
+            self._set_loading_overlay(False)
             self.lista_productos_req = []
             self._requisicion_editando = None
             self._volver_lista()
 
         except Exception as ex:
+            self._set_loading_overlay(False)
             logger.error(f"Error guardando requisición: {ex}")
             show_error(f"Error: {ex}")
 
