@@ -3,8 +3,8 @@ config/*.json
 *.json
 !whatsapp_bot/*.json
 *app_updates/
-*version.json
-!update.zip
+!version.json
+*update.zip
 .env
 __pycache__/
 build/
