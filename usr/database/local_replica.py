@@ -264,6 +264,33 @@ def init_local_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recetas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            producto_base_id INTEGER,
+            producto_final_id INTEGER,
+            cantidad_producida REAL DEFAULT 1,
+            activo INTEGER DEFAULT 1,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS receta_componentes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            receta_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            cantidad REAL NOT NULL,
+            unidad TEXT DEFAULT 'unidad',
+            tipo_componente TEXT NOT NULL,
+            FOREIGN KEY (receta_id) REFERENCES recetas(id),
+            FOREIGN KEY (producto_id) REFERENCES productos(id)
+        )
+    """)
+    
     # Índices locales
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_tipo_fecha ON movimientos (tipo, fecha_movimiento DESC)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_local_producto ON movimientos (producto_id, fecha_movimiento DESC)")

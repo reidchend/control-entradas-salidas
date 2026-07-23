@@ -98,15 +98,15 @@ def marcar_detalle_verificado(detalle_id, estado):
         detalle = db.query(RequisicionDetalle).filter(RequisicionDetalle.id == detalle_id).first()
         if detalle:
             detalle.verificado = estado
-            req_num = db.query(Requisicion.numero).filter(Requisicion.id == detalle.requisicion_id).scalar()
             db.commit()
             
+            # Encolar sync para propagar el cambio a otros dispositivos
             from usr.database.sync_queue import get_sync_queue
             queue = get_sync_queue()
             queue.add_pending('requisicion_detalles', 'update', {
+                'id': detalle.id,
                 'verificado': 1 if estado else 0,
                 'requisicion_id': detalle.requisicion_id,
-                'numero': req_num,
                 'producto_id': detalle.producto_id,
                 'ingrediente': detalle.ingrediente,
                 'cantidad': detalle.cantidad,
@@ -230,9 +230,6 @@ def totalizar_requisicion(req_id, usuario="Admin"):
         req = db.query(Requisicion).filter(Requisicion.id == req_id).first()
         if not req:
             raise ValueError("Requisición no encontrada")
-        if req.estado == 'completada':
-            print(f"[REQ] Requisición {req.numero} ya está completada, ignorando")
-            return True
 
         detalles = db.query(RequisicionDetalle).filter(RequisicionDetalle.requisicion_id == req_id).all()
 
@@ -384,7 +381,6 @@ def _encolar_requisicion_sync(req, detalles):
                 'ingrediente': _nombre_detalle(item),
                 'cantidad': cant,
                 'unidad': uni,
-                'verificado': item.get('verificado', False),
             })
         req_data = {
             'id': req.id,
