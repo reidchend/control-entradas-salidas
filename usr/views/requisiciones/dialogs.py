@@ -397,8 +397,15 @@ def build_crear_vista(view, requisicion=None):
 
     if requisicion:
         view.lista_productos_req = []
+        prod_ids = {d.producto_id for d in requisicion.detalles if d.producto_id}
+        db = next(get_db_adaptive())
+        try:
+            productos_map = {p.id: p for p in db.query(Producto).filter(Producto.id.in_(prod_ids)).all()}
+        finally:
+            db.close()
         for d in requisicion.detalles:
-            es_pesable = d.producto and d.producto.es_pesable
+            prod = productos_map.get(d.producto_id) if d.producto_id else None
+            es_pesable = prod and prod.es_pesable
             entry = {
                 'producto_id': d.producto_id,
                 'nombre': d.ingrediente,
