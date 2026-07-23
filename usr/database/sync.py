@@ -361,6 +361,7 @@ class SyncManager:
                         LocalReplica.delete_orphaned_records('factura_pagos', remote_ids)
                     elif local_table == 'requisiciones':
                         LocalReplica.save_requisiciones(data)
+                        LocalReplica.delete_orphaned_records('requisiciones', remote_ids)
                     elif local_table == 'requisicion_detalles':
                         LocalReplica.save_requisicion_detalles(data)
                     elif local_table == 'movimientos_archivo':

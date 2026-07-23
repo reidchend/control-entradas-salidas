@@ -194,6 +194,14 @@ class RequisicionesView(ft.Container):
         def confirm_delete(_):
             if eliminar_requisicion(req.id):
                 show_success(f"Requisición {req.numero} eliminada")
+                import threading
+                try:
+                    from usr.database import get_sync_manager
+                    sync_mgr = get_sync_manager()
+                    if sync_mgr:
+                        threading.Thread(target=sync_mgr.force_sync_now, daemon=True).start()
+                except Exception:
+                    pass
                 self._load_requisiciones()
             else:
                 show_error("Error al eliminar la requisición")
@@ -399,6 +407,15 @@ class RequisicionesView(ft.Container):
                     user_id=user_id, estado="pendiente", mover_stock=False,
                 )
                 show_success(f"Requisición creada: {origen} → {destino}")
+
+            import threading
+            try:
+                from usr.database import get_sync_manager
+                sync_mgr = get_sync_manager()
+                if sync_mgr:
+                    threading.Thread(target=sync_mgr.force_sync_now, daemon=True).start()
+            except Exception:
+                pass
 
             self.lista_productos_req = []
             self._requisicion_editando = None
