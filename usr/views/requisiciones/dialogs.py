@@ -396,10 +396,19 @@ def build_crear_vista(view, requisicion=None):
     view._requisicion_editando = requisicion
 
     if requisicion:
-        view.lista_productos_req = [
-            {'producto_id': d.producto_id, 'nombre': d.ingrediente, 'cantidad': d.cantidad, 'unidad': d.unidad}
-            for d in requisicion.detalles
-        ]
+        view.lista_productos_req = []
+        for d in requisicion.detalles:
+            es_pesable = d.producto and d.producto.es_pesable
+            entry = {
+                'producto_id': d.producto_id,
+                'nombre': d.ingrediente,
+                'cantidad': d.cantidad,
+                'unidad': d.unidad or 'uds',
+                'es_pesable': bool(es_pesable),
+            }
+            if es_pesable:
+                entry['peso'] = d.cantidad
+            view.lista_productos_req.append(entry)
     else:
         view.lista_productos_req = []
 
@@ -760,8 +769,11 @@ def build_agregar_producto_req_dialog(view, producto, disponible):
 
         existe = next((item for item in view.lista_productos_req if item['producto_id'] == producto.id), None)
         if existe:
-            existe['cantidad'] += cantidad
             existe['peso'] = (existe.get('peso') or 0) + peso
+            if es_pesable:
+                existe['cantidad'] = existe['peso']
+            else:
+                existe['cantidad'] += cantidad
         else:
             view.lista_productos_req.append({
                 'producto_id': producto.id,
