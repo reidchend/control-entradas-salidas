@@ -153,19 +153,19 @@ async def comprobar_y_aplicar_actualizaciones(page: ft.Page, status_text: ft.Tex
             modal=True,
             title=ft.Row([
                 ft.Icon(ft.Icons.SYSTEM_UPDATE, color=ft.Colors.BLUE_400),
-                ft.Text("Actualización disponible", weight=ft.FontWeight.BOLD),
+                ft.Text("Actualización disponible", weight=ft.FontWeight.BOLD, expand=True, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=10),
             content=ft.Column([
-                ft.Text(f"Versión actual: {local_version}", size=14),
+                ft.Text(f"Versión actual: {local_version}", size=14, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                 ft.Row([
                     ft.Icon(ft.Icons.ARROW_FORWARD, size=16, color=ft.Colors.GREEN_400),
-                    ft.Text(f"Nueva versión: {remote_version}", weight=ft.FontWeight.BOLD, size=15),
+                    ft.Text(f"Nueva versión: {remote_version}", weight=ft.FontWeight.BOLD, size=15, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                 ], spacing=6),
                 ft.Container(height=10),
-                ft.Text("¿Desea descargar e instalar la actualización ahora?"),
+                ft.Text("¿Desea descargar e instalar la actualización ahora?", max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                 ft.Text(
                     "Los cambios se aplicarán al reiniciar la aplicación.",
-                    size=12, color=ft.Colors.GREY_400, italic=True,
+                    size=12, color=ft.Colors.GREY_400, italic=True, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
                 ),
             ], tight=True, spacing=8),
             actions=[

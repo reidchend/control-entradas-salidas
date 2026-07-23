@@ -144,8 +144,15 @@ class ControlEntradasSalidasApp:
             self._layout_row = ft.SafeArea(content=ft.Row([self.navigation_rail, self.content_area], expand=True, spacing=0), expand=True)
             self.page.clean()
             self.page.padding = 5
+            self._sync_safe = ft.SafeArea(
+                content=ft.Container(
+                    content=self.sync_status_bar,
+                    height=0,
+                ),
+                top=True, bottom=False, left=True, right=True,
+            )
             self.page.add(ft.Column([
-                ft.SafeArea(content=self.sync_status_bar, top=True, bottom=False, left=True, right=True),
+                self._sync_safe,
                 self._layout_row,
             ], spacing=4, expand=True))
         except Exception as e:
