@@ -919,6 +919,9 @@ class LocalReplica:
             return
         conn = get_local_conn()
         cursor = conn.cursor()
+        req_ids = set(d.get('requisicion_id') for d in detalles if d.get('requisicion_id') is not None)
+        for rid in req_ids:
+            cursor.execute("DELETE FROM requisicion_detalles WHERE requisicion_id = ?", (rid,))
         for det in detalles:
             cursor.execute("""
                 INSERT INTO requisicion_detalles 
