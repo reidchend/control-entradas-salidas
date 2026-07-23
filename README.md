@@ -165,7 +165,7 @@ Si se agregan nuevas dependencias en `requirements.txt`, se debe recompilar:
 - 🗑️ **Eliminada**: Tabla `pending_operations` + sus 4 métodos (código muerto - nunca se procesaba)
 - 📝 **Añadido**: Guía de buenas prácticas y errores a evitar
 
-### Version 2.1.0 (Mayo 2026)
+### Version 1.2.50 (julio 2026)
 - ✨ **OCR con Gemini API**: Extraccion automatica de datos de facturas desde imagenes del portapapeles
 - ✨ **Lista de Compras**: Gestion de productos pendientes por ingresar
 - 🔧 Correcciones de UI en lista de compras (empty state, actualizacion de stock)
