@@ -419,17 +419,23 @@ def guardar_requisicion(origen, destino, observaciones, detalles,
             editando.origen = origen
             editando.destino = destino
             editando.observaciones = observaciones
+            verificado_map = {}
             for d in list(editando.detalles):
+                if d.verificado:
+                    key = (d.producto_id, d.ingrediente)
+                    verificado_map[key] = True
                 db.delete(d)
             db.flush()
             for item in detalles:
                 cant, uni = _cantidad_unidad_item(item)
+                key = (item.get('producto_id'), _nombre_detalle(item))
                 db.add(RequisicionDetalle(
                     requisicion_id=editando.id,
                     producto_id=item.get('producto_id'),
                     ingrediente=_nombre_detalle(item),
                     cantidad=cant,
                     unidad=uni,
+                    verificado=verificado_map.get(key, False),
                 ))
             db.commit()
             _encolar_requisicion_sync(editando, detalles)

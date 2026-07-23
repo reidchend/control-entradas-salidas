@@ -412,6 +412,7 @@ def build_crear_vista(view, requisicion=None):
                 'cantidad': d.cantidad,
                 'unidad': d.unidad or 'uds',
                 'es_pesable': bool(es_pesable),
+                'verificado': bool(d.verificado),
             }
             if es_pesable:
                 entry['peso'] = d.cantidad
