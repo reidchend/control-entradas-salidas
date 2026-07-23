@@ -103,9 +103,11 @@ def marcar_detalle_verificado(detalle_id, estado):
             # Encolar sync para propagar el cambio a otros dispositivos
             from usr.database.sync_queue import get_sync_queue
             queue = get_sync_queue()
+            req_num = detalle.requisicion.numero if detalle.requisicion else None
             queue.add_pending('requisicion_detalles', 'update', {
                 'id': detalle.id,
                 'verificado': 1 if estado else 0,
+                'numero': req_num,
                 'requisicion_id': detalle.requisicion_id,
                 'producto_id': detalle.producto_id,
                 'ingrediente': detalle.ingrediente,

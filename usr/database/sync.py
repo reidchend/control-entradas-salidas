@@ -844,7 +844,7 @@ class SyncManager:
                         res = conn.execute(
                             text("""SELECT id FROM requisicion_detalles 
                                 WHERE requisicion_id = :rid AND producto_id = :pid 
-                                AND ingrediente = :ing AND cantidad = :cant"""),
+                                AND ingrediente = :ing AND ABS(cantidad - :cant) < 0.001"""),
                             {'rid': remote_req_id, 'pid': prod_id, 'ing': ingred, 'cant': cant}
                         ).fetchone()
                         if res:
