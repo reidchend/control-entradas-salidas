@@ -131,7 +131,7 @@ class ControlEntradasSalidasApp:
             )
 
             self.sync_status_bar = ft.Container(
-                height=0, visible=False,
+                height=0, visible=True,
                 bgcolor='#2D2D2D',
                 padding=ft.padding.symmetric(horizontal=12, vertical=0),
                 border_radius=ft.border_radius.all(8),
@@ -145,10 +145,7 @@ class ControlEntradasSalidasApp:
             self.page.clean()
             self.page.padding = 5
             self._sync_safe = ft.SafeArea(
-                content=ft.Container(
-                    content=self.sync_status_bar,
-                    height=0,
-                ),
+                content=self.sync_status_bar,
                 top=True, bottom=False, left=True, right=True,
             )
             self.page.add(ft.Column([
@@ -178,7 +175,6 @@ class ControlEntradasSalidasApp:
 
             if is_start:
                 bar.height = 30
-                bar.visible = True
                 spinner.visible = True
                 text.value = clean
                 text.color = '#BBBBBB'
@@ -199,7 +195,6 @@ class ControlEntradasSalidasApp:
                 threading.Thread(target=self._hide_sync_bar, args=(6,), daemon=True).start()
             else:
                 bar.height = 30
-                bar.visible = True
                 spinner.visible = True
                 text.value = clean
                 text.color = '#BBBBBB'
@@ -215,7 +210,6 @@ class ControlEntradasSalidasApp:
         time.sleep(delay)
         try:
             if self.page and hasattr(self, 'sync_status_bar'):
-                self.sync_status_bar.visible = False
                 self.sync_status_bar.height = 0
                 self.page.update()
         except Exception:
