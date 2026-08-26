@@ -26,8 +26,8 @@ if %errorlevel% neq 0 (
 )
 
 REM 3. Crear share nuevo
-echo Creando share lycoris-bot...
-"%ZROK%" share public http://127.0.0.1:3000 --backend-mode proxy --unique-name lycoris-bot
+echo Creando share lycoris-bot-v2...
+"%ZROK%" share public http://127.0.0.1:3000 --backend-mode proxy --unique-name lycoris-bot-v2
 if %errorlevel% neq 0 (
     echo [ERROR] zrok share fallo
     pause
@@ -35,7 +35,7 @@ if %errorlevel% neq 0 (
 )
 
 REM 4. Abrir navegador con QR
-start https://lycoris-bot.shares.zrok.io/qr
+start https://lycoris-bot-v2.shares.zrok.io/qr
 
 REM 5. Iniciar bot
 cd /d "%BOT_DIR%"
