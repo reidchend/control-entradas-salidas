@@ -19,7 +19,7 @@ if not exist "%BOT_DIR%\.ngrok.yml" (
 
 REM 3. Iniciar ngrok
 echo Iniciando ngrok...
-start /b "%NGROK%" http --domain=opt-dazzling-elves.ngrok-free.dev 3000
+start /b "" "%NGROK%" http --domain=opt-dazzling-elves.ngrok-free.dev 3000
 timeout /t 5 /nobreak >nul
 
 REM 4. Abrir navegador con QR
