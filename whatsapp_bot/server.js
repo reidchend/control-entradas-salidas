@@ -16,6 +16,12 @@ const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN || 'mi_token_secreto_123';
 app.use(cors());
 app.use(express.json());
 
+// Header anti-interstitial ngrok
+app.use((req, res, next) => {
+    res.setHeader('ngrok-skip-browser-warning', 'true');
+    next();
+});
+
 // Middleware de autenticación (excepto para /qr)
 app.use((req, res, next) => {
     // No requiere auth para la página del QR

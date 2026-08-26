@@ -3,42 +3,27 @@ chcp 65001 >nul
 echo === WhatsApp Bot - Inicio ===
 
 set BOT_DIR=C:\Users\ADMINISTRACION02\Documents\APP REID\whatsapp_bot
-set ZROK=%BOT_DIR%\zrok.exe
+set NGROK=%BOT_DIR%\ngrok.exe
 
-REM 1. Eliminar shares corruptos/viejos
-echo Limpiando shares zrok...
-"%ZROK%" delete share lycorys-control 2>nul
-"%ZROK%" delete share lycoris-bot 2>nul
-"%ZROK%" delete environment 2>nul
-timeout /t 3 /nobreak >nul
-
-REM 2. Disable + Enable zrok
-echo Deshabilitando zrok previo...
-"%ZROK%" disable 2>nul
+REM 1. Matar instancias previas
+echo Cerrando instancias previas...
+taskkill /F /IM node.exe 2>nul
+taskkill /F /IM ngrok.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-echo Restaurando endpoint v2...
-"%ZROK%" config set apiEndpoint https://api-v2.zrok.io 2>nul
-
-echo Habilitando zrok...
-"%ZROK%" enable VEmjqUcsIk8u --headless
-if %errorlevel% neq 0 (
-    echo [ERROR] zrok enable fallo
-    pause
-    exit /b 1
+REM 2. Configurar authtoken ngrok (solo primera vez)
+if not exist "%BOT_DIR%\.ngrok.yml" (
+    echo Configurando ngrok...
+    "%NGROK%" config add-authtoken 3DBp3i1YC9T67o212BCZbjAxRUN_EhB2S5wq4Y1oDsbKS4Lo
 )
 
-REM 3. Crear share nuevo
-echo Creando share lycoris-bot-v2...
-"%ZROK%" share public http://127.0.0.1:3000 --backend-mode proxy --unique-name lycoris-bot-v2
-if %errorlevel% neq 0 (
-    echo [ERROR] zrok share fallo
-    pause
-    exit /b 1
-)
+REM 3. Iniciar ngrok
+echo Iniciando ngrok...
+start /b "%NGROK%" http --domain=opt-dazzling-elves.ngrok-free.dev 3000
+timeout /t 5 /nobreak >nul
 
 REM 4. Abrir navegador con QR
-start https://lycoris-bot-v2.shares.zrok.io/qr
+start https://opt-dazzling-elves.ngrok-free.dev/qr
 
 REM 5. Iniciar bot
 cd /d "%BOT_DIR%"

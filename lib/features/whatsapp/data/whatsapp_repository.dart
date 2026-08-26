@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import '../../../core/data/supabase_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 
-const whatsappBotUrl = 'https://lycoris-bot-v2.shares.zrok.io';
+const whatsappBotUrl = 'https://opt-dazzling-elves.ngrok-free.dev';
 const whatsappBotToken = 'mi_token_secreto_123';
 
 class WhatsappRepository {
@@ -69,7 +69,7 @@ class WhatsappRepository {
 
   Map<String, String> get _headers => {
         'x-auth-token': whatsappBotToken,
-        'skip_zrok_interstitial': '1',
+        'ngrok-skip-browser-warning': 'true',
       };
 
   /// Convierte bytes de imagen a JPEG base64 si es necesario.
