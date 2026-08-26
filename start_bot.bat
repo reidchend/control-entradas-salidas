@@ -14,7 +14,7 @@ timeout /t 3 /nobreak >nul
 
 REM 2. Enable zrok
 echo Habilitando zrok...
-"%ZROK%" enable
+"%ZROK%" enable MTufMotg8wH5 --headless
 if %errorlevel% neq 0 (
     echo [ERROR] zrok enable fallo
     pause
