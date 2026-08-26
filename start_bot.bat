@@ -12,7 +12,11 @@ echo Limpiando shares zrok...
 "%ZROK%" delete environment 2>nul
 timeout /t 3 /nobreak >nul
 
-REM 2. Enable zrok
+REM 2. Disable + Enable zrok
+echo Deshabilitando zrok previo...
+"%ZROK%" disable 2>nul
+timeout /t 2 /nobreak >nul
+
 echo Habilitando zrok...
 "%ZROK%" enable MTufMotg8wH5 --headless
 if %errorlevel% neq 0 (
