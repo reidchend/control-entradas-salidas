@@ -262,14 +262,14 @@ String formatValidationMessage({
       ? _fmtFechaHora(fechaEntrada)
       : _fmtFechaHora(DateTime.now());
   final productosBlock = productos.contains('\n')
-      ? '*Cargo productos:*\n'
+      ? '📦 *Cargo productos:*\n'
           '${productos.split('\n').map((l) => '• $l').join('\n')}'
-      : '*Cargo productos:* $productos';
-  return '*ENTRADA VALIDADA*\n\n'
+      : '📦 *Cargo productos:* $productos';
+  return '✅ *ENTRADA VALIDADA*\n\n'
       '$productosBlock\n'
-      '*Proveedor:* $proveedor\n'
-      '*Factura:* $factura\n'
-      '*Fecha:* $fechaStr\n'
-      '*Usuario:* $usuario\n\n'
+      '🏪 *Proveedor:* $proveedor\n'
+      '🧾 *Factura:* $factura\n'
+      '📅 *Fecha:* $fechaStr\n'
+      '👤 *Usuario:* $usuario\n\n'
       '_Lycoris bot_';
 }
