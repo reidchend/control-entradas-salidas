@@ -17,6 +17,9 @@ echo Deshabilitando zrok previo...
 "%ZROK%" disable 2>nul
 timeout /t 2 /nobreak >nul
 
+echo Restaurando endpoint v2...
+"%ZROK%" config set apiEndpoint https://api-v2.zrok.io 2>nul
+
 echo Habilitando zrok...
 "%ZROK%" enable VEmjqUcsIk8u --headless
 if %errorlevel% neq 0 (
