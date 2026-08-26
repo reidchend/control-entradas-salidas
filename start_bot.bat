@@ -18,7 +18,7 @@ echo Deshabilitando zrok previo...
 timeout /t 2 /nobreak >nul
 
 echo Habilitando zrok...
-"%ZROK%" enable MTufMotg8wH5 --headless
+"%ZROK%" enable VEmjqUcsIk8u --headless
 if %errorlevel% neq 0 (
     echo [ERROR] zrok enable fallo
     pause
