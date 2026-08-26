@@ -13,16 +13,41 @@ echo Limpiando shares zrok...
 timeout /t 3 /nobreak >nul
 
 REM 2. Enable zrok
-"%ZROK%" enable 2>nul
+echo Habilitando zrok...
+"%ZROK%" enable
+if %errorlevel% neq 0 (
+    echo [ERROR] zrok enable fallo
+    pause
+    exit /b 1
+)
 
 REM 3. Crear share nuevo
 echo Creando share lycoris-bot...
 "%ZROK%" share public http://127.0.0.1:3000 --backend-mode proxy --unique-name lycoris-bot
+if %errorlevel% neq 0 (
+    echo [ERROR] zrok share fallo
+    pause
+    exit /b 1
+)
 
 REM 4. Abrir navegador con QR
 start https://lycoris-bot.shares.zrok.io/qr
 
 REM 5. Iniciar bot
 cd /d "%BOT_DIR%"
-npm install
+echo.
+echo === Instalando dependencias ===
+call npm install
+if %errorlevel% neq 0 (
+    echo [ERROR] npm install fallo
+    pause
+    exit /b 1
+)
+
+echo === Iniciando servidor ===
 node server.js
+if %errorlevel% neq 0 (
+    echo [ERROR] node server.js fallo
+    pause
+    exit /b 1
+)
