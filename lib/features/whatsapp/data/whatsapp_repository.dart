@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 
 import '../../../core/data/supabase_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
@@ -70,6 +72,34 @@ class WhatsappRepository {
         'skip_zrok_interstitial': '1',
       };
 
+  /// Convierte bytes de imagen a JPEG base64 si es necesario.
+  /// El clipboard de Windows devuelve BMP/DIB que WhatsApp no puede mostrar.
+  static String _ensureJpegBase64(String base64Image) {
+    try {
+      final bytes = base64Decode(base64Image);
+
+      // JPEG: FF D8 FF
+      if (bytes.length >= 3 &&
+          bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+        return base64Image;
+      }
+      // PNG: 89 50 4E 47
+      if (bytes.length >= 4 &&
+          bytes[0] == 0x89 && bytes[1] == 0x50 &&
+          bytes[2] == 0x4E && bytes[3] == 0x47) {
+        return base64Image;
+      }
+
+      // Otro formato (BMP, TIFF, etc.) → decodificar y re-encodear como JPEG
+      final image = img.decodeImage(bytes);
+      if (image == null) return base64Image;
+      final jpeg = img.encodeJpg(image, quality: 85);
+      return base64Encode(jpeg);
+    } catch (_) {
+      return base64Image;
+    }
+  }
+
   Future<bool> _enviarTextoDirecto(String mensaje) async {
     try {
       final resp = await http
@@ -134,9 +164,11 @@ class WhatsappRepository {
     required String? imagenBase64,
     String caption = '',
   }) async {
-    if (imagenBase64 != null &&
-        await _enviarImagenDirecto(imagenBase64: imagenBase64, caption: caption)) {
-      return true;
+    if (imagenBase64 != null && imagenBase64.isNotEmpty) {
+      final jpeg = _ensureJpegBase64(imagenBase64);
+      if (await _enviarImagenDirecto(imagenBase64: jpeg, caption: caption)) {
+        return true;
+      }
     }
     await saveToQueue(
       tipo: imagenBase64 != null ? 'image' : 'text',
@@ -172,7 +204,11 @@ class WhatsappRepository {
     if (msg.estado != 'pending' && msg.estado != 'failed') return false;
     await updateEstado(msg.id, 'sending');
     final success = msg.tipo == 'image'
-        ? await _enviarImagenDirecto(imagenBase64: msg.imagenBase64, caption: msg.mensaje ?? '')
+        ? await _enviarImagenDirecto(
+            imagenBase64: msg.imagenBase64 != null
+                ? _ensureJpegBase64(msg.imagenBase64!)
+                : null,
+            caption: msg.mensaje ?? '')
         : await _enviarTextoDirecto(msg.mensaje ?? '');
     if (success) {
       await updateEstado(msg.id, 'sent');
