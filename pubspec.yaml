@@ -34,7 +34,7 @@ dependencies:
   # vía RAW datatype. No tiene efecto en web/Android (se usa preview + diálogo).
   windows_printer: ^0.2.1
   # Decodificar/encodear imágenes (BMP→JPEG para WhatsApp)
-  image: ^4.5.3
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_test:
