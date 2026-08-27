@@ -1,7 +1,7 @@
 const { spawn, exec } = require('child_process');
 const { updateBotUrl } = require('./update_url');
 
-const CLOUDFLARED = process.env.CLOUDFLARED || 'cloudflared.exe';
+const CLOUDFLARED = process.env.CLOUDFLARED || require('path').join(__dirname, 'cloudflared.exe');
 const LOCAL_PORT = process.env.LOCAL_PORT || '3000';
 
 let urlFound = false;
