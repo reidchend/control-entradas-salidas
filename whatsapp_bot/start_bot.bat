@@ -11,11 +11,13 @@ echo [1/3] Instalando dependencias...
 cd /d "%BOT_DIR%"
 call npm install --production >nul 2>&1
 
+echo Cargando variables de entorno...
+for /f "usebackq tokens=1,* delims==" %%a in ("%BOT_DIR%\.env") do set "%%a=%%b"
+
 echo [2/3] Iniciando servidor...
 start /b "" node "%BOT_DIR%\server.js"
 
 echo [3/3] Iniciando tunnel y guardando URL...
-for /f "tokens=1,* delims==" %%a in (%BOT_DIR%\.env) do set %%a=%%b
 node "%BOT_DIR%\start_tunnel.js"
 
 pause
