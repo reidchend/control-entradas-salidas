@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control - WhatsApp Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="border-b border-gray-800 pb-4 mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-green-400 flex items-center gap-2">
+                    <span>🤖</span> Lycorys Bot Control
+                </h1>
+                <p class="text-gray-400 text-sm mt-1">Consola de pruebas para administración de endpoints</p>
+            </div>
+            <div id="status-badge" class="bg-gray-800 text-gray-400 text-xs px-3 py-1.5 rounded-full font-mono border border-gray-700">
+                Listo para enviar peticiones
+            </div>
+        </header>
+
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
+            <h2 class="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">⚙️ Configuración del Servidor</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">URL Base del Bot</label>
+                    <input type="text" id="baseUrl" placeholder="https://allocated-announcement-ing-seq.trycloudflare.com" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-green-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Token de Seguridad (Plano)</label>
+                    <input type="password" id="apiToken" placeholder="Introduce tu WHATSAPP_BOT_TOKEN" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-green-500 font-mono">
+                </div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 space-y-6">
+
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="bg-blue-900/40 text-blue-400 text-xs font-mono px-2 py-0.5 rounded border border-blue-800/60">GET /groups</span>
+                        <button onclick="listarGrupos()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg text-sm transition-colors">Listar Grupos</button>
+                    </div>
+                    <p class="text-xs text-gray-400">Solicita al bot la estructura completa de los grupos vinculados actualmente.</p>
+                </div>
+
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <span class="bg-green-900/40 text-green-400 text-xs font-mono px-2 py-0.5 rounded border border-green-800/60 inline-block mb-3">POST /send</span>
+                    <form onsubmit="ejecutarPost(event, '/send', { message: this.msg.value })" class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Mensaje al Grupo por Defecto</label>
+                            <textarea name="msg" required rows="2" placeholder="Escribe el mensaje corporativo..." class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500"></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-green-600 hover:bg-green-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">Enviar Mensaje Global</button>
+                    </form>
+                </div>
+
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <span class="bg-green-900/40 text-green-400 text-xs font-mono px-2 py-0.5 rounded border border-green-800/60 inline-block mb-3">POST /send-to</span>
+                    <form onsubmit="ejecutarPost(event, '/send-to', { to: this.to.value, message: this.message.value })" class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="md:col-span-1">
+                                <label class="block text-xs text-gray-400 mb-1">Destinatario (Número)</label>
+                                <input type="text" name="to" required placeholder="584121234567" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500 font-mono">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs text-gray-400 mb-1">Mensaje Privado</label>
+                                <input type="text" name="message" required placeholder="Hola, este es un mensaje directo..." class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg text-sm transition-colors">Enviar a Destinatario</button>
+                    </form>
+                </div>
+
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <span class="bg-green-900/40 text-green-400 text-xs font-mono px-2 py-0.5 rounded border border-green-800/60 inline-block mb-3">POST /send-image</span>
+                    <form onsubmit="ejecutarPost(event, '/send-image', { imageUrl: this.imageUrl.value, caption: this.caption.value })" class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">URL Pública de la Imagen</label>
+                            <input type="url" name="imageUrl" required placeholder="https://imagenes.com/reporte.jpg" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500 font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Pie de foto (Caption)</label>
+                            <input type="text" name="caption" placeholder="Aquí está el reporte solicitado" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500">
+                        </div>
+                        <button type="submit" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg text-sm transition-colors">Enviar Imagen</button>
+                    </form>
+                </div>
+
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <span class="bg-purple-900/40 text-purple-400 text-xs font-mono px-2 py-0.5 rounded border border-purple-800/60 inline-block mb-3">POST /set-group</span>
+                    <form onsubmit="ejecutarPost(event, '/set-group', { groupId: this.groupId.value })" class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">ID Único del Grupo de WhatsApp</label>
+                            <input type="text" name="groupId" required placeholder="120363238472910382@g.us" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500 font-mono">
+                        </div>
+                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">Establecer Grupo Activo</button>
+                    </form>
+                </div>
+
+            </div>
+
+            <div class="lg:col-span-1">
+                <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 sticky top-6 shadow-lg h-[calc(100vh-12rem)] flex flex-col">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Respuesta del Servidor</h2>
+                        <button onclick="limpiarConsola()" class="text-xs text-gray-500 hover:text-gray-300">Limpiar</button>
+                    </div>
+                    <div id="response-output" class="w-full flex-1 bg-gray-950 border border-gray-700 rounded-lg p-4 font-mono text-xs overflow-y-auto text-green-400 whitespace-pre-wrap">
+// Las respuestas de los endpoints se renderizarán aquí en tiempo real...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if(localStorage.getItem('bot_url')) document.getElementById('baseUrl').value = localStorage.getItem('bot_url');
+            if(localStorage.getItem('bot_token')) document.getElementById('apiToken').value = localStorage.getItem('bot_token');
+        });
+
+        function getCredentials() {
+            let url = document.getElementById('baseUrl').value.trim();
+            const token = document.getElementById('apiToken').value.trim();
+
+            if (!url) url = "http://localhost:3000"; 
+            if (url.endsWith('/')) url = url.slice(0, -1); 
+
+            localStorage.setItem('bot_url', url);
+            localStorage.setItem('bot_token', token);
+
+            return { url, token };
+        }
+
+        function actualizarEstatus(texto, esError = false) {
+            const badge = document.getElementById('status-badge');
+            badge.innerText = texto;
+            if (esError) {
+                badge.className = "bg-red-900/40 text-red-400 text-xs px-3 py-1.5 rounded-full font-mono border border-red-800/60";
+            } else {
+                badge.className = "bg-green-900/40 text-green-400 text-xs px-3 py-1.5 rounded-full font-mono border border-green-800/60";
+            }
+        }
+
+        function limpiarConsola() {
+            document.getElementById('response-output').innerText = '// Consola limpia.';
+        }
+
+        async function ejecutarPost(event, endpoint, bodyData) {
+            event.preventDefault();
+            const consoleOut = document.getElementById('response-output');
+            const { url, token } = getCredentials();
+            
+            consoleOut.innerText = `Enviando POST a ${url}${endpoint}...\n`;
+            actualizarEstatus("Procesando...");
+
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['x-auth-token'] = token;
+            }
+
+            try {
+                const response = await fetch(`${url}${endpoint}`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(bodyData)
+                });
+
+                const data = await response.json().catch(() => null) || await response.text();
+                
+                consoleOut.innerText = JSON.stringify({
+                    status: response.status,
+                    statusText: response.statusText,
+                    body: data
+                }, null, 2);
+
+                if(response.ok) {
+                    actualizarEstatus("Petición Exitosa 200 OK");
+                    event.target.reset(); 
+                } else {
+                    actualizarEstatus(`Error ${response.status}`, true);
+                }
+
+            } catch (error) {
+                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\nNo se pudo establecer contacto con el bot en ${url}.\n\nDetalles:\n${error.message}`;
+                actualizarEstatus("Fallo de Red", true);
+            }
+        }
+
+        async function listarGrupos() {
+            const consoleOut = document.getElementById('response-output');
+            const { url, token } = getCredentials();
+            
+            consoleOut.innerText = `Enviando GET a ${url}/groups...\n`;
+            actualizarEstatus("Cargando grupos...");
+
+            const headers = {};
+            if (token) {
+                headers['x-auth-token'] = token;
+            }
+
+            try {
+                const response = await fetch(`${url}/groups`, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const data = await response.json().catch(() => null) || await response.text();
+
+                consoleOut.innerText = JSON.stringify(data, null, 2);
+                
+                if(response.ok) {
+                    actualizarEstatus("Grupos cargados");
+                } else {
+                    actualizarEstatus(`Error ${response.status}`, true);
+                }
+
+            } catch (error) {
+                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\nNo se pudo mapear la lista de grupos.\n\nDetalles:\n${error.message}`;
+                actualizarEstatus("Fallo de Red", true);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -191,6 +191,12 @@ app.get('/', (req, res) => {
     });
 });
 
+// Panel de control
+app.get('/panel', (req, res) => {
+    const panelPath = path.join(__dirname, 'panel_bot.html');
+    res.sendFile(panelPath);
+});
+
 // Endpoint para enviar mensaje al grupo
 app.post('/send', async (req, res) => {
     try {
