@@ -129,8 +129,8 @@ class WhatsappRepository {
       final resp = await http
           .post(
             Uri.parse('$url/send'),
-            headers: _headers,
-            body: {'message': mensaje},
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'message': mensaje}),
           )
           .timeout(const Duration(seconds: 30));
       return resp.statusCode == 200;

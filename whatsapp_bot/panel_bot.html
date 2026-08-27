@@ -9,30 +9,76 @@
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
 
     <div class="container mx-auto px-4 py-8 max-w-5xl">
-        <header class="border-b border-gray-800 pb-4 mb-8 flex justify-between items-center">
+        <header class="border-b border-gray-800 pb-4 mb-8 flex justify-between items-center flex-wrap gap-3">
             <div>
                 <h1 class="text-3xl font-bold text-green-400 flex items-center gap-2">
                     <span>🤖</span> Lycorys Bot Control
                 </h1>
-                <p class="text-gray-400 text-sm mt-1">Consola de pruebas para administración de endpoints</p>
+                <p class="text-gray-400 text-sm mt-1">Consola de administración del bot de WhatsApp</p>
             </div>
-            <div id="status-badge" class="bg-gray-800 text-gray-400 text-xs px-3 py-1.5 rounded-full font-mono border border-gray-700">
-                Listo para enviar peticiones
+            <div class="flex flex-col items-end gap-2">
+                <div id="status-badge" class="bg-gray-800 text-gray-400 text-xs px-3 py-1.5 rounded-full font-mono border border-gray-700">
+                    Cargando estado...
+                </div>
+                <div id="bot-availability" class="text-xs font-mono text-gray-500 hidden"></div>
             </div>
         </header>
 
+        <!-- Tarjeta de Estado del Bot -->
         <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
-            <h2 class="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">⚙️ Configuración del Servidor</h2>
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-lg font-semibold text-gray-200 flex items-center gap-2">📡 Estado del Bot</h2>
+                <button onclick="refreshAll()" class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                    <span id="refresh-spin" class="inline-block">🔄</span> Actualizar
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="status-cards">
+                <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
+                    <div class="text-xs text-gray-400 uppercase mb-1">Conexión WhatsApp</div>
+                    <div id="conn-card" class="text-sm font-semibold text-gray-500">—</div>
+                </div>
+                <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
+                    <div class="text-xs text-gray-400 uppercase mb-1">Grupo Activo</div>
+                    <div id="active-group-card" class="text-sm font-semibold text-gray-500">—</div>
+                </div>
+                <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
+                    <div class="text-xs text-gray-400 uppercase mb-1">Grupos Disponibles</div>
+                    <div id="groups-count-card" class="text-sm font-semibold text-gray-500">—</div>
+                </div>
+            </div>
+            <div id="active-group-detail" class="hidden mt-4 bg-green-950/30 border border-green-800/50 rounded-lg p-3 text-sm"></div>
+        </section>
+
+        <!-- Configuración del servidor -->
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
+            <h2 class="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">⚙️ Conexión al Servidor</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">URL Base del Bot</label>
                     <input type="text" id="baseUrl" placeholder="https://allocated-announcement-ing-seq.trycloudflare.com" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-green-500 font-mono">
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Token de Seguridad (Plano)</label>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Token de Seguridad</label>
                     <input type="password" id="apiToken" value="mi_token_secreto_123" placeholder="Introduce tu WHATSAPP_BOT_TOKEN" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-green-500 font-mono">
                 </div>
             </div>
+        </section>
+
+        <!-- Selección de grupo activo -->
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
+            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+                <span class="bg-purple-900/40 text-purple-400 text-xs font-mono px-2 py-0.5 rounded border border-purple-800/60">POST /set-group</span>
+                <button onclick="cargarGrupos()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded-lg transition-colors">↻ Recargar lista</button>
+            </div>
+            <div class="flex flex-col md:flex-row gap-3">
+                <select id="gruposSelect" class="w-full md:flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500">
+                    <option value="">Cargando grupos...</option>
+                </select>
+                <button onclick="establecerGrupoSeleccionado()" class="bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap">
+                    Establecer como grupo activo
+                </button>
+            </div>
+            <p id="grupos-info" class="text-xs text-gray-400 mt-2"></p>
         </section>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -41,9 +87,10 @@
                 <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
                     <div class="flex justify-between items-center mb-3">
                         <span class="bg-blue-900/40 text-blue-400 text-xs font-mono px-2 py-0.5 rounded border border-blue-800/60">GET /groups</span>
-                        <button onclick="listarGrupos()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg text-sm transition-colors">Listar Grupos</button>
+                        <button onclick="cargarGrupos()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg text-sm transition-colors">Listar Grupos</button>
                     </div>
-                    <p class="text-xs text-gray-400">Solicita al bot la estructura completa de los grupos vinculados actualmente.</p>
+                    <p class="text-xs text-gray-400 mb-3">Grupos a los que está vinculado el número del bot.</p>
+                    <div id="grupos-lista" class="space-y-2 max-h-64 overflow-y-auto"></div>
                 </div>
 
                 <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
@@ -59,7 +106,7 @@
 
                 <div class="bg-gray-800 border border-gray-700 rounded-xl p-5">
                     <span class="bg-green-900/40 text-green-400 text-xs font-mono px-2 py-0.5 rounded border border-green-800/60 inline-block mb-3">POST /send-to</span>
-                    <form onsubmit="ejecutarPost(event, '/send-to', { to: this.to.value, message: this.message.value })" class="space-y-3">
+                    <form onsubmit="ejecutarPost(event, '/send-to', { jid: this.to.value, message: this.message.value })" class="space-y-3">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div class="md:col-span-1">
                                 <label class="block text-xs text-gray-400 mb-1">Destinatario (Número)</label>
@@ -96,7 +143,7 @@
                             <label class="block text-xs text-gray-400 mb-1">ID Único del Grupo de WhatsApp</label>
                             <input type="text" name="groupId" required placeholder="120363238472910382@g.us" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500 font-mono">
                         </div>
-                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">Establecer Grupo Activo</button>
+                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">Establecer Grupo Activo (por ID)</button>
                     </form>
                 </div>
 
@@ -117,22 +164,34 @@
     </div>
 
     <script>
+        let cachedGroups = [];
+
         document.addEventListener('DOMContentLoaded', () => {
             if(localStorage.getItem('bot_url')) document.getElementById('baseUrl').value = localStorage.getItem('bot_url');
             if(localStorage.getItem('bot_token')) document.getElementById('apiToken').value = localStorage.getItem('bot_token');
+            refreshAll();
         });
 
         function getCredentials() {
             let url = document.getElementById('baseUrl').value.trim();
             const token = document.getElementById('apiToken').value.trim();
 
-            if (!url) url = "http://localhost:3000"; 
-            if (url.endsWith('/')) url = url.slice(0, -1); 
+            if (!url) url = "http://localhost:3000";
+            if (url.endsWith('/')) url = url.slice(0, -1);
 
             localStorage.setItem('bot_url', url);
             localStorage.setItem('bot_token', token);
 
             return { url, token };
+        }
+
+        async function apiGET(endpoint) {
+            const { url, token } = getCredentials();
+            const headers = {};
+            if (token) headers['x-auth-token'] = token;
+            const resp = await fetch(`${url}${endpoint}`, { method: 'GET', headers });
+            const data = await resp.json().catch(() => null) || await resp.text();
+            return { ok: resp.ok, status: resp.status, data };
         }
 
         function actualizarEstatus(texto, esError = false) {
@@ -149,77 +208,184 @@
             document.getElementById('response-output').innerText = '// Consola limpia.';
         }
 
-        async function ejecutarPost(event, endpoint, bodyData) {
-            event.preventDefault();
-            const consoleOut = document.getElementById('response-output');
-            const { url, token } = getCredentials();
-            
-            consoleOut.innerText = `Enviando POST a ${url}${endpoint}...\n`;
-            actualizarEstatus("Procesando...");
+        function setRespuesta(texto) {
+            document.getElementById('response-output').innerText = texto;
+        }
 
-            const headers = { 'Content-Type': 'application/json' };
-            if (token) {
-                headers['x-auth-token'] = token;
+        async function refreshAll() {
+            const spin = document.getElementById('refresh-spin');
+            spin.classList.add('animate-spin');
+            actualizarEstatus("Consultando estado...");
+            await Promise.all([cargarEstado(), cargarGrupos()]);
+            spin.classList.remove('animate-spin');
+            actualizarEstatus("Estado actualizado");
+        }
+
+        async function cargarEstado() {
+            const card = document.getElementById('conn-card');
+            const groupCard = document.getElementById('active-group-card');
+            const groupsCard = document.getElementById('groups-count-card');
+            const detail = document.getElementById('active-group-detail');
+            try {
+                const r = await apiGET('/config');
+                if (!r.ok) {
+                    card.textContent = 'Sin conexión';
+                    card.className = "text-sm font-semibold text-red-400";
+                    groupCard.textContent = '—';
+                    groupsCard.textContent = '—';
+                    detail.classList.add('hidden');
+                    actualizarEstatus(`Error ${r.status}`, true);
+                    setRespuesta(JSON.stringify({ status: r.status, body: r.data }, null, 2));
+                    return;
+                }
+                const d = r.data;
+                const connected = d.whatsapp_connected === true;
+                card.textContent = connected ? '✅ Conectado' : '❌ Desconectado';
+                card.className = connected ? "text-sm font-semibold text-green-400" : "text-sm font-semibold text-red-400";
+
+                const gid = d.group_id;
+                if (gid) {
+                    groupCard.textContent = d.group_name || gid;
+                    groupCard.className = "text-sm font-semibold text-green-400";
+                    detail.classList.remove('hidden');
+                    detail.innerHTML = `
+                        <div class="text-green-300 font-semibold mb-1">📢 Grupo activo: ${escapeHtml(d.group_name || 'Sin nombre')}</div>
+                        <div class="text-gray-400 text-xs font-mono break-all">ID: ${escapeHtml(gid)}</div>
+                        ${d.group_participants != null ? `<div class="text-gray-400 text-xs mt-1">👥 ${d.group_participants} participantes</div>` : ''}
+                        <button onclick="cargarEstado()" class="mt-2 text-xs text-green-400 hover:text-green-300 underline">↻ Actualizar grupo</button>
+                    `;
+                } else {
+                    groupCard.textContent = '⚠️ No configurado';
+                    groupCard.className = "text-sm font-semibold text-yellow-400";
+                    detail.classList.add('hidden');
+                }
+                groupsCard.textContent = cachedGroups.length > 0 ? `${cachedGroups.length}` : '—';
+                groupsCard.className = "text-sm font-semibold text-green-400";
+            } catch (e) {
+                card.textContent = '⚠️ Fallo de red';
+                card.className = "text-sm font-semibold text-red-400";
+                groupCard.textContent = '—';
+                groupsCard.textContent = '—';
+                detail.classList.add('hidden');
+                actualizarEstatus("Fallo de Red", true);
+                setRespuesta(`[ERROR DE CONEXIÓN]:\nNo se pudo contactar el bot.\n\n${e.message}`);
             }
+        }
+
+        function escapeHtml(s) {
+            if (s == null) return '';
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        async function cargarGrupos() {
+            const select = document.getElementById('gruposSelect');
+            const info = document.getElementById('grupos-info');
+            const lista = document.getElementById('grupos-lista');
+            const groupsCard = document.getElementById('groups-count-card');
+            const consoleOut = document.getElementById('response-output');
+
+            select.innerHTML = '<option value="">Cargando...</option>';
+            info.textContent = 'Consultando grupos...';
 
             try {
-                const response = await fetch(`${url}${endpoint}`, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify(bodyData)
-                });
+                const r = await apiGET('/groups');
+                consoleOut.innerText = JSON.stringify(r.data, null, 2);
+                if (!r.ok) {
+                    select.innerHTML = '<option value="">Error al cargar grupos</option>';
+                    info.textContent = r.data && r.data.error ? r.data.error : `HTTP ${r.status}`;
+                    return;
+                }
+                const groups = (r.data && r.data.groups) || [];
+                cachedGroups = groups;
+                groupsCard.textContent = `${groups.length}`;
+                groupsCard.className = "text-sm font-semibold text-green-400";
 
-                const data = await response.json().catch(() => null) || await response.text();
-                
-                consoleOut.innerText = JSON.stringify({
-                    status: response.status,
-                    statusText: response.statusText,
-                    body: data
-                }, null, 2);
+                const config = await apiGET('/config');
+                const activeId = config.ok ? config.data.group_id : null;
 
-                if(response.ok) {
-                    actualizarEstatus("Petición Exitosa 200 OK");
-                    event.target.reset(); 
-                } else {
-                    actualizarEstatus(`Error ${response.status}`, true);
+                if (groups.length === 0) {
+                    select.innerHTML = '<option value="">No hay grupos disponibles</option>';
+                    info.textContent = 'El número del bot no está en ningún grupo.';
+                    lista.innerHTML = '<p class="text-xs text-gray-500">Sin grupos.</p>';
+                    return;
                 }
 
-            } catch (error) {
-                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\nNo se pudo establecer contacto con el bot en ${url}.\n\nDetalles:\n${error.message}`;
+                let options = '<option value="">Selecciona un grupo...</option>';
+                groups.forEach(g => {
+                    const sel = activeId === g.id ? ' selected' : '';
+                    options += `<option value="${escapeHtml(g.id)}"${sel}>${escapeHtml(g.name)} (${g.participants})${sel ? ' ✓ activo' : ''}</option>`;
+                });
+                select.innerHTML = options;
+
+                if (activeId && !groups.some(g => g.id === activeId)) {
+                    select.innerHTML += `<option value="${escapeHtml(activeId)}" selected>👁 Grupo activo no listado</option>`;
+                }
+
+                lista.innerHTML = groups.map(g => {
+                    const activo = g.id === activeId;
+                    return `
+                        <div class="flex justify-between items-center bg-gray-950 border ${activo ? 'border-green-700' : 'border-gray-700'} rounded-lg px-3 py-2">
+                            <div class="min-w-0">
+                                <div class="text-sm font-medium ${activo ? 'text-green-400' : 'text-gray-200'} truncate">
+                                    ${activo ? '✅ ' : ''}${escapeHtml(g.name)}
+                                </div>
+                                <div class="text-xs text-gray-500 font-mono truncate">${escapeHtml(g.id)}</div>
+                            </div>
+                            <span class="text-xs text-gray-400 whitespace-nowrap ml-2">👥 ${g.participants}</span>
+                        </div>`;
+                }).join('');
+
+                info.textContent = `${groups.length} grupo(s) encontrado(s).`;
+                actualizarEstatus("Grupos cargados");
+            } catch (e) {
+                select.innerHTML = '<option value="">Error de conexión</option>';
+                info.textContent = `No se pudo conectar: ${e.message}`;
+                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\n${e.message}`;
                 actualizarEstatus("Fallo de Red", true);
             }
         }
 
-        async function listarGrupos() {
-            const consoleOut = document.getElementById('response-output');
-            const { url, token } = getCredentials();
-            
-            consoleOut.innerText = `Enviando GET a ${url}/groups...\n`;
-            actualizarEstatus("Cargando grupos...");
-
-            const headers = {};
-            if (token) {
-                headers['x-auth-token'] = token;
+        async function establecerGrupoSeleccionado() {
+            const select = document.getElementById('gruposSelect');
+            const gid = select.value;
+            if (!gid) {
+                actualizarEstatus("Selecciona un grupo", true);
+                return;
             }
+            const r = await ejecutarPostRaw('/set-group', { groupId: gid });
+            if (r && r.ok) {
+                await cargarEstado();
+                await cargarGrupos();
+                actualizarEstatus("Grupo activo actualizado");
+            }
+        }
 
+        async function ejecutarPostRaw(endpoint, bodyData) {
+            const { url, token } = getCredentials();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['x-auth-token'] = token;
+            const resp = await fetch(`${url}${endpoint}`, { method: 'POST', headers, body: JSON.stringify(bodyData) });
+            const data = await resp.json().catch(() => null) || await resp.text();
+            return { ok: resp.ok, status: resp.status, data };
+        }
+
+        async function ejecutarPost(event, endpoint, bodyData) {
+            event.preventDefault();
+            const consoleOut = document.getElementById('response-output');
+            consoleOut.innerText = `Enviando POST a ${endpoint}...\n`;
+            actualizarEstatus("Procesando...");
             try {
-                const response = await fetch(`${url}/groups`, {
-                    method: 'GET',
-                    headers: headers
-                });
-
-                const data = await response.json().catch(() => null) || await response.text();
-
-                consoleOut.innerText = JSON.stringify(data, null, 2);
-                
-                if(response.ok) {
-                    actualizarEstatus("Grupos cargados");
+                const r = await ejecutarPostRaw(endpoint, bodyData);
+                consoleOut.innerText = JSON.stringify({ status: r.status, statusText: '', body: r.data }, null, 2);
+                if (r.ok) {
+                    actualizarEstatus("Petición Exitosa 200 OK");
+                    event.target.reset();
+                    if (endpoint === '/set-group') await cargarEstado();
                 } else {
-                    actualizarEstatus(`Error ${response.status}`, true);
+                    actualizarEstatus(`Error ${r.status}`, true);
                 }
-
             } catch (error) {
-                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\nNo se pudo mapear la lista de grupos.\n\nDetalles:\n${error.message}`;
+                consoleOut.innerText = `[ERROR DE CONEXIÓN]:\nNo se pudo establecer contacto con el bot.\n\nDetalles:\n${error.message}`;
                 actualizarEstatus("Fallo de Red", true);
             }
         }

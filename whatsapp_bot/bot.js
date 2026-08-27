@@ -37,6 +37,30 @@ function saveConfig(newConfig) {
 }
 
 /**
+ * Resuelve el metadata de un grupo (nombre, participantes) por su ID.
+ * Retorna null si no está conectado o no se encuentra.
+ */
+async function getGroupMetadata(groupId) {
+    if (!sock || !isConnected || !groupId) {
+        return null;
+    }
+    try {
+        const groups = await sock.groupFetchAllParticipating();
+        const g = Object.values(groups).find(x => x.id === groupId);
+        if (!g) return null;
+        return {
+            id: g.id,
+            name: g.subject,
+            participants: g.participants ? g.participants.length : 0,
+            desc: g.desc || null
+        };
+    } catch (error) {
+        console.error('Error al obtener metadata del grupo:', error);
+        return null;
+    }
+}
+
+/**
  * Obtiene la lista de grupos disponibles
  */
 async function getGroups() {
@@ -241,6 +265,7 @@ module.exports = {
     sendToGroup,
     sendImageToGroup,
     getGroups,
+    getGroupMetadata,
     setGroupId,
     getGroupId,
     isConnected: isWAConnected,

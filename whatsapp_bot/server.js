@@ -308,9 +308,16 @@ app.post('/set-group', (req, res) => {
 });
 
 // Endpoint para obtener la configuración actual
-app.get('/config', (req, res) => {
+app.get('/config', async (req, res) => {
+    const groupId = bot.getGroupId();
+    let group = null;
+    if (groupId && bot.isConnected()) {
+        group = await bot.getGroupMetadata(groupId);
+    }
     res.json({
-        group_id: bot.getGroupId(),
+        group_id: groupId,
+        group_name: group ? group.name : null,
+        group_participants: group ? group.participants : null,
         whatsapp_connected: bot.isConnected()
     });
 });
