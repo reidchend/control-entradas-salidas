@@ -25,7 +25,7 @@ app.use((req, res, next) => {
 // Middleware de autenticación (excepto para /qr)
 app.use((req, res, next) => {
     // No requiere auth para la página del QR
-    if (req.path === '/qr' || req.path === '/') {
+    if (req.path === '/qr' || req.path === '/' || req.path === '/panel') {
         return next();
     }
     
