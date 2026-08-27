@@ -109,7 +109,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
 
   Future<void> _registrar() async {
     if (_registrando) return;
-    _registrando = true;
+    setState(() => _registrando = true);
     try {
       await _doRegistrar();
     } catch (e, st) {
@@ -120,7 +120,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
         );
       }
     } finally {
-      _registrando = false;
+      if (mounted) setState(() => _registrando = false);
     }
   }
 
@@ -382,8 +382,14 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancelar')),
         FilledButton(
-          onPressed: _registrar,
-          child: const Text('Registrar'),
+          onPressed: _registrando ? null : _registrar,
+          child: _registrando
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Registrar'),
         ),
       ],
     );

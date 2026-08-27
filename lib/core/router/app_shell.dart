@@ -92,7 +92,14 @@ class _ShellAutenticado extends ConsumerStatefulWidget {
 
 class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
   int _index = 0;
+  int _refreshTick = 0;
   List<RealtimeSubscription> _realtimeSubs = [];
+
+  /// Botón de sincronizar del encabezado: remonta la pantalla activa para
+  /// recargar sus datos.
+  void _syncActual() {
+    setState(() => _refreshTick++);
+  }
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -133,7 +140,7 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
               index: _index,
               colors: c,
               esEscritorio: esEscritorio,
-              onSync: () {},
+              onSync: _syncActual,
               onToggleTheme: () => ref
                   .read(themeControllerProvider.notifier)
                   .toggle(),
@@ -151,7 +158,10 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
                                 topLeft: Radius.circular(20))
                             : null,
                       ),
-                      child: _DestinoPage(destino: dest),
+                      child: KeyedSubtree(
+                        key: ValueKey('dest-${dest.ruta}-$_refreshTick'),
+                        child: _DestinoPage(destino: dest),
+                      ),
                     ),
                   ),
                 ],
