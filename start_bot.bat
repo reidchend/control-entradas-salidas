@@ -30,4 +30,4 @@ timeout /t 3 /nobreak >nul
 REM 4. Iniciar tunnel SSH serveo
 echo === Iniciando tunnel serveo ===
 echo URL: https://lycoris-bot.serveo.net
-ssh -o StrictHostKeyChecking=accept-new -R lycoris-bot:80:localhost:3000 serveo.net
+ssh -i C:\Users\ADMINISTRACION02\.ssh\serveo_key -o StrictHostKeyChecking=accept-new -R lycoris-bot:80:localhost:3000 serveo.net
