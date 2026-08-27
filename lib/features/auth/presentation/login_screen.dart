@@ -48,6 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_loading) return;
     setState(() {
       _error = '';
       _loading = true;
@@ -138,6 +139,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           textCapitalization: TextCapitalization.words,
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).nextFocus(),
                         ),
                       if (isRegistro) const SizedBox(height: 12),
                       TextField(
@@ -149,6 +152,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         keyboardType: TextInputType.number,
                         maxLength: 4,
                         obscureText: true,
+                        onSubmitted: (_) => !isRegistro
+                            ? _submit()
+                            : FocusScope.of(context).nextFocus(),
                       ),
                       if (isRegistro) const SizedBox(height: 12),
                       if (isRegistro)
@@ -161,6 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           keyboardType: TextInputType.number,
                           maxLength: 4,
                           obscureText: true,
+                          onSubmitted: (_) => _submit(),
                         ),
                       if (_error.isNotEmpty) ...[
                         const SizedBox(height: 12),

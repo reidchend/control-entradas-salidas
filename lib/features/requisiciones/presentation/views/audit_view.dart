@@ -30,6 +30,15 @@ class _AuditViewState extends ConsumerState<AuditView> {
   int _tab = 0;
   String? _error;
 
+  /// Muestra la cantidad real (hasta 3 decimales) sin ceros redundantes.
+  String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v
+        .toStringAsFixed(3)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -337,7 +346,7 @@ class _AuditViewState extends ConsumerState<AuditView> {
           SizedBox(
             width: 90,
             child: Text(
-              data.inicial.toStringAsFixed(2),
+              _fmtNum(data.inicial),
               textAlign: TextAlign.right,
               style: TextStyle(fontSize: 13, color: scheme.onSurface),
             ),
@@ -345,7 +354,7 @@ class _AuditViewState extends ConsumerState<AuditView> {
           SizedBox(
             width: 80,
             child: Text(
-              data.trasladada.toStringAsFixed(2),
+              _fmtNum(data.trasladada),
               textAlign: TextAlign.right,
               style: TextStyle(fontSize: 13, color: scheme.primary),
             ),
@@ -353,7 +362,7 @@ class _AuditViewState extends ConsumerState<AuditView> {
           SizedBox(
             width: 80,
             child: Text(
-              data.final_.toStringAsFixed(2),
+              _fmtNum(data.final_),
               textAlign: TextAlign.right,
               style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.bold, color: scheme.onSurface),

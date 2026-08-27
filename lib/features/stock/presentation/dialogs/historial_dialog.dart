@@ -68,6 +68,15 @@ class _MovimientoCard extends StatelessWidget {
     return '${p(d.day)}/${p(d.month)}/${d.year} ${p(d.hour)}:${p(d.minute)}';
   }
 
+  /// Muestra la cantidad real (hasta 3 decimales) sin ceros redundantes.
+  String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v
+        .toStringAsFixed(3)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -139,7 +148,7 @@ class _MovimientoCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    m.cantidadAnterior.toStringAsFixed(1),
+                    _fmtNum(m.cantidadAnterior),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                   ),
@@ -148,7 +157,7 @@ class _MovimientoCard extends StatelessWidget {
                     style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
                 Expanded(
                   child: Text(
-                    '$sign${cantMedio.toStringAsFixed(1)} $unidadMedio'.trim(),
+                    '$sign${_fmtNum(cantMedio)} $unidadMedio'.trim(),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: signColor),
                   ),
@@ -157,7 +166,7 @@ class _MovimientoCard extends StatelessWidget {
                     style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
                 Expanded(
                   child: Text(
-                    m.cantidadNueva.toStringAsFixed(1),
+                    _fmtNum(m.cantidadNueva),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: scheme.onSurface),
                   ),
