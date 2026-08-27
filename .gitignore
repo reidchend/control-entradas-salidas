@@ -68,3 +68,9 @@ app.*.map.json
 android/release.jks
 android/release.p12
 android/key.properties
+.neon
+
+# Neon Data API: secretos de firma de JWT (nunca al repo)
+neon-dataapi-keys/
+neon-dataapi-keys/private.pem
+neon-dataapi-keys/app_token.txt
