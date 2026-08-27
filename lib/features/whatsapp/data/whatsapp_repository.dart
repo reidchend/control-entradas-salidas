@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import '../../../core/data/supabase_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 
-const whatsappBotUrl = 'https://allocated-announcement-ing-seq.trycloudflare.com';
+const whatsappBotUrl = 'https://lycoris-bot.shares.zrok.io';
 const whatsappBotToken = 'mi_token_secreto_123';
 
 class WhatsappRepository {
