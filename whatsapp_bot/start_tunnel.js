@@ -1,5 +1,5 @@
 const { spawn, exec } = require('child_process');
-const { updateBotUrl } = require('./update_url');
+const { updateGist } = require('./update_gist');
 
 const CLOUDFLARED = process.env.CLOUDFLARED || require('path').join(__dirname, 'cloudflared.exe');
 const LOCAL_PORT = process.env.LOCAL_PORT || '3000';
@@ -16,8 +16,8 @@ function handleUrl(url) {
   if (urlFound) return;
   urlFound = true;
   console.log(`\n[TUNNEL] URL detected: ${url}`);
-  updateBotUrl(url).then(ok => {
-    if (ok) console.log('[TUNNEL] URL saved to Supabase');
+  updateGist(url).then(ok => {
+    if (ok) console.log('[TUNNEL] URL saved to Gist');
   });
   openBrowser(url);
 }

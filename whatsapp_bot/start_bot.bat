@@ -15,6 +15,7 @@ echo [2/3] Iniciando servidor...
 start /b "" node "%BOT_DIR%\server.js"
 
 echo [3/3] Iniciando tunnel y guardando URL...
+for /f "tokens=1,* delims==" %%a in (%BOT_DIR%\.env) do set %%a=%%b
 node "%BOT_DIR%\start_tunnel.js"
 
 pause

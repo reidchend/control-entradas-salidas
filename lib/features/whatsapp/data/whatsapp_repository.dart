@@ -9,6 +9,7 @@ import '../../../core/models/mensaje_whatsapp.dart';
 
 const whatsappBotToken = 'mi_token_secreto_123';
 const String _fallbackBotUrl = 'https://lycoris-bot.shares.zrok.io';
+const String _gistRawUrl = 'https://gist.githubusercontent.com/reidchend/5b37693a243d8d2235eea0647396b8d3/raw/bot_url.json';
 
 class WhatsappRepository {
   WhatsappRepository(this._db);
@@ -20,15 +21,14 @@ class WhatsappRepository {
     if (_cachedBotUrl != null) return _cachedBotUrl!;
 
     try {
-      final rows = await _db.client
-          .from('bot_config')
-          .select('value')
-          .eq('key', 'bot_url')
-          .limit(1);
-
-      if (rows.isNotEmpty) {
-        _cachedBotUrl = rows[0]['value'] as String;
-        return _cachedBotUrl!;
+      final resp = await http.get(Uri.parse(_gistRawUrl))
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data.containsKey('url')) {
+          _cachedBotUrl = data['url'] as String;
+          return _cachedBotUrl!;
+        }
       }
     } catch (_) {}
 
