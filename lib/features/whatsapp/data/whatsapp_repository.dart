@@ -7,14 +7,38 @@ import 'package:image/image.dart' as img;
 import '../../../core/data/supabase_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 
-const whatsappBotUrl = 'https://lycoris-bot.shares.zrok.io';
 const whatsappBotToken = 'mi_token_secreto_123';
+const String _fallbackBotUrl = 'https://lycoris-bot.shares.zrok.io';
 
 class WhatsappRepository {
   WhatsappRepository(this._db);
   final SupabaseService _db;
 
-  static String get botUrl => whatsappBotUrl;
+  String? _cachedBotUrl;
+
+  Future<String> get botUrl async {
+    if (_cachedBotUrl != null) return _cachedBotUrl!;
+
+    try {
+      final rows = await _db.client
+          .from('bot_config')
+          .select('value')
+          .eq('key', 'bot_url')
+          .limit(1);
+
+      if (rows.isNotEmpty) {
+        _cachedBotUrl = rows[0]['value'] as String;
+        return _cachedBotUrl!;
+      }
+    } catch (_) {}
+
+    _cachedBotUrl = _fallbackBotUrl;
+    return _cachedBotUrl!;
+  }
+
+  void invalidateCache() {
+    _cachedBotUrl = null;
+  }
 
   Future<List<MensajeWhatsapp>> getMensajes({
     String? estado,
@@ -101,9 +125,10 @@ class WhatsappRepository {
 
   Future<bool> _enviarTextoDirecto(String mensaje) async {
     try {
+      final url = await botUrl;
       final resp = await http
           .post(
-            Uri.parse('$whatsappBotUrl/send'),
+            Uri.parse('$url/send'),
             headers: _headers,
             body: {'message': mensaje},
           )
@@ -122,9 +147,10 @@ class WhatsappRepository {
     final b64 = imagenBase64;
     if (b64 == null || b64.isEmpty) return false;
     try {
+      final url = await botUrl;
       final resp = await http
           .post(
-            Uri.parse('$whatsappBotUrl/send-image'),
+            Uri.parse('$url/send-image'),
             headers: {..._headers, 'Content-Type': 'application/json'},
             body: jsonEncode({'imageBase64': b64, 'caption': caption}),
           )
@@ -137,8 +163,9 @@ class WhatsappRepository {
 
   Future<({bool connected, String? groupId})> getStatus() async {
     try {
+      final url = await botUrl;
       final resp = await http
-          .get(Uri.parse('$whatsappBotUrl/config'), headers: _headers)
+          .get(Uri.parse('$url/config'), headers: _headers)
           .timeout(const Duration(seconds: 5));
       if (resp.statusCode != 200) {
         return (connected: false, groupId: null);
