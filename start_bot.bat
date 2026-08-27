@@ -3,16 +3,15 @@ chcp 65001 >nul
 echo === WhatsApp Bot - Inicio ===
 
 set BOT_DIR=C:\Users\ADMINISTRACION02\Documents\APP REID\whatsapp_bot
+set NGROK=%BOT_DIR%\cloudflared.exe
 
 REM 1. Matar instancias previas
 echo Cerrando instancias previas...
 taskkill /F /IM node.exe 2>nul
+taskkill /F /IM cloudflared.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-REM 2. Abrir navegador con QR
-start https://lycoris-bot.serveo.net/qr
-
-REM 3. Iniciar bot Node.js
+REM 2. Iniciar bot Node.js
 cd /d "%BOT_DIR%"
 echo.
 echo === Instalando dependencias ===
@@ -27,7 +26,8 @@ echo === Iniciando servidor ===
 start /b node server.js
 timeout /t 3 /nobreak >nul
 
-REM 4. Iniciar tunnel SSH serveo
-echo === Iniciando tunnel serveo ===
-echo URL: https://lycoris-bot.serveo.net
-ssh -i C:\Users\ADMINISTRACION02\.ssh\serveo_key -o StrictHostKeyChecking=accept-new -R lycoris-bot:80:localhost:3000 serveo.net
+REM 3. Iniciar cloudflared tunnel
+echo === Iniciando cloudflared tunnel ===
+echo Copia la URL que apareca abajo y pegala en el navegador:
+echo.
+"%NGROK%" tunnel --url http://localhost:3000
