@@ -156,12 +156,8 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       return;
     }
 
-    // 5. Acciones post-guardado
-    if (resultado == CierreTurnoResultado.enviarYConfirmar) {
-      // El diálogo ya envió los reportes y confirmó el cierre
-    }
-
-    // 6. Cerrar la sesión (turno + caja)
+    // 5. Cerrar la sesión (turno + caja)
+    // El diálogo ya envió los reportes por WhatsApp automáticamente
     await ref.read(posSessionProvider.notifier).cerrarSesion();
   }
 
