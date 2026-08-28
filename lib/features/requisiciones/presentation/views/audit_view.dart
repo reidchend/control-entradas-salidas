@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../features/calculadora/presentation/calculadora.dart';
 import '../../../../core/models/requisicion.dart';
 import '../../data/requisiciones_providers.dart';
 import '../../data/requisiciones_repository.dart';
@@ -132,6 +133,10 @@ class _AuditViewState extends ConsumerState<AuditView> {
     );
   }
 
+  void _abrirCalculadora() {
+    showCalculadoraDialog(context, initialValue: 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -202,6 +207,15 @@ class _AuditViewState extends ConsumerState<AuditView> {
     final acciones = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Tooltip(
+          message: 'Abrir calculadora',
+          child: OutlinedButton.icon(
+            onPressed: _abrirCalculadora,
+            icon: const Icon(Icons.calculate, size: 18),
+            label: const Text('Calc'),
+          ),
+        ),
+        const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: _totalizando ? null : _totalizar,
           style: FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
