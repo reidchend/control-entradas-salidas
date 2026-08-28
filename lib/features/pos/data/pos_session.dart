@@ -18,42 +18,35 @@ enum SesionLoginResult {
   /// Se retomó el turno existente del mismo usuario.
   retomada,
 
-  /// Había un turno abierto de OTRO usuario. El caller debe preguntar
-  /// al usuario si quiere cerrar el turno ajeno y abrir uno nuevo, o
-  /// retomar el turno existente.
-  sesionAjena,
-
   /// El PIN era incorrecto (no se hizo nada).
   pinIncorrecto,
 }
 
-/// Estado de la sesión del POS (flujo de turnos/cajas):
+/// Estado de la sesión del POS (flujo de turnos/cajas multi-cajero):
 /// - Al hacer login se abre un turno con caja en 0 (o se retoma el turno que
-///   quedó abierto si el sistema se cerró sin logout).
+///   el MISMO cajero dejó abierto si el sistema se cerró sin logout).
+/// - Cada cajero tiene SU PROPIO turno independiente. Varios cajeros pueden
+///   tener turnos abiertos a la vez en el mismo dispositivo sin cerrarse entre
+///   sí.
 /// - Al cerrar sesión se cierra el turno y la caja (monto final automático =
 ///   caja inicial + ventas vigentes del turno), generando el reporte que se
 ///   guarda como `pos_sesiones`.
 /// - Al arrancar siempre se pide login (no se restaura la sesión), pero el
-///   turno abierto se conserva para retomarlo en el próximo login.
+///   turno de cada cajero se conserva para retomarlo en su próximo login.
 final posSessionProvider =
     NotifierProvider<PosSessionNotifier, PosSesionActiva?>(
         PosSessionNotifier.new);
 
 class PosSessionNotifier extends Notifier<PosSesionActiva?> {
-  /// ID de la sesión ajena detectada durante el login (para el diálogo).
-  int? sesionAjenaId;
-  String? sesionAjenaNombre;
-
   @override
   PosSesionActiva? build() => null;
 
   /// Valida el PIN (si el usuario lo tiene), cierra sesiones stale (>8h) y
-  /// abre un turno de caja en 0, o retoma el turno que quedó abierto.
+  /// abre un turno de caja en 0 para ESTE cajero, o retoma el turno que ese
+  /// mismo cajero dejó abierto.
   ///
-  /// Si hay un turno abierto de OTRO usuario, no lo cierra automáticamente:
-  /// devuelve [SesionLoginResult.sesionAjena] para que la UI muestre un
-  /// diálogo de confirmación. El caller debe llamar a
-  /// [forzarCerrarSesionAjena] o [retomarSesionAjena] después.
+  /// Cada cajero retoma o abre SU turno. Los turnos de otros cajeros quedan
+  /// intactos (no se cierran al entrar otro cajero).
   Future<SesionLoginResult> iniciarSesion(PosUsuario usuario,
       {String? pin}) async {
     if (usuario.pinHash != null && usuario.pinHash!.isNotEmpty) {
@@ -74,19 +67,10 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
       return SesionLoginResult.nueva;
     }
 
-    final abierto = await repo.getSesionActiva();
+    final abierto = await repo.getSesionActivaDeUsuario(usuario.id);
     if (abierto != null) {
-      // Turno pendiente del dispositivo.
-      if (abierto.sesion.usuarioId != usuario.id) {
-        // Turno de OTRO usuario: devolver info para que la UI pregunte.
-        sesionAjenaId = abierto.sesion.id;
-        sesionAjenaNombre = abierto.usuarioNombre;
-        return SesionLoginResult.sesionAjena;
-      }
-      // Turno del MISMO usuario: retomar silenciosamente.
-      final u = await repo.getUsuario(abierto.sesion.usuarioId);
-      if (u == null) return SesionLoginResult.nueva;
-      state = PosSesionActiva(usuario: u, sesionId: abierto.sesion.id);
+      // Turno del MISMO usuario abierto: retomarlo.
+      state = PosSesionActiva(usuario: usuario, sesionId: abierto.sesion.id);
       return SesionLoginResult.retomada;
     }
 
@@ -95,31 +79,9 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
     return SesionLoginResult.nueva;
   }
 
-  /// Cierra el turno ajeno detectado en [iniciarSesion] y abre uno nuevo para
-  /// el usuario indicado. Llamar después de que el usuario confirme en el
-  /// diálogo.
-  Future<void> forzarCerrarSesionAjena(PosUsuario usuario) async {
-    final repo = ref.read(posRepoProvider)!;
-    if (sesionAjenaId != null) {
-      await repo.forzarCerrarSesion(sesionAjenaId!);
-      sesionAjenaId = null;
-      sesionAjenaNombre = null;
-    }
-    final sesionId = await repo.abrirSesion(usuario.id);
-    state = PosSesionActiva(usuario: usuario, sesionId: sesionId);
-  }
-
-  /// Retoma la sesión ajena existente (el usuario decidió NO cerrarla).
-  Future<void> retomarSesionAjena(PosUsuario usuario) async {
-    final repo = ref.read(posRepoProvider)!;
-    if (sesionAjenaId != null) {
-      state = PosSesionActiva(usuario: usuario, sesionId: sesionAjenaId!);
-      sesionAjenaId = null;
-      sesionAjenaNombre = null;
-    }
-  }
-
   /// Cierra el turno y la caja (monto final automático) y vuelve al login.
+  /// Solo cierra el turno del cajero actual; los turnos de otros cajeros no se
+  /// ven afectados.
   Future<void> cerrarSesion() async {
     final s = state;
     state = null;
@@ -129,7 +91,8 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
     }
   }
 
-  /// Vuelve al login sin cerrar la sesión en BD (el turno queda abierto).
+  /// Vuelve al login sin cerrar la sesión en BD (el turno de ESTE cajero queda
+  /// abierto para retomarlo en el próximo login).
   void salirSinCerrar() {
     state = null;
   }

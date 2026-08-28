@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/updater/auto_update_checker.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
 import 'comanda_screen.dart';
 import 'config_screen.dart';
+import 'dialogs/cierre_turno_dialog.dart';
 import 'dialogs/nuevo_cajero_dialog.dart';
 import 'dialogs/pin_dialog.dart';
 import 'habitaciones_screen.dart';
@@ -111,35 +113,56 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  void _cerrarSesion() {
-    showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Qué deseas hacer?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Solo salir'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cerrar turno'),
-          ),
-        ],
-      ),
-    ).then((opcion) {
-      if (opcion == null) return;
-      if (opcion == true) {
-        ref.read(posSessionProvider.notifier).cerrarSesion();
-      } else {
-        ref.read(posSessionProvider.notifier).salirSinCerrar();
-      }
-    });
+  Future<void> _cerrarSesion() async {
+    final sesionActiva = ref.read(posSessionProvider);
+    if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
+
+    final sesionId = sesionActiva.sesionId;
+    final repo = ref.read(posRepoProvider)!;
+
+    // 1. Generar el cierre (calcula totales y reportes)
+    CierreCaja cierre;
+    try {
+      cierre = await repo.generarCierre(sesionId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error generando cierre: $e')),
+      );
+      return;
+    }
+
+    // 2. Obtener la sesión para mostrar detalles
+    final sesionData = await repo.getSesionActivaDeUsuario(sesionActiva.usuario.id);
+    if (!mounted) return;
+    if (sesionData == null) return;
+
+    // 3. Mostrar diálogo de cierre
+    final resultado = await showCierreTurnoDialog(context, cierre, sesionData.sesion);
+    if (!mounted) return;
+
+    if (resultado == null || resultado == CierreTurnoResultado.cancelar) {
+      return; // Usuario canceló, no hace nada
+    }
+
+    // 4. Guardar el cierre en BD
+    try {
+      await repo.guardarCierre(cierre);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error guardando cierre: $e')),
+      );
+      return;
+    }
+
+    // 5. Acciones post-guardado
+    if (resultado == CierreTurnoResultado.enviarYConfirmar) {
+      // El diálogo ya envió los reportes y confirmó el cierre
+    }
+
+    // 6. Cerrar la sesión (turno + caja)
+    await ref.read(posSessionProvider.notifier).cerrarSesion();
   }
 
   /// Retoma una comanda activa desde el home (resuelve mesa/habitación por id
@@ -278,62 +301,22 @@ class _LoginViewState extends ConsumerState<_LoginView> {
   Future<void> _login(PosUsuario u) async {
     if (u.pinHash != null && u.pinHash!.isNotEmpty) {
       final result = await showPinDialog(context, u);
+      // El diálogo ya inicia la sesión internamente con el PIN. Solo
+      // invalidamos la lista si se canceló o el PIN fue incorrecto.
       if (result == null || result == SesionLoginResult.pinIncorrecto) {
         if (mounted) ref.invalidate(usuariosProvider);
-        return;
-      }
-      // PIN correcto: sesión ya iniciada dentro del diálogo.
-      // Manejar sesionAjena si aplica.
-      if (result == SesionLoginResult.sesionAjena) {
-        await _manejarSesionAjena(u);
       }
       return;
     }
-    final notifier = ref.read(posSessionProvider.notifier);
-    final result = await notifier.iniciarSesion(u);
-    if (!mounted) return;
-
-    if (result == SesionLoginResult.sesionAjena) {
-      await _manejarSesionAjena(u);
-    }
-  }
-
-  Future<void> _manejarSesionAjena(PosUsuario u) async {
-    final notifier = ref.read(posSessionProvider.notifier);
-    final cerrar = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Turno abierto de otro cajero'),
-        content: Text(
-          'Hay un turno abierto de ${notifier.sesionAjenaNombre ?? "otro cajero"}. '
-          '¿Cerrar ese turno y abrir uno nuevo para ${u.nombre}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Retomar turno existente'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Cerrar y abrir nuevo'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (cerrar == true) {
-      await notifier.forzarCerrarSesionAjena(u);
-    } else {
-      await notifier.retomarSesionAjena(u);
-    }
+    await ref.read(posSessionProvider.notifier).iniciarSesion(u);
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final usuarios = ref.watch(usuariosProvider);
-    final turnoUsuarioId = ref.watch(turnoActivoUsuarioProvider).valueOrNull;
+    final turnosActivos =
+        ref.watch(turnosActivosProvider).valueOrNull ?? <int>{};
 
     return Scaffold(
       appBar: AppBar(
@@ -387,7 +370,7 @@ class _LoginViewState extends ConsumerState<_LoginView> {
                             UsuarioCard(
                               usuario: u,
                               selected: u.id == _selectedId,
-                              turnoAbierto: u.id == turnoUsuarioId,
+                              turnoAbierto: turnosActivos.contains(u.id),
                               onTap: () {
                                 setState(() => _selectedId = u.id);
                                 _login(u);

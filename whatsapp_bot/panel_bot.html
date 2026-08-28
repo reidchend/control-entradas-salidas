@@ -32,7 +32,7 @@
                     <span id="refresh-spin" class="inline-block">🔄</span> Actualizar
                 </button>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="status-cards">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="status-cards">
                 <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
                     <div class="text-xs text-gray-400 uppercase mb-1">Conexión WhatsApp</div>
                     <div id="conn-card" class="text-sm font-semibold text-gray-500">—</div>
@@ -42,11 +42,16 @@
                     <div id="active-group-card" class="text-sm font-semibold text-gray-500">—</div>
                 </div>
                 <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
+                    <div class="text-xs text-gray-400 uppercase mb-1">Grupo de Reportes</div>
+                    <div id="report-group-card" class="text-sm font-semibold text-gray-500">—</div>
+                </div>
+                <div class="bg-gray-950 border border-gray-700 rounded-lg p-4">
                     <div class="text-xs text-gray-400 uppercase mb-1">Grupos Disponibles</div>
                     <div id="groups-count-card" class="text-sm font-semibold text-gray-500">—</div>
                 </div>
             </div>
             <div id="active-group-detail" class="hidden mt-4 bg-green-950/30 border border-green-800/50 rounded-lg p-3 text-sm"></div>
+            <div id="report-group-detail" class="hidden mt-4 bg-purple-950/30 border border-purple-800/50 rounded-lg p-3 text-sm"></div>
         </section>
 
         <!-- Configuración del servidor -->
@@ -79,6 +84,23 @@
                 </button>
             </div>
             <p id="grupos-info" class="text-xs text-gray-400 mt-2"></p>
+        </section>
+
+        <!-- Selección de grupo de reportes -->
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
+            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+                <span class="bg-purple-900/40 text-purple-400 text-xs font-mono px-2 py-0.5 rounded border border-purple-800/60">POST /set-report-group</span>
+                <button onclick="cargarGruposReportes()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded-lg transition-colors">↻ Recargar lista</button>
+            </div>
+            <div class="flex flex-col md:flex-row gap-3">
+                <select id="reportesSelect" class="w-full md:flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500">
+                    <option value="">Cargando grupos...</option>
+                </select>
+                <button onclick="establecerGrupoReportesSeleccionado()" class="bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap">
+                    Establecer como grupo de reportes
+                </button>
+            </div>
+            <p id="reportes-info" class="text-xs text-gray-400 mt-2"></p>
         </section>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -360,6 +382,64 @@
             }
         }
 
+        async function cargarGruposReportes() {
+            const select = document.getElementById('reportesSelect');
+            const info = document.getElementById('reportes-info');
+            select.innerHTML = '<option value="">Cargando...</option>';
+            info.textContent = 'Consultando grupos...';
+            try {
+                const r = await apiGET('/groups');
+                if (!r.ok) {
+                    select.innerHTML = '<option value="">Error al cargar grupos</option>';
+                    info.textContent = r.data && r.data.error ? r.data.error : `HTTP ${r.status}`;
+                    return;
+                }
+                const groups = (r.data && r.data.groups) || [];
+                const config = await apiGET('/config');
+                const activeId = config.ok ? config.data.report_group_id : null;
+
+                if (groups.length === 0) {
+                    select.innerHTML = '<option value="">No hay grupos disponibles</option>';
+                    info.textContent = 'El número del bot no está en ningún grupo.';
+                    return;
+                }
+
+                let options = '<option value="">Selecciona un grupo...</option>';
+                groups.forEach(g => {
+                    const sel = activeId === g.id ? ' selected' : '';
+                    options += `<option value="${escapeHtml(g.id)}"${sel}>${escapeHtml(g.name)} (${g.participants})${sel ? ' ✓ activo' : ''}</option>`;
+                });
+                select.innerHTML = options;
+
+                if (activeId && !groups.some(g => g.id === activeId)) {
+                    select.innerHTML += `<option value="${escapeHtml(activeId)}" selected>👁 Grupo activo no listado</option>`;
+                }
+                const activo = activeId ? groups.find(g => g.id === activeId) : null;
+                info.textContent = activo
+                    ? `Grupo de reportes actual: ${activo.name}`
+                    : `${groups.length} grupo(s) encontrado(s). Selecciona uno para reportes.`;
+            } catch (e) {
+                select.innerHTML = '<option value="">Error de conexión</option>';
+                info.textContent = `No se pudo conectar: ${e.message}`;
+                actualizarEstatus("Fallo de Red", true);
+            }
+        }
+
+        async function establecerGrupoReportesSeleccionado() {
+            const select = document.getElementById('reportesSelect');
+            const gid = select.value;
+            if (!gid) {
+                actualizarEstatus("Selecciona un grupo de reportes", true);
+                return;
+            }
+            const r = await ejecutarPostRaw('/set-report-group', { reportGroupId: gid });
+            if (r && r.ok) {
+                await cargarEstado();
+                await cargarGruposReportes();
+                actualizarEstatus("Grupo de reportes actualizado");
+            }
+        }
+
         async function ejecutarPostRaw(endpoint, bodyData) {
             const { url, token } = getCredentials();
             const headers = { 'Content-Type': 'application/json' };
@@ -380,7 +460,7 @@
                 if (r.ok) {
                     actualizarEstatus("Petición Exitosa 200 OK");
                     event.target.reset();
-                    if (endpoint === '/set-group') await cargarEstado();
+                    if (endpoint === '/set-group' || endpoint === '/set-report-group') await cargarEstado();
                 } else {
                     actualizarEstatus(`Error ${r.status}`, true);
                 }

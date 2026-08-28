@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/supabase_providers.dart';
+import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import 'pos_comanda_models.dart';
 import 'pos_repository.dart';
@@ -36,12 +39,10 @@ final usuariosProvider = FutureProvider<List<PosUsuario>>((ref) {
   return ref.watch(posRepoProvider)!.getUsuarios();
 });
 
-/// ID del cajero con turno abierto (para marcarlo en el login), o null.
-final turnoActivoUsuarioProvider = FutureProvider<int?>((ref) {
-  return ref
-      .watch(posRepoProvider)!
-      .getSesionActiva()
-      .then((a) => a?.sesion.usuarioId);
+/// IDs de los cajeros con turno abierto (para marcarlos en el login).
+/// Soporta varios turnos activos simultáneos (uno por cajero).
+final turnosActivosProvider = FutureProvider<Set<int>>((ref) {
+  return ref.watch(posRepoProvider)!.getUsuariosConTurnoActivo();
 });
 
 final platosProvider = FutureProvider<List<PosPlato>>((ref) {
@@ -89,4 +90,37 @@ final tasaCambioProvider = FutureProvider<double>((ref) {
 /// Última venta vigente (para el botón "Anular última venta").
 final ultimaVentaVigenteProvider = FutureProvider<PosVenta?>((ref) {
   return ref.watch(posVentasRepoProvider)!.getUltimaVentaVigente();
+});
+
+/// Generar y guardar cierre de caja (usar desde UI de cierre).
+final cierreProvider = FutureProvider.family<CierreCaja, int>((ref, sesionId) {
+  return ref.watch(posRepoProvider)!.generarCierre(sesionId);
+});
+
+/// Historial de cierres guardados (para listar/consultar cierres anteriores).
+final cierresHistorialProvider = FutureProvider<List<CierreCaja>>((ref) async {
+  final db = ref.watch(supabaseServiceProvider);
+  if (db == null) return [];
+  final rows = await db.client
+      .from('pos_cierres')
+      .select()
+      .order('cerrada_en', ascending: false)
+      .limit(50);
+  return rows.map((r) => CierreCaja.fromJson({
+    'sesion_id': r['sesion_id'],
+    'usuario_id': r['usuario_id'],
+    'usuario_nombre': r['usuario_nombre'] ?? '',
+    'abierta_en': r['abierta_en'],
+    'cerrada_en': r['cerrada_en'],
+    'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
+    'total_ventas': (r['total_ventas'] as num?)?.toDouble() ?? 0,
+    'caja_final': (r['caja_final'] as num?)?.toDouble() ?? 0,
+    'reporte_simple_json': r['reporte_simple_json'] is String
+        ? jsonDecode(r['reporte_simple_json'])
+        : r['reporte_simple_json'],
+    'reporte_detallado_json': r['reporte_detallado_json'] is String
+        ? jsonDecode(r['reporte_detallado_json'])
+        : r['reporte_detallado_json'],
+    'sync_uuid': r['sync_uuid'],
+  })).toList();
 });

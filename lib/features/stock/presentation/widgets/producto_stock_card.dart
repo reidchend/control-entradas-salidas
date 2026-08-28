@@ -14,10 +14,12 @@ class ProductoStockCard extends ConsumerWidget {
     required this.producto,
     required this.categorias,
     required this.onAction,
+    this.almacen,
   });
 
   final Producto producto;
   final Map<int, String> categorias;
+  final String? almacen;
   final void Function(String action, Producto producto) onAction;
 
   bool get _esPesable => producto.esPesable;
@@ -53,8 +55,14 @@ class ProductoStockCard extends ConsumerWidget {
         future: repo.getExistenciasProducto(producto.id),
         builder: (context, snap) {
           final exis = snap.data ?? [];
-          final total = exis.fold<double>(0, (a, e) => a + e.cantidad);
-          final color = _colorPara(context, total);
+          // Con filtro de almacén, el stock destacado y su nivel se calculan
+          // solo con las existencias de ese almacén; sin filtro, la suma.
+          final totalEsAlmacen = almacen != null
+              ? exis
+                  .where((e) => e.almacen == almacen)
+                  .fold<double>(0, (a, e) => a + e.cantidad)
+              : exis.fold<double>(0, (a, e) => a + e.cantidad);
+          final color = _colorPara(context, totalEsAlmacen);
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,7 +142,7 @@ class ProductoStockCard extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _fmt(total),
+                        _fmt(totalEsAlmacen),
                         style: TextStyle(
                           color: color,
                           fontSize: 18,

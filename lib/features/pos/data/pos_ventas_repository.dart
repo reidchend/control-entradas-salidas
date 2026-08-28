@@ -613,4 +613,133 @@ class PosVentasRepository {
         (a['producto_nombre'] as String).compareTo(b['producto_nombre'] as String));
     return result;
   }
+
+  /// Obtiene todos los movimientos de tipo 'venta' de una sesión (para el cierre)
+  Future<List<Map<String, dynamic>>> movimientosVentaDeSesion(int sesionId) async {
+    // 1. Obtener IDs de ventas de la sesión
+    final ventas = await getVentasPorSesion(sesionId);
+    final ventaIds = ventas.where((v) => v.estado == 'vigente').map((v) => v.id).toList();
+    if (ventaIds.isEmpty) return [];
+
+    // 2. Traer todos los movimientos 'venta' de esas ventas
+    final rows = await _db.client
+        .from('movimientos')
+        .select()
+        .filter('venta_id', 'in', ventaIds)
+        .eq('tipo', 'venta');
+    
+    final result = <Map<String, dynamic>>[];
+    for (final m in rows) {
+      final pid = m['producto_id'] as int;
+      final p = await getProductoById(pid);
+      result.add({
+        'producto_id': pid,
+        'cantidad': (m['cantidad'] as num?)?.toDouble() ?? 0,
+        'almacen': m['almacen'],
+        'producto_nombre': p?.nombre ?? 'Producto #$pid',
+        'precio_venta': (p?.precioVenta as num?)?.toDouble() ?? 0,
+        'categoria': await _getCategoriaNombre(p?.categoriaId),
+      });
+    }
+    result.sort((a, b) =>
+        (a['producto_nombre'] as String).compareTo(b['producto_nombre'] as String));
+    return result;
+  }
+
+  Future<String> _getCategoriaNombre(int? categoriaId) async {
+    if (categoriaId == null) return 'Sin categoría';
+    final rows = await _db.client
+        .from('categorias')
+        .select('nombre')
+        .eq('id', categoriaId)
+        .limit(1);
+    return rows.isNotEmpty ? rows.first['nombre'] as String : 'Sin categoría';
+  }
+
+  /// Desglose por ingrediente para una sesión: total consumido, stock final, usos por plato
+  Future<List<Map<String, dynamic>>> desgloseIngredientesDeSesion(int sesionId) async {
+    // 1. Obtener ventas vigentes de la sesión con sus items
+    final ventas = await getVentasPorSesion(sesionId);
+    final ventasVigentes = ventas.where((v) => v.estado == 'vigente').toList();
+    if (ventasVigentes.isEmpty) return [];
+
+    // 2. Acumular ingredientes a partir de items_json de cada venta
+    final Map<int, Map<String, dynamic>> ingredientesAcum = {};
+
+    void acumularIngrediente(
+      int productoId,
+      String nombre,
+      double cantidad,
+      String platoNombre,
+    ) {
+      final key = productoId;
+      final m = ingredientesAcum.putIfAbsent(key, () => {
+        'producto_id': productoId,
+        'ingrediente': nombre,
+        'total_consumido': 0.0,
+        'usos': <Map<String, dynamic>>[],
+      });
+      m['total_consumido'] = (m['total_consumido'] as double) + cantidad;
+      final usos = m['usos'] as List<Map<String, dynamic>>;
+      usos.add({'plato': platoNombre, 'cantidad': cantidad});
+    }
+
+    for (final venta in ventasVigentes) {
+      final itemsJson = venta.itemsJson;
+      if (itemsJson == null || itemsJson.isEmpty) continue;
+      final items = jsonDecode(itemsJson) as List;
+      for (final item in items) {
+        final pid = item['id'] as int?;
+        final cant = (item['cantidad'] as num?)?.toDouble() ?? 1;
+        if (pid == null) continue;
+
+        final tipo = (item['tipo'] as String? ?? '').toLowerCase();
+        final prod = await getProductoById(pid);
+        if (tipo == 'producto' || prod != null) {
+          // Producto simple (no compuesto)
+          continue; // Ya está en movimientosVentaDeSesion
+        } else {
+          // Plato compuesto: desglosar sus ingredientes
+          final ing = await getPlatoIngredientes(pid);
+          final platoNombre = prod?.nombre ?? 'Plato #$pid';
+          for (final i in ing) {
+            acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, platoNombre);
+          }
+        }
+
+        // Contornos
+        final cids = <int>[
+          ...?((item['contorno_ids'] as List?)?.cast<num>().map((n) => n.toInt())),
+        ];
+        for (final cid in cids) {
+          final ing = await getPlatoIngredientes(cid);
+          final contorno = await getProductoById(cid);
+          final contornoNombre = contorno?.nombre ?? 'Contorno #$cid';
+          for (final i in ing) {
+            acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, contornoNombre);
+          }
+        }
+      }
+    }
+
+    // 3. Obtener stock final de cada ingrediente (desde existencias)
+    for (final entry in ingredientesAcum.entries) {
+      final pid = entry.key;
+      final m = entry.value;
+      final exRows = await _db.client
+          .from('existencias')
+          .select('cantidad')
+          .eq('producto_id', pid)
+          .eq('almacen', 'restaurante')
+          .limit(1);
+      m['stock_final'] = exRows.isNotEmpty
+          ? (exRows.first['cantidad'] as num?)?.toDouble() ?? 0
+          : 0;
+    }
+
+    // 4. Convertir a lista ordenada
+    final result = ingredientesAcum.values.toList();
+    result.sort((a, b) => (a['ingrediente'] as String).compareTo(b['ingrediente'] as String));
+    return result;
+  }
 }

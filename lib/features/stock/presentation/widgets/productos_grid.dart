@@ -12,10 +12,12 @@ class ProductosGrid extends StatelessWidget {
     required this.productos,
     required this.categorias,
     required this.onAction,
+    this.almacen,
   });
 
   final List<Producto> productos;
   final Map<int, String> categorias;
+  final String? almacen;
   final void Function(String action, Producto producto) onAction;
 
   @override
@@ -34,6 +36,7 @@ class ProductosGrid extends StatelessWidget {
             ProductoStockCard(
               producto: p,
               categorias: categorias,
+              almacen: almacen,
               onAction: onAction,
             ),
         ];

@@ -32,6 +32,8 @@ class _RecetaEditorScreenState extends ConsumerState<RecetaEditorScreen> {
   final _nombreCtrl = TextEditingController();
   final _cantidadCtrl = TextEditingController(text: '1');
   final _searchCtrl = TextEditingController();
+
+  bool get _angosto => MediaQuery.of(context).size.width < 600;
   final _baseSearchCtrl = TextEditingController();
   final _finalSearchCtrl = TextEditingController();
 
@@ -343,18 +345,23 @@ class _RecetaEditorScreenState extends ConsumerState<RecetaEditorScreen> {
           Text('Tipo de Receta',
               style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
           SegmentedButton<String>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: 'simple',
-                label: Text('Simple · parte un producto en sus derivados'),
+                label: Text(_angosto
+                    ? 'Simple'
+                    : 'Simple · parte un producto en sus derivados'),
               ),
               ButtonSegment(
                 value: 'compuesta',
-                label: Text('Compuesta · fabrica un producto desde ingredientes'),
+                label: Text(_angosto
+                    ? 'Compuesta'
+                    : 'Compuesta · fabrica un producto desde ingredientes'),
               ),
             ],
             selected: {_tipo},
             showSelectedIcon: false,
+            expandedInsets: _angosto ? EdgeInsets.zero : null,
             onSelectionChanged: (s) => _onTipoChange(s.first),
           ),
         ],
@@ -616,6 +623,43 @@ class _RecetaEditorScreenState extends ConsumerState<RecetaEditorScreen> {
   Widget _componentRow(
       ColorScheme scheme, List<Producto> productos, int index) {
     final row = _componentes[index];
+    final dropdown = DropdownButtonFormField<int>(
+      initialValue: row.productoId,
+      isExpanded: true,
+      hint: const Text('Producto...'),
+      items: [
+        for (final p in productos)
+          if (p.activo)
+            DropdownMenuItem(
+              value: p.id,
+              child: Text(p.nombre, overflow: TextOverflow.ellipsis),
+            ),
+      ],
+      onChanged: (v) => setState(() => row.productoId = v),
+    );
+    final cantField = TextField(
+      controller: row.cantidadCtrl,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: const InputDecoration(
+        isDense: true,
+        hintText: 'Cant.',
+        border: OutlineInputBorder(),
+      ),
+    );
+    final unidadField = TextField(
+      controller: row.unidadCtrl,
+      decoration: const InputDecoration(
+        isDense: true,
+        hintText: 'unidad',
+        border: OutlineInputBorder(),
+      ),
+    );
+    final deleteBtn = IconButton(
+      icon: Icon(Icons.delete_outline, color: scheme.error),
+      tooltip: 'Quitar',
+      onPressed: () => _quitarFila(index),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(8),
@@ -623,89 +667,78 @@ class _RecetaEditorScreenState extends ConsumerState<RecetaEditorScreen> {
         border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: DropdownButtonFormField<int>(
-              initialValue: row.productoId,
-              isExpanded: true,
-              hint: const Text('Producto...'),
-              items: [
-                for (final p in productos)
-                  if (p.activo)
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text(p.nombre,
-                          overflow: TextOverflow.ellipsis),
-                    ),
+      child: _angosto
+          ? Column(
+              children: [
+                dropdown,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: cantField),
+                    const SizedBox(width: 8),
+                    Expanded(child: unidadField),
+                    const SizedBox(width: 4),
+                    deleteBtn,
+                  ],
+                ),
               ],
-              onChanged: (v) => setState(() => row.productoId = v),
+            )
+          : Row(
+              children: [
+                Expanded(flex: 3, child: dropdown),
+                const SizedBox(width: 8),
+                SizedBox(width: 90, child: cantField),
+                const SizedBox(width: 8),
+                SizedBox(width: 90, child: unidadField),
+                deleteBtn,
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 90,
-            child: TextField(
-              controller: row.cantidadCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'Cant.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 90,
-            child: TextField(
-              controller: row.unidadCtrl,
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'unidad',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.delete_outline, color: scheme.error),
-            tooltip: 'Quitar',
-            onPressed: () => _quitarFila(index),
-          ),
-        ],
-      ),
     );
   }
 
   Widget _footer(ColorScheme scheme) {
+    final angosto = MediaQuery.of(context).size.width < 600;
+    final texto = Text(
+      '${_componentes.length} componentes · cantidad editable al descargar',
+      style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+    );
+    final botones = Row(
+      children: [
+        OutlinedButton(
+          onPressed: _cancelar,
+          child: const Text('Cancelar'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Guardar'),
+          onPressed: _guardar,
+        ),
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(top: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${_componentes.length} componentes · cantidad editable al descargar',
-              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+      child: angosto
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                texto,
+                const SizedBox(height: 12),
+                botones,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: texto),
+                const SizedBox(width: 12),
+                botones,
+              ],
             ),
-          ),
-          OutlinedButton(
-            onPressed: _cancelar,
-            child: const Text('Cancelar'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Guardar Receta'),
-            onPressed: _guardar,
-          ),
-        ],
-      ),
     );
   }
 

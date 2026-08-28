@@ -248,7 +248,27 @@ class ValidacionRepository {
         .inFilter('id', ids.toList());
   }
 
+  /// Elimina una entrada pendiente (movimiento 'entrada' sin validar) y
+  /// revierte el stock que esa entrada sumó a la existencia del producto en
+  /// su almacén. Se resta la cantidad neta (`cantidadNueva - cantidadAnterior`)
+  /// que la entrada agregó, para no pisar otros movimientos posteriores.
   Future<void> eliminarEntrada(EntradaPendiente entrada) async {
+    final neto = entrada.cantidadNueva - entrada.cantidadAnterior;
+    if (neto != 0) {
+      final exRows = await _db.fetchAll('existencias', filters: {
+        'producto_id': entrada.productoId,
+        'almacen': entrada.almacen,
+      });
+      if (exRows.isNotEmpty) {
+        final id = exRows.first['id'] as int;
+        final actual =
+            (exRows.first['cantidad'] as num?)?.toDouble() ?? 0;
+        final nueva = actual - neto;
+        await _db.updateById('existencias', id, {
+          'cantidad': nueva < 0 ? 0 : nueva,
+        });
+      }
+    }
     await _db.deleteById('movimientos', entrada.id);
   }
 

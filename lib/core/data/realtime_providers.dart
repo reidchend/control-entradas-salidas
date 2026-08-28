@@ -35,7 +35,7 @@ List<RealtimeSubscription> initRealtimeSubscriptions(
       table: 'pos_sesiones',
       events: {PostgresChangeEvent.insert, PostgresChangeEvent.update},
       invalidate: (r) {
-        r.invalidate(turnoActivoUsuarioProvider);
+        r.invalidate(turnosActivosProvider);
       },
     ),
     _RealtimeBindings(

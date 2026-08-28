@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -161,23 +160,90 @@ class WhatsappRepository {
     }
   }
 
-  Future<({bool connected, String? groupId})> getStatus() async {
+  Future<({bool connected, String? groupId, String? reportGroupId})> getStatus() async {
     try {
       final url = await botUrl;
       final resp = await http
           .get(Uri.parse('$url/config'), headers: _headers)
           .timeout(const Duration(seconds: 5));
       if (resp.statusCode != 200) {
-        return (connected: false, groupId: null);
+        return (connected: false, groupId: null, reportGroupId: null);
       }
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       return (
         connected: data['whatsapp_connected'] == true,
         groupId: data['group_id'] as String?,
+        reportGroupId: data['report_group_id'] as String?,
       );
     } catch (_) {
-      return (connected: false, groupId: null);
+      return (connected: false, groupId: null, reportGroupId: null);
     }
+  }
+
+  Future<bool> _enviarReporteDirecto(String mensaje) async {
+    try {
+      final url = await botUrl;
+      final resp = await http
+          .post(
+            Uri.parse('$url/send-report'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'message': mensaje}),
+          )
+          .timeout(const Duration(seconds: 30));
+      return resp.statusCode == 200;
+    } catch (e) {
+      print('[WA] send report error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _enviarDocumentoDirecto({
+    required String fileName,
+    required String content,
+    String caption = '',
+  }) async {
+    try {
+      final url = await botUrl;
+      final resp = await http
+          .post(
+            Uri.parse('$url/send-document'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'fileName': fileName,
+              'content': content,
+              'caption': caption,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      return resp.statusCode == 200;
+    } catch (e) {
+      print('[WA] send document error: $e');
+      return false;
+    }
+  }
+
+  /// Envía el reporte simple (texto) al grupo de reportes.
+  Future<bool> enviarReporteSimple(String mensaje) async {
+    if (await _enviarReporteDirecto(mensaje)) return true;
+    await saveToQueue(tipo: 'report_simple', mensaje: mensaje);
+    return false;
+  }
+
+  /// Envía el reporte detallado (.txt) al grupo de reportes.
+  Future<bool> enviarReporteDetallado({
+    required String fileName,
+    required String content,
+    String caption = '',
+  }) async {
+    if (await _enviarDocumentoDirecto(fileName: fileName, content: content, caption: caption)) {
+      return true;
+    }
+    await saveToQueue(
+      tipo: 'report_detail',
+      mensaje: caption,
+      imagenBase64: base64Encode(utf8.encode(content)), // guardamos el contenido en base64
+    );
+    return false;
   }
 
   Future<bool> enviarMensaje(String mensaje) async {

@@ -83,7 +83,7 @@ async function getGroups() {
 }
 
 /**
- * Configura el ID del grupo para enviar mensajes
+ * Configura el ID del grupo para enviar mensajes (grupo principal)
  */
 function setGroupId(groupId) {
     saveConfig({ groupId });
@@ -91,10 +91,70 @@ function setGroupId(groupId) {
 }
 
 /**
- * Obtiene el ID del grupo actual
+ * Obtiene el ID del grupo actual (grupo principal)
  */
 function getGroupId() {
     return config.groupId;
+}
+
+/**
+ * Configura el ID del grupo de reportes (grupo secundario dedicado)
+ */
+function setReportGroupId(reportGroupId) {
+    saveConfig({ reportGroupId });
+    console.log(`✅ Grupo de reportes configurado: ${reportGroupId}`);
+}
+
+/**
+ * Obtiene el ID del grupo de reportes
+ */
+function getReportGroupId() {
+    return config.reportGroupId;
+}
+
+/**
+ * Envía un mensaje de texto al grupo de reportes
+ */
+async function sendReportToGroup(message) {
+    if (!config.reportGroupId) {
+        throw new Error('No hay grupo de reportes configurado.');
+    }
+    if (!sock || !isConnected) {
+        throw new Error('WhatsApp no conectado');
+    }
+    try {
+        await sock.sendMessage(config.reportGroupId, { text: message });
+        console.log(`✅ Reporte enviado a ${config.reportGroupId}`);
+        return true;
+    } catch (error) {
+        console.error('Error enviando reporte:', error);
+        throw error;
+    }
+}
+
+/**
+ * Envía un archivo (documento .txt) al grupo de reportes
+ */
+async function sendDocumentToGroup(buffer, fileName, caption = '') {
+    if (!config.reportGroupId) {
+        throw new Error('No hay grupo de reportes configurado.');
+    }
+    if (!sock || !isConnected) {
+        throw new Error('WhatsApp no conectado');
+    }
+    try {
+        await sock.sendMessage(config.reportGroupId, {
+            document: buffer,
+            mimetype: 'text/plain',
+            fileName: fileName,
+            caption: caption || undefined
+        });
+        console.log(`✅ Documento enviado al grupo de reportes: ${fileName}`);
+        return true;
+    } catch (error) {
+        console.error('Error enviando documento:', error);
+        throw error;
+    }
 }
 
 /**
@@ -268,6 +328,10 @@ module.exports = {
     getGroupMetadata,
     setGroupId,
     getGroupId,
+    setReportGroupId,
+    getReportGroupId,
+    sendReportToGroup,
+    sendDocumentToGroup,
     isConnected: isWAConnected,
     getCurrentQR: () => currentQR
 };

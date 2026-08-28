@@ -166,14 +166,21 @@ app.get('/qr', (req, res) => {
             `<div class="info">📢 Grupo configurado: ${bot.getGroupId()}</div>` : 
             ''
         }
+        ${bot.getReportGroupId() ? 
+            `<div class="info">📊 Grupo de reportes: ${bot.getReportGroupId()}</div>` : 
+            ''
+        }
         
         <div class="info">
             <strong>📋 Endpoints disponibles:</strong><br>
-            POST /send        → Enviar mensaje al grupo<br>
-            POST /send-image  → Enviar imagen con caption al grupo<br>
-            POST /send-to     → Enviar a destinatario       <br>
-            GET  /groups      → Listar grupos               <br>
-            POST /set-group   → Configurar grupo            <br>
+            POST /send          → Enviar mensaje al grupo<br>
+            POST /send-image    → Enviar imagen con caption al grupo<br>
+            POST /send-to       → Enviar a destinatario       <br>
+            GET  /groups        → Listar grupos               <br>
+            POST /set-group     → Configurar grupo            <br>
+            POST /set-report-group → Configurar grupo reportes<br>
+            POST /send-report   → Enviar reporte (texto)      <br>
+            POST /send-document → Enviar documento .txt       <br>
         </div>
     </div>
 </body>
@@ -187,7 +194,8 @@ app.get('/', (req, res) => {
     res.json({
         status: 'ok',
         whatsapp_connected: bot.isConnected(),
-        group_id: bot.getGroupId()
+        group_id: bot.getGroupId(),
+        report_group_id: bot.getReportGroupId()
     });
 });
 
@@ -307,6 +315,69 @@ app.post('/set-group', (req, res) => {
     }
 });
 
+// Endpoint para configurar el grupo de reportes
+app.post('/set-report-group', (req, res) => {
+    try {
+        const { reportGroupId } = req.body;
+        
+        if (!reportGroupId) {
+            return res.status(400).json({ error: 'El campo "reportGroupId" es requerido' });
+        }
+        
+        bot.setReportGroupId(reportGroupId);
+        
+        res.json({ success: true, message: `Grupo de reportes configurado: ${reportGroupId}` });
+    } catch (error) {
+        console.error('Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint para enviar un mensaje de texto al grupo de reportes
+app.post('/send-report', async (req, res) => {
+    try {
+        const { message } = req.body;
+        
+        if (!message) {
+            return res.status(400).json({ error: 'El campo "message" es requerido' });
+        }
+        
+        if (!bot.isConnected()) {
+            return res.status(503).json({ error: 'WhatsApp no conectado' });
+        }
+        
+        await bot.sendReportToGroup(message);
+        
+        res.json({ success: true, message: 'Reporte enviado al grupo de reportes' });
+    } catch (error) {
+        console.error('Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint para enviar un documento (.txt) al grupo de reportes
+app.post('/send-document', async (req, res) => {
+    try {
+        const { fileName, content, caption } = req.body;
+        
+        if (!fileName || content === undefined || content === null) {
+            return res.status(400).json({ error: 'Los campos "fileName" y "content" son requeridos' });
+        }
+        
+        if (!bot.isConnected()) {
+            return res.status(503).json({ error: 'WhatsApp no conectado' });
+        }
+        
+        const buffer = Buffer.from(String(content), 'utf8');
+        await bot.sendDocumentToGroup(buffer, fileName, caption || '');
+        
+        res.json({ success: true, message: `Documento enviado: ${fileName}` });
+    } catch (error) {
+        console.error('Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Endpoint para obtener la configuración actual
 app.get('/config', async (req, res) => {
     const groupId = bot.getGroupId();
@@ -314,10 +385,17 @@ app.get('/config', async (req, res) => {
     if (groupId && bot.isConnected()) {
         group = await bot.getGroupMetadata(groupId);
     }
+    const reportGroupId = bot.getReportGroupId();
+    let reportGroup = null;
+    if (reportGroupId && bot.isConnected()) {
+        reportGroup = await bot.getGroupMetadata(reportGroupId);
+    }
     res.json({
         group_id: groupId,
         group_name: group ? group.name : null,
         group_participants: group ? group.participants : null,
+        report_group_id: reportGroupId,
+        report_group_name: reportGroup ? reportGroup.name : null,
         whatsapp_connected: bot.isConnected()
     });
 });

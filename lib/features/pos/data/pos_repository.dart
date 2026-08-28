@@ -5,8 +5,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/data/supabase_service.dart';
 import '../../../core/models/categoria.dart';
+import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
+import 'pos_ventas_repository.dart';
 
 class PosRepository {
   PosRepository(this._db);
@@ -121,10 +123,17 @@ class PosRepository {
     return ids;
   }
 
-  Future<({PosSesion sesion, String? usuarioNombre})?> getSesionActiva() async {
+  /// Devuelve el turno de caja ACTIVO de un cajero concreto (si lo tiene).
+  ///
+  /// Soporta múltiples turnos abiertos simultáneos (uno por cajero) en el
+  /// mismo dispositivo: cada cajero retoma o abre SU propio turno sin cerrar
+  /// el de los demás.
+  Future<({PosSesion sesion, String? usuarioNombre})?> getSesionActivaDeUsuario(
+      int usuarioId) async {
     final rows = await _db.client
         .from('pos_sesiones')
         .select()
+        .eq('usuario_id', usuarioId)
         .filter('cerrada_en', 'is', null)
         .order('abierta_en', ascending: false)
         .limit(1);
@@ -139,6 +148,16 @@ class PosRepository {
       sesion: PosSesion.fromMap(s),
       usuarioNombre: u.isNotEmpty ? u.first['nombre'] as String? : null,
     );
+  }
+
+  /// IDs de los cajeros que tienen un turno abierto en este momento (para
+  /// marcarlos en la pantalla de login).
+  Future<Set<int>> getUsuariosConTurnoActivo() async {
+    final rows = await _db.client
+        .from('pos_sesiones')
+        .select('usuario_id')
+        .filter('cerrada_en', 'is', null);
+    return rows.map((r) => r['usuario_id'] as int).toSet();
   }
 
   Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>>
@@ -618,5 +637,115 @@ class PosRepository {
     await _db.deleteWhere('plato_ingredientes', {'plato_id': platoId});
     await _db.deleteWhere('plato_contornos', {'plato_id': platoId});
     await _db.deleteById('platos', platoId);
+  }
+
+  /// Genera el cierre de caja completo (caja + reportes) para una sesión
+  Future<CierreCaja> generarCierre(int sesionId) async {
+    final ventasRepo = PosVentasRepository(_db);
+
+    // 1. Obtener sesión y usuario
+    final sRows = await _db.client
+        .from('pos_sesiones')
+        .select()
+        .eq('id', sesionId)
+        .limit(1);
+    if (sRows.isEmpty) throw Exception('Sesión no encontrada: $sesionId');
+    final s = sRows.first;
+
+    final uRows = await _db.client
+        .from('pos_usuarios')
+        .select('nombre')
+        .eq('id', s['usuario_id'] as int)
+        .limit(1);
+    final usuarioNombre = uRows.isNotEmpty ? uRows.first['nombre'] as String : 'Desconocido';
+
+    // 2. Totales de caja
+    final cajaInicial = (s['caja_inicial'] as num? ?? 0).toDouble();
+    final totalVentas = await _totalVigenteDeSesion(sesionId);
+    final cajaFinal = cajaInicial + totalVentas;
+
+    // 3. Reporte simple: movimientos de venta agregados por producto/plato
+    final movs = await ventasRepo.movimientosVentaDeSesion(sesionId);
+    final Map<String, LineaVenta> lineasMap = {};
+    for (final m in movs) {
+      final key = m['producto_id'].toString();
+      final precio = (m['precio_venta'] as num?)?.toDouble() ?? 0;
+      final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
+      final cat = m['categoria'] as String? ?? 'Sin categoría';
+      final nombre = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
+      if (lineasMap.containsKey(key)) {
+        final existing = lineasMap[key]!;
+        lineasMap[key] = LineaVenta(
+          nombre: existing.nombre,
+          categoria: existing.categoria,
+          cantidad: existing.cantidad + cant,
+          precioUnitario: existing.precioUnitario,
+          total: existing.total + (cant * precio),
+        );
+      } else {
+        lineasMap[key] = LineaVenta(
+          nombre: nombre,
+          categoria: cat,
+          cantidad: cant,
+          precioUnitario: precio,
+          total: cant * precio,
+        );
+      }
+    }
+    final lineas = lineasMap.values.toList()
+      ..sort((a, b) => a.nombre.compareTo(b.nombre));
+    final reporteSimple = ReporteSimple(
+      lineas: lineas,
+      totalGeneral: lineas.fold(0.0, (s, l) => s + l.total),
+    );
+
+    // 4. Reporte detallado: desglose por ingrediente
+    final desglosesRaw = await ventasRepo.desgloseIngredientesDeSesion(sesionId);
+    final desgloses = desglosesRaw.map((d) => DesgloseIngrediente(
+      ingrediente: d['ingrediente'] as String,
+      totalConsumido: (d['total_consumido'] as num?)?.toDouble() ?? 0,
+      stockFinal: (d['stock_final'] as num?)?.toDouble() ?? 0,
+      usos: (d['usos'] as List)
+          .map((u) => UsoIngrediente(
+                plato: u['plato'] as String,
+                cantidad: (u['cantidad'] as num?)?.toDouble() ?? 0,
+              ))
+          .toList(),
+    )).toList();
+    final reporteDetallado = ReporteDetallado(desgloses: desgloses);
+
+    // 5. Construir CierreCaja
+    return CierreCaja(
+      sesionId: sesionId,
+      usuarioId: s['usuario_id'] as int,
+      usuarioNombre: usuarioNombre,
+      abiertaEn: s['abierta_en'] as String,
+      cerradaEn: DateTime.now().toIso8601String(),
+      cajaInicial: cajaInicial,
+      totalVentas: totalVentas,
+      cajaFinal: cajaFinal,
+      reporteSimple: reporteSimple,
+      reporteDetallado: reporteDetallado,
+      syncUuid: _uuid.v4(),
+    );
+  }
+
+  /// Guarda el cierre en la tabla histórica pos_cierres
+  Future<int> guardarCierre(CierreCaja cierre) async {
+    final now = DateTime.now().toIso8601String();
+    return await _db.insert('pos_cierres', {
+      'sesion_id': cierre.sesionId,
+      'usuario_id': cierre.usuarioId,
+      'abierta_en': cierre.abiertaEn,
+      'cerrada_en': cierre.cerradaEn,
+      'caja_inicial': cierre.cajaInicial,
+      'total_ventas': cierre.totalVentas,
+      'caja_final': cierre.cajaFinal,
+      'reporte_simple_json': jsonEncode(cierre.reporteSimple.toJson()),
+      'reporte_detallado_json': jsonEncode(cierre.reporteDetallado.toJson()),
+      'sync_uuid': cierre.syncUuid,
+      'created_at': now,
+      'updated_at': now,
+    });
   }
 }

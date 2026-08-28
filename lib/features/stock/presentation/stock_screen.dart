@@ -82,7 +82,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   void _reload() {
     final repo = ref.read(stockRepoProvider)!;
     setState(() {
-      _statsFuture = repo.getStockStats();
+      _statsFuture = repo.getStockStats(almacen: _almacen);
       _productosFuture = repo.filterProductos(
         search: _search,
         categoriaId: _categoriaId,
@@ -294,6 +294,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         return ProductosGrid(
           productos: prods,
           categorias: _categoriasMap,
+          almacen: _almacen,
           onAction: _onAction,
         );
       },

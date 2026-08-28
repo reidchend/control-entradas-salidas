@@ -47,6 +47,8 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
   bool _guardando = false;
   String? _codigoAuto;
 
+  bool get _angosto => MediaQuery.of(context).size.width < 600;
+
   @override
   void initState() {
     super.initState();
@@ -167,28 +169,49 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
                         onChanged: (v) => setState(() => _categoriaId = v),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SwitchListTile(
+                      if (_angosto)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SwitchListTile(
                               title: const Text('Pesable'),
                               value: _esPesable,
                               onChanged: (v) =>
                                   setState(() => _esPesable = v),
                               dense: true,
                             ),
-                          ),
-                          Expanded(
-                            child: SwitchListTile(
+                            SwitchListTile(
                               title: const Text('Requiere foto peso'),
                               value: _requiereFotoPeso,
                               onChanged: (v) =>
                                   setState(() => _requiereFotoPeso = v),
                               dense: true,
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SwitchListTile(
+                                title: const Text('Pesable'),
+                                value: _esPesable,
+                                onChanged: (v) =>
+                                    setState(() => _esPesable = v),
+                                dense: true,
+                              ),
+                            ),
+                            Expanded(
+                              child: SwitchListTile(
+                                title: const Text('Requiere foto peso'),
+                                value: _requiereFotoPeso,
+                                onChanged: (v) =>
+                                    setState(() => _requiereFotoPeso = v),
+                                dense: true,
+                              ),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 12),
                       Row(
                         children: [

@@ -24,6 +24,6 @@ final whatsappPendientesProvider =
 
 /// Estado de conexión del bot (GET /config).
 final whatsappStatusProvider = FutureProvider.autoDispose<
-    ({bool connected, String? groupId})>((ref) {
+    ({bool connected, String? groupId, String? reportGroupId})>((ref) {
   return ref.watch(whatsappRepoProvider)!.getStatus();
 });

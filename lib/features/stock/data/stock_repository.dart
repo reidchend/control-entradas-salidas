@@ -100,8 +100,13 @@ class StockRepository {
 
     final result = <Producto>[];
     for (final p in productos) {
-      final stock = stockTotal[p.id] ?? 0;
-      if (almacen != null && (existenciasMap[p.id]?[almacen] ?? 0) <= 0) {
+      // Al filtrar por almacén, el nivel se decide con las existencias de ese
+      // almacén; sin filtro, con la suma de todos los almacenes.
+      final stock = almacen != null
+          ? (existenciasMap[p.id]?[almacen] ?? 0)
+          : (stockTotal[p.id] ?? 0);
+      if (almacen != null &&
+          !(existenciasMap[p.id]?.containsKey(almacen) ?? false)) {
         continue;
       }
       if (stockStatus == 'out' && !(stock <= 0)) continue;
@@ -116,12 +121,27 @@ class StockRepository {
     return result;
   }
 
-  Future<StockStats> getStockStats() async {
+  Future<StockStats> getStockStats({String? almacen}) async {
     final productos = await loadProductos(limit: 99999);
-    final stockTotales = await getStockTotal([for (final p in productos) p.id]);
+    final ids = [for (final p in productos) p.id];
+    Map<int, double> stockMap;
+    Map<int, Map<String, double>>? existenciasMap;
+    if (almacen != null) {
+      existenciasMap = await getExistenciasMap(ids);
+      stockMap = {
+        for (final e in existenciasMap.entries)
+          e.key: e.value[almacen] ?? 0,
+      };
+    } else {
+      stockMap = await getStockTotal(ids);
+    }
     var total = 0, bajo = 0, agotado = 0;
     for (final p in productos) {
-      final stock = stockTotales[p.id] ?? 0;
+      if (almacen != null) {
+        final porAlmacen = existenciasMap![p.id];
+        if (porAlmacen == null || !porAlmacen.containsKey(almacen)) continue;
+      }
+      final stock = stockMap[p.id] ?? 0;
       total++;
       if (stock <= 0) {
         agotado++;
