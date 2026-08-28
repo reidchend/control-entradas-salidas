@@ -7,7 +7,10 @@ import 'whatsapp_repository.dart';
 final whatsappRepoProvider = Provider<WhatsappRepository?>((ref) {
   final db = ref.watch(supabaseServiceProvider);
   if (db == null) return null;
-  return WhatsappRepository(db);
+  final repo = WhatsappRepository(db);
+  repo.startRetryTimer();
+  ref.onDispose(() => repo.stopRetryTimer());
+  return repo;
 });
 
 /// Mensajes de la bandeja (los más recientes primero).

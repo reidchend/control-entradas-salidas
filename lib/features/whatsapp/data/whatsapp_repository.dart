@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -15,6 +16,24 @@ class WhatsappRepository {
   final SupabaseService _db;
 
   String? _cachedBotUrl;
+  Timer? _retryTimer;
+
+  /// Inicia el timer de reintentos cada 1 minuto (hasta 5 intentos por mensaje).
+  void startRetryTimer() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      reintentarTodos(limit: 20).catchError((e) {
+        print('[WA] retry timer error: $e');
+        return 0;
+      });
+    });
+  }
+
+  /// Detiene el timer de reintentos.
+  void stopRetryTimer() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+  }
 
   Future<String> get botUrl async {
     if (_cachedBotUrl != null) return _cachedBotUrl!;
