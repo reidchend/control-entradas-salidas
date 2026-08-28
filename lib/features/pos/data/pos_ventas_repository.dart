@@ -575,11 +575,22 @@ class PosVentasRepository {
       if (pid == null) continue;
 
       final tipo = (item['tipo'] as String? ?? '').toLowerCase();
-      final prod = await getProductoById(pid);
-      if (tipo == 'producto' || prod != null) {
+
+      if (tipo == 'producto') {
+        // Producto simple: consultar tabla productos
+        final prod = await getProductoById(pid);
         acumular(pid, prod?.nombre ?? 'Producto #$pid', cant, 'restaurante');
-      } else {
+      } else if (tipo == 'plato' || tipo == 'contorno') {
+        // Plato o contorno compuesto: desglosar ingredientes de la tabla platos
         await acumularIngredientes(pid, cant);
+      } else {
+        // Fallback: intentar como producto, si no existe tratar como plato
+        final prod = await getProductoById(pid);
+        if (prod != null) {
+          acumular(pid, prod.nombre, cant, 'restaurante');
+        } else {
+          await acumularIngredientes(pid, cant);
+        }
       }
 
       final cids = <int>[
@@ -694,16 +705,40 @@ class PosVentasRepository {
         if (pid == null) continue;
 
         final tipo = (item['tipo'] as String? ?? '').toLowerCase();
-        final prod = await getProductoById(pid);
-        if (tipo == 'producto' || prod != null) {
-          // Producto simple (no compuesto)
-          continue; // Ya está en movimientosVentaDeSesion
-        } else {
-          // Plato compuesto: desglosar sus ingredientes
+
+        if (tipo == 'producto') {
+          // Producto simple: ya está en movimientosVentaDeSesion
+          continue;
+        } else if (tipo == 'plato' || tipo == 'contorno') {
+          // Plato o contorno compuesto: desglosar ingredientes de la tabla platos
           final ing = await getPlatoIngredientes(pid);
-          final platoNombre = prod?.nombre ?? 'Plato #$pid';
+          // Para el nombre del plato, consultar tabla platos
+          final platoRows = await _db.client
+              .from('platos')
+              .select('nombre')
+              .eq('id', pid)
+              .limit(1);
+          final platoNombre = platoRows.isNotEmpty
+              ? platoRows.first['nombre'] as String
+              : 'Plato #$pid';
           for (final i in ing) {
             acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, platoNombre);
+          }
+        } else {
+          // Fallback: intentar como plato si no es producto explícito
+          final ing = await getPlatoIngredientes(pid);
+          if (ing.isNotEmpty) {
+            final platoRows = await _db.client
+                .from('platos')
+                .select('nombre')
+                .eq('id', pid)
+                .limit(1);
+            final platoNombre = platoRows.isNotEmpty
+                ? platoRows.first['nombre'] as String
+                : 'Plato #$pid';
+            for (final i in ing) {
+              acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, platoNombre);
+            }
           }
         }
 
@@ -713,8 +748,14 @@ class PosVentasRepository {
         ];
         for (final cid in cids) {
           final ing = await getPlatoIngredientes(cid);
-          final contorno = await getProductoById(cid);
-          final contornoNombre = contorno?.nombre ?? 'Contorno #$cid';
+          final contornoRows = await _db.client
+              .from('platos')
+              .select('nombre')
+              .eq('id', cid)
+              .limit(1);
+          final contornoNombre = contornoRows.isNotEmpty
+              ? contornoRows.first['nombre'] as String
+              : 'Contorno #$cid';
           for (final i in ing) {
             acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, contornoNombre);
           }
