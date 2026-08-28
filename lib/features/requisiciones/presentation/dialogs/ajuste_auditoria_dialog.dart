@@ -327,6 +327,15 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
           onPressed: _procesando ? null : () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
+        Tooltip(
+          message: 'Abrir calculadora (F1)',
+          child: OutlinedButton.icon(
+            onPressed: _procesando ? null : _abrirCalculadora,
+            icon: const Icon(Icons.calculate, size: 18),
+            label: const Text('Calculadora'),
+          ),
+        ),
+        const SizedBox(width: 8),
         FilledButton(
           onPressed: _procesando ? null : _aceptar,
           child: _procesando
