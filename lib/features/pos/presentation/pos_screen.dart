@@ -17,6 +17,32 @@ import 'pos_home_screen.dart';
 import 'ventas_screen.dart';
 import 'widgets/usuario_card.dart';
 
+/// Diálogo de carga mostrado mientras se genera el cierre de turno.
+class _CerrandoSesionDialog extends StatelessWidget {
+  const _CerrandoSesionDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Generando corte de caja...\nCalculando totales y reportes',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Pantalla del módulo POS.
 /// - Sin sesión: login PIN (Fase 6.1) — lista de cajeros, seed admin, alta.
 /// - Con sesión: router de etapas (Fase 6.2): selector → mesas/habitaciones →
@@ -117,15 +143,23 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     final sesionActiva = ref.read(posSessionProvider);
     if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
 
+    // Mostrar diálogo de carga inmediatamente
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _CerrandoSesionDialog(),
+    );
+
     final sesionId = sesionActiva.sesionId;
     final repo = ref.read(posRepoProvider)!;
 
-    // 1. Generar el cierre (calcula totales y reportes)
+    // 1. Generar el cierre (calcula totales y reportes) - operación pesada
     CierreCaja cierre;
     try {
       cierre = await repo.generarCierre(sesionId);
     } catch (e) {
       if (!mounted) return;
+      Navigator.pop(context); // cerrar loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error generando cierre: $e')),
       );
@@ -135,6 +169,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     // 2. Obtener la sesión para mostrar detalles
     final sesionData = await repo.getSesionActivaDeUsuario(sesionActiva.usuario.id);
     if (!mounted) return;
+    Navigator.pop(context); // cerrar loading
     if (sesionData == null) return;
 
     // 3. Mostrar diálogo de cierre
