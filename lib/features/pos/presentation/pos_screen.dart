@@ -139,7 +139,45 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  Future<void> _cerrarSesion() async {
+  /// Muestra diálogo para elegir: cerrar turno completo, cambiar cajero, o cancelar.
+  Future<void> _mostrarOpcionesCierre() async {
+    final sesionActiva = ref.read(posSessionProvider);
+    if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
+
+    final opcion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Opciones de sesión'),
+        content: const Text('¿Qué deseas hacer?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cancelar'),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cambiar_cajero'),
+            child: const Text('Cambiar cajero\n(turno queda abierto)'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'cerrar_turno'),
+            child: const Text('Cerrar turno\n(corte + WhatsApp)'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (opcion == 'cambiar_cajero') {
+      // Sale sin cerrar: turno queda abierto en BD para retomar luego
+      ref.read(posSessionProvider.notifier).salirSinCerrar();
+    } else if (opcion == 'cerrar_turno') {
+      // Flujo completo: cierre + WhatsApp + cerrar sesión
+      await _cerrarSesionCompleto();
+    }
+  }
+
+  Future<void> _cerrarSesionCompleto() async {
     final sesionActiva = ref.read(posSessionProvider);
     if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
 
@@ -271,14 +309,14 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           sesion: s,
           onOpenMesa: _abrirMesa,
           onBack: () => _go(_PosStage.home),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
         );
       case _PosStage.habitaciones:
         return HabitacionesScreen(
           sesion: s,
           onOpenHabitacion: _abrirHabitacion,
           onBack: () => _go(_PosStage.home),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
         );
       case _PosStage.comanda:
         return ComandaScreen(
@@ -286,20 +324,20 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           mesa: _mesa,
           habitacion: _habitacion,
           onBack: () => _go(_PosStage.home),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
         );
       case _PosStage.ventas:
         return VentasScreen(
           sesion: s,
           onBack: () => _go(_PosStage.home),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
           onCorregirVenta: _corregirVenta,
         );
       case _PosStage.config:
         return ConfigScreen(
           sesion: s,
           onBack: () => _go(_PosStage.home),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
         );
       case _PosStage.home:
         return PosHomeScreen(
@@ -308,7 +346,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           onHabitaciones: () => _go(_PosStage.habitaciones),
           onVentas: () => _go(_PosStage.ventas),
           onConfig: () => _go(_PosStage.config),
-          onLogout: _cerrarSesion,
+          onLogout: _mostrarOpcionesCierre,
           onAbrirComanda: _abrirComandaActiva,
         );
     }
