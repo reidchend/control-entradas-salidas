@@ -47,6 +47,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
   final _finalCtrl = TextEditingController();
   final _inicialCtrl = TextEditingController();
   bool _esPesable = false;
+  bool _procesando = false;
 
   double get _inicial => widget.item.origen.inicial;
   double get _trasladada => widget.item.origen.trasladada;
@@ -131,13 +132,20 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
   }
 
   Future<void> _aceptar() async {
+    if (_procesando) return;
+    setState(() => _procesando = true);
+
     final repo = ref.read(requisicionesRepoProvider);
-    if (repo == null) return;
+    if (repo == null) {
+      if (mounted) setState(() => _procesando = false);
+      return;
+    }
     final p = widget.item.productoId ?? -1;
     if (_esPesable) {
       final pesoTotal = double.tryParse(_pesoTotalCtrl.text.replaceAll(',', '.')) ?? -1;
       if (pesoTotal <= 0) {
         _snack('El peso debe ser mayor a 0');
+        if (mounted) setState(() => _procesando = false);
         return;
       }
       await repo.crearAjusteStock(
@@ -158,6 +166,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
       final nuevaQty = double.tryParse(_inicialCtrl.text) ?? -1;
       if (nuevaQty < 0) {
         _snack('La cantidad no puede ser negativa');
+        if (mounted) setState(() => _procesando = false);
         return;
       }
       await repo.crearAjusteStock(
@@ -174,6 +183,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
         ));
       }
     }
+    if (mounted) setState(() => _procesando = false);
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -314,10 +324,19 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _procesando ? null : () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
-        FilledButton(onPressed: _aceptar, child: const Text('Aceptar')),
+        FilledButton(
+          onPressed: _procesando ? null : _aceptar,
+          child: _procesando
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Aceptar'),
+        ),
       ],
     );
   }
