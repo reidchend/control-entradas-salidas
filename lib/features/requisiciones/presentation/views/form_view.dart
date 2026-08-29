@@ -375,12 +375,12 @@ class _FormViewState extends ConsumerState<FormView> {
   Widget _productoRow(ColorScheme scheme, int index, RequisicionItem item) {
     String display;
     if (item.esPesable) {
-      display = '${item.cantidad.toStringAsFixed(2)} kg';
+      display = '${item.cantidad.toStringAsFixed(3)} kg';
     } else {
       final cantidad = item.cantidad;
       display = cantidad == cantidad.roundToDouble()
           ? '${cantidad.toInt()} ${item.unidad}'
-          : '${cantidad.toStringAsFixed(2)} ${item.unidad}';
+          : '${cantidad.toStringAsFixed(3)} ${item.unidad}';
     }
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
