@@ -35,8 +35,9 @@ class RequisicionCard extends StatelessWidget {
 
   String _fmtFecha(DateTime? d) {
     if (d == null) return '';
+    final local = d.toLocal();
     String p(int v) => v.toString().padLeft(2, '0');
-    return '${p(d.day)}/${p(d.month)}/${d.year} ${p(d.hour)}:${p(d.minute)}';
+    return '${p(local.day)}/${p(local.month)}/${local.year} ${p(local.hour)}:${p(local.minute)}';
   }
 
   @override
