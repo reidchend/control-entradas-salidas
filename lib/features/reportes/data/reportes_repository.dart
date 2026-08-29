@@ -17,8 +17,8 @@ class ReportesRepository {
     dynamic query = _db.client
         .from('pos_ventas')
         .select()
-        .gte('fecha', desde.toIso8601String())
-        .lte('fecha', hasta.toIso8601String());
+        .gte('created_at', desde.toIso8601String())
+        .lte('created_at', hasta.toIso8601String());
 
     if (cajero != null && cajero != 'Todos') {
       query = query.filter('cajero', 'eq', cajero);
@@ -27,7 +27,7 @@ class ReportesRepository {
       query = query.filter('forma_pago', 'eq', formaPago);
     }
 
-    query = query.order('fecha', ascending: false);
+    query = query.order('created_at', ascending: false);
 
     return await query;
   }
@@ -137,7 +137,7 @@ class ReportesRepository {
     final Map<String, double> porDia = {};
 
     for (final v in ventas) {
-      final fecha = (v['fecha'] as String).substring(0, 10); // YYYY-MM-DD
+      final fecha = (v['created_at'] as String).substring(0, 10); // YYYY-MM-DD
       final total = (v['total'] as num?)?.toDouble() ?? 0;
       porDia[fecha] = (porDia[fecha] ?? 0) + total;
     }
