@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/reportes_repository.dart';
+
 /// Pantalla de estadísticas y KPIs.
 class EstadisticasReportScreen extends ConsumerStatefulWidget {
   const EstadisticasReportScreen({super.key});
@@ -12,6 +14,16 @@ class EstadisticasReportScreen extends ConsumerStatefulWidget {
 class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScreen> {
   DateTime _desde = DateTime.now().subtract(const Duration(days: 30));
   DateTime _hasta = DateTime.now();
+  Map<String, dynamic> _kpis = {};
+  List<Map<String, dynamic>> _topProductos = [];
+  List<Map<String, dynamic>> _tendencia = [];
+  bool _cargando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _actualizar();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +73,7 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
           FilledButton.icon(
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Actualizar KPIs'),
-            onPressed: _actualizar,
+            onPressed: _cargando ? null : _actualizar,
           ),
         ],
       ),
@@ -95,6 +107,10 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
   }
 
   Widget _buildContenido(ColorScheme scheme) {
+    if (_cargando) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -110,7 +126,7 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
           const SizedBox(height: 32),
           Text('Tendencia de Ventas', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
-          _buildGraficoPlaceholder(scheme),
+          _buildTendenciaChart(scheme),
         ],
       ),
     );
@@ -118,10 +134,10 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
 
   Widget _buildKPIsGrid(ColorScheme scheme) {
     final kpis = [
-      _KPIData('Ventas Totales', '\$12,450.00', Icons.attach_money, Colors.green),
-      _KPIData('Ticket Promedio', '\$28.50', Icons.receipt_long, Colors.blue),
-      _KPIData('Productos Vendidos', '1,234', Icons.inventory, Colors.orange),
-      _KPIData('Comandas', '89', Icons.point_of_sale, Colors.purple),
+      _KPIData('Ventas Totales', _fmtMoneda(_kpis['total_ventas'] ?? 0), Icons.attach_money, Colors.green),
+      _KPIData('Ticket Promedio', _fmtMoneda(_kpis['ticket_promedio'] ?? 0), Icons.receipt_long, Colors.blue),
+      _KPIData('Productos Vendidos', (_kpis['productos_vendidos'] ?? 0).toString(), Icons.inventory, Colors.orange),
+      _KPIData('Comandas', (_kpis['num_comandas'] ?? 0).toString(), Icons.point_of_sale, Colors.purple),
     ];
 
     return LayoutBuilder(
@@ -141,27 +157,30 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
   }
 
   Widget _buildTopProductos(ColorScheme scheme) {
-    final productos = [
-      {'nombre': 'Hamburguesa Clásica', 'unidades': 156, 'total': '\$1,560.00'},
-      {'nombre': 'Papas Fritas', 'unidades': 142, 'total': '\$710.00'},
-      {'nombre': 'Gaseosa 500ml', 'unidades': 138, 'total': '\$690.00'},
-      {'nombre': 'Helado Vainilla', 'unidades': 98, 'total': '\$490.00'},
-      {'nombre': 'Ensalada César', 'unidades': 87, 'total': '\$1,305.00'},
-    ];
+    if (_topProductos.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Text('Sin datos de productos', style: TextStyle(color: scheme.onSurfaceVariant)),
+          ),
+        ),
+      );
+    }
 
     return Card(
       child: Column(
         children: [
-          for (var i = 0; i < productos.length; i++)
+          for (var i = 0; i < _topProductos.length; i++)
             ListTile(
               leading: CircleAvatar(
                 backgroundColor: scheme.primaryContainer,
                 child: Text('${i + 1}', style: TextStyle(color: scheme.onPrimaryContainer)),
               ),
-              title: Text(productos[i]['nombre'] as String),
-              subtitle: Text('${productos[i]['unidades']} unidades vendidas'),
+              title: Text(_topProductos[i]['nombre'] as String? ?? 'Producto #${_topProductos[i]['producto_id']}'),
+              subtitle: Text('${(_topProductos[i]['cantidad'] as num?)?.toStringAsFixed(2) ?? '0'} unidades'),
               trailing: Text(
-                productos[i]['total'] as String,
+                _fmtMoneda((_topProductos[i]['total'] as num?)?.toDouble() ?? 0),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: scheme.primary,
@@ -174,7 +193,37 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
     );
   }
 
-  Widget _buildGraficoPlaceholder(ColorScheme scheme) {
+  Widget _buildTendenciaChart(ColorScheme scheme) {
+    if (_tendencia.isEmpty) {
+      return Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.show_chart_outlined, size: 48, color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
+              const SizedBox(height: 8),
+              Text(
+                'Sin datos de tendencia para el período',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Encontrar min/max para escalar
+    final valores = _tendencia.map((e) => (e['total'] as num?)?.toDouble() ?? 0).toList();
+    final maxVal = valores.reduce((a, b) => a > b ? a : b);
+    final minVal = valores.reduce((a, b) => a < b ? a : b);
+
     return Container(
       height: 200,
       decoration: BoxDecoration(
@@ -182,25 +231,42 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.show_chart_outlined, size: 48, color: scheme.onSurfaceVariant.withOpacity(0.5)),
-            const SizedBox(height: 8),
-            Text(
-              'Gráfico de tendencia de ventas\n(pendiente implementar con fl_chart)',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          ],
+      padding: const EdgeInsets.all(16),
+      child: CustomPaint(
+        size: const Size(double.infinity, 180),
+        painter: _TendenciaPainter(
+          puntos: _tendencia
+              .map((e) => (e['total'] as num?)?.toDouble() ?? 0)
+              .toList(),
+          maxVal: maxVal,
+          minVal: minVal,
+          color: scheme.primary,
         ),
       ),
     );
   }
 
-  void _actualizar() {
-    _snack('Actualizando KPIs para $_desde - $_hasta');
+  Future<void> _actualizar() async {
+    setState(() => _cargando = true);
+    try {
+      final repo = ref.read(reportesRepoProvider);
+      final kpis = await repo.getKPIs(desde: _desde, hasta: _hasta);
+      final top = await repo.getTopProductos(desde: _desde, hasta: _hasta, limit: 10);
+      final tendencia = await repo.getTendenciaVentas(desde: _desde, hasta: _hasta);
+      if (mounted) {
+        setState(() {
+          _kpis = kpis;
+          _topProductos = top;
+          _tendencia = tendencia;
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _cargando = false);
+        _snack('Error: $e');
+      }
+    }
   }
 
   void _exportar() {
@@ -212,6 +278,8 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
       SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
     );
   }
+
+  String _fmtMoneda(double v) => '\$${v.toStringAsFixed(2)}';
 }
 
 class _KPIData {
@@ -240,7 +308,7 @@ class _KPICard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: data.color.withOpacity(0.15),
+                color: data.color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(data.icono, size: 28, color: data.color),
@@ -266,4 +334,78 @@ class _KPICard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TendenciaPainter extends CustomPainter {
+  final List<double> puntos;
+  final double maxVal;
+  final double minVal;
+  final Color color;
+
+  _TendenciaPainter({
+    required this.puntos,
+    required this.maxVal,
+    required this.minVal,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (puntos.length < 2) return;
+
+    final paintLine = Paint()
+      ..color = color
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final paintArea = Paint()
+      ..color = color.withValues(alpha: 0.1)
+      ..style = PaintingStyle.fill;
+
+    final double range = maxVal - minVal;
+    final double scale = range > 0 ? size.height * 0.8 / range : 0;
+    final double baseY = size.height - (size.height * 0.1);
+
+    final path = Path();
+    final pathArea = Path();
+
+    final double stepX = size.width / (puntos.length - 1);
+
+    for (int i = 0; i < puntos.length; i++) {
+      final double x = i * stepX;
+      final double y = baseY - ((puntos[i] - minVal) * scale);
+
+      if (i == 0) {
+        path.moveTo(x, y);
+        pathArea.moveTo(x, size.height);
+        pathArea.lineTo(x, y);
+      } else {
+        path.lineTo(x, y);
+        pathArea.lineTo(x, y);
+      }
+    }
+
+    // Cerrar área
+    pathArea.lineTo(size.width, size.height);
+    pathArea.lineTo(0, size.height);
+    pathArea.close();
+
+    canvas.drawPath(pathArea, paintArea);
+    canvas.drawPath(path, paintLine);
+
+    // Puntos
+    final paintDot = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < puntos.length; i++) {
+      final double x = i * stepX;
+      final double y = baseY - ((puntos[i] - minVal) * scale);
+      canvas.drawCircle(Offset(x, y), 4, paintDot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

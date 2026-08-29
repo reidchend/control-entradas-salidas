@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/supabase_providers.dart';
 import '../../../core/data/supabase_service.dart';
-import '../../pos/data/pos_repository.dart';
 
 class ReportesRepository {
   ReportesRepository(this._db);
@@ -14,19 +14,20 @@ class ReportesRepository {
     String? cajero,
     String? formaPago,
   }) async {
-    var query = _db.client
+    dynamic query = _db.client
         .from('pos_ventas')
         .select()
         .gte('fecha', desde.toIso8601String())
-        .lte('fecha', hasta.toIso8601String())
-        .order('fecha', ascending: false);
+        .lte('fecha', hasta.toIso8601String());
 
     if (cajero != null && cajero != 'Todos') {
-      query = query.eq('cajero', cajero);
+      query = query.filter('cajero', 'eq', cajero);
     }
     if (formaPago != null && formaPago != 'Todas') {
-      query = query.eq('forma_pago', formaPago);
+      query = query.filter('forma_pago', 'eq', formaPago);
     }
+
+    query = query.order('fecha', ascending: false);
 
     return await query;
   }
@@ -46,19 +47,20 @@ class ReportesRepository {
     String? tipo,
     String? almacen,
   }) async {
-    var query = _db.client
+    dynamic query = _db.client
         .from('movimientos')
         .select()
         .gte('fecha_movimiento', desde.toIso8601String())
-        .lte('fecha_movimiento', hasta.toIso8601String())
-        .order('fecha_movimiento', ascending: false);
+        .lte('fecha_movimiento', hasta.toIso8601String());
 
     if (tipo != null && tipo != 'Todos') {
-      query = query.eq('tipo', tipo);
+      query = query.filter('tipo', 'eq', tipo);
     }
     if (almacen != null && almacen != 'Todos') {
-      query = query.eq('almacen', almacen);
+      query = query.filter('almacen', 'eq', almacen);
     }
+
+    query = query.order('fecha_movimiento', ascending: false);
 
     return await query;
   }
