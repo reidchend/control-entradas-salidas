@@ -193,6 +193,10 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
     for (final _ in widget.data.items) {
       _stockKeys.add(GlobalKey());
     }
+    // Cargar stock inicial para el almacén por defecto
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _actualizarStock();
+    });
   }
 
   @override
@@ -418,61 +422,129 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
     final unidadLabel = item.unidadLabel;
     final esVariable = item.pesoVariable;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.nombre,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Row(
-                  children: [
-                    Text(
-                      esVariable ? 'Variable · $unidadLabel' : 'Sugerido · $unidadLabel',
-                      style:
-                          TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                    ),
-                    Text(' · ',
-                        style: TextStyle(fontSize: 11, color: scheme.outline)),
-                    _StockText(
-                      key: _stockKeys[index],
-                      scheme: scheme,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final angosto = constraints.maxWidth < 400;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 120,
-            child: TextField(
-              controller: _cantCtrls[index],
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              autofocus: esVariable,
-              decoration: InputDecoration(
-                suffixText: unidadLabel,
-                isDense: true,
-                hintText: esVariable ? 'Peso real (kg)' : 'Sugerido',
-                border: const OutlineInputBorder(),
+          child: angosto
+              ? _buildItemRowAngosto(scheme, item, index, unidadLabel, esVariable)
+              : _buildItemRowAncho(scheme, item, index, unidadLabel, esVariable),
+        );
+      },
+    );
+  }
+
+  Widget _buildItemRowAncho(
+    ColorScheme scheme,
+    DescargoItem item,
+    int index,
+    String unidadLabel,
+    bool esVariable,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.nombre,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
+              Row(
+                children: [
+                  Text(
+                    esVariable ? 'Variable · $unidadLabel' : 'Sugerido · $unidadLabel',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                  Text(' · ',
+                      style: TextStyle(fontSize: 11, color: scheme.outline)),
+                  _StockText(
+                    key: _stockKeys[index],
+                    scheme: scheme,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 120,
+          child: TextField(
+            controller: _cantCtrls[index],
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            autofocus: esVariable,
+            decoration: InputDecoration(
+              suffixText: unidadLabel,
+              isDense: true,
+              hintText: esVariable ? 'Peso real (kg)' : 'Sugerido',
+              border: const OutlineInputBorder(),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItemRowAngosto(
+    ColorScheme scheme,
+    DescargoItem item,
+    int index,
+    String unidadLabel,
+    bool esVariable,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          item.nombre,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 2,
+          children: [
+            Text(
+              esVariable ? 'Variable · $unidadLabel' : 'Sugerido · $unidadLabel',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            ),
+            _StockText(
+              key: _stockKeys[index],
+              scheme: scheme,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: TextField(
+            controller: _cantCtrls[index],
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            autofocus: esVariable,
+            decoration: InputDecoration(
+              suffixText: unidadLabel,
+              isDense: true,
+              hintText: esVariable ? 'Peso real (kg)' : 'Sugerido',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
