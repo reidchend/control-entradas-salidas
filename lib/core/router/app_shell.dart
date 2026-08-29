@@ -13,6 +13,7 @@ import '../../features/historial/presentation/historial_screen.dart';
 import '../../features/inventario/presentation/inventario_screen.dart';
 import '../../features/producciones/presentation/producciones_screen.dart';
 import '../../features/requisiciones/presentation/requisiciones_screen.dart';
+import '../../features/reportes/presentation/screens/reportes_screen.dart';
 import '../../features/stock/presentation/stock_screen.dart';
 import '../../features/validacion/presentation/validacion_screen.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
@@ -28,6 +29,8 @@ class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
   static const List<_NavDest> _destinos = [
+    _NavDest(Icons.assessment_outlined, 'Reportes',
+        'Ventas, movimientos y estadísticas', '/reportes'),
     _NavDest(Icons.shopping_cart_outlined, 'Inventario',
         'Gestión de existencias', '/inventario'),
     _NavDest(Icons.checklist_outlined, 'Validación',
@@ -427,6 +430,9 @@ class _DestinoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (destino.ruta == '/reportes') {
+      return const ReportesScreen();
+    }
     if (destino.ruta == '/inventario') {
       return const InventarioScreen();
     }
