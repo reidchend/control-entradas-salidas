@@ -57,9 +57,10 @@ class ReportesRepository {
     String? tipo,
     String? almacen,
   }) async {
+    // Incluye join con productos para obtener nombre del producto
     dynamic query = _db.client
         .from('movimientos')
-        .select()
+        .select('*, productos!inner(nombre)')
         .gte('fecha_movimiento', desde.toIso8601String())
         .lte('fecha_movimiento', hasta.toIso8601String());
 
@@ -72,7 +73,17 @@ class ReportesRepository {
 
     query = query.order('fecha_movimiento', ascending: false);
 
-    return await query;
+    final result = await query;
+    
+    // Mapear producto_nombre desde el join
+    return result.map((m) {
+      final producto = m['productos'] as Map<String, dynamic>?;
+      final nombre = producto?['nombre'] as String?;
+      return {
+        ...m,
+        'producto_nombre': nombre ?? 'Producto #${m['producto_id']}',
+      };
+    }).toList();
   }
 
   /// KPIs principales para dashboard
