@@ -117,7 +117,7 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
                               final p = periodos[i];
                               String fecha = '';
                               try {
-                                final d = DateTime.parse(p.fechaApertura);
+                                final d = DateTime.parse(p.fechaApertura).toLocal();
                                 fecha = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
                               } catch (_) {
                                 fecha = p.fechaApertura;
