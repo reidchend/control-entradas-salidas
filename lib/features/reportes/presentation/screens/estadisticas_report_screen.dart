@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/reportes_repository.dart';
 
 /// Pantalla de estadísticas y KPIs.
@@ -274,9 +275,7 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
   }
 
   void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-    );
+    showErrorSnackBar(context, msg);
   }
 
   String _fmtMoneda(double v) => '\$${v.toStringAsFixed(2)}';
