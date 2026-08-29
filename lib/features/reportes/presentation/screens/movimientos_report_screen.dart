@@ -177,28 +177,35 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
           color: scheme.surfaceContainerHighest,
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _ResumenCard(label: 'Total Movs.', valor: _movimientos.length.toString(), icon: Icons.inventory_2, color: Colors.blue),
-                  ...porTipo.entries.map((e) => _ResumenCard(
-                    label: e.key.capitalize(),
-                    valor: e.value.toString(),
-                    icon: _iconoTipo(e.key),
+Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    _ResumenCard(label: 'Total Movs.', valor: _movimientos.length.toString(), icon: Icons.inventory_2, color: Colors.blue),
+                    ...porTipo.entries.map((e) => _ResumenCard(
+                      label: e.key.capitalize(),
+                      valor: e.value.toString(),
+                      icon: _iconoTipo(e.key),
+                      color: _colorTipo(e.key),
+                    )),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: cantidadPorTipo.entries.map((e) => _ResumenCard(
+                    label: 'Cant. ${e.key.capitalize()}',
+                    valor: e.value.toStringAsFixed(2),
+                    icon: Icons.straighten,
                     color: _colorTipo(e.key),
-                  )),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: cantidadPorTipo.entries.map((e) => _ResumenCard(
-                  label: 'Cant. ${e.key.capitalize()}',
-                  valor: e.value.toStringAsFixed(2),
-                  icon: Icons.straighten,
-                  color: _colorTipo(e.key),
-                )).toList(),
-              ),
+                  )).toList(),
+                ),
+              ],
+            ),
             ],
           ),
         ),
