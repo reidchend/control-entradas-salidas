@@ -203,12 +203,17 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
   Future<void> _verDetalle(Map<String, dynamic> venta) async {
     try {
       final repo = ref.read(reportesRepoProvider);
-      final items = await repo.getItemsVenta(venta['id'] as int);
+      final ventaId = (venta['id'] as num?)?.toInt() ?? 0;
+      if (ventaId == 0) {
+        _snack('Error: Venta sin ID válido');
+        return;
+      }
+      final items = await repo.getItemsVenta(ventaId);
       if (!mounted) return;
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: Text('Detalle Venta #${venta['id']}'),
+          title: Text('Detalle Venta #$ventaId'),
           content: SizedBox(
             width: 400,
             child: ListView.separated(
@@ -217,8 +222,9 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, i) {
                 final it = items[i];
+                final prodId = (it['producto_id'] as num?)?.toInt() ?? 0;
                 return ListTile(
-                  title: Text(it['nombre'] as String? ?? 'Producto #${it['producto_id']}'),
+                  title: Text(it['nombre'] as String? ?? 'Producto #$prodId'),
                   subtitle: Text('${it['cantidad']} x \$${((it['precio'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'),
                   trailing: Text('\$${(((it['cantidad'] as num?)?.toDouble() ?? 0) * ((it['precio'] as num?)?.toDouble() ?? 0)).toStringAsFixed(2)}'),
                 );
