@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/supabase_providers.dart';
@@ -32,12 +34,20 @@ class ReportesRepository {
     return await query;
   }
 
-  /// Detalle de items de una venta
+  /// Detalle de items de una venta (desde items_json de pos_ventas)
   Future<List<Map<String, dynamic>>> getItemsVenta(int ventaId) async {
-    return await _db.client
-        .from('pos_venta_items')
-        .select()
-        .eq('venta_id', ventaId);
+    final row = await _db.client
+        .from('pos_ventas')
+        .select('items_json')
+        .eq('id', ventaId)
+        .limit(1)
+        .maybeSingle();
+    
+    if (row == null || row['items_json'] == null) return [];
+    
+    final itemsJson = row['items_json'] as String;
+    final items = jsonDecode(itemsJson) as List;
+    return items.map((e) => e as Map<String, dynamic>).toList();
   }
 
   /// Movimientos de inventario en un rango de fechas
