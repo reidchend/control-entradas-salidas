@@ -178,16 +178,17 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final v = _ventas[index];
-              final fecha = (v['fecha'] as String?)?.substring(0, 16) ?? '—';
+              final fecha = (v['created_at'] as String?)?.substring(0, 16) ?? '—';
               final cajero = v['cajero'] as String? ?? '—';
               final formaPago = v['forma_pago'] as String? ?? '—';
               final totalV = (v['total'] as num?)?.toDouble() ?? 0;
+              final correlativo = v['correlativo'] as int? ?? v['id'] as int? ?? 0;
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: scheme.primaryContainer,
                   child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
                 ),
-                title: Text('Venta #${v['id']} · $fecha'),
+                title: Text('Venta #$correlativo · $fecha'),
                 subtitle: Text('$cajero · $formaPago'),
                 trailing: Text('\$${totalV.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
                 onTap: () => _verDetalle(v),
