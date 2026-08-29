@@ -111,9 +111,9 @@ class ReportesRepository {
     final Map<int, Map<String, dynamic>> acumulado = {};
 
     for (final v in ventas) {
-      final items = await getItemsVenta(v['id'] as int);
+      final items = await getItemsVenta((v['id'] as num?)?.toInt() ?? 0);
       for (final i in items) {
-        final pid = i['producto_id'] as int;
+        final pid = (i['producto_id'] as num?)?.toInt() ?? 0;
         final cant = (i['cantidad'] as num?)?.toDouble() ?? 0;
         final precio = (i['precio'] as num?)?.toDouble() ?? 0;
         final nombre = i['nombre'] as String? ?? 'Producto #$pid';
