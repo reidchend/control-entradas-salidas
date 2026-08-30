@@ -96,13 +96,30 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
     sb.writeln('──────────────');
     sb.writeln('Final:   \$${_fmtNum(c.cajaFinal)}');
     sb.writeln('');
-    sb.writeln('📦 *VENTAS POR PRODUCTO*');
+
+    // Agrupar por categoría
+    final porCategoria = <String, List<LineaVenta>>{};
     for (final l in c.reporteSimple.lineas) {
-      sb.writeln('• ${l.nombre} (${l.categoria})');
-      sb.writeln('  ${_fmtNum(l.cantidad)} x \$${_fmtNum(l.precioUnitario)} = \$${_fmtNum(l.total)}');
+      porCategoria.putIfAbsent(l.categoria, () => []).add(l);
+    }
+
+    sb.writeln('📦 *VENTAS POR CATEGORÍA*');
+    for (final entry in porCategoria.entries) {
+      final categoria = entry.key;
+      final items = entry.value;
+      final subtotal = items.fold<double>(0, (s, l) => s + l.total);
+      
+      sb.writeln('');
+      sb.writeln('*${categoria.toUpperCase()}*');
+      sb.writeln('━━━━━━━━━━━━━━━━━━');
+      for (final l in items) {
+        sb.writeln('**${l.nombre}**');
+        sb.writeln('  ${_fmtNum(l.cantidad)} x \$${_fmtNum(l.precioUnitario)} = *\$${_fmtNum(l.total)}*');
+      }
+      sb.writeln('  *Subtotal: \$${_fmtNum(subtotal)}*');
     }
     sb.writeln('');
-    sb.writeln('TOTAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}');
+    sb.writeln('💰 *TOTAL GENERAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}*');
     sb.writeln('');
     sb.writeln('_Lycoris POS_');
     return sb.toString();
