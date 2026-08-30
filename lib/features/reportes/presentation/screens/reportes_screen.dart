@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ventas_report_screen.dart';
 import 'movimientos_report_screen.dart';
 import 'estadisticas_report_screen.dart';
+import 'cierres_screen.dart';
 
 /// Pantalla principal de Reportes: dashboard con botones grandes.
 class ReportesScreen extends ConsumerWidget {
@@ -75,6 +76,16 @@ class ReportesScreen extends ConsumerWidget {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => const EstadisticasReportScreen()),
+                              ),
+                            ),
+                            _ReporteCard(
+                              icon: Icons.history_outlined,
+                              titulo: 'Cierres de Caja',
+                              subtitulo: 'Historial de cierres,\nresumen por turno, exportar',
+                              color: Colors.purple.shade700,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const CierresHistorialScreen()),
                               ),
                             ),
                           ],
