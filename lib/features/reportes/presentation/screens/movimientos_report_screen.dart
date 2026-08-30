@@ -75,14 +75,10 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
                 border: OutlineInputBorder(),
               ),
               isExpanded: true,
-              items: const [
-                DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                DropdownMenuItem(value: 'entrada', child: Text('Entrada')),
-                DropdownMenuItem(value: 'salida', child: Text('Salida')),
-                DropdownMenuItem(value: 'ajuste', child: Text('Ajuste')),
-                DropdownMenuItem(value: 'transferencia', child: Text('Transferencia')),
-                DropdownMenuItem(value: 'entrada_produccion', child: Text('Entr. Producción')),
-                DropdownMenuItem(value: 'salida_produccion', child: Text('Sal. Producción')),
+              items: [
+                const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                ..._tiposInfo.entries.map((e) =>
+                    DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
               ],
               onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
             ),
@@ -162,51 +158,38 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
 
     // Resumen por tipo
     final Map<String, int> porTipo = {};
-    final Map<String, double> cantidadPorTipo = {};
     for (final m in _movimientos) {
       final tipo = m['tipo'] as String? ?? '—';
-      final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
       porTipo[tipo] = (porTipo[tipo] ?? 0) + 1;
-      cantidadPorTipo[tipo] = (cantidadPorTipo[tipo] ?? 0) + cant;
     }
 
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           color: scheme.surfaceContainerHighest,
-          child: Column(
-            children: [
-Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    _ResumenCard(label: 'Total Movs.', valor: _movimientos.length.toString(), icon: Icons.inventory_2, color: Colors.blue),
-                    ...porTipo.entries.map((e) => _ResumenCard(
-                      label: e.key.capitalize(),
-                      valor: e.value.toString(),
-                      icon: _iconoTipo(e.key),
-                      color: _colorTipo(e.key),
-                    )),
-                  ],
+                _ResumenChip(
+                  label: 'Total Movs.',
+                  valor: _movimientos.length.toString(),
+                  icon: Icons.inventory_2,
+                  color: Colors.blue,
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: cantidadPorTipo.entries.map((e) => _ResumenCard(
-                    label: 'Cant. ${e.key.capitalize()}',
-                    valor: e.value.toStringAsFixed(2),
-                    icon: Icons.straighten,
+                const SizedBox(width: 12),
+                ...porTipo.entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _ResumenChip(
+                    label: _tipoLabel(e.key),
+                    valor: e.value.toString(),
+                    icon: _iconoTipo(e.key),
                     color: _colorTipo(e.key),
-                  )).toList(),
-                ),
+                  ),
+                )),
               ],
             ),
-            ],
           ),
         ),
         Expanded(
@@ -226,7 +209,7 @@ Column(
                   backgroundColor: _colorTipo(tipo).withValues(alpha: 0.15),
                   child: Icon(_iconoTipo(tipo), color: _colorTipo(tipo), size: 20),
                 ),
-                title: Text('$prod · $tipo'),
+                title: Text('$prod · ${_tipoLabel(tipo)}'),
                 subtitle: Text('$fecha · $almacen'),
                 trailing: Text(
                   '${cant.toStringAsFixed(3)} ${m['unidad'] ?? ''}',
@@ -273,42 +256,29 @@ extension _StringExt on String {
   String capitalize() => isNotEmpty ? '${this[0].toUpperCase()}${substring(1)}' : this;
 }
 
-IconData _iconoTipo(String tipo) {
-  switch (tipo) {
-    case 'entrada':
-    case 'entrada_produccion':
-      return Icons.arrow_downward;
-    case 'salida':
-    case 'salida_produccion':
-      return Icons.arrow_upward;
-    case 'ajuste':
-      return Icons.tune;
-    case 'transferencia':
-      return Icons.swap_horiz;
-    default:
-      return Icons.help;
-  }
-}
+const Map<String, (String, Color, IconData)> _tiposInfo = {
+  'entrada': ('Entrada', Colors.green, Icons.arrow_downward),
+  'salida': ('Salida', Colors.red, Icons.arrow_upward),
+  'ajuste': ('Ajuste', Colors.orange, Icons.tune),
+  'tr_entrada': ('Tr. Entrada', Colors.blue, Icons.swap_horiz),
+  'tr_salida': ('Tr. Salida', Colors.indigo, Icons.swap_horiz),
+  'devolucion': ('Devolución', Colors.teal, Icons.replay),
+  'venta': ('Venta', Colors.deepOrange, Icons.point_of_sale),
+  'entrada_produccion': ('Ent. Producción', Colors.green, Icons.arrow_downward),
+  'salida_produccion': ('Sal. Producción', Colors.red, Icons.arrow_upward),
+};
 
-Color _colorTipo(String tipo) {
-  switch (tipo) {
-    case 'entrada':
-    case 'entrada_produccion':
-      return Colors.green;
-    case 'salida':
-    case 'salida_produccion':
-      return Colors.red;
-    case 'ajuste':
-      return Colors.orange;
-    case 'transferencia':
-      return Colors.purple;
-    default:
-      return Colors.grey;
-  }
-}
+String _tipoLabel(String tipo) =>
+    _tiposInfo[tipo]?.$1 ?? tipo.capitalize();
 
-class _ResumenCard extends StatelessWidget {
-  const _ResumenCard({required this.label, required this.valor, required this.icon, required this.color});
+IconData _iconoTipo(String tipo) =>
+    _tiposInfo[tipo]?.$3 ?? Icons.help;
+
+Color _colorTipo(String tipo) =>
+    _tiposInfo[tipo]?.$2 ?? Colors.grey;
+
+class _ResumenChip extends StatelessWidget {
+  const _ResumenChip({required this.label, required this.valor, required this.icon, required this.color});
   final String label;
   final String valor;
   final IconData icon;
@@ -316,14 +286,48 @@ class _ResumenCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 4),
-        Text(valor, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      ],
+    final theme = Theme.of(context);
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  valor,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
