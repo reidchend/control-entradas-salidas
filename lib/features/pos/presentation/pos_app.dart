@@ -36,9 +36,11 @@ class _PosAppState extends ConsumerState<PosApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
-      // App perdió foco o se minimizó: cerrar sesión del POS para no dejar
-      // turnos huérfanos si el usuario cierra la app desde el taskbar.
-      ref.read(posSessionProvider.notifier).cerrarSesion();
+      // App perdió foco o se minimizó: se libera la sesión en memoria pero el
+      // turno de caja NO se cierra en BD. Así, al volver a entrar, el cajero
+      // retoma SU turno donde quedó (evita cierres fantasma al minimizar,
+      // bloquear pantalla o al actualizar/recompilar la app).
+      ref.read(posSessionProvider.notifier).salirSinCerrar();
     }
   }
 

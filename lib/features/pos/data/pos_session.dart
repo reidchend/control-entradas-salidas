@@ -41,9 +41,8 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
   @override
   PosSesionActiva? build() => null;
 
-  /// Valida el PIN (si el usuario lo tiene), cierra sesiones stale (>8h) y
-  /// abre un turno de caja en 0 para ESTE cajero, o retoma el turno que ese
-  /// mismo cajero dejó abierto.
+  /// Valida el PIN (si el usuario lo tiene) y abre un turno de caja en 0 para
+  /// ESTE cajero, o retoma el turno que ese mismo cajero dejó abierto.
   ///
   /// Cada cajero retoma o abre SU turno. Los turnos de otros cajeros quedan
   /// intactos (no se cierran al entrar otro cajero).
@@ -57,8 +56,9 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
 
     final repo = ref.read(posRepoProvider)!;
 
-    // Cerrar sesiones stale (>8h abiertas) automáticamente.
-    await repo.cerrarSesionesStale(horas: 8);
+    // Se retoma o abre el turno del cajero. NO se cierran turnos stale de forma
+    // automática (>8h), para evitar "cierres fantasma": cada cajero cierra su
+    // propio turno manualmente al finalizar su jornada.
 
     // Usuario desarrollador: inicia sesión SIN aperturar turno/caja
     // (`sesionId = 0` = sin turno). No hereda ni conflictúa con turnos ajenos.

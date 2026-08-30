@@ -77,10 +77,9 @@ uno cierre al otro, y volver al login para abrir el de otro cajero.
       turnos activos (no había restricción; no requirió cambio).
 - [x] `pos_repository.dart`: `getUsuariosConTurnoActivo()` → `Set<int>` (ids de
       cajeros con turno abierto, para el login).
-- [~] `pos_repository.dart`: `cerrarSesionesStale` — se dejó igual. ⚠️ Riesgo
-      pendiente: puede cerrar turnos de >8h de CUALQUIER cajero al iniciar sesión,
-      incluso si otro cajero los mantiene abiertos legítimamente. Se afina en
-      la Fase 4 (anti-cierre).
+- [x] `pos_repository.dart`: `cerrarSesionesStale` — dejó de llamarse en
+      `iniciarSesion` (se elimina el cierre automático de turnos >8h para evitar
+      "cierres fantasma"). El cajero cierra SU turno manualmente.
 - [x] `pos_repository.dart`: `getSesiones` listar turnos de todos los cajeros
       (ya lista todas; no requería cambio).
 - [x] `lib/features/pos/data/pos_session.dart`: `iniciarSesion` retoma el turno
