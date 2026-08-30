@@ -665,7 +665,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       }
     }
     for (final item in _items) {
-      if (item.id == id && !item.tieneContornos) {
+      if (item.id == id && item.tipo == tipo && !item.tieneContornos) {
         setState(() => item.cantidad++);
         return;
       }
@@ -684,7 +684,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
 
   void _agregarItemConContornos(int id, String nombre, double precio, List<PosPlato> contornos) {
     for (final item in _items) {
-      if (item.id == id && !item.tieneContornos) {
+      if (item.id == id && item.tipo == 'plato' && !item.tieneContornos) {
         setState(() => item.cantidad++);
         return;
       }
