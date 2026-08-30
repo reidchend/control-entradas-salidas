@@ -322,9 +322,9 @@ class _NavBarMobile extends StatelessWidget {
         NavigationDestination(
             icon: Icon(destinos[0].icono), label: destinos[0].label),
         NavigationDestination(
-            icon: Icon(destinos[1].icono), label: 'Validar'),
+            icon: Icon(destinos[1].icono), label: destinos[1].label),
         NavigationDestination(
-            icon: Icon(destinos[2].icono), label: 'Stock'),
+            icon: Icon(destinos[2].icono), label: destinos[2].label),
         const NavigationDestination(icon: Icon(Icons.more_vert), label: 'Más'),
       ],
     );
