@@ -7,6 +7,7 @@ import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import 'pos_comanda_models.dart';
 import 'pos_repository.dart';
+import 'pos_session.dart';
 import 'pos_ventas_repository.dart';
 
 /// Repositorio de catálogos/settings/sesiones del POS.
@@ -80,6 +81,15 @@ final ventasProvider = FutureProvider<List<PosVenta>>((ref) {
 final ventasHoyProvider =
     FutureProvider<({int cantidad, double total})>((ref) {
   return ref.watch(posVentasRepoProvider)!.getVentasHoy();
+});
+
+/// Resumen de ventas vigentes de la SESIÓN ACTIVA del cajero actual.
+/// Con multi-cajero, cada cajero ve solo las ventas de SU turno.
+final ventasSesionActualProvider =
+    FutureProvider<({int cantidad, double total})?>((ref) async {
+  final sesion = ref.watch(posSessionProvider);
+  if (sesion == null || sesion.sesionId <= 0) return null;
+  return ref.watch(posVentasRepoProvider)!.getVentasDeSesion(sesion.sesionId);
 });
 
 /// Tasa de cambio oficial guardada localmente (pos_settings).

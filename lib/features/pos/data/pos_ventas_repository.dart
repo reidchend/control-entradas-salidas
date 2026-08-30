@@ -456,6 +456,20 @@ class PosVentasRepository {
     return (cantidad: rows.length, total: total);
   }
 
+  /// Resumen de ventas vigentes de una sesión/turno específica
+  Future<({int cantidad, double total})> getVentasDeSesion(int sesionId) async {
+    final rows = await _db.client
+        .from('pos_ventas')
+        .select('total')
+        .eq('estado', 'vigente')
+        .eq('sesion_id', sesionId);
+    var total = 0.0;
+    for (final v in rows) {
+      total += (v['total'] as num? ?? 0).toDouble();
+    }
+    return (cantidad: rows.length, total: total);
+  }
+
   Future<PosVenta?> getVenta(int id) async {
     final rows = await _db.client
         .from('pos_ventas')

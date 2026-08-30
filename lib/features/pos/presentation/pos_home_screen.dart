@@ -42,7 +42,7 @@ class PosHomeScreen extends ConsumerWidget {
     final mesasOcupadas = ref.watch(mesasOcupadasProvider).valueOrNull?.length ?? 0;
     final habitacionesOcupadas =
         ref.watch(habitacionesOcupadasProvider).valueOrNull?.length ?? 0;
-    final ventasHoy = ref.watch(ventasHoyProvider);
+    final ventasSesion = ref.watch(ventasSesionActualProvider);
     final tasa = ref.watch(tasaCambioProvider);
     final comandasActivas =
         ref.watch(comandasActivasProvider).valueOrNull ?? const <ComandaActiva>[];
@@ -161,14 +161,14 @@ class PosHomeScreen extends ConsumerWidget {
                             child: EntryCard(
                               icon: Icons.receipt_long,
                               titulo: 'Ventas',
-                              subtitulo: 'Historial y devoluciones',
+                              subtitulo: 'Ventas de este turno',
                               color: const Color(0xFF66BB6A),
-                              badge: ventasHoy.valueOrNull == null
+                              badge: ventasSesion.valueOrNull == null
                                   ? null
-                                  : '${ventasHoy.valueOrNull!.cantidad} hoy',
-                              valor: ventasHoy.valueOrNull == null
+                                  : '${ventasSesion.valueOrNull!.cantidad} ventas',
+                              valor: ventasSesion.valueOrNull == null
                                   ? null
-                                  : '\$${ventasHoy.valueOrNull!.total.toStringAsFixed(2)}',
+                                  : '\$${ventasSesion.valueOrNull!.total.toStringAsFixed(2)}',
                               onTap: onVentas,
                             ),
                           ),
