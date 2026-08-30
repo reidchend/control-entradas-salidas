@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_cierre_models.dart';
+import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/cierres_repository.dart';
 
 /// Pantalla de historial de cierres de caja
@@ -288,9 +289,7 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
   }
 
   void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-    );
+    showErrorSnackBar(context, msg);
   }
 }
 
