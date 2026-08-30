@@ -36,7 +36,7 @@ class CierresRepository {
         .order('cerrada_en', ascending: false)
         .limit(limit);
 
-    final rows = await query;
+    final rows = (await query) as List<Map<String, dynamic>>;
     return rows.map((r) => CierreCaja.fromJson({
       'sesion_id': r['sesion_id'],
       'usuario_id': r['usuario_id'],
