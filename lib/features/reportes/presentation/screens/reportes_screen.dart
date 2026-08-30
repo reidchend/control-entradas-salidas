@@ -16,125 +16,80 @@ class ReportesScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHeader(scheme),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final ancho = constraints.maxWidth;
-                  final esMovil = ancho < 600;
-                  final columns = esMovil ? 1 : (ancho < 900 ? 2 : 3);
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final ancho = constraints.maxWidth;
+            final esMovil = ancho < 600;
+            final columns = esMovil ? 1 : (ancho < 900 ? 2 : 3);
 
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.all(esMovil ? 16 : 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Selecciona el tipo de reporte',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        GridView.count(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          childAspectRatio: esMovil ? 2.05 : 1.8,
-                          children: [
-                            _ReporteCard(
-                              icon: Icons.point_of_sale_outlined,
-                              titulo: 'Ventas',
-                              subtitulo: 'Reporte de ventas por período,\ncajero, producto, forma de pago',
-                              color: Colors.green.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const VentasReportScreen()),
-                              ),
-                            ),
-                            _ReporteCard(
-                              icon: Icons.inventory_2_outlined,
-                              titulo: 'Movimientos',
-                              subtitulo: 'Entradas, salidas, ajustes,\ntransferencias y descargos',
-                              color: Colors.blue.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const MovimientosReportScreen()),
-                              ),
-                            ),
-                            _ReporteCard(
-                              icon: Icons.analytics_outlined,
-                              titulo: 'Estadísticas',
-                              subtitulo: 'KPIs, tendencias, top productos,\nestacionalidad, rendimiento',
-                              color: Colors.deepOrange.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const EstadisticasReportScreen()),
-                              ),
-                            ),
-                            _ReporteCard(
-                              icon: Icons.history_outlined,
-                              titulo: 'Cierres de Caja',
-                              subtitulo: 'Historial de cierres,\nresumen por turno, exportar',
-                              color: Colors.purple.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const CierresHistorialScreen()),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+            return SingleChildScrollView(
+              padding: EdgeInsets.all(esMovil ? 16 : 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Selecciona el tipo de reporte',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
-                  );
-                },
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  GridView.count(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: esMovil ? 2.05 : 1.8,
+                    children: [
+                      _ReporteCard(
+                        icon: Icons.point_of_sale_outlined,
+                        titulo: 'Ventas',
+                        subtitulo: 'Reporte de ventas por período,\ncajero, producto, forma de pago',
+                        color: Colors.green.shade700,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const VentasReportScreen()),
+                        ),
+                      ),
+                      _ReporteCard(
+                        icon: Icons.inventory_2_outlined,
+                        titulo: 'Movimientos',
+                        subtitulo: 'Entradas, salidas, ajustes,\ntransferencias y descargos',
+                        color: Colors.blue.shade700,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const MovimientosReportScreen()),
+                        ),
+                      ),
+                      _ReporteCard(
+                        icon: Icons.analytics_outlined,
+                        titulo: 'Estadísticas',
+                        subtitulo: 'KPIs, tendencias, top productos,\nestacionalidad, rendimiento',
+                        color: Colors.deepOrange.shade700,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const EstadisticasReportScreen()),
+                        ),
+                      ),
+                      _ReporteCard(
+                        icon: Icons.history_outlined,
+                        titulo: 'Cierres de Caja',
+                        subtitulo: 'Historial de cierres,\nresumen por turno, exportar',
+                        color: Colors.purple.shade700,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CierresHistorialScreen()),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-          ],
+            );
+          },
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(ColorScheme scheme) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.assessment_outlined, size: 28, color: scheme.primary),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Reportes',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: scheme.onSurface,
-                ),
-              ),
-              Text(
-                'Análisis de ventas, movimientos y KPIs',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
