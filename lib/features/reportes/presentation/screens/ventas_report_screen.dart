@@ -162,8 +162,10 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          child: Wrap(
+            alignment: WrapAlignment.spaceEvenly,
+            spacing: 16,
+            runSpacing: 16,
             children: [
               _ResumenCard(label: 'Total Ventas', valor: '\$${total.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
               _ResumenCard(label: 'Comandas', valor: _ventas.length.toString(), icon: Icons.receipt_long, color: Colors.blue),
@@ -282,8 +284,8 @@ class _ResumenCard extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 4),
-        Text(valor, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        Text(valor, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
       ],
     );
   }

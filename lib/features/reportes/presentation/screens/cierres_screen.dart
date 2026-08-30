@@ -152,8 +152,10 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 24,
+            runSpacing: 12,
             children: [
               _ResumenCard(label: 'Total Cierres', valor: _cierres.length.toString(), icon: Icons.history, color: Colors.blue),
               _ResumenCard(label: 'Caja Inicial Total', valor: '\$${_totalInicial.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
@@ -306,8 +308,8 @@ class _ResumenCard extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 4),
-        Text(valor, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        Text(valor, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
       ],
     );
   }
@@ -327,8 +329,9 @@ class _DetalleRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          Text(valor, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color)),
+          Flexible(child: Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+          const SizedBox(width: 12),
+          Flexible(child: Text(valor, textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color))),
         ],
       ),
     );
