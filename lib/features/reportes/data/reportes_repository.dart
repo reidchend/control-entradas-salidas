@@ -73,7 +73,7 @@ class ReportesRepository {
 
     query = query.order('fecha_movimiento', ascending: false);
 
-    final result = await query;
+    final result = (await query) as List<Map<String, dynamic>>;
     
     // Mapear producto_nombre desde el join
     return result.map((m) {
