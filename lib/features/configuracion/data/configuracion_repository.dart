@@ -211,7 +211,8 @@ class ConfiguracionRepository {
   // ---------------------------------------------------------------------------
 
   Future<void> recalcularExistencias() async {
-    await _db.deleteWhere('existencias', {});
+    // Borrado total explícito: id >= 0 cubre todos los seriales positivos
+    await _db.client.from('existencias').delete().gte('id', 0);
     await _recalcularExistenciasDesdeMovimientos();
   }
 
@@ -219,7 +220,7 @@ class ConfiguracionRepository {
     final builder = _db.client
         .from('movimientos')
         .select()
-        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste')
+        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada')
         .order('fecha_movimiento', ascending: true);
     final movs = (await builder as List).cast<Map<String, dynamic>>();
 
@@ -258,7 +259,7 @@ class ConfiguracionRepository {
   }
 
   Future<void> clearCheckpoints() {
-    return _db.deleteWhere('existencias', {});
+    return _db.client.from('existencias').delete().gte('id', 0);
   }
 
   // ---------------------------------------------------------------------------
