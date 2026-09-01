@@ -241,15 +241,15 @@ class ConfiguracionRepository {
       }
     }
 
-    var builder = _db.client
+    var query = _db.client
         .from('movimientos')
         .select()
-        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada')
-        .order('fecha_movimiento', ascending: true);
+        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada');
     if (desde != null) {
-      builder = builder.filter('fecha_movimiento', 'gte', desde.toIso8601String());
+      query = query.gte('fecha_movimiento', desde.toIso8601String());
     }
-    final movs = (await builder as List).cast<Map<String, dynamic>>();
+    final movs = (await query.order('fecha_movimiento', ascending: true) as List)
+        .cast<Map<String, dynamic>>();
 
     for (final m in movs) {
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
