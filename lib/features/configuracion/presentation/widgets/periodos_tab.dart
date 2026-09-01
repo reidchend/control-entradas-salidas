@@ -20,6 +20,17 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
   bool _aperturando = false;
   bool _recalculando = false;
   bool _forzando = false;
+  double _progreso = 0;
+  String _etapa = '';
+  bool get _trabajando => _aperturando || _recalculando || _forzando;
+
+  void _reportarProgreso(double progreso, String etapa) {
+    if (!mounted) return;
+    setState(() {
+      _progreso = progreso.clamp(0.0, 1.0);
+      _etapa = etapa;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +113,46 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
                             onPressed: _forzando ? null : _forzarArchivo,
                           ),
                         ],
+                        if (_trabajando) ...[
+                          const SizedBox(height: 16),
+                          LinearProgressIndicator(
+                            value: _progreso == 0 ? null : _progreso,
+                            minHeight: 8,
+                            borderRadius: BorderRadius.circular(4),
+                            backgroundColor: scheme.surfaceContainerHighest,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2.5),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _etapa,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${(_progreso * 100).round()}%',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const Divider(height: 20),
                         const Text('Historial de Periodos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
@@ -149,7 +200,11 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
   }
 
   Future<void> _aperturarPeriodo() async {
-    setState(() => _aperturando = true);
+    setState(() {
+      _aperturando = true;
+      _progreso = 0;
+      _etapa = 'Preparando apertura...';
+    });
     try {
       final repo = ref.read(configuracionRepoProvider)!;
       final periodo = _periodoActual();
@@ -159,9 +214,13 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
         return;
       }
 
-      await repo.archivarMovimientos(mesesActivos: 3, mesesRetencion: 7);
+      await repo.archivarMovimientos(
+        mesesActivos: 3,
+        onProgreso: (p, e) => _reportarProgreso(p, e),
+      );
+      _reportarProgreso(0.95, 'Creando periodo $periodo...');
       await repo.crearPeriodo(periodo, registradoPor: 'sistema');
-      await repo.recalcularExistencias();
+      await repo.recalcularExistencias(onProgreso: _reportarProgreso);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Periodo $periodo aperturado')));
@@ -170,30 +229,54 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     } finally {
-      if (mounted) setState(() => _aperturando = false);
+      if (mounted) {
+        setState(() {
+          _aperturando = false;
+          _progreso = 0;
+          _etapa = '';
+        });
+      }
     }
   }
 
   Future<void> _recalcularDesdeCero() async {
-    setState(() => _recalculando = true);
+    setState(() {
+      _recalculando = true;
+      _progreso = 0;
+      _etapa = 'Iniciando recálculo de stock...';
+    });
     try {
       final repo = ref.read(configuracionRepoProvider)!;
-      await repo.clearCheckpoints();
-      await repo.recalcularExistencias();
+      await repo.recalcularExistencias(onProgreso: _reportarProgreso);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock recalculado desde todos los movimientos')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     } finally {
-      if (mounted) setState(() => _recalculando = false);
+      if (mounted) {
+        setState(() {
+          _recalculando = false;
+          _progreso = 0;
+          _etapa = '';
+        });
+      }
     }
   }
 
   Future<void> _forzarArchivo() async {
-    setState(() => _forzando = true);
+    setState(() {
+      _forzando = true;
+      _progreso = 0;
+      _etapa = 'Forzando archivo...';
+    });
     try {
       final repo = ref.read(configuracionRepoProvider)!;
-      await repo.archivarMovimientos(mesesActivos: 3, mesesRetencion: 7);
-      await repo.recalcularExistencias();
+      await repo.archivarMovimientos(
+        mesesActivos: 3,
+        onProgreso: (p, e) => _reportarProgreso(p * 0.5, e),
+      );
+      await repo.recalcularExistencias(
+        onProgreso: (p, e) => _reportarProgreso(0.5 + p * 0.5, e),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Archivo forzado completado')));
         ref.invalidate(_periodosAsync);
@@ -201,7 +284,13 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     } finally {
-      if (mounted) setState(() => _forzando = false);
+      if (mounted) {
+        setState(() {
+          _forzando = false;
+          _progreso = 0;
+          _etapa = '';
+        });
+      }
     }
   }
 

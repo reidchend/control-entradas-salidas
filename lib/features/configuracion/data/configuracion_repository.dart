@@ -6,6 +6,9 @@ import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
 import '../../../core/models/periodo.dart';
 
+/// Callback de progreso para operaciones largas (archivo/recalculo).
+typedef ProgresoCallback = void Function(double progreso, String etapa);
+
 /// Repositorio de configuracion — CRUD de catalogos y ajustes del sistema.
 /// Implementa stale-while-revalidate: sirve cache si esta fresco, si no
 /// refresca desde Supabase y actualiza cache.
@@ -209,63 +212,56 @@ class ConfiguracionRepository {
   // Existencias / Recálculo
   // ---------------------------------------------------------------------------
 
-  Future<void> recalcularExistencias() async {
-    // Borrado total explícito: id >= 0 cubre todos los seriales positivos
+  Future<void> recalcularExistencias({ProgresoCallback? onProgreso}) async {
+    // Recálculo ABSOLUTO: ignora el checkpoint como base. Reproduce el stock
+    // real desde todos los movimientos (activos + archivados).
+    onProgreso?.call(0.05, 'Eliminando existencias anteriores...');
     await _db.client.from('existencias').delete().gte('id', 0);
-    await _recalcularExistenciasDesdeMovimientos();
+    await _db.client.from('stock_checkpoint').delete().gte('producto_id', 0);
+    await _recalcularExistenciasDesdeMovimientos(onProgreso: onProgreso);
   }
 
-  Future<void> _recalcularExistenciasDesdeMovimientos() async {
-    // 1) Leer checkpoints existentes como base (snapshot de aperturas anteriores)
-    final Map<String, double> stock = {};
-    final cpRows = await _db.client
-        .from('stock_checkpoint')
-        .select('producto_id, almacen, cantidad');
-    for (final r in cpRows) {
-      final key = '${r['producto_id']}|${r['almacen']}';
-      stock[key] = (r['cantidad'] as num?)?.toDouble() ?? 0;
-    }
-
-    // 2) Replay SOLO movimientos posteriores al último checkpoint
-    // (si no hay checkpoints, desde el inicio)
-    DateTime? desde;
-    if (stock.isNotEmpty) {
-      // Buscar fecha del último checkpoint (aproximación: último período)
-      final ultPeriodo = await _db.client
-          .from('periodos')
-          .select('fecha_apertura')
-          .order('fecha_apertura', ascending: false)
-          .limit(1);
-      if (ultPeriodo.isNotEmpty) {
-        desde = DateTime.tryParse(ultPeriodo.first['fecha_apertura'] as String);
-      }
-    }
-
+  Future<void> _recalcularExistenciasDesdeMovimientos(
+      {ProgresoCallback? onProgreso}) async {
     // Todos los tipos de movimiento que modifican stock. La delta se deriva de
     // `cantidad_nueva - cantidad_anterior`, que TODAS las operaciones escriben
     // de forma consistente con el valor real que actualizaron en `existencias`
     // (entrada/salida/venta/devolución/producción/traslado/ajuste), así el
     // recálculo reproduce exactamente lo que hizo cada operación en tiempo real.
-    var query = _db.client
-        .from('movimientos')
-        .select()
-        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion');
-    if (desde != null) {
-      query = query.gte('fecha_movimiento', desde.toIso8601String());
-    }
-    final movs = (await query.order('fecha_movimiento', ascending: true) as List)
+    const tipos =
+        'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion';
+    onProgreso?.call(0.10, 'Leyendo movimientos...');
+    final activos = (await _db.client
+            .from('movimientos')
+            .select()
+            .or(tipos) as List)
+        .cast<Map<String, dynamic>>();
+    final archivados = (await _db.client
+            .from('movimientos_archivo')
+            .select()
+            .or(tipos) as List)
         .cast<Map<String, dynamic>>();
 
-    for (final m in movs) {
+    final todas = [...archivados, ...activos];
+    final Map<String, double> stock = {};
+    for (var i = 0; i < todas.length; i++) {
+      final m = todas[i];
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
-      // Delta real aplicado por el movimiento: se reproduce el valor final.
       final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
       final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
       stock[key] = (stock[key] ?? 0) + (nue - ant);
+      if (todas.isNotEmpty && i % 250 == 0) {
+        onProgreso?.call(
+            0.15 + (i / todas.length) * 0.45, 'Calculando stock ($i/${todas.length})...');
+      }
     }
+    if (todas.isEmpty) onProgreso?.call(0.60, 'Sin movimientos, stock vacío');
 
-    // 3) Persistir + actualizar checkpoints
-    for (final entry in stock.entries) {
+    // Persistir existencias + checkpoint como snapshot del stock real
+    final now = DateTime.now().toIso8601String();
+    final entries = stock.entries.toList();
+    for (var j = 0; j < entries.length; j++) {
+      final entry = entries[j];
       final parts = entry.key.split('|');
       final productoId = int.parse(parts[0]);
       final almacen = parts[1];
@@ -288,19 +284,19 @@ class ConfiguracionRepository {
         });
       }
 
-      // Upsert checkpoint
+      // Upsert checkpoint (snapshot para cálculos en tiempo real)
       await _db.client.from('stock_checkpoint').upsert({
         'producto_id': productoId,
         'almacen': almacen,
         'cantidad': cantFinal,
+        'fecha_checkpoint': now,
       });
+      if (j % 25 == 0 || j == entries.length - 1) {
+        onProgreso?.call(
+            0.60 + ((j + 1) / entries.length) * 0.40, 'Guardando existencias (${j + 1}/${entries.length})...');
+      }
     }
-  }
-
-  Future<void> clearCheckpoints() async {
-    // Borra existencias Y checkpoints (snapshot)
-    await _db.client.from('existencias').delete().gte('id', 0);
-    await _db.client.from('stock_checkpoint').delete().gte('producto_id', 0);
+    onProgreso?.call(1.0, 'Recálculo completado');
   }
 
   // ---------------------------------------------------------------------------
@@ -399,17 +395,15 @@ class ConfiguracionRepository {
   // Archive / Periodos (funciones avanzadas)
   // ---------------------------------------------------------------------------
 
-  /// Archiva movimientos > 3 meses activos y > 7 meses retención.
-  Future<(int archivados, int eliminados)> archivarMovimientos({
-    int mesesActivos = 3,
-    int mesesRetencion = 7,
-  }) async {
+  /// Archiva movimientos anteriores a `mesesActivos` (por defecto 3).
+  /// Nunca elimina: todo pasa a `movimientos_archivo` para conservar el
+  /// historial completo y que el recálculo absoluto de existencias siga siendo
+  /// fiel. Devuelve la cantidad archivada.
+  Future<int> archivarMovimientos(
+      {int mesesActivos = 3, ProgresoCallback? onProgreso}) async {
     final now = DateTime.now();
     final cutoffActivo = now
         .subtract(Duration(days: mesesActivos * 30))
-        .toIso8601String();
-    final cutoffRetencion = now
-        .subtract(Duration(days: mesesRetencion * 30))
         .toIso8601String();
 
     final builder = _db.client
@@ -418,21 +412,23 @@ class ConfiguracionRepository {
         .lt('fecha_movimiento', cutoffActivo)
         .order('fecha_movimiento', ascending: true);
     final movs = (await builder as List).cast<Map<String, dynamic>>();
+    if (movs.isEmpty) {
+      onProgreso?.call(1.0, 'Sin movimientos por archivar');
+      return 0;
+    }
 
-    int archivados = 0, eliminados = 0;
-    for (final m in movs) {
-      final fecha = m['fecha_movimiento'] as String?;
-      final isOld = fecha != null && fecha.compareTo(cutoffRetencion) < 0;
-      if (isOld) {
-        await _db.deleteById('movimientos', m['id'] as int);
-        eliminados++;
-      } else {
-        await _db.upsertById('movimientos_archivo', m);
-        await _db.deleteById('movimientos', m['id'] as int);
-        archivados++;
+    int archivados = 0;
+    for (var i = 0; i < movs.length; i++) {
+      final m = movs[i];
+      await _db.upsertById('movimientos_archivo', m);
+      await _db.deleteById('movimientos', m['id'] as int);
+      archivados++;
+      if (i % 10 == 0 || i == movs.length - 1) {
+        onProgreso?.call(
+            (i + 1) / movs.length, 'Archivando movimientos (${i + 1}/${movs.length})...');
       }
     }
-    return (archivados, eliminados);
+    return archivados;
   }
 
   Future<bool> testLocalConnection() async {

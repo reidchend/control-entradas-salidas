@@ -69,9 +69,10 @@ CREATE TABLE IF NOT EXISTS existencias (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_existencias_unique ON existencias (producto_id, almacen);
 
 CREATE TABLE IF NOT EXISTS stock_checkpoint (
-    producto_id INTEGER NOT NULL,
-    almacen    TEXT NOT NULL,
-    cantidad   DOUBLE PRECISION DEFAULT 0,
+    producto_id      INTEGER NOT NULL,
+    almacen          TEXT NOT NULL,
+    cantidad         DOUBLE PRECISION DEFAULT 0,
+    fecha_checkpoint TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY (producto_id, almacen)
 );
 
@@ -103,6 +104,8 @@ CREATE TABLE IF NOT EXISTS movimientos_archivo (
     producto_id      INTEGER NOT NULL REFERENCES productos(id),
     factura_id       INTEGER,
     requisicion_id   INTEGER,
+    venta_id         INTEGER,
+    venta_sync_uuid  TEXT,
     tipo             VARCHAR(30) NOT NULL,
     cantidad         DOUBLE PRECISION NOT NULL,
     cantidad_anterior DOUBLE PRECISION DEFAULT 0,
