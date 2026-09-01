@@ -217,30 +217,94 @@ class ConfiguracionRepository {
   }
 
   Future<void> _recalcularExistenciasDesdeMovimientos() async {
-    final builder = _db.client
+    // 1) Leer checkpoints existentes como base (snapshot de aperturas anteriores)
+    final Map<String, double> stock = {};
+    final cpRows = await _db.client
+        .from('stock_checkpoint')
+        .select('producto_id, almacen, cantidad');
+    for (final r in cpRows) {
+      final key = '${r['producto_id']}|${r['almacen']}';
+      stock[key] = (r['cantidad'] as num?)?.toDouble() ?? 0;
+    }
+
+    // 2) Replay SOLO movimientos posteriores al último checkpoint
+    // (si no hay checkpoints, desde el inicio)
+    DateTime? desde;
+    if (stock.isNotEmpty) {
+      // Buscar fecha del último checkpoint (aproximación: último período)
+      final ultPeriodo = await _db.client
+          .from('periodos')
+          .select('fecha_apertura')
+          .order('fecha_apertura', ascending: false)
+          .limit(1);
+      if (ultPeriodo.isNotEmpty) {
+        desde = DateTime.tryParse(ultPeriodo.first['fecha_apertura'] as String);
+      }
+    }
+
+    var builder = _db.client
         .from('movimientos')
         .select()
         .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada')
         .order('fecha_movimiento', ascending: true);
+    if (desde != null) {
+      builder = builder.gte('fecha_movimiento', desde.toIso8601String());
+    }
     final movs = (await builder as List).cast<Map<String, dynamic>>();
 
-    final Map<String, double> stock = {};
     for (final m in movs) {
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
       final tipo = m['tipo'] as String;
       double delta;
       if (tipo == 'ajuste') {
-        // ajuste guarda cantidad = |delta|, pero cantidad_nueva - cantidad_anterior = delta firmado
+        // Ajuste REEMPLAZA el stock: delta firmado = nueva - anterior
         final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
         final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
         delta = nue - ant;
+      } else if (tipo == 'tr_salida' || tipo == 'tr_entrada') {
+        // Traslados: cantidad YA viene firmada (tr_salida negativo, tr_entrada positivo)
+        delta = (m['cantidad'] as num?)?.toDouble() ?? 0;
       } else {
-        final signo = (tipo == 'salida' || tipo == 'tr_salida') ? -1.0 : 1.0;
+        // Entrada/salida: cantidad positiva, signo según tipo
+        final signo = (tipo == 'salida') ? -1.0 : 1.0;
         final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
         delta = cant * signo;
       }
       stock[key] = (stock[key] ?? 0) + delta;
     }
+
+    // 3) Persistir + actualizar checkpoints
+    for (final entry in stock.entries) {
+      final parts = entry.key.split('|');
+      final productoId = int.parse(parts[0]);
+      final almacen = parts[1];
+      final cantFinal = entry.value;
+
+      final rows = await _db.client
+          .from('existencias')
+          .select('id')
+          .eq('producto_id', productoId)
+          .eq('almacen', almacen)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        await _db.updateById('existencias', rows.first['id'] as int, {'cantidad': cantFinal});
+      } else {
+        await _db.insert('existencias', {
+          'producto_id': productoId,
+          'almacen': almacen,
+          'cantidad': cantFinal,
+          'unidad': 'unidad',
+        });
+      }
+
+      // Upsert checkpoint
+      await _db.client.from('stock_checkpoint').upsert({
+        'producto_id': productoId,
+        'almacen': almacen,
+        'cantidad': cantFinal,
+      });
+    }
+  }
 
     for (final entry in stock.entries) {
       final parts = entry.key.split('|');
@@ -269,7 +333,9 @@ class ConfiguracionRepository {
   }
 
   Future<void> clearCheckpoints() {
-    return _db.client.from('existencias').delete().gte('id', 0);
+    // Borra existencias Y checkpoints (snapshot)
+    _db.client.from('existencias').delete().gte('id', 0);
+    return _db.client.from('stock_checkpoint').delete().gte('producto_id', 0);
   }
 
   // ---------------------------------------------------------------------------
