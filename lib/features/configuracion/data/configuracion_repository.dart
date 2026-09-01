@@ -75,7 +75,6 @@ class ConfiguracionRepository {
     int? categoriaId,
     String? search,
   }) async {
-    // Solo cacheamos la query basica (sin filtros especificos)
     final useCache = soloActivos && categoriaId == null && (search == null || search.isEmpty);
     if (useCache) {
       final cached = _cache?.get<List>('${_k}_prods', ttl: _catalogTtl);
@@ -248,7 +247,7 @@ class ConfiguracionRepository {
         .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada')
         .order('fecha_movimiento', ascending: true);
     if (desde != null) {
-      builder = builder.gte('fecha_movimiento', desde.toIso8601String());
+      builder = builder.filter('fecha_movimiento', 'gte', desde.toIso8601String());
     }
     final movs = (await builder as List).cast<Map<String, dynamic>>();
 
@@ -306,36 +305,10 @@ class ConfiguracionRepository {
     }
   }
 
-    for (final entry in stock.entries) {
-      final parts = entry.key.split('|');
-      final productoId = int.parse(parts[0]);
-      final almacen = parts[1];
-      final rows = await _db.client
-          .from('existencias')
-          .select('id')
-          .eq('producto_id', productoId)
-          .eq('almacen', almacen)
-          .limit(1);
-      if (rows.isNotEmpty) {
-        await _db.updateById(
-            'existencias', rows.first['id'] as int, {
-          'cantidad': entry.value,
-        });
-      } else {
-        await _db.insert('existencias', {
-          'producto_id': productoId,
-          'almacen': almacen,
-          'cantidad': entry.value,
-          'unidad': 'unidad',
-        });
-      }
-    }
-  }
-
-  Future<void> clearCheckpoints() {
+  Future<void> clearCheckpoints() async {
     // Borra existencias Y checkpoints (snapshot)
-    _db.client.from('existencias').delete().gte('id', 0);
-    return _db.client.from('stock_checkpoint').delete().gte('producto_id', 0);
+    await _db.client.from('existencias').delete().gte('id', 0);
+    await _db.client.from('stock_checkpoint').delete().gte('producto_id', 0);
   }
 
   // ---------------------------------------------------------------------------
