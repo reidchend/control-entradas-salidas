@@ -227,9 +227,19 @@ class ConfiguracionRepository {
     final Map<String, double> stock = {};
     for (final m in movs) {
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
-      final signo = m['tipo'] == 'salida' ? -1.0 : 1.0;
-      final cantidad = (m['cantidad'] as num?)?.toDouble() ?? 0;
-      stock[key] = (stock[key] ?? 0) + (cantidad * signo);
+      final tipo = m['tipo'] as String;
+      double delta;
+      if (tipo == 'ajuste') {
+        // ajuste guarda cantidad = |delta|, pero cantidad_nueva - cantidad_anterior = delta firmado
+        final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
+        final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
+        delta = nue - ant;
+      } else {
+        final signo = (tipo == 'salida' || tipo == 'tr_salida') ? -1.0 : 1.0;
+        final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
+        delta = cant * signo;
+      }
+      stock[key] = (stock[key] ?? 0) + delta;
     }
 
     for (final entry in stock.entries) {
