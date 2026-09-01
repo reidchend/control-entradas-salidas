@@ -241,10 +241,15 @@ class ConfiguracionRepository {
       }
     }
 
+    // Todos los tipos de movimiento que modifican stock. La delta se deriva de
+    // `cantidad_nueva - cantidad_anterior`, que TODAS las operaciones escriben
+    // de forma consistente con el valor real que actualizaron en `existencias`
+    // (entrada/salida/venta/devolución/producción/traslado/ajuste), así el
+    // recálculo reproduce exactamente lo que hizo cada operación en tiempo real.
     var query = _db.client
         .from('movimientos')
         .select()
-        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada');
+        .or('tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion');
     if (desde != null) {
       query = query.gte('fecha_movimiento', desde.toIso8601String());
     }
@@ -253,23 +258,10 @@ class ConfiguracionRepository {
 
     for (final m in movs) {
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
-      final tipo = m['tipo'] as String;
-      double delta;
-      if (tipo == 'ajuste') {
-        // Ajuste REEMPLAZA el stock: delta firmado = nueva - anterior
-        final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
-        final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
-        delta = nue - ant;
-      } else if (tipo == 'tr_salida' || tipo == 'tr_entrada') {
-        // Traslados: cantidad YA viene firmada (tr_salida negativo, tr_entrada positivo)
-        delta = (m['cantidad'] as num?)?.toDouble() ?? 0;
-      } else {
-        // Entrada/salida: cantidad positiva, signo según tipo
-        final signo = (tipo == 'salida') ? -1.0 : 1.0;
-        final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
-        delta = cant * signo;
-      }
-      stock[key] = (stock[key] ?? 0) + delta;
+      // Delta real aplicado por el movimiento: se reproduce el valor final.
+      final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
+      final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
+      stock[key] = (stock[key] ?? 0) + (nue - ant);
     }
 
     // 3) Persistir + actualizar checkpoints
