@@ -8,6 +8,7 @@ import '../data/inventario_repository.dart';
 import 'widgets/categorias_grid.dart';
 import 'widgets/productos_panel.dart';
 import 'widgets/lista_compra_panel.dart';
+import 'dialogs/descargo_consumibles_dialog.dart';
 
 /// Pantalla de Inventario (porta `usr/views/inventario_view.py`).
 ///
@@ -81,6 +82,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
 
     if (lk == LogicalKeyboardKey.f1) {
       _searchFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.f2) {
+      showDescargoConsumiblesDialog(context);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -165,6 +170,11 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
               ),
             ),
             const SizedBox(width: 12),
+            IconButton(
+              icon: const Icon(Icons.inventory_2_outlined),
+              tooltip: 'Descargo de consumibles (F2)',
+              onPressed: () => showDescargoConsumiblesDialog(context),
+            ),
             IconButton(
               icon: const Icon(Icons.shopping_cart_outlined),
               tooltip: 'Lista de compras',

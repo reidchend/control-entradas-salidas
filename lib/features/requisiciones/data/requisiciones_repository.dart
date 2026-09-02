@@ -58,14 +58,20 @@ class RequisicionesRepository {
   final SupabaseService _db;
 
   Future<List<String>> getAlmacenes() async {
-    final rows = await _db.fetchAll('existencias');
-    final almacenes = <String>{
-      for (final r in rows) r['almacen'] as String,
+    final rows = await _db.fetchAll('almacenes',
+        filters: {'activo': true}, orderBy: 'orden');
+    final nombres = <String>{
+      for (final r in rows) r['nombre'] as String,
+      'principal',
+      'restaurante',
     };
-    almacenes
-      ..add('principal')
-      ..add('restaurante');
-    return almacenes.toList()..sort();
+    // Incluir strings huérfanos aún en los datos.
+    final existencias = await _db.fetchAll('existencias');
+    for (final r in existencias) {
+      final a = r['almacen'] as String?;
+      if (a != null && a.isNotEmpty) nombres.add(a);
+    }
+    return nombres.toList()..sort();
   }
 
   Future<List<Map<String, dynamic>>> getProductosActivos({int limit = 200}) =>
@@ -306,21 +312,47 @@ class RequisicionesRepository {
       throw StateError('La requisición ya fue totalizada');
     }
 
-    final movimientos = await _db.client
-        .from('movimientos')
-        .select('id')
-        .or(
-            'observaciones.eq.Traslado req ${req.numero} → ${req.destino},observaciones.eq.Traslado req ${req.numero} ← ${req.origen}');
-    if (movimientos.isNotEmpty) {
-      throw StateError('La requisición ya tiene traslados registrados');
-    }
-
     final detalles = await getDetalles(req.id);
     if (detalles.isEmpty) {
       throw StateError('La requisición no tiene detalles');
     }
 
-    for (final d in detalles) {
+    // Productos que ya tienen su par de traslados aplicado (idempotencia:
+    // permite reanudar si un totalizar anterior se interrumpió a mitad,
+    // sin duplicar movimientos).
+    final traslados = await _db.client
+        .from('movimientos')
+        .select('producto_id,tipo')
+        .eq('requisicion_id', req.id);
+    final productosTrasladados = <int>{
+      for (final m in traslados)
+        if (m['producto_id'] is int) m['producto_id'] as int,
+    };
+    // Un producto cuenta como trasladado solo si tiene AMBOS movimientos.
+    // Por robustez: si el set es impar (solo tr_salida o solo tr_entrada),
+    // lo dejamos fuera para reprocesarlo.
+    final conteo = <int, int>{};
+    for (final m in traslados) {
+      final p = m['producto_id'];
+      if (p is int) {
+        conteo[p] = (conteo[p] ?? 0) + 1;
+      }
+    }
+    productosTrasladados.removeWhere((p) => (conteo[p] ?? 0) < 2);
+
+    final pendientes = detalles
+        .where((d) =>
+            d.productoId == null || !productosTrasladados.contains(d.productoId))
+        .toList();
+
+    // Si no queda nada por procesar (totalizar anterior se interrumpió solo
+    // en el flag de estado), simplemente marcamos como completada.
+    if (pendientes.isEmpty) {
+      await _marcarCompletada(req, usuario);
+      return;
+    }
+
+    for (final d in pendientes) {
       if (d.productoId == null) continue;
 
       final actualOrigen = await getExistencia(d.productoId!, req.origen);
@@ -361,6 +393,10 @@ class RequisicionesRepository {
       await _upsertExistencia(d.productoId!, req.destino, cantDestinoNueva);
     }
 
+    await _marcarCompletada(req, usuario);
+  }
+
+  Future<void> _marcarCompletada(domain.Requisicion req, String usuario) async {
     await _db.updateById('requisiciones', req.id, {
       'estado': 'completada',
       'procesada_por': usuario,

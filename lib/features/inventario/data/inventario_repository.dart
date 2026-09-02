@@ -87,6 +87,17 @@ class InventarioRepository {
     }).toList();
   }
 
+  Future<List<Producto>> getProductosConsumibles() async {
+    final data = await _db.client
+        .from('productos')
+        .select()
+        .eq('activo', 1)
+        .eq('tipo', 'Consumo')
+        .order('nombre', ascending: true);
+    final rows = (data as List).cast<Map<String, dynamic>>();
+    return rows.map(Producto.fromMap).toList();
+  }
+
   Future<List<Existencia>> getExistenciasByProducto(int productoId) async {
     final rows = await _db.fetchAll('existencias',
         filters: {'producto_id': productoId});

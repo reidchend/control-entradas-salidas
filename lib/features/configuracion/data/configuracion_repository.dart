@@ -1,6 +1,7 @@
 import '../../../core/auth/device_id_service.dart';
 import '../../../core/data/cache_service.dart';
 import '../../../core/data/supabase_service.dart';
+import '../../../core/models/almacen.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
@@ -231,7 +232,7 @@ class ConfiguracionRepository {
     // sin registrar el movimiento intermedio (que hacían fallar la suma de
     // deltas y sobre/infra-estimaban el stock).
     const tipos =
-        'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion';
+        'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion,tipo.eq.consumo';
     onProgreso?.call(0.10, 'Leyendo movimientos...');
     final activos = (await _db.client
             .from('movimientos')
@@ -348,10 +349,42 @@ class ConfiguracionRepository {
     return setPosSetting('almacen_produccion', almacen);
   }
 
-  Future<List<String>> getAlmacenes() async {
+  /// Almacenes activos (catálogo), ordenados por `orden`.
+  Future<List<Almacen>> getAlmacenes({bool soloActivos = true}) async {
+    final filters = soloActivos ? {'activo': true} : null;
+    final rows = await _db.fetchAll(
+      'almacenes',
+      orderBy: 'orden',
+      ascending: true,
+      filters: filters,
+    );
+    if (rows.isEmpty) {
+      // Fallback: derivar de los strings usados en la BD (pre-catálogo).
+      final nombres = await _almacenesLegacy();
+      return [
+        for (final n in nombres) Almacen(id: 0, nombre: n, orden: 0),
+      ];
+    }
+    return rows.map(Almacen.fromMap).toList();
+  }
+
+  /// Almacenes (activos) como lista simple de nombres, para dropdowns.
+  Future<List<String>> getAlmacenesNombres() async {
+    final almacenes = await getAlmacenes();
+    final nombres = almacenes.map((a) => a.nombre).toSet();
+    // Incluir cualquier string huérfano aún presente en los datos.
+    for (final n in await _almacenesLegacy()) {
+      nombres.add(n);
+    }
+    final lista = nombres.toList()..sort();
+    return lista;
+  }
+
+  /// Strings de almacén que existen en los datos, no necesariamente en tabla.
+  Future<Set<String>> _almacenesLegacy() async {
     final existencias = await _db.fetchAll('existencias');
     final movimientos = await _db.fetchAll('movimientos');
-    final Set<String> almacenes = {};
+    final Set<String> almacenes = {'principal', 'restaurante'};
     for (final r in existencias) {
       final a = r['almacen'] as String?;
       if (a != null && a.isNotEmpty) almacenes.add(a);
@@ -360,7 +393,68 @@ class ConfiguracionRepository {
       final a = r['almacen'] as String?;
       if (a != null && a.isNotEmpty) almacenes.add(a);
     }
-    return almacenes.toList()..sort();
+    return almacenes;
+  }
+
+  /// Crea un nuevo almacén en el catálogo.
+  Future<void> crearAlmacen(Almacen almacen) async {
+    final orden = almacen.orden > 0
+        ? almacen.orden
+        : await _db.count('almacenes', filters: {'activo': true}) + 1;
+    await _db.insert('almacenes', {
+      'nombre': almacen.nombre.trim(),
+      'descripcion': almacen.descripcion,
+      'activo': almacen.activo,
+      'orden': orden,
+    });
+  }
+
+  /// Actualiza nombre (renombra en todos lados), descripción, activo y orden.
+  /// `nombreViejo` es el nombre previo; si cambia, propaga el string a
+  /// existencias, movimientos, movimientos_archivo, stock_checkpoint,
+  /// productos.almacen_predeterminado y pos_config (almacen_produccion).
+  Future<void> actualizarAlmacen(
+    Almacen almacen, {
+    required String nombreViejo,
+  }) async {
+    final data = <String, dynamic>{
+      'nombre': almacen.nombre.trim(),
+      'descripcion': almacen.descripcion,
+      'activo': almacen.activo,
+      'orden': almacen.orden,
+    };
+    await _db.updateById('almacenes', almacen.id, data);
+
+    if (nombreViejo != almacen.nombre.trim()) {
+      final viejo = nombreViejo;
+      final nuevo = almacen.nombre.trim();
+      await _db.updateWhere('existencias', {'almacen': viejo}, {'almacen': nuevo});
+      await _db.updateWhere('movimientos', {'almacen': viejo}, {'almacen': nuevo});
+      await _db.updateWhere(
+          'movimientos_archivo', {'almacen': viejo}, {'almacen': nuevo});
+      await _db.updateWhere(
+          'stock_checkpoint', {'almacen': viejo}, {'almacen': nuevo});
+      await _db.updateWhere(
+          'productos', {'almacen_predeterminado': viejo}, {'almacen_predeterminado': nuevo});
+      final pos = await _db.fetchByField('pos_settings', 'key', 'almacen_produccion');
+      if (pos != null && pos['value'] == viejo) {
+        await _db.updateWhere(
+            'pos_settings', {'key': 'almacen_produccion'}, {'value': nuevo});
+      }
+    }
+  }
+
+  /// Elimina un almacén del catálogo. Requiere que no tenga existencias.
+  Future<(bool, String)> eliminarAlmacen(Almacen almacen) async {
+    final filas = await _db.count('existencias',
+        filters: {'almacen': almacen.nombre});
+    if (filas > 0) {
+      return (false,
+          'El almacén aún tiene $filas producto(s) con existencias. '
+          'Debe dejar el stock en 0 para eliminarlo.');
+    }
+    await _db.deleteById('almacenes', almacen.id);
+    return (true, '');
   }
 
   // ---------------------------------------------------------------------------

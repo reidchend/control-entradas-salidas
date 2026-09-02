@@ -21,6 +21,17 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
   bool _cargando = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Normalizar a inicio/fin de día local para que el rango "de hoy" cubra
+    // todo el día del usuario independientemente de la hora actual.
+    final now = DateTime.now();
+    _desde = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 7));
+    _hasta = DateTime(now.year, now.month, now.day, 23, 59, 59);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -63,8 +74,8 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
         runSpacing: 12,
         alignment: WrapAlignment.center,
         children: [
-          _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-          _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
+          _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day))),
+          _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59))),
           SizedBox(
             width: 180,
             child: DropdownButtonFormField<String>(
@@ -266,6 +277,7 @@ const Map<String, (String, Color, IconData)> _tiposInfo = {
   'venta': ('Venta', Colors.deepOrange, Icons.point_of_sale),
   'entrada_produccion': ('Ent. Producción', Colors.green, Icons.arrow_downward),
   'salida_produccion': ('Sal. Producción', Colors.red, Icons.arrow_upward),
+  'consumo': ('Consumo', Colors.deepPurple, Icons.delete_sweep_outlined),
 };
 
 String _tipoLabel(String tipo) =>

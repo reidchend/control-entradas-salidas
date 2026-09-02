@@ -13,6 +13,7 @@ import '../../data/configuracion_providers.dart'
         almacenesConfigProvider,
         usuarioDispositivoProvider;
 import '../../data/configuracion_repository.dart';
+import 'almacenes_panel.dart';
 
 /// Pestaña de Sistema (porta `usr/views/configuracion/sistema.py`).
 class SistemaTab extends ConsumerStatefulWidget {
@@ -178,6 +179,14 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
               error: (_, __) => const Text('Error'),
             ),
           ],
+        ),
+        _sectionCard(
+          scheme,
+          title: 'Almacenes',
+          subtitle: 'Cree, edite, desactive o elimine los almacenes del sistema.',
+          icon: Icons.warehouse,
+          iconBg: scheme.primaryContainer,
+          children: const [AlmacenesPanel()],
         ),
         _sectionCard(
           scheme,

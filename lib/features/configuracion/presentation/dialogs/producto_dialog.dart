@@ -277,6 +277,9 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
                                     child: Text(
                                         'Productos para uso Interno')),
                                 DropdownMenuItem(
+                                    value: 'Consumo',
+                                    child: Text('Consumo')),
+                                DropdownMenuItem(
                                     value: 'Productos para la venta',
                                     child:
                                         Text('Productos para la venta')),

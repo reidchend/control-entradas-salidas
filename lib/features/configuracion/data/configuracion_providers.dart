@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/supabase_providers.dart';
+import '../../../core/models/almacen.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
@@ -25,9 +26,14 @@ final categoriasConfigProvider = FutureProvider<List<Categoria>>((ref) {
   return ref.watch(configuracionRepoProvider)!.getCategorias();
 });
 
-/// Almacenes disponibles.
+/// Almacenes disponibles (catálogo completo, para administración).
+final almacenesAdminProvider = FutureProvider<List<Almacen>>((ref) {
+  return ref.watch(configuracionRepoProvider)!.getAlmacenes(soloActivos: false);
+});
+
+/// Almacenes disponibles como lista simple de nombres (dropdowns).
 final almacenesConfigProvider = FutureProvider<List<String>>((ref) {
-  return ref.watch(configuracionRepoProvider)!.getAlmacenes();
+  return ref.watch(configuracionRepoProvider)!.getAlmacenesNombres();
 });
 
 /// Productos para la pestaña de configuración.

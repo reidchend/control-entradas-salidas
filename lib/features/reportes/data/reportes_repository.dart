@@ -19,8 +19,8 @@ class ReportesRepository {
     dynamic query = _db.client
         .from('pos_ventas')
         .select()
-        .gte('created_at', desde.toIso8601String())
-        .lte('created_at', hasta.toIso8601String());
+        .gte('created_at', desde.toUtc().toIso8601String())
+        .lte('created_at', hasta.toUtc().toIso8601String());
 
     if (cajero != null && cajero != 'Todos') {
       query = query.filter('cajero', 'eq', cajero);
@@ -61,8 +61,8 @@ class ReportesRepository {
     dynamic query = _db.client
         .from('movimientos')
         .select('*, productos!inner(nombre)')
-        .gte('fecha_movimiento', desde.toIso8601String())
-        .lte('fecha_movimiento', hasta.toIso8601String());
+        .gte('fecha_movimiento', desde.toUtc().toIso8601String())
+        .lte('fecha_movimiento', hasta.toUtc().toIso8601String());
 
     if (tipo != null && tipo != 'Todos') {
       query = query.filter('tipo', 'eq', tipo);
