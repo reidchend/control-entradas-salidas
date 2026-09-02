@@ -35,24 +35,54 @@ class LineaVenta {
       );
 }
 
+/// Resumen informativo de un contorno servido con platos (no suma al total,
+/// su precio ya está incluido en el plato base).
+class ResumenContorno {
+  const ResumenContorno({
+    required this.nombre,
+    required this.cantidad,
+  });
+
+  final String nombre;
+  final double cantidad;
+
+  Map<String, dynamic> toJson() => {
+        'nombre': nombre,
+        'cantidad': cantidad,
+      };
+
+  factory ResumenContorno.fromJson(Map<String, dynamic> j) => ResumenContorno(
+        nombre: j['nombre'] as String,
+        cantidad: (j['cantidad'] as num).toDouble(),
+      );
+}
+
 /// Reporte simple: agregado por producto/plato + categoría + total
 class ReporteSimple {
   const ReporteSimple({
     required this.lineas,
     required this.totalGeneral,
+    this.contornos = const [],
   });
 
   final List<LineaVenta> lineas;
   final double totalGeneral;
+  final List<ResumenContorno> contornos;
 
   Map<String, dynamic> toJson() => {
         'lineas': lineas.map((l) => l.toJson()).toList(),
         'total_general': totalGeneral,
+        if (contornos.isNotEmpty)
+          'contornos': contornos.map((c) => c.toJson()).toList(),
       };
 
   factory ReporteSimple.fromJson(Map<String, dynamic> j) => ReporteSimple(
         lineas: (j['lineas'] as List).map((e) => LineaVenta.fromJson(e)).toList(),
         totalGeneral: (j['total_general'] as num).toDouble(),
+        contornos: (j['contornos'] as List?)
+                ?.map((e) => ResumenContorno.fromJson(e))
+                .toList() ??
+            const [],
       );
 }
 

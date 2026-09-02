@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/data/supabase_service.dart';
+import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
 import 'pos_comanda_models.dart';
@@ -639,36 +640,115 @@ class PosVentasRepository {
     return result;
   }
 
-  /// Obtiene todos los movimientos de tipo 'venta' de una sesión (para el cierre)
-  Future<List<Map<String, dynamic>>> movimientosVentaDeSesion(int sesionId) async {
-    // 1. Obtener IDs de ventas de la sesión
+  /// Resumen de items vendidos en una sesión (para el reporte simple del cierre).
+  ///
+  /// Se arma desde `pos_ventas.items_json` para que el reporte coincida con lo
+  /// realmente vendido (productos, platos y contornos, incluso platos sin
+  /// ingredientes asignados). Los contornos se agrupan aparte como referencia
+  /// informativa (su costo ya está incluido en el plato base).
+  Future<({List<Map<String, dynamic>> lineas, List<ResumenContorno> contornos})>
+      resumenItemsVentaDeSesion(int sesionId) async {
     final ventas = await getVentasPorSesion(sesionId);
-    final ventaIds = ventas.where((v) => v.estado == 'vigente').map((v) => v.id).toList();
-    if (ventaIds.isEmpty) return [];
-
-    // 2. Traer todos los movimientos 'venta' de esas ventas
-    final rows = await _db.client
-        .from('movimientos')
-        .select()
-        .filter('venta_id', 'in', ventaIds)
-        .eq('tipo', 'venta');
-    
-    final result = <Map<String, dynamic>>[];
-    for (final m in rows) {
-      final pid = m['producto_id'] as int;
-      final p = await getProductoById(pid);
-      result.add({
-        'producto_id': pid,
-        'cantidad': (m['cantidad'] as num?)?.toDouble() ?? 0,
-        'almacen': m['almacen'],
-        'producto_nombre': p?.nombre ?? 'Producto #$pid',
-        'precio_venta': (p?.precioVenta as num?)?.toDouble() ?? 0,
-        'categoria': await _getCategoriaNombre(p?.categoriaId),
-      });
+    final vigentes = ventas.where((v) => v.estado == 'vigente').toList();
+    if (vigentes.isEmpty) {
+      return (
+        lineas: <Map<String, dynamic>>[],
+        contornos: <ResumenContorno>[],
+      );
     }
-    result.sort((a, b) =>
-        (a['producto_nombre'] as String).compareTo(b['producto_nombre'] as String));
-    return result;
+
+    final catCache = <String, String>{};
+
+    Future<String> categoriaProducto(int? catId) async {
+      final key = 'prod-$catId';
+      if (catId == null) return 'Sin categoría';
+      if (catCache.containsKey(key)) return catCache[key]!;
+      final nombre = await _getCategoriaNombre(catId);
+      catCache[key] = nombre;
+      return nombre;
+    }
+
+    Future<String> categoriaPlato(int catId) async {
+      final key = 'plato-$catId';
+      if (!catCache.containsKey(key)) {
+        final rows = await _db.client
+            .from('platos_categorias')
+            .select('nombre')
+            .eq('id', catId)
+            .limit(1);
+        catCache[key] = rows.isNotEmpty ? rows.first['nombre'] as String : 'Sin categoría';
+      }
+      return catCache[key]!;
+    }
+
+    final acumulado = <String, Map<String, dynamic>>{};
+    final contornosAcum = <String, Map<String, dynamic>>{};
+    for (final venta in vigentes) {
+      final itemsJson = venta.itemsJson;
+      if (itemsJson == null || itemsJson.isEmpty) continue;
+      final items = jsonDecode(itemsJson) as List;
+      for (final item in items) {
+        final pid = item['id'] as int?;
+        if (pid == null) continue;
+        final cant = (item['cantidad'] as num?)?.toDouble() ?? 1;
+        final tipo = (item['tipo'] as String? ?? '').toLowerCase();
+        final nombre = item['nombre'] as String? ?? 'Item #$pid';
+        final precio = (item['precio'] as num?)?.toDouble() ?? 0;
+
+        String categoria;
+        if (tipo == 'producto') {
+          final prod = await getProductoById(pid);
+          categoria = await categoriaProducto(prod?.categoriaId);
+        } else {
+          final plato = await _getPlatoById(pid);
+          categoria = plato != null
+              ? await categoriaPlato(plato.categoriaId)
+              : 'Sin categoría';
+        }
+
+        final key = '$tipo-$pid';
+        final m = acumulado.putIfAbsent(key, () => {
+              'producto_nombre': nombre,
+              'cantidad': 0.0,
+              'precio_venta': precio,
+              'categoria': categoria,
+            });
+        m['cantidad'] = (m['cantidad'] as double) + cant;
+
+        // Contornos servidos con el plato (informativo, agrupado por contorno)
+        final contornos = (item['contornos'] as List?)?.cast<String>() ?? const [];
+        for (var i = 0; i < contornos.length; i++) {
+          final cNombre = contornos[i];
+          final ckey = cNombre;
+          final cm = contornosAcum.putIfAbsent(ckey, () => {
+                'nombre': cNombre,
+                'cantidad': 0.0,
+              });
+          cm['cantidad'] = (cm['cantidad'] as double) + cant;
+        }
+      }
+    }
+
+    final lineas = acumulado.values.toList()
+      ..sort((a, b) =>
+          (a['producto_nombre'] as String).compareTo(b['producto_nombre'] as String));
+    final contornos = [
+      for (final c in contornosAcum.values)
+        ResumenContorno(
+          nombre: c['nombre'] as String,
+          cantidad: c['cantidad'] as double,
+        ),
+    ]..sort((a, b) => a.nombre.compareTo(b.nombre));
+    return (lineas: lineas, contornos: contornos);
+  }
+
+  Future<PosPlato?> _getPlatoById(int platoId) async {
+    final rows = await _db.client
+        .from('platos')
+        .select()
+        .eq('id', platoId)
+        .limit(1);
+    return rows.isEmpty ? null : PosPlato.fromMap(rows.first);
   }
 
   Future<String> _getCategoriaNombre(int? categoriaId) async {
@@ -721,8 +801,10 @@ class PosVentasRepository {
         final tipo = (item['tipo'] as String? ?? '').toLowerCase();
 
         if (tipo == 'producto') {
-          // Producto simple: ya está en movimientosVentaDeSesion
-          continue;
+          // Producto para la venta: se descarga a sí mismo
+          final prod = await getProductoById(pid);
+          final prodNombre = prod?.nombre ?? 'Producto #$pid';
+          acumularIngrediente(pid, prodNombre, cant, prodNombre);
         } else if (tipo == 'plato' || tipo == 'contorno') {
           // Plato o contorno compuesto: desglosar ingredientes de la tabla platos
           final ing = await getPlatoIngredientes(pid);

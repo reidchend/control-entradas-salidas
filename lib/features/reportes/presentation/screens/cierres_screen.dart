@@ -232,19 +232,39 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
   }
 
   Widget _buildReporteSimple(ReporteSimple reporte) {
-    return Column(
-      children: reporte.lineas.map((l) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(child: Text(l.nombre, style: const TextStyle(fontSize: 12))),
-            Text('${l.cantidad.toStringAsFixed(2)} x \$${l.precioUnitario.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-            Text('\$${l.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-          ],
+    final widgets = <Widget>[
+      for (final l in reporte.lineas)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: Text(l.nombre, style: const TextStyle(fontSize: 12))),
+              Text('${l.cantidad.toStringAsFixed(3)} x \$${l.precioUnitario.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+              Text('\$${l.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
-      )).toList(),
-    );
+    ];
+    if (reporte.contornos.isNotEmpty) {
+      widgets.add(const SizedBox(height: 8));
+      widgets.add(const Text('Contornos servidos:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)));
+      for (final cn in reporte.contornos) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(cn.nombre, style: const TextStyle(fontSize: 11))),
+                Text(cn.cantidad.toStringAsFixed(3), style: const TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+    return Column(children: widgets);
   }
 
   Widget _buildReporteDetallado(ReporteDetallado reporte) {
@@ -255,8 +275,8 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(child: Text(d.ingrediente, style: const TextStyle(fontSize: 11))),
-            Text('Cons: ${d.totalConsumido.toStringAsFixed(2)}', style: const TextStyle(fontSize: 10)),
-            Text('Stock: ${d.stockFinal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 10)),
+            Text('Cons: ${d.totalConsumido.toStringAsFixed(3)}', style: const TextStyle(fontSize: 10)),
+            Text('Stock: ${d.stockFinal.toStringAsFixed(3)}', style: const TextStyle(fontSize: 10)),
           ],
         ),
       )).toList(),

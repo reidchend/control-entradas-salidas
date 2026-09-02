@@ -119,6 +119,14 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
       sb.writeln('  *Subtotal: \$${_fmtNum(subtotal)}*');
     }
     sb.writeln('');
+    final contornos = c.reporteSimple.contornos;
+    if (contornos.isNotEmpty) {
+      sb.writeln('🍽️ *CONTORNOS SERVIDOS*');
+      for (final cn in contornos) {
+        sb.writeln('  ${cn.nombre}: ${_fmtNum(cn.cantidad)}');
+      }
+      sb.writeln('');
+    }
     sb.writeln('💰 *TOTAL GENERAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}*');
     sb.writeln('');
     sb.writeln('_Lycoris POS_');

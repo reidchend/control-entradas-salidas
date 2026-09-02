@@ -664,15 +664,15 @@ class PosRepository {
     final totalVentas = await _totalVigenteDeSesion(sesionId);
     final cajaFinal = cajaInicial + totalVentas;
 
-    // 3. Reporte simple: movimientos de venta agregados por producto/plato
-    final movs = await ventasRepo.movimientosVentaDeSesion(sesionId);
+    // 3. Reporte simple: items vendidos agregados (desde items_json de la venta)
+    final resumen = await ventasRepo.resumenItemsVentaDeSesion(sesionId);
     final Map<String, LineaVenta> lineasMap = {};
-    for (final m in movs) {
-      final key = m['producto_id'].toString();
+    for (final m in resumen.lineas) {
+      final key = m['producto_nombre'].toString();
       final precio = (m['precio_venta'] as num?)?.toDouble() ?? 0;
       final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
       final cat = m['categoria'] as String? ?? 'Sin categoría';
-      final nombre = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
+      final nombre = m['producto_nombre'] as String? ?? 'Producto';
       if (lineasMap.containsKey(key)) {
         final existing = lineasMap[key]!;
         lineasMap[key] = LineaVenta(
@@ -696,6 +696,7 @@ class PosRepository {
       ..sort((a, b) => a.nombre.compareTo(b.nombre));
     final reporteSimple = ReporteSimple(
       lineas: lineas,
+      contornos: resumen.contornos,
       totalGeneral: lineas.fold(0.0, (s, l) => s + l.total),
     );
 
