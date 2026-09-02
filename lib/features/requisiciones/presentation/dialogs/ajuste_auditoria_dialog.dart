@@ -314,7 +314,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Stock actual: ${_inicial.toStringAsFixed(2)}',
+              Text('Stock actual: ${_inicial.toStringAsFixed(3)}',
                   style: const TextStyle(fontSize: 14)),
               const SizedBox(height: 10),
               campos,

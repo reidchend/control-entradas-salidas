@@ -76,7 +76,7 @@ class EntradaCard extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Text(
-        '${e.pesoTotal.toStringAsFixed(2)} kg',
+        '${e.pesoTotal.toStringAsFixed(3)} kg',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,

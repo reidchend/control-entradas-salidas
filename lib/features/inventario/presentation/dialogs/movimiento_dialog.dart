@@ -466,7 +466,7 @@ class _LoteSelectorState extends State<_LoteSelector> {
                     DropdownMenuItem<int?>(
                       value: l.id,
                       child: Text(
-                          'Lote #${l.id} · ${l.cantidad.toStringAsFixed(2)}'),
+                          'Lote #${l.id} · ${l.cantidad.toStringAsFixed(3)}'),
                     ),
               ],
               onChanged: (v) => widget.onChanged(v == 0 ? null : v),

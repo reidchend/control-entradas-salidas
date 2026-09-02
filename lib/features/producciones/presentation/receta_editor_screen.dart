@@ -112,7 +112,7 @@ class _RecetaEditorScreenState extends ConsumerState<RecetaEditorScreen> {
 
   String _fmtCant(double v) {
     if (v == v.roundToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(2);
+    return v.toStringAsFixed(3);
   }
 
   void _onTipoChange(String? tipo) {

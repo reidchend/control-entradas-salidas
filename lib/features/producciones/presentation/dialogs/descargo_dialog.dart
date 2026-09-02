@@ -207,10 +207,10 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
     super.dispose();
   }
 
-  String _fmtSugerida(double v) => v.toStringAsFixed(2);
+  String _fmtSugerida(double v) => v.toStringAsFixed(3);
 
   String _fmtStock(double v) {
-    final s = v.toStringAsFixed(2);
+    final s = v.toStringAsFixed(3);
     return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
   }
 
@@ -582,7 +582,7 @@ class _StockTextState extends State<_StockText> {
   }
 
   String _fmt(double v) {
-    final s = v.toStringAsFixed(2);
+    final s = v.toStringAsFixed(3);
     return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
   }
 }

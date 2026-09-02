@@ -25,7 +25,7 @@ Future<void> showExistenciasDialog(
   final esPesable = producto.esPesable;
 
   String fmtCant(double cant) => esPesable
-      ? '${cant.toStringAsFixed(2)} ${producto.unidadMedida}'
+      ? '${cant.toStringAsFixed(3)} ${producto.unidadMedida}'
       : '${cant.round()} ${producto.unidadMedida}';
 
   await showDialog<void>(

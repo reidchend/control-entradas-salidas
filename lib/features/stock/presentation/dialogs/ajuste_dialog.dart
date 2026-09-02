@@ -13,7 +13,7 @@ Future<(double, String)?> showAjusteDialog(
   final esPesable = producto.esPesable;
   final cantCtrl = TextEditingController(
     text: esPesable
-        ? cantidadActual.toStringAsFixed(2)
+        ? cantidadActual.toStringAsFixed(3)
         : cantidadActual.round().toString(),
   );
   final motivoCtrl = TextEditingController();
@@ -33,7 +33,7 @@ Future<(double, String)?> showAjusteDialog(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Stock actual: ${esPesable ? cantidadActual.toStringAsFixed(2) : cantidadActual.round()} $unidad',
+                'Stock actual: ${esPesable ? cantidadActual.toStringAsFixed(3) : cantidadActual.round()} $unidad',
                 style: TextStyle(
                     fontSize: 13,
                     color: Theme.of(context).colorScheme.onSurfaceVariant),

@@ -179,7 +179,7 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
                 child: Text('${i + 1}', style: TextStyle(color: scheme.onPrimaryContainer)),
               ),
               title: Text(_topProductos[i]['nombre'] as String? ?? 'Producto #${(_topProductos[i]['producto_id'] as num?)?.toInt() ?? 0}'),
-              subtitle: Text('${(_topProductos[i]['cantidad'] as num?)?.toStringAsFixed(2) ?? '0'} unidades'),
+              subtitle: Text('${(_topProductos[i]['cantidad'] as num?)?.toStringAsFixed(3) ?? '0'} unidades'),
               trailing: Text(
                 _fmtMoneda((_topProductos[i]['total'] as num?)?.toDouble() ?? 0),
                 style: TextStyle(

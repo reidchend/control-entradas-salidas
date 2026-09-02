@@ -110,6 +110,6 @@ class RecetaCard extends StatelessWidget {
 
   String _fmtCant(double c) {
     if (c == c.roundToDouble()) return c.toInt().toString();
-    return c.toStringAsFixed(2);
+    return c.toStringAsFixed(3);
   }
 }

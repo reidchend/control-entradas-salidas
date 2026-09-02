@@ -24,7 +24,7 @@ class ProductoStockCard extends ConsumerWidget {
 
   bool get _esPesable => producto.esPesable;
 
-  String _fmt(double v) => _esPesable ? v.toStringAsFixed(2) : v.round().toString();
+  String _fmt(double v) => _esPesable ? v.toStringAsFixed(3) : v.round().toString();
 
   Color _colorPara(BuildContext context, double total) {
     final scheme = Theme.of(context).colorScheme;

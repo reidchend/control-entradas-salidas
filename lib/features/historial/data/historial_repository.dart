@@ -44,7 +44,7 @@ class FacturaDetalleItem {
 
   String get cantidadTexto {
     if (pesoTotal > 0) {
-      return 'Cant: ${cantidad.toStringAsFixed(0)} | Peso: ${pesoTotal.toStringAsFixed(2)} kg';
+      return 'Cant: ${cantidad.toStringAsFixed(0)} | Peso: ${pesoTotal.toStringAsFixed(3)} kg';
     }
     return 'Cant: ${cantidad.toStringAsFixed(0)}';
   }

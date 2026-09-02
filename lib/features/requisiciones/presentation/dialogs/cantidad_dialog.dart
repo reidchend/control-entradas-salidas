@@ -187,7 +187,7 @@ class _CantidadDialogState extends ConsumerState<_CantidadDialog> {
           Icon(Icons.inventory_2_rounded, size: 16, color: stockColor),
           const SizedBox(width: 5),
           Text(
-            'Disponible: ${_disponible.toStringAsFixed(2)} $unidad',
+            'Disponible: ${_disponible.toStringAsFixed(3)} $unidad',
             style: TextStyle(
                 fontSize: 12, color: stockColor, fontWeight: FontWeight.bold),
           ),

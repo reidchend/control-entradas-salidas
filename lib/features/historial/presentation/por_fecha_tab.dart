@@ -198,7 +198,7 @@ class _PorFechaTabState extends ConsumerState<PorFechaTab> {
     final uds = movs.fold<int>(0, (acc, m) => acc + m.cantidad.round());
     final kg = movs.fold<double>(0, (acc, m) => acc + m.pesoTotal);
     var texto = '$dia  •  $uds uds';
-    if (kg > 0) texto += '  •  ${kg.toStringAsFixed(2)} kg';
+    if (kg > 0) texto += '  •  ${kg.toStringAsFixed(3)} kg';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       margin: const EdgeInsets.only(top: 8, bottom: 4),

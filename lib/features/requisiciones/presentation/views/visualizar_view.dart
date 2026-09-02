@@ -71,7 +71,7 @@ class _VisualizarViewState extends ConsumerState<VisualizarView> {
       '',
       '*Detalles:*',
       for (final d in _detalles)
-        '• ${d.ingrediente}: ${d.cantidad.toStringAsFixed(2)} ${d.unidad}',
+        '• ${d.ingrediente}: ${d.cantidad.toStringAsFixed(3)} ${d.unidad}',
     ];
     return lines.join('\n');
   }
@@ -151,7 +151,7 @@ class _VisualizarViewState extends ConsumerState<VisualizarView> {
                                 style: TextStyle(color: scheme.onSurface)),
                           ),
                           Text(
-                            '${d.cantidad.toStringAsFixed(2)} ${d.unidad}',
+                            '${d.cantidad.toStringAsFixed(3)} ${d.unidad}',
                             style: TextStyle(
                                 color: scheme.primary,
                                 fontWeight: FontWeight.bold),

@@ -211,7 +211,7 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
       final nombres = <String>[];
       for (final e in seleccionadas) {
         if (e.esPesable && e.pesoTotal > 0) {
-          nombres.add('${e.nombre}: ${e.pesoTotal.toStringAsFixed(2)} kg');
+          nombres.add('${e.nombre}: ${e.pesoTotal.toStringAsFixed(3)} kg');
         } else {
           nombres.add('${e.nombre}: ${e.cantidad.toInt()} ${e.unidad}');
         }
