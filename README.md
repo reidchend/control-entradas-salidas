@@ -8,8 +8,8 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 
 | App | Entry point | Descripcion | Binarios nativos |
 |---|---|---|---|
-| **Inventario** | `lib/main.dart` | Inventario, stock, producciones, requisiciones, validacion de facturas, historial, WhatsApp, configuracion | Windows (`LycorisControl.exe`) + Android (APK) |
-| **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) |
+| **Inventario** | `lib/main.dart` | Inventario, stock, producciones, requisiciones, validacion de facturas, historial, reportes, WhatsApp, configuracion | Windows (`LycorisControl.exe`) + Android (APK) |
+| **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, cierres, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) |
 
 **Arquitectura**: 3 plataformas desde un solo codigo base — **web** (desarrollo/uso en navegador) y **nativos** (Windows/Android) con actualizacion remota via GitHub Releases.
 
@@ -19,17 +19,20 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 
 ### Inventario (`lib/features/`)
 - **Inventario**: categorias, productos (con stock), movimientos y lista de compra.
-- **Stock / Toma de inventario**: conteo y checkpoint por periodos.
+- **Stock / Toma de inventario**: conteo y checkpoint por periodos, con recálculo de existencias sobre todos los movimientos (ver `recalcularExistencias`).
 - **Producciones**: recetas, editor de recetas, pendientes e historial.
 - **Requisiciones**: formulario, cards, visualizacion y auditoria.
 - **Validacion de facturas**: validacion de entradas con OCR y registro de pagos.
 - **Historial de facturas**: facturas y estados de pago.
+- **Reportes**: ventas, movimientos, estadisticas y cierres de caja (corte de inventario).
 - **Configuracion**: categorias, periodos, productos, proveedores y sistema.
 - **WhatsApp**: bandeja de mensajes con cola y envio via bot.
+- **Calculadora**: dialog invocable con F1/atajo en campos de cantidad y precio.
 
 ### POS (`lib/features/pos/`)
 - Login con PIN por dispositivo (`device_id` unico por dispositivo).
 - Mesas, habitaciones, comandas activas, ventas y cierre de turnos/cajas.
+- **Cierre de turno**: genera `pos_cierres` con reporte simple (agregado por linea/plato desde `pos_ventas.items_json`) y reporte detallado (desglose por ingrediente/producto consumido). Los platos se agrupan por nombre base y los contornos se reportan aparte como informativos.
 - Tasa del dia del **BCV** (proxy con *stale-while-revalidate*).
 - Impresion de tickets **ESC/POS** (impresora termica).
 - Configuracion: categorias, platos, mesas, habitaciones, impresora, tasa, usuarios.
@@ -71,10 +74,11 @@ lib/
 │   │   └── realtime_service.dart    # suscripciones Realtime generico
 │   ├── models/                      # modelos de dominio (Producto, Categoria, etc.)
 │   ├── network/                     # cliente Supabase, HTTP
-│   ├── theme/  state/  logging/
+│   ├── router/  theme/  state/  logging/  utils/
 │   └── updater/                     # actualizacion remota Windows/Android
-├── features/                        # inventario, stock, producciones, requisiciones,
-│                                    # validacion, historial, configuracion, whatsapp, pos
+├── features/                        # auth, calculadora, configuracion, historial,
+│                                    # inventario, pos, producciones, reportes,
+│                                    # requisiciones, stock, validacion, whatsapp
 │   └── <feature>/
 │       ├── data/                    # repository + providers
 │       └── presentation/            # screens, widgets, dialogs
@@ -93,6 +97,27 @@ lib/
 Las columnas `integer` de Supabase que representan booleanos (`activo`, `es_pesable`, `es_contorno`, etc.) requieren `0`/`1` en vez de `true`/`false`.
 
 **Regla**: `SupabaseService._encodeMap()` aplica conversion automatica en todos los metodos de escritura (`insert`, `insertBatch`, `updateById`, `updateWhere`, `upsert`, `upsertById`). Los filtros `.eq()` directos al cliente deben usar `1`/`0` explicitamente.
+
+### Exactitud de decimales
+
+Todas las cantidades y pesos se manejan y despliegan con **3 decimales** (`toStringAsFixed(3)`) en stock, producciones, requisiciones, historial, validacion e inventario. La moneda (`$`, `Bs`, `VES`) se mantiene en 2 decimales.
+
+### Recalculo de existencias
+
+`configuracion_repository.dart` (`_recalcularExistenciasDesdeMovimientos`) reconstruye el stock unitario y en checkpoint desde **todos** los movimientos (`movimientos` + `movimientos_archivo`):
+
+1. Lee todos los movimientos de entrada, salida, ajuste, traslado, produccion, venta y devolucion.
+2. Para cada `(producto_id, almacen)` toma el **ultimo movimiento por `fecha_movimiento`** (desempate `id`) y usa su `cantidad_nueva` como stock real.
+3. Persiste las `existencias` (upsert merge-duplicates) y actualiza `stock_checkpoint.fecha_checkpoint`.
+
+> Uso del ultimo `cantidad_nueva` en vez de sumar deltas: es inmune a *resets* historicos donde se escribio `existencias` directamente sin registrar el movimiento intermedio, que inflaban/deflaban el stock con la suma de deltas.
+
+### Cierre de turno y `pos_cierres`
+
+Al cerrar una sesion se inserta una fila en `pos_cierres` (historica, inmutable) con `reporte_simple_json` y `reporte_detallado_json`:
+
+- **Reporte simple** se construye desde `pos_ventas.items_json` (`resumenItemsVentaDeSesion`): agrega por linea tipo+id, agrupa los platos por nombre base (sin concatenar contornos) y acumula los contornos por nombre en una seccion aparte (no suman al total, su costo ya lo incluye el plato). El total del reporte coincide con el corte de caja.
+- **Reporte detallado** (`desgloseIngredientesDeSesion`): por ingrediente/producto, el total consumido y el stock final. Los productos se descargan a si mismos (aparecen como linea propia), los platos descomponen sus ingredientes desde `plato_ingredientes`.
 
 ### Auth por dispositivo
 
@@ -166,6 +191,7 @@ CREATE POLICY "dispositivo_usuario_all" ON dispositivo_usuario
 | `productos` | Inventario, Stock, Configuracion, Producciones, POS |
 | `existencias` | Stock, Configuracion, Requisiciones |
 | `movimientos` | Stock, Historial, Requisiciones, Producciones |
+| `movimientos_archivo` | Archivo de movimientos (recalculos de stock) |
 | `proveedores` | Configuracion, Validacion |
 | `facturas` | Historial, Validacion |
 | `factura_pagos` | Historial |
@@ -183,17 +209,17 @@ CREATE POLICY "dispositivo_usuario_all" ON dispositivo_usuario
 | `pos_settings` | Configuracion, POS |
 | `pos_usuarios` | POS |
 | `pos_sesiones` | POS (turnos/cajas) |
+| `pos_cierres` | Reportes (corte de caja/inventario) |
+| `pos_temporales` | POS (ventas temporales pre-cierre) |
 | `pos_mesas` | POS |
 | `pos_habitaciones` | POS |
 | `pos_categorias` | POS |
 | `pos_comandas` | POS |
 | `pos_ventas` | POS |
 | `dispositivo_usuario` | Auth (login PIN por dispositivo) |
-| `fcm_tokens` | Notificaciones push |
 | `compras_lista` | Inventario (lista de compra) |
 | `whatsapp_queue` | WhatsApp |
 | `stock_checkpoint` | Stock (toma de inventario) |
-| `resumen` | Resumen/estadisticas |
 
 Ver `supabase/schema.sql` para el esquema completo (idempotente).
 
@@ -256,7 +282,7 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 flutter test
 ```
 
-Tests actuales (29):
+Tests actuales (28):
 - Modelos de dominio: Producto, Categoria, Existencia, Movimiento, MensajeWhatsapp
 - TemporalesRepository (in-memory)
 - CacheService (SharedPreferences)
@@ -282,6 +308,11 @@ Tests actuales (29):
 - **Fase 8**: Fix bool→int — conversion automatica en `SupabaseService._encodeMap()` + filtros directos
 - **Fase 9**: Fix N+1 queries — batch queries en historial, requisiciones y facturas
 - **Fase 10**: Fix error handling — try/catch en comanda_screen, validacion_screen, bandeja_screen
+
+### Migraciones recientes
+
+- `20260827000000_add_pos_cierres.sql` — tabla historica `pos_cierres` para el corte de caja/inventario al cerrar turno.
+- `20260901000000_add_stock_fecha_checkpoint.sql` — `stock_checkpoint.fecha_checkpoint` (fecha del snapshot) y columnas `venta_id`/`venta_sync_uuid` en `movimientos_archivo` (espejo de movimientos).
 
 ---
 
