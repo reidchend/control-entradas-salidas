@@ -223,11 +223,13 @@ class ConfiguracionRepository {
 
   Future<void> _recalcularExistenciasDesdeMovimientos(
       {ProgresoCallback? onProgreso}) async {
-    // Todos los tipos de movimiento que modifican stock. La delta se deriva de
-    // `cantidad_nueva - cantidad_anterior`, que TODAS las operaciones escriben
-    // de forma consistente con el valor real que actualizaron en `existencias`
-    // (entrada/salida/venta/devolución/producción/traslado/ajuste), así el
-    // recálculo reproduce exactamente lo que hizo cada operación en tiempo real.
+    // Todos los tipos de movimiento que modifican stock. El stock real de cada
+    // producto/almacén es el `cantidad_nueva` del ÚLTIMO movimiento que lo
+    // tocó (por fecha), porque todas las operaciones escriben ese campo con el
+    // valor real que quedó en `existencias` tras aplicarse. Esta estrategia es
+    // inmune a "resets" históricos donde se modificó existencias directamente
+    // sin registrar el movimiento intermedio (que hacían fallar la suma de
+    // deltas y sobre/infra-estimaban el stock).
     const tipos =
         'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion';
     onProgreso?.call(0.10, 'Leyendo movimientos...');
@@ -243,13 +245,22 @@ class ConfiguracionRepository {
         .cast<Map<String, dynamic>>();
 
     final todas = [...archivados, ...activos];
-    final Map<String, double> stock = {};
+    final Map<String, Map<String, dynamic>> ultimo = {};
     for (var i = 0; i < todas.length; i++) {
       final m = todas[i];
       final key = '${m['producto_id']}|${m['almacen'] ?? 'principal'}';
-      final ant = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
-      final nue = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
-      stock[key] = (stock[key] ?? 0) + (nue - ant);
+      final actual = ultimo[key];
+      final fecha = (m['fecha_movimiento'] as String?) ?? '';
+      final id = (m['id'] as num?)?.toInt() ?? 0;
+      if (actual == null) {
+        ultimo[key] = m;
+        continue;
+      }
+      final actualFecha = (actual['fecha_movimiento'] as String?) ?? '';
+      final actualId = (actual['id'] as num?)?.toInt() ?? 0;
+      final esMasReciente = fecha.compareTo(actualFecha) > 0 ||
+          (fecha == actualFecha && id >= actualId);
+      if (esMasReciente) ultimo[key] = m;
       if (todas.isNotEmpty && i % 250 == 0) {
         onProgreso?.call(
             0.15 + (i / todas.length) * 0.45, 'Calculando stock ($i/${todas.length})...');
@@ -259,13 +270,13 @@ class ConfiguracionRepository {
 
     // Persistir existencias + checkpoint como snapshot del stock real
     final now = DateTime.now().toIso8601String();
-    final entries = stock.entries.toList();
+    final entries = ultimo.entries.toList();
     for (var j = 0; j < entries.length; j++) {
       final entry = entries[j];
       final parts = entry.key.split('|');
       final productoId = int.parse(parts[0]);
       final almacen = parts[1];
-      final cantFinal = entry.value;
+      final cantFinal = (entry.value['cantidad_nueva'] as num?)?.toDouble() ?? 0;
 
       final rows = await _db.client
           .from('existencias')
