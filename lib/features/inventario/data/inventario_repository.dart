@@ -1,14 +1,14 @@
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/existencia.dart';
 
 /// Repositorio de inventario — CRUD de productos, movimientos y lista de compra.
-/// Opera directamente contra Supabase (sin Drift ni sync manual).
+/// Opera directamente contra PostgreSQL (pooler Neon).
 class InventarioRepository {
   InventarioRepository(this._db);
 
-  final SupabaseService _db;
+  final PostgresService _db;
 
   // ---------------------------------------------------------------------
   // Categorías
@@ -38,29 +38,33 @@ class InventarioRepository {
   // ---------------------------------------------------------------------
 
   Future<List<Producto>> getAllProductos({String searchTerm = ''}) async {
-    dynamic builder = _db.client
-        .from('productos')
-        .select()
-        .eq('activo', 1);
-    if (searchTerm.isNotEmpty) {
-      builder = builder.ilike('nombre', '%$searchTerm%');
-    }
-    builder = builder.order('nombre', ascending: true);
-    final data = await builder;
-    final rows = (data as List).cast<Map<String, dynamic>>();
+    final filters = <String, dynamic>{'activo': true};
+    final rows = await _db.fetchAll(
+      'productos',
+      orderBy: 'nombre',
+      ascending: true,
+      filters: filters,
+    );
     if (rows.isEmpty) return [];
-    final ids = rows.map((r) => r['id'] as int).toList();
-    final existRows = await _db.client
-        .from('existencias')
-        .select('producto_id, cantidad')
-        .inFilter('producto_id', ids);
+
+    // Filtrar por búsqueda en memoria (PostgresService no tiene ilike en fetchAll)
+    final filtered = searchTerm.isEmpty
+        ? rows
+        : rows.where((r) =>
+            (r['nombre'] as String).toLowerCase().contains(searchTerm.toLowerCase())).toList();
+
+    final ids = filtered.map((r) => r['id'] as int).toList();
+    final existRows = await _db.fetchAll(
+      'existencias',
+      filters: {'producto_id': ids},
+    );
     final stockMap = <int, double>{};
     for (final e in existRows) {
       final pid = e['producto_id'] as int;
       final cant = (e['cantidad'] as num?)?.toDouble() ?? 0;
       stockMap[pid] = (stockMap[pid] ?? 0) + cant;
     }
-    return rows.map((r) {
+    return filtered.map((r) {
       final p = Producto.fromMap(r);
       return p.copyWith(stockActual: stockMap[p.id] ?? 0);
     }).toList();
@@ -68,13 +72,13 @@ class InventarioRepository {
 
   Future<List<Producto>> getProductosByCategoria(int categoriaId) async {
     final rows = await _db.fetchAll('productos',
-        orderBy: 'nombre', filters: {'categoria_id': categoriaId});
+        orderBy: 'nombre', filters: {'categoria_id': categoriaId, 'activo': true});
     if (rows.isEmpty) return [];
     final ids = rows.map((r) => r['id'] as int).toList();
-    final existRows = await _db.client
-        .from('existencias')
-        .select('producto_id, cantidad')
-        .inFilter('producto_id', ids);
+    final existRows = await _db.fetchAll(
+      'existencias',
+      filters: {'producto_id': ids},
+    );
     final stockMap = <int, double>{};
     for (final e in existRows) {
       final pid = e['producto_id'] as int;
@@ -88,13 +92,8 @@ class InventarioRepository {
   }
 
   Future<List<Producto>> getProductosConsumibles() async {
-    final data = await _db.client
-        .from('productos')
-        .select()
-        .eq('activo', 1)
-        .eq('tipo', 'Consumo')
-        .order('nombre', ascending: true);
-    final rows = (data as List).cast<Map<String, dynamic>>();
+    final rows = await _db.fetchAll('productos',
+        orderBy: 'nombre', ascending: true, filters: {'activo': true, 'tipo': 'Consumo'});
     return rows.map(Producto.fromMap).toList();
   }
 
@@ -230,13 +229,12 @@ class InventarioRepository {
 
     final productoIds =
         rows.map((r) => r['producto_id'] as int).toSet();
-    final productosRaw = await _db.client
-        .from('productos')
-        .select()
-        .inFilter('id', productoIds.toList());
+    final productosRaw = await _db.fetchAll(
+      'productos',
+      filters: {'id': productoIds.toList()},
+    );
     final prodMap = {
-      for (final p in productosRaw as List)
-        (p['id'] as int): Producto.fromMap(p)
+      for (final p in productosRaw) (p['id'] as int): Producto.fromMap(p)
     };
 
     final catIds = prodMap.values
@@ -245,12 +243,10 @@ class InventarioRepository {
         .toSet();
     final categoriasRaw = catIds.isEmpty
         ? <Map<String, dynamic>>[]
-        : (await _db.client
-                .from('categorias')
-                .select()
-                .inFilter('id', catIds.toList())
-            as List)
-            .cast<Map<String, dynamic>>();
+        : await _db.fetchAll(
+            'categorias',
+            filters: {'id': catIds.toList()},
+          );
     final catMap = {
       for (final c in categoriasRaw) (c['id'] as int): Categoria.fromMap(c)
     };

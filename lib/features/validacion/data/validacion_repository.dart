@@ -1,4 +1,4 @@
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/utils/supabase_cast.dart';
 
 class EntradaPendiente {
@@ -62,7 +62,7 @@ class ResultadoValidacion {
 
 class ValidacionRepository {
   ValidacionRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   Future<List<EntradaPendiente>> getEntradasPendientes(
       {String search = ''}) async {

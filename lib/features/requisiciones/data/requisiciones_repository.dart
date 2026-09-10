@@ -1,4 +1,4 @@
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/requisicion.dart' as domain;
 
 class RequisicionItem {
@@ -55,7 +55,7 @@ class AuditItem {
 
 class RequisicionesRepository {
   RequisicionesRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   Future<List<String>> getAlmacenes() async {
     final rows = await _db.fetchAll('almacenes',

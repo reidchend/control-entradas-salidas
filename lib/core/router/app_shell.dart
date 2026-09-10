@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,9 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/login_screen.dart';
 import '../auth/session_controller.dart';
-import '../data/realtime_providers.dart';
-import '../data/realtime_service.dart';
-import '../data/supabase_providers.dart';
+import '../data/postgres_providers.dart';
+import '../data/polling_providers.dart';
+import '../data/postgres_service.dart';
+import '../state/theme_controller.dart';
 import '../state/theme_controller.dart';
 import '../../features/historial/presentation/historial_screen.dart';
 import '../../features/inventario/presentation/inventario_screen.dart';
@@ -96,7 +98,7 @@ class _ShellAutenticado extends ConsumerStatefulWidget {
 class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
   int _index = 0;
   int _refreshTick = 0;
-  List<RealtimeSubscription> _realtimeSubs = [];
+  List<void Function()> _pollingCancels = [];
 
   /// Botón de sincronizar del encabezado: remonta la pantalla activa para
   /// recargar sus datos.
@@ -110,17 +112,17 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
   void initState() {
     super.initState();
     Future(() {
-      final rt = ref.read(realtimeServiceProvider);
-      if (rt != null) {
-        _realtimeSubs = initRealtimeSubscriptions(rt, ref);
+      final db = ref.read(postgresServiceProvider);
+      if (db != null) {
+        _pollingCancels = initPollingSubscriptions(ref, db: db);
       }
     });
   }
 
   @override
   void dispose() {
-    for (final sub in _realtimeSubs) {
-      sub.cancel();
+    for (final cancel in _pollingCancels) {
+      cancel();
     }
     super.dispose();
   }

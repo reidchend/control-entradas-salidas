@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/logging/log_bridge.dart';
-import 'core/network/supabase_client.dart';
+import 'core/network/postgres_client.dart';
 import 'core/router/app_shell.dart';
 
 void main() {
@@ -13,8 +13,8 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       await LogBridge.instance.start();
 
-      // Configurar Supabase REST (no-op si falta la anon key).
-      await initializeSupabase();
+      // Configurar PostgreSQL pool (no-op si falta la URL).
+      await initializePostgres();
 
       runApp(
         const ProviderScope(

@@ -10,8 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Supabase (Postgres REST, auth, storage, realtime)
-  supabase_flutter: ^2.8.0
+  # PostgreSQL directo (driver nativo Dart, reemplaza supabase_flutter)
+  postgres: ^3.4.0
   # Estado y navegación
   flutter_riverpod: ^2.5.1
   # Red

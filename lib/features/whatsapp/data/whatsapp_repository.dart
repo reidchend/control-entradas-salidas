@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 
 const whatsappBotToken = 'mi_token_secreto_123';
@@ -13,7 +13,7 @@ const String _gistRawUrl = 'https://gist.githubusercontent.com/reidchend/5b37693
 
 class WhatsappRepository {
   WhatsappRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   String? _cachedBotUrl;
   Timer? _retryTimer;

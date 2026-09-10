@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
@@ -13,7 +13,7 @@ import 'pos_ventas_repository.dart';
 class PosRepository {
   PosRepository(this._db);
 
-  final SupabaseService _db;
+  final PostgresService _db;
 
   static const Uuid _uuid = Uuid();
 

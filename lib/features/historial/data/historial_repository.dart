@@ -1,4 +1,4 @@
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 
 class EntradaPorFecha {
   const EntradaPorFecha({
@@ -80,7 +80,7 @@ class LibroComprasRow {
 
 class HistorialRepository {
   HistorialRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   Future<List<Map<String, dynamic>>> getFacturas({
     DateTime? desde,

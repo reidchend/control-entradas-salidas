@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
@@ -11,7 +11,7 @@ import 'pos_comanda_models.dart';
 class PosVentasRepository {
   PosVentasRepository(this._db);
 
-  final SupabaseService _db;
+  final PostgresService _db;
 
   static const Uuid _uuid = Uuid();
 

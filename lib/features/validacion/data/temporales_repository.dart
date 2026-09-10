@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:control_entradas_salidas/core/data/postgres_service.dart';
 
 /// Datos de una imagen temporal pre-cargada en la vista de Validacion.
 class TemporalData {
@@ -27,33 +27,38 @@ class TemporalData {
   });
 }
 
-/// Repositorio de temporales en Supabase: imagenes pre-cargadas por OCR.
-/// Sincronizado en tiempo real entre todos los dispositivos.
+/// Repositorio de temporales usando PostgreSQL directo + polling
+/// (reemplaza al Supabase Realtime). Las actualizaciones entre dispositivos
+/// se detectan por intervalos de tiempo; no hay suscripciones en vivo.
 class TemporalesRepository {
-  TemporalesRepository(this._client);
-  final SupabaseClient _client;
+  TemporalesRepository(this._db);
+  final PostgresService _db;
 
   final _controller = StreamController<List<TemporalData>>.broadcast();
-  RealtimeChannel? _channel;
+  Timer? _timer;
 
-  /// Escucha cambios en pos_temporales vía Supabase Realtime.
+  /// Inicia el polling periódico para detectar cambios en `pos_temporales`.
   Stream<List<TemporalData>> watchTemporales() {
-    _suscribirRealtime();
+    _startPolling();
     return _controller.stream;
   }
 
-  void _suscribirRealtime() {
-    if (_channel != null) return;
-    _channel = _client
-        .channel('pos_temporales_changes')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'pos_temporales',
-          callback: (_) => _refrescar(),
-        )
-        .subscribe();
+  void _startPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      try {
+        await _refrescarSilencioso();
+      } catch (_) {
+        // Silenciar errores de polling
+      }
+    });
     _refrescar();
+  }
+
+  Future<void> _refrescarSilencioso() async {
+    try {
+      await _refrescar();
+    } catch (_) {}
   }
 
   Future<void> _refrescar() async {
@@ -64,11 +69,24 @@ class TemporalesRepository {
   }
 
   Future<List<TemporalData>> getTemporales() async {
-    final rows = await _client
-        .from('pos_temporales')
-        .select()
-        .order('creado_en', ascending: false);
-    return rows.map<Map<String, dynamic>>((r) => r as Map<String, dynamic>).map(_fromRow).toList();
+    final rows = await _db.client.from('pos_temporales').select().order('creado_en', ascending: false);
+    return rows.map<TemporalData>((r) => TemporalData(
+      id: r['id'] as int?,
+      imagen: (r['imagen_base64'] as String?) != null
+          ? base64Decode(r['imagen_base64'] as String)
+          : null,
+      tipoDocumento: r['tipo_documento'] as String?,
+      nroFactura: r['nro_factura'] as String?,
+      proveedor: r['proveedor'] as String?,
+      monto: (r['monto'] as num?)?.toDouble(),
+      fecha: _parseDate(r['fecha'] as String?),
+      createdAt: DateTime.parse(r['creado_en'] as String),
+    )).toList();
+  }
+
+  DateTime? _parseDate(String? s) {
+    if (s == null || s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   Future<int> guardar({
@@ -79,7 +97,7 @@ class TemporalesRepository {
     double? monto,
     DateTime? fecha,
   }) async {
-    final row = await _client.from('pos_temporales').insert({
+    final row = await _db.client.from('pos_temporales').insert({
       'imagen_base64': base64Encode(imagen),
       'tipo_documento': tipoDocumento,
       'nro_factura': nroFactura,
@@ -91,38 +109,15 @@ class TemporalesRepository {
   }
 
   Future<void> eliminar(int id) async {
-    await _client.from('pos_temporales').delete().eq('id', id);
+    await _db.client.from('pos_temporales').delete().eq('id', id);
   }
 
   Future<void> limpiar() async {
-    await _client.from('pos_temporales').delete().neq('id', 0);
+    await _db.client.from('pos_temporales').delete().neq('id', 0);
   }
 
   void dispose() {
-    if (_channel != null) {
-      _client.removeChannel(_channel!);
-      _channel = null;
-    }
+    _timer?.cancel();
     _controller.close();
-  }
-
-  TemporalData _fromRow(Map<String, dynamic> row) {
-    DateTime? parseDate(String? s) {
-      if (s == null || s.isEmpty) return null;
-      return DateTime.tryParse(s);
-    }
-
-    return TemporalData(
-      id: row['id'] as int,
-      imagen: row['imagen_base64'] != null
-          ? base64Decode(row['imagen_base64'] as String)
-          : null,
-      tipoDocumento: row['tipo_documento'] as String?,
-      nroFactura: row['nro_factura'] as String?,
-      proveedor: row['proveedor'] as String?,
-      monto: (row['monto'] as num?)?.toDouble(),
-      fecha: parseDate(row['fecha'] as String?),
-      createdAt: DateTime.parse(row['creado_en'] as String),
-    );
   }
 }

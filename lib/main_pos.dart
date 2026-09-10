@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/logging/log_bridge.dart';
-import 'core/network/supabase_client.dart';
+import 'core/network/postgres_client.dart';
 import 'features/pos/presentation/pos_app.dart';
 
 /// Punto de entrada de la aplicación POS (independiente de la app de
-/// inventario). Comparte la base de datos remota (Supabase) y mantiene su
+/// inventario). Comparte la base de datos remota (PostgreSQL pooler) y mantiene su
 /// propia base local. Build: `flutter build web --release -t lib/main_pos.dart`.
 void main() {
   runZonedGuarded(
@@ -16,8 +16,8 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       await LogBridge.instance.start();
 
-      // Configurar Supabase REST (no-op si falta la anon key).
-      await initializeSupabase();
+      // Configurar PostgreSQL pool (no-op si falta la URL).
+      await initializePostgres();
 
       runApp(
         const ProviderScope(

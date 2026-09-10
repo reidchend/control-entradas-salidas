@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import 'pos_comanda_models.dart';
@@ -12,14 +12,14 @@ import 'pos_ventas_repository.dart';
 
 /// Repositorio de catálogos/settings/sesiones del POS.
 final posRepoProvider = Provider<PosRepository?>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return PosRepository(db);
 });
 
 /// Repositorio de comandas/ventas del POS.
 final posVentasRepoProvider = Provider<PosVentasRepository?>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return PosVentasRepository(db);
 });
@@ -109,7 +109,7 @@ final cierreProvider = FutureProvider.family<CierreCaja, int>((ref, sesionId) {
 
 /// Historial de cierres guardados (para listar/consultar cierres anteriores).
 final cierresHistorialProvider = FutureProvider<List<CierreCaja>>((ref) async {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return [];
   final rows = await db.client
       .from('pos_cierres')

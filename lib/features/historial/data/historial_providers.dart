@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import 'historial_repository.dart';
 
 final historialRepoProvider = Provider<HistorialRepository?>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return HistorialRepository(db);
 });

@@ -1,4 +1,4 @@
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/receta.dart';
 import '../../../core/utils/supabase_cast.dart';
@@ -202,7 +202,7 @@ class RecetaComponenteInput {
 class ProduccionesRepository {
   ProduccionesRepository(this._db);
 
-  final SupabaseService _db;
+  final PostgresService _db;
 
   // ---------------------------------------------------------------------
   // Helpers de joins en Dart

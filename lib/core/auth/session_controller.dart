@@ -1,17 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'device_id_service.dart';
-import '../data/supabase_service.dart';
-import '../data/supabase_providers.dart';
+import '../data/postgres_providers.dart';
+import '../data/postgres_service.dart';
 
 final sessionProvider =
     StateNotifierProvider<SessionController, SessionState>((ref) {
-  return SessionController(ref.watch(supabaseServiceProvider));
+  return SessionController(ref.watch(postgresServiceProvider));
 });
 
 class SessionController extends StateNotifier<SessionState> {
   SessionController(this._db) : super(const SessionState.unauthenticated());
-  final SupabaseService? _db;
+  final PostgresService? _db;
 
   Future<bool> registrarOperador({
     required String nombre,
@@ -19,25 +19,23 @@ class SessionController extends StateNotifier<SessionState> {
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    final result = await _db.insert('dispositivo_usuario', {
+    final result = await _db!.insert('dispositivo_usuario', {
       'nombre': nombre,
       'pin_hash': pin,
       'device_id': deviceId,
       'configurado_en': DateTime.now().toIso8601String(),
     });
     state = SessionState.authenticated(nombre: nombre, pinHash: pin);
-    return true;
-    return false;
+    return result > 0;
   }
 
   Future<bool> verificarPin(String pin) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    final rows = await _db.client
-        .from('dispositivo_usuario')
-        .select('nombre, pin_hash')
-        .eq('device_id', deviceId)
-        .limit(1);
+    final rows = await _db!.executeSql(
+      'SELECT nombre, pin_hash FROM dispositivo_usuario WHERE device_id = \$1 LIMIT 1',
+      [deviceId],
+    );
     if (rows.isEmpty) return false;
     final u = rows.first;
     if (u['pin_hash'] == pin) {

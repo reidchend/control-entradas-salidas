@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/almacen.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
@@ -10,7 +10,7 @@ import 'configuracion_repository.dart';
 
 /// Provider compartido del repositorio de configuracion.
 final configuracionRepoProvider = Provider<ConfiguracionRepository?>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   final cache = ref.watch(cacheServiceProvider).valueOrNull;
   return ConfiguracionRepository(db, cache: cache);

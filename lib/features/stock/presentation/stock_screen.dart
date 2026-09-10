@@ -1,9 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/data/realtime_service.dart';
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../data/stock_providers.dart';
@@ -14,8 +14,8 @@ import 'dialogs/historial_dialog.dart';
 import 'dialogs/existencias_dialog.dart';
 
 /// Pantalla de Stock / Toma de inventario (porta `usr/views/stock_view.py`).
-/// Cabecera de estadísticas (total/bajo/agotado) + filtros + grid de
-/// productos con historial, existencias y ajuste de conteo físico.
+/// Cabecera de estadisticas (total/bajo/agotado) + filtros + grid de
+/// productos con historial, existencias y ajuste de conteo fisico.
 class StockScreen extends ConsumerStatefulWidget {
   const StockScreen({super.key});
 
@@ -33,36 +33,27 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Map<int, String> _categoriasMap = {};
   Future<StockStats>? _statsFuture;
   Future<List<Producto>>? _productosFuture;
-  final List<RealtimeSubscription> _rtSubs = [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _cargarFiltros();
     _reload();
-    _initRealtime();
+    _startPolling();
   }
 
-  void _initRealtime() {
-    final rt = ref.read(realtimeServiceProvider);
-    if (rt == null) return;
-    for (final table in ['existencias', 'movimientos']) {
-      final sub = rt.subscribe(
-        table: table,
-        events: {PostgresChangeEvent.insert, PostgresChangeEvent.update, PostgresChangeEvent.delete},
-      );
-      sub.stream.listen((_) {
-        if (mounted) _reload();
-      });
-      _rtSubs.add(sub);
-    }
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) _reload();
+    });
+    _reload();
   }
 
   @override
   void dispose() {
-    for (final sub in _rtSubs) {
-      sub.cancel();
-    }
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -300,8 +291,8 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       },
     );
   }
-}
 
-extension _StringCapitalize on String {
-  String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
+  extension _StringCapitalize on String {
+    String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
+  }
 }

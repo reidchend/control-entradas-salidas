@@ -2,14 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_providers.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/pos_cierre_models.dart';
 
 /// Repositorio para consultar cierres de caja guardados
 class CierresRepository {
   CierresRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   /// Lista cierres con filtros opcionales
   Future<List<CierreCaja>> getCierres({
@@ -86,7 +86,7 @@ class CierresRepository {
 }
 
 final cierresRepoProvider = Provider<CierresRepository>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) throw Exception('Supabase no configurado');
   return CierresRepository(db);
 });
