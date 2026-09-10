@@ -1,18 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import 'temporales_repository.dart';
 import 'validacion_repository.dart';
 
 final validacionRepoProvider = Provider<ValidacionRepository?>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
+  final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return ValidacionRepository(db);
 });
 
 final temporalesRepoProvider = Provider<TemporalesRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider)!;
-  return TemporalesRepository(client);
+  final db = ref.watch(postgresServiceProvider);
+  if (db == null) return null;
+  return TemporalesRepository(db);
 });
 
 final temporalesProvider = StreamProvider<List<TemporalData>>((ref) {

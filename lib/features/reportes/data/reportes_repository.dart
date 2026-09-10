@@ -2,12 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/supabase_providers.dart';
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 
 class ReportesRepository {
   ReportesRepository(this._db);
-  final SupabaseService _db;
+  final PostgresService _db;
 
   /// Ventas en un rango de fechas con filtros opcionales
   Future<List<Map<String, dynamic>>> getVentas({
@@ -171,7 +170,7 @@ class ReportesRepository {
 }
 
 final reportesRepoProvider = Provider<ReportesRepository>((ref) {
-  final db = ref.watch(supabaseServiceProvider);
-  if (db == null) throw Exception('Supabase no configurado');
+  final db = ref.watch(postgresServiceProvider);
+  if (db == null) throw Exception('PostgreSQL no configurado');
   return ReportesRepository(db);
 });

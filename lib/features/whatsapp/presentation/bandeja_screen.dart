@@ -2,11 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/session_controller.dart';
-import '../../../core/data/realtime_service.dart';
-import '../../../core/data/supabase_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 import '../data/whatsapp_providers.dart';
 import 'widgets/mensaje_card.dart';
@@ -23,34 +21,23 @@ class BandejaScreen extends ConsumerStatefulWidget {
 
 class _BandejaScreenState extends ConsumerState<BandejaScreen> {
   Timer? _timer;
-  RealtimeSubscription? _rtSub;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      _procesarReintentos();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      try {
+        final repo = ref.read(whatsappRepoProvider)!;
+        await repo.reintentarTodos();
+        _refrescar();
+      } catch (_) {}
     });
-    _initRealtime();
-  }
-
-  void _initRealtime() {
-    final rt = ref.read(realtimeServiceProvider);
-    if (rt == null) return;
-    final sub = rt.subscribe(
-      table: 'whatsapp_queue',
-      events: {PostgresChangeEvent.insert, PostgresChangeEvent.update, PostgresChangeEvent.delete},
-    );
-    sub.stream.listen((_) {
-      if (mounted) _refrescar();
-    });
-    _rtSub = sub;
+    _refrescar();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _rtSub?.cancel();
     super.dispose();
   }
 

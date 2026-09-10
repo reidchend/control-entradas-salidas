@@ -1,6 +1,6 @@
 import '../../../core/auth/device_id_service.dart';
 import '../../../core/data/cache_service.dart';
-import '../../../core/data/supabase_service.dart';
+import '../../../core/data/postgres_service.dart';
 import '../../../core/models/almacen.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
