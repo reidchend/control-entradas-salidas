@@ -61,7 +61,7 @@ class ConfiguracionRepository {
 
   /// Soft-delete: desactiva la categoria en el server (activo=false).
   Future<void> deleteCategoria(int id) async {
-    await _db.updateById('categorias', id, {'activo': 0});
+    await _db.updateById('categorias', id, {'activo': false});
     _invalidateCats();
   }
 
@@ -88,7 +88,7 @@ class ConfiguracionRepository {
     }
 
     var builder = _db.client.from('productos').select();
-    if (soloActivos) builder = builder.eq('activo', 1);
+    if (soloActivos) builder = builder.eq('activo', true);
     if (categoriaId != null) builder = builder.eq('categoria_id', categoriaId);
     if (search != null && search.isNotEmpty) {
       builder = builder.ilike('nombre', '%$search%');
@@ -136,7 +136,7 @@ class ConfiguracionRepository {
 
   /// Soft-delete: desactiva el producto en el server (activo=false).
   Future<void> deleteProducto(int id) async {
-    await _db.updateById('productos', id, {'activo': 0});
+    await _db.updateById('productos', id, {'activo': false});
     _cache?.remove('${_k}_prods');
   }
 
@@ -382,16 +382,18 @@ class ConfiguracionRepository {
 
   /// Strings de almacén que existen en los datos, no necesariamente en tabla.
   Future<Set<String>> _almacenesLegacy() async {
-    final existencias = await _db.fetchAll('existencias');
-    final movimientos = await _db.fetchAll('movimientos');
+    final existencias = await _db.executeSql(
+        'SELECT DISTINCT almacen FROM existencias '
+        'WHERE almacen IS NOT NULL AND almacen <> \'\'');
+    final movimientos = await _db.executeSql(
+        'SELECT DISTINCT almacen FROM movimientos '
+        'WHERE almacen IS NOT NULL AND almacen <> \'\'');
     final Set<String> almacenes = {'principal', 'restaurante'};
     for (final r in existencias) {
-      final a = r['almacen'] as String?;
-      if (a != null && a.isNotEmpty) almacenes.add(a);
+      almacenes.add(r['almacen'] as String);
     }
     for (final r in movimientos) {
-      final a = r['almacen'] as String?;
-      if (a != null && a.isNotEmpty) almacenes.add(a);
+      almacenes.add(r['almacen'] as String);
     }
     return almacenes;
   }

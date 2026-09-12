@@ -38,33 +38,19 @@ class InventarioRepository {
   // ---------------------------------------------------------------------
 
   Future<List<Producto>> getAllProductos({String searchTerm = ''}) async {
-    final filters = <String, dynamic>{'activo': true};
     final rows = await _db.fetchAll(
       'productos',
       orderBy: 'nombre',
       ascending: true,
-      filters: filters,
+      filters: {'activo': true},
+      search: searchTerm,
+      searchColumn: 'nombre',
     );
     if (rows.isEmpty) return [];
 
-    // Filtrar por búsqueda en memoria (PostgresService no tiene ilike en fetchAll)
-    final filtered = searchTerm.isEmpty
-        ? rows
-        : rows.where((r) =>
-            (r['nombre'] as String).toLowerCase().contains(searchTerm.toLowerCase())).toList();
-
-    final ids = filtered.map((r) => r['id'] as int).toList();
-    final existRows = await _db.fetchAll(
-      'existencias',
-      filters: {'producto_id': ids},
-    );
-    final stockMap = <int, double>{};
-    for (final e in existRows) {
-      final pid = e['producto_id'] as int;
-      final cant = (e['cantidad'] as num?)?.toDouble() ?? 0;
-      stockMap[pid] = (stockMap[pid] ?? 0) + cant;
-    }
-    return filtered.map((r) {
+    final ids = rows.map((r) => r['id'] as int).toList();
+    final stockMap = await _db.getStockMapForProductos(ids);
+    return rows.map((r) {
       final p = Producto.fromMap(r);
       return p.copyWith(stockActual: stockMap[p.id] ?? 0);
     }).toList();
@@ -75,16 +61,7 @@ class InventarioRepository {
         orderBy: 'nombre', filters: {'categoria_id': categoriaId, 'activo': true});
     if (rows.isEmpty) return [];
     final ids = rows.map((r) => r['id'] as int).toList();
-    final existRows = await _db.fetchAll(
-      'existencias',
-      filters: {'producto_id': ids},
-    );
-    final stockMap = <int, double>{};
-    for (final e in existRows) {
-      final pid = e['producto_id'] as int;
-      final cant = (e['cantidad'] as num?)?.toDouble() ?? 0;
-      stockMap[pid] = (stockMap[pid] ?? 0) + cant;
-    }
+    final stockMap = await _db.getStockMapForProductos(ids);
     return rows.map((r) {
       final p = Producto.fromMap(r);
       return p.copyWith(stockActual: stockMap[p.id] ?? 0);
@@ -126,13 +103,9 @@ class InventarioRepository {
       'tipo': tipo,
       'almacen_predeterminado': almacenPredeterminado,
       'es_pesable': esPesable ? 1 : 0,
-      'activo': 1,
+      'activo': true,
     });
   }
-
-  // ---------------------------------------------------------------------
-  // Movimientos (porta registrar_movimiento de movements.py)
-  // ---------------------------------------------------------------------
 
   /// Registra un movimiento y actualiza la existencia.
   /// Devuelve `false` si el stock no alcanza (salidas/ajustes negativos).

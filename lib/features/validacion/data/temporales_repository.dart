@@ -45,7 +45,7 @@ class TemporalesRepository {
 
   void _startPolling() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) async {
       try {
         await _refrescarSilencioso();
       } catch (_) {

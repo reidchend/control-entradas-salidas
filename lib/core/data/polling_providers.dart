@@ -16,11 +16,13 @@ class PollingConfig {
     required this.table,
     required this.interval,
     required this.invalidate,
+    this.timestampCols = const ['updated_at', 'created_at'],
   });
 
   final String table;
   final Duration interval;
   final void Function(WidgetRef ref) invalidate;
+  final List<String> timestampCols;
 }
 
 /// Inicializa los timers de polling para tablas críticas.
@@ -49,7 +51,7 @@ List<void Function()> initPollingSubscriptions(
       },
     ),
     PollingConfig(
-      table: 'pos_venta_detalle',
+      table: 'pos_ventas',
       interval: const Duration(seconds: 10),
       invalidate: (r) {
         r.invalidate(ventasProvider);
@@ -71,6 +73,7 @@ List<void Function()> initPollingSubscriptions(
     PollingConfig(
       table: 'proveedores',
       interval: const Duration(seconds: 30),
+      timestampCols: const ['created_at'],
       invalidate: (r) => r.invalidate(proveedoresConfigProvider),
     ),
     PollingConfig(
@@ -84,17 +87,24 @@ List<void Function()> initPollingSubscriptions(
   for (final b in bindings) {
     final timer = Timer.periodic(b.interval, (_) async {
       try {
-        // Verificar si hay cambios recientes (últimos interval*2)
+        // Verificar si hay cambios recientes (últimos interval*2), usando
+        // solo las columnas que existen en la tabla. Cada condición usa un
+        // placeholder distinto (`$1`, `$2`, ...) porque el proxy web (psycopg)
+        // no permite reutilizar `$1` en dos lugares del mismo query.
         final cutoff = DateTime.now().subtract(b.interval * 2).toIso8601String();
+        final cond = [
+          for (var i = 0; i < b.timestampCols.length; i++)
+            '${b.timestampCols[i]} >= \$${i + 1}',
+        ].join(' OR ');
         final result = await db.executeSql(
-          'SELECT 1 FROM ${b.table} WHERE updated_at >= \$1 OR created_at >= \$1 LIMIT 1',
-          params: [cutoff],
+          'SELECT 1 FROM ${b.table} WHERE $cond LIMIT 1',
+          params: [for (final _ in b.timestampCols) cutoff],
         );
         if (result.isNotEmpty) {
           b.invalidate(ref);
         }
       } catch (_) {
-        // Silenciar errores de polling
+        // Silenciar errores de polling (tabla sin las columnas, etc.)
       }
     });
     timers.add(timer);

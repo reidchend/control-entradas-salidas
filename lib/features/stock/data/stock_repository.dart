@@ -74,84 +74,127 @@ class StockRepository {
     String? stockStatus,
     int limit = 50,
   }) async {
-    final filters = <String, dynamic>{'activo': true};
-    final rows = await _db.fetchAll(
-      'productos',
-      orderBy: 'nombre',
-      limit: limit,
-      filters: filters,
-    );
-    var productos = rows.map(Producto.fromMap).toList();
-
-    if (search.isNotEmpty) {
-      productos = productos.where((p) =>
-          p.nombre.toLowerCase().contains(search.toLowerCase())).toList();
-    }
+    // Filtros de activo/categoría/búsqueda se aplican en SQL para que el
+    // LIMIT no corte productos de la categoría seleccionada.
+    final params = <dynamic>[];
+    final conds = <String>['p.activo = TRUE'];
     if (categoriaId != null) {
-      productos = productos.where((p) => p.categoriaId == categoriaId).toList();
+      params.add(categoriaId);
+      conds.add('p.categoria_id = \$${params.length}');
+    }
+    if (search.isNotEmpty) {
+      params.add('%${search.toLowerCase()}%');
+      conds.add('LOWER(p.nombre) LIKE \$${params.length}');
+    }
+    final where = conds.join(' AND ');
+
+    final necesitaStock = almacen != null || stockStatus != null;
+    List<Map<String, dynamic>> rows;
+    if (necesitaStock) {
+      String join;
+      if (almacen != null) {
+        params.add(almacen);
+        // Solo productos con existencias en ese almacén.
+        join = 'JOIN existencias e ON e.producto_id = p.id '
+            'AND e.almacen = \$${params.length}';
+      } else {
+        join = 'LEFT JOIN existencias e ON e.producto_id = p.id';
+      }
+      final stockExpr = 'COALESCE(SUM(e.cantidad), 0) AS stock_prd';
+      var sql = 'SELECT p.*, $stockExpr FROM productos p '
+          '$join WHERE $where GROUP BY p.id ORDER BY p.nombre ASC';
+      if (stockStatus == 'out') {
+        sql += ' HAVING stock_prd <= 0';
+      }
+      rows = await _db.executeSql(sql, params: params);
+    } else {
+      rows = await _db.executeSql(
+        'SELECT p.* FROM productos p WHERE $where '
+        'ORDER BY p.nombre ASC LIMIT $limit',
+        params: params,
+      );
     }
 
-    if (almacen == null && stockStatus == null) {
-      return productos.take(limit).toList();
-    }
+    final productos = rows.map(Producto.fromMap).toList();
 
-    final ids = [for (final p in productos) p.id];
-    final existenciasMap = await getExistenciasMap(ids);
-    final stockTotal = <int, double>{
-      for (final e in existenciasMap.entries)
-        e.key: e.value.values.fold<double>(0, (a, b) => a + b),
+    // El stock ya viene calculado en cada fila cuando hubo JOIN.
+    final stock = {
+      for (final r in rows)
+        if (r.containsKey('stock_prd') && r['stock_prd'] != null)
+          r['id'] as int: (r['stock_prd'] as num).toDouble(),
     };
 
-    final result = <Producto>[];
-    for (final p in productos) {
-      final stock = almacen != null
-          ? (existenciasMap[p.id]?[almacen] ?? 0)
-          : (stockTotal[p.id] ?? 0);
-      if (almacen != null &&
-          !(existenciasMap[p.id]?.containsKey(almacen) ?? false)) {
-        continue;
-      }
-      if (stockStatus == 'out' && !(stock <= 0)) continue;
-      if (stockStatus == 'low' &&
-          !(stock > 0 &&
-              stock <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity))) {
-        continue;
-      }
-      result.add(p);
-      if (result.length >= limit) break;
+    if (stockStatus == 'low') {
+      return productos
+          .where((p) {
+            final s = stock[p.id] ?? 0;
+            return s > 0 &&
+                s <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity);
+          })
+          .take(limit)
+          .toList();
     }
-    return result;
+    return productos.take(limit).toList();
+  }
+
+  Future<Map<int, double>> getStockTotalAlmacenBase(
+      List<int> productoIds, String? almacen) async {
+    if (productoIds.isEmpty) return {};
+    final conds = <String>['producto_id = ANY(\$1)'];
+    final params = <dynamic>[productoIds];
+    if (almacen != null) {
+      conds.add('almacen = \$2');
+      params.add(almacen);
+    }
+    final sql = 'SELECT producto_id, SUM(cantidad) AS stock '
+        'FROM existencias WHERE ${conds.join(' AND ')} GROUP BY producto_id';
+    final rows = await _db.executeSql(sql, params: params);
+    return {
+      for (final r in rows)
+        r['producto_id'] as int: (r['stock'] as num).toDouble(),
+    };
   }
 
   Future<StockStats> getStockStats({String? almacen}) async {
-    final productos = await loadProductos(limit: 99999);
-    final ids = [for (final p in productos) p.id];
-    Map<int, double> stockMap;
-    Map<int, Map<String, double>>? existenciasMap;
-    if (almacen != null) {
-      existenciasMap = await getExistenciasMap(ids);
-      stockMap = {
-        for (final e in existenciasMap.entries)
-          e.key: e.value[almacen] ?? 0,
-      };
+    final params = <dynamic>[];
+    String sql;
+    if (almacen == null) {
+      sql = '''
+        SELECT COUNT(DISTINCT p.id) AS total,
+          COUNT(DISTINCT p.id) FILTER (WHERE stock <= 0) AS agotado,
+          COUNT(DISTINCT p.id) FILTER (
+            WHERE stock > 0 AND p.stock_minimo > 0 AND stock <= p.stock_minimo
+          ) AS bajo
+        FROM productos p
+        LEFT JOIN (
+          SELECT producto_id, SUM(cantidad) AS stock
+          FROM existencias GROUP BY producto_id
+        ) s ON s.producto_id = p.id
+        WHERE p.activo = TRUE
+      ''';
     } else {
-      stockMap = await getStockTotal(ids);
+      params.add(almacen);
+      sql = '''
+        SELECT COUNT(DISTINCT p.id) AS total,
+          COUNT(DISTINCT p.id) FILTER (WHERE stock <= 0) AS agotado,
+          COUNT(DISTINCT p.id) FILTER (
+            WHERE stock > 0 AND p.stock_minimo > 0 AND stock <= p.stock_minimo
+          ) AS bajo
+        FROM productos p
+        LEFT JOIN (
+          SELECT producto_id, SUM(cantidad) AS stock
+          FROM existencias WHERE almacen = \$1 GROUP BY producto_id
+        ) s ON s.producto_id = p.id
+        WHERE p.activo = TRUE
+      ''';
     }
-    var total = 0, bajo = 0, agotado = 0;
-    for (final p in productos) {
-      if (almacen != null) {
-        final porAlmacen = existenciasMap![p.id];
-        if (porAlmacen == null || !porAlmacen.containsKey(almacen)) continue;
-      }
-      final stock = stockMap[p.id] ?? 0;
-      total++;
-      if (stock <= 0) {
-        agotado++;
-      } else if (p.stockMinimo > 0 && stock <= p.stockMinimo) {
-        bajo++;
-      }
-    }
-    return StockStats(total: total, bajo: bajo, agotado: agotado);
+    final rows = await _db.executeSql(sql, params: params);
+    final r = rows.isNotEmpty ? rows.first : <String, dynamic>{};
+    return StockStats(
+      total: (r['total'] as num?)?.toInt() ?? 0,
+      bajo: (r['bajo'] as num?)?.toInt() ?? 0,
+      agotado: (r['agotado'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<List<Existencia>> getExistenciasProducto(int productoId) async {
@@ -199,7 +242,8 @@ class StockRepository {
       filters: {'id': productoId},
       limit: 1,
     );
-    final esPesable = pRows.isNotEmpty && (pRows.first['es_pesable'] as int?) == 1;
+    final esPesable =
+        pRows.isNotEmpty && (pRows.first['es_pesable'] == true || pRows.first['es_pesable'] == 1);
     final unidad =
         pRows.isNotEmpty ? (pRows.first['unidad_medida'] as String?) ?? 'unidad' : 'unidad';
     final now = DateTime.now().toIso8601String();

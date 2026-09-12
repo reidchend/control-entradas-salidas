@@ -66,41 +66,29 @@ class ValidacionRepository {
 
   Future<List<EntradaPendiente>> getEntradasPendientes(
       {String search = ''}) async {
-    final movimientos = await _db.client
-        .from('movimientos')
-        .select()
-        .eq('tipo', 'entrada')
-        .isFilter('factura_id', null)
-        .order('fecha_movimiento', ascending: false);
+    final term = search.trim().toLowerCase();
+    final params = <dynamic>[];
+    if (term.isNotEmpty) params.add('%$term%');
+    final movimientos = await _db.executeSql(
+      'SELECT m.*, p.nombre AS producto_nombre, p.unidad_medida, '
+      'p.es_pesable FROM movimientos m '
+      'LEFT JOIN productos p ON p.id = m.producto_id '
+      'WHERE m.tipo = \'entrada\' AND m.factura_id IS NULL '
+      '${term.isNotEmpty ? 'AND LOWER(p.nombre) LIKE \$${params.length}' : ''} '
+      'ORDER BY m.fecha_movimiento DESC',
+      params: params,
+    );
 
     if (movimientos.isEmpty) return [];
 
-    final productoIds = movimientos
-        .map((m) => m['producto_id'] as int)
-        .toSet()
-        .toList();
-
-    final productosRows = await _db.client
-        .from('productos')
-        .select('id, nombre, unidad_medida, es_pesable')
-        .inFilter('id', productoIds);
-    final productosMap = <int, Map<String, dynamic>>{
-      for (final p in productosRows) p['id'] as int: p,
-    };
-
-    final List<EntradaPendiente> result = [];
+    final result = <EntradaPendiente>[];
     for (final m in movimientos) {
-      final productoId = m['producto_id'] as int;
-      final producto = productosMap[productoId];
-      final nombre = (producto?['nombre'] as String?) ?? '';
-      final term = search.trim().toLowerCase();
-      if (term.isNotEmpty && !nombre.toLowerCase().contains(term)) continue;
       result.add(EntradaPendiente(
         id: m['id'] as int,
-        productoId: productoId,
-        nombre: nombre,
-        unidad: (producto?['unidad_medida'] as String?) ?? '',
-        esPesable: toBool(producto?['es_pesable']),
+        productoId: m['producto_id'] as int,
+        nombre: (m['producto_nombre'] as String?) ?? '',
+        unidad: (m['unidad_medida'] as String?) ?? '',
+        esPesable: toBool(m['es_pesable']),
         cantidad: (m['cantidad'] as num?)?.toDouble() ?? 0,
         pesoTotal: (m['peso_total'] as num?)?.toDouble() ?? 0,
         almacen: (m['almacen'] as String?) ?? 'principal',

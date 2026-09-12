@@ -65,11 +65,12 @@ class RequisicionesRepository {
       'principal',
       'restaurante',
     };
-    // Incluir strings huérfanos aún en los datos.
-    final existencias = await _db.fetchAll('existencias');
-    for (final r in existencias) {
-      final a = r['almacen'] as String?;
-      if (a != null && a.isNotEmpty) nombres.add(a);
+    // Incluir strings huérfanos aún en los datos (DISTINCT en SQL, sin
+    // descargar la tabla completa).
+    final huerfanos = await _db.executeSql(
+        'SELECT DISTINCT almacen FROM existencias WHERE almacen IS NOT NULL AND almacen <> \'\'');
+    for (final r in huerfanos) {
+      nombres.add(r['almacen'] as String);
     }
     return nombres.toList()..sort();
   }
@@ -78,14 +79,14 @@ class RequisicionesRepository {
       await _db.client
           .from('productos')
           .select()
-          .eq('activo', 1)
+          .eq('activo', true)
           .order('nombre', ascending: true)
           .limit(limit);
 
   Future<List<Map<String, dynamic>>> buscarProductos(String texto,
       {int limit = 30}) async {
     dynamic builder =
-        _db.client.from('productos').select().eq('activo', 1);
+        _db.client.from('productos').select().eq('activo', true);
     if (texto.isNotEmpty) {
       builder = builder.ilike('nombre', '%$texto%');
     }

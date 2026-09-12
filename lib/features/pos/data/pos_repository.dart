@@ -221,9 +221,9 @@ class PosRepository {
     return await _db.insert('pos_usuarios', {
       'nombre': nombre.trim(),
       'pin_hash': pin != null && pin.trim().isNotEmpty ? _pinHash(pin) : null,
-      'es_admin': esAdmin,
-      'es_desarrollador': esDesarrollador,
-      'activo': true,
+      'es_admin': esAdmin ? 1 : 0,
+      'es_desarrollador': esDesarrollador ? 1 : 0,
+      'activo': 1,
       'creado_en': DateTime.now().toIso8601String(),
     });
   }
@@ -250,9 +250,9 @@ class PosRepository {
           : pin.isEmpty
               ? null
               : _pinHash(pin),
-      if (esAdmin != null) 'es_admin': esAdmin,
-      if (esDesarrollador != null) 'es_desarrollador': esDesarrollador,
-      if (activo != null) 'activo': activo,
+      if (esAdmin != null) 'es_admin': esAdmin ? 1 : 0,
+      if (esDesarrollador != null) 'es_desarrollador': esDesarrollador ? 1 : 0,
+      if (activo != null) 'activo': activo ? 1 : 0,
     });
   }
 
@@ -295,7 +295,7 @@ class PosRepository {
       'numero': numero.trim(),
       'nombre': nombre?.trim(),
       'zona': zona?.trim(),
-      'activo': true,
+      'activo': 1,
       'creado_en': DateTime.now().toIso8601String(),
     });
   }
@@ -345,7 +345,7 @@ class PosRepository {
       'numero': numero.trim(),
       'piso': piso?.trim(),
       'tipo': tipo?.trim(),
-      'activo': true,
+      'activo': 1,
       'creado_en': DateTime.now().toIso8601String(),
     });
   }
@@ -386,7 +386,7 @@ class PosRepository {
       'nombre': nombre.trim(),
       'color': color,
       'icono': icono,
-      'activo': true,
+      'activo': 1,
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     });
@@ -561,7 +561,7 @@ class PosRepository {
       'nombre': nombre.trim(),
       'categoria_id': categoriaId,
       'precio_venta': precioVenta,
-      'activo': true,
+      'activo': 1,
       'es_contorno': esContorno,
       'lleva_contornos': llevaContornos,
       'created_at': now,

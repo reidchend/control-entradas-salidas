@@ -36,8 +36,15 @@ String _normalizeUrl(String url) {
   final kept = Map<String, String>.fromEntries(
       uri.queryParameters.entries.where(
           (e) => _supportedQueryParams.contains(e.key)));
-  if (kept.isEmpty) return url;
-  return uri.replace(queryParameters: kept).toString();
+  var result = uri;
+  if (kept.isNotEmpty) {
+    result = uri.replace(queryParameters: kept);
+  }
+  // Pool pequeño reutilizable (4 conexiones): el default del driver es 1,
+  // lo que serializaría todas las queries concurrentes de la app móvil.
+  final params = Map<String, String>.from(result.queryParameters);
+  params['max_connection_count'] ??= '4';
+  return result.replace(queryParameters: params).toString();
 }
 
 /// Sesión SQL de la plataforma (null si no fue inicializado).

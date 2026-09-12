@@ -87,38 +87,50 @@ class HistorialRepository {
     DateTime? hasta,
     String search = '',
   }) async {
-    dynamic builder = _db.client.from('facturas').select();
+    final params = <dynamic>[];
+    final conds = <String>[];
     if (desde != null) {
-      builder = builder.gte('fecha_factura', desde.toUtc().toIso8601String());
+      params.add(desde.toUtc().toIso8601String());
+      conds.add('fecha_factura >= \$${params.length}');
     }
     if (hasta != null) {
       final fin = hasta.add(const Duration(days: 1));
-      builder = builder.lt('fecha_factura', fin.toUtc().toIso8601String());
+      params.add(fin.toUtc().toIso8601String());
+      conds.add('fecha_factura < \$${params.length}');
     }
-    builder = builder.order('fecha_factura', ascending: false).limit(100);
-    final facturas = await builder;
-
     final term = search.trim().toLowerCase();
-    if (term.isEmpty) return facturas;
-
-    return facturas.where((f) {
-      final num = (f['numero_factura'] as String? ?? '').toLowerCase();
-      final prov = (f['proveedor'] as String? ?? '').toLowerCase();
-      return num.contains(term) || prov.contains(term);
-    }).toList();
+    if (term.isNotEmpty) {
+      final t1 = params.length + 1;
+      final t2 = params.length + 2;
+      params.add('%$term%');
+      params.add('%$term%');
+      conds.add('(LOWER(numero_factura) LIKE \$$t1 OR '
+          'LOWER(proveedor) LIKE \$$t2)');
+    }
+    final where = conds.isEmpty ? '' : 'WHERE ${conds.join(' AND ')}';
+    return _db.executeSql(
+        'SELECT * FROM facturas $where '
+        'ORDER BY fecha_factura DESC LIMIT 100',
+        params: params);
   }
 
   Future<int> countFacturas({DateTime? desde, DateTime? hasta}) async {
-    dynamic builder = _db.client.from('facturas').select('id');
+    final params = <dynamic>[];
+    final conds = <String>[];
     if (desde != null) {
-      builder = builder.gte('fecha_factura', desde.toUtc().toIso8601String());
+      params.add(desde.toUtc().toIso8601String());
+      conds.add('fecha_factura >= \$${params.length}');
     }
     if (hasta != null) {
       final fin = hasta.add(const Duration(days: 1));
-      builder = builder.lt('fecha_factura', fin.toUtc().toIso8601String());
+      params.add(fin.toUtc().toIso8601String());
+      conds.add('fecha_factura < \$${params.length}');
     }
-    final rows = await builder;
-    return rows.length;
+    final where = conds.isEmpty ? '' : 'WHERE ${conds.join(' AND ')}';
+    final rows = await _db.executeSql(
+        'SELECT COUNT(*) AS total FROM facturas $where', params: params);
+    final n = rows.isNotEmpty ? rows.first['total'] : 0;
+    return n is num ? n.toInt() : int.tryParse('$n') ?? 0;
   }
 
   Future<List<EntradaPorFecha>> getEntradasPorFecha(
@@ -154,7 +166,7 @@ class HistorialRepository {
         productoId: m['producto_id'] as int,
         nombre: (p?['nombre'] as String?) ?? '',
         unidad: (p?['unidad_medida'] as String?) ?? '',
-        esPesable: p?['es_pesable'] == 1,
+        esPesable: p?['es_pesable'] == true || p?['es_pesable'] == 1,
         cantidad: (m['cantidad'] as num?)?.toDouble() ?? 0,
         pesoTotal: (m['peso_total'] as num?)?.toDouble() ?? 0,
         fecha: DateTime.tryParse(m['fecha_movimiento']?.toString() ?? ''),

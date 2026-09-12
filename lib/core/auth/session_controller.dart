@@ -13,12 +13,19 @@ class SessionController extends StateNotifier<SessionState> {
   SessionController(this._db) : super(const SessionState.unauthenticated());
   final PostgresService? _db;
 
+  /// Registra o re-vincula un operador por nombre+PIN (independiente del
+  /// device_id), devolviendo el resultado de la operación.
   Future<bool> registrarOperador({
     required String nombre,
     required String pin,
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
+
+    if (await existeOperador(nombre)) {
+      return verificarPin(nombre: nombre, pin: pin);
+    }
+
     final result = await _db.insert('dispositivo_usuario', {
       'nombre': nombre,
       'pin_hash': pin,
@@ -29,16 +36,30 @@ class SessionController extends StateNotifier<SessionState> {
     return result > 0;
   }
 
-  Future<bool> verificarPin(String pin) async {
+  /// Verifica nombre+PIN contra la tabla global. Si coincide, actualiza el
+  /// device_id de ese operador al dispositivo actual (para que una
+  /// reinstalación no vuelva a crear un registro duplicado).
+  Future<bool> verificarPin({
+    required String nombre,
+    required String pin,
+  }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
     final rows = await _db.executeSql(
-      'SELECT nombre, pin_hash FROM dispositivo_usuario WHERE device_id = \$1 LIMIT 1',
-      params: [deviceId],
+      'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
+      'WHERE nombre = \$1 ORDER BY id LIMIT 1',
+      params: [nombre],
     );
     if (rows.isEmpty) return false;
     final u = rows.first;
     if (u['pin_hash'] == pin) {
+      if (u['id'] != null) {
+        await _db.updateWhere(
+          'dispositivo_usuario',
+          {'id': u['id']},
+          {'device_id': deviceId},
+        );
+      }
       state = SessionState.authenticated(
         nombre: u['nombre'] as String,
         pinHash: u['pin_hash'] as String,
@@ -46,6 +67,16 @@ class SessionController extends StateNotifier<SessionState> {
       return true;
     }
     return false;
+  }
+
+  /// ¿Existe un operador con este nombre en la BD?
+  Future<bool> existeOperador(String nombre) async {
+    if (_db == null) return false;
+    final rows = await _db.executeSql(
+      'SELECT 1 FROM dispositivo_usuario WHERE nombre = \$1 LIMIT 1',
+      params: [nombre],
+    );
+    return rows.isNotEmpty;
   }
 
   void cerrarSesion() {

@@ -358,15 +358,13 @@ class ProduccionesRepository {
 
   /// Stock total (todos los almacenes) por producto, en una sola consulta.
   Future<Map<int, double>> stockTotalPorProducto() async {
-    final rows = await _db.fetchAll('existencias');
-    final totales = <int, double>{};
-    for (final e in rows) {
-      final pid = e['producto_id'] as int?;
-      if (pid == null) continue;
-      totales[pid] =
-          (totales[pid] ?? 0) + ((e['cantidad'] as num?)?.toDouble() ?? 0);
-    }
-    return totales;
+    final rows = await _db.executeSql(
+        'SELECT producto_id, SUM(cantidad) AS total FROM existencias '
+        'WHERE producto_id IS NOT NULL GROUP BY producto_id');
+    return {
+      for (final e in rows)
+        e['producto_id'] as int: (e['total'] as num).toDouble(),
+    };
   }
 
   Future<double> getExistencia(int productoId, String almacen) async {

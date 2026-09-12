@@ -38,6 +38,11 @@ try:
 except ImportError:  # pragma: no cover
     psycopg = None
 
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:  # pragma: no cover
+    ConnectionPool = None
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_REL = sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "web")
 WEB_DIR = os.path.join(ROOT, WEB_REL)
@@ -160,7 +165,12 @@ _TXNS = {}
 
 
 # Locks: una conexión psycopg no es thread-safe, así que cada transacción usa
-# el suyo; las operaciones autocommit usan una conexión nueva por request.
+# el suyo; las operaciones autocommit usan un pool de conexiones reutilizables
+# (antes se abría una conexión nueva por request, muy costoso en web con
+# polling cada pocos segundos).
+_POOL = None
+
+
 def _connect_db():
     url = db_url()
     if not url:
@@ -168,6 +178,29 @@ def _connect_db():
     # prepare_threshold=None evita prepared statements server-side, que el
     # pooler (PgBouncer) no soporta en modo transaccional.
     return psycopg.connect(url, prepare_threshold=None)
+
+
+def _get_pool():
+    """Pool de conexiones para operaciones autocommit (thread-safe)."""
+    global _POOL
+    if _POOL is None:
+        url = db_url()
+        if not url:
+            raise RuntimeError("DATABASE_URL no configurada (env o .env.local)")
+        if ConnectionPool is None:
+            raise RuntimeError(
+                "psycopg_pool no instalado (ejecuta: "
+                "tool/venv/bin/pip install 'psycopg[pool]')"
+            )
+        _POOL = ConnectionPool(
+            conninfo=url,
+            min_size=1,
+            max_size=3,
+            open=True,
+            timeout=30,
+            kwargs={"prepare_threshold": None},
+        )
+    return _POOL
 
 
 def _cleanup_txns():
@@ -222,19 +255,8 @@ def _exec_sql(conn, sql, params):
 
 
 def _exec_autocommit(sql, params):
-    conn = _connect_db()
-    try:
-        rows, affected = _exec_sql(conn, sql, params)
-        conn.commit()
-        return rows, affected
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    with _get_pool().connection(timeout=30) as conn:
+        return _exec_sql(conn, sql, params)
 
 
 def _end_tx(txid, commit):

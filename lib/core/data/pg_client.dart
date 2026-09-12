@@ -394,7 +394,7 @@ class PgQueryBuilder implements Future<dynamic> {
 
   /// Parámetros en orden de su placeholder `$1..$N`.
   List<Object?> _orderedParams() {
-    return [for (var i = 1; i <= _paramSeq; i++) _bindings[i]!];
+    return [for (var i = 1; i <= _paramSeq; i++) _bindings[i]];
   }
 
   // -------------------------------------------------------------------

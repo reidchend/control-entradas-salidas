@@ -44,7 +44,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _reload();
     });
     _reload();
