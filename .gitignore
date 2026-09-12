@@ -16,6 +16,9 @@ graphify-out/
 *.db-wal
 *.sqlite
 
+# Python venv del proxy SQL (tool/server.py)
+/tool/venv/
+
 # Miscellaneous
 *.class
 *.pyc

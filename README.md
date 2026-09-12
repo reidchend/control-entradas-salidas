@@ -232,17 +232,26 @@ Ver `supabase/schema.sql` para el esquema completo (idempotente).
 ```bash
 # Inventario (puerto 8501)
 flutter build web --release -o build/web
-python3 tool/server.py 8501 build/web
+tool/venv/bin/python tool/server.py 8501 build/web
 
 # POS (puerto 8502)
 flutter build web --release -t lib/main_pos.dart -o build/pos
 cp web_pos/favicon.png web_pos/manifest.json build/pos/
 cp -r web_pos/icons build/pos/
 cp web_pos/index.html build/pos/index.html
-python3 tool/server.py 8502 build/pos
+tool/venv/bin/python tool/server.py 8502 build/pos
 ```
 
-`tool/server.py` expone `/proxy-bcv` (tasa del BCV con cache y *stale-while-revalidate*) y recibe los logs de Flutter web (`POST /log`).
+`tool/server.py` expone `/proxy-bcv` (tasa del BCV con cache y *stale-while-revalidate*), `/proxy-sql` (acceso a PostgreSQL desde Flutter web) y recibe los logs de Flutter web (`POST /log`).
+
+**Proxy SQL con psycopg** (requerido en web): el driver nativo `package:postgres` usa sockets de `dart:io`, inexistentes en Flutter web; por eso las queries viajan por `POST /proxy-sql`. El servidor aplica las transacciones iniciadas con `HttpSqlSession` y limpia las olvidadas. Se instala una sola vez:
+
+```bash
+python3 -m venv tool/venv
+tool/venv/bin/pip install "psycopg[binary]"
+```
+
+La `DATABASE_URL` se lee de la variable de entorno o de `.env.local` (prioriza `DATABASE_URL_UNPOOLED`).
 
 ### Nativos (CI / GitHub Actions)
 

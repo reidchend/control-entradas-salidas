@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../network/postgres_client.dart';
 import 'cache_service.dart';
 import 'postgres_service.dart';
+import 'sql_session.dart';
 
 /// Provider del servicio PostgreSQL centralizado.
 ///
@@ -16,9 +17,9 @@ final postgresServiceProvider = Provider<PostgresService?>((ref) {
   return PostgresService(pool);
 });
 
-/// Provider del pool de conexiones raw (para queries complejas que el
-/// servicio genérico no cubre).
-final postgresPoolRawProvider = Provider<PostgreSQLPool?>((ref) {
+/// Provider de la sesión SQL raw (para queries complejas que el servicio
+/// genérico no cubre).
+final postgresPoolRawProvider = Provider<SqlSession?>((ref) {
   return ref.watch(postgresPoolProvider).value;
 });
 

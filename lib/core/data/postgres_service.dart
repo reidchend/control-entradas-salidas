@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:postgres/postgres.dart';
+import 'pg_client.dart';
+import 'sql_session.dart';
 
 /// Servicio base para operaciones CRUD contra PostgreSQL directo (pooler Neon).
 ///
@@ -8,15 +9,15 @@ import 'package:postgres/postgres.dart';
 /// Los repositorios de cada feature usan este servicio o acceden a la
 /// conexión raw para queries complejas.
 class PostgresService {
-  PostgresService(this._pool);
+  PostgresService(this._session);
 
-  final PostgreSQLPool _pool;
+  /// Sesión base: puede ser una sesión directa o una de transacción obtenida
+  /// con `runTx`. En escritorio usa el pool nativo; en web el proxy HTTP.
+  final SqlSession _session;
 
-  /// Pool de conexiones subyacente (para queries complejas).
-  PostgreSQLPool get pool => _pool;
-
-  /// Alias de compatibilidad: algunos repositorios usan `_db.client`.
-  PostgreSQLPool get client => _pool;
+  /// Alias de compatibilidad: fachada con sintaxis `.from().select().eq()...`
+  /// (estilo PostgREST) que los repositorios ya usan.
+  PgClient get client => PgClient(_session);
 
   /// Convierte bool→int en un map (columnas integer de Postgres).
   static Map<String, dynamic> _encodeMap(Map<String, dynamic> m) {
@@ -31,8 +32,8 @@ class PostgresService {
     String sql,
     List<dynamic> params,
   ) async {
-    final result = await _pool.execute(sql, parameters: params);
-    return result.map((row) => row.toColumnMap()).toList();
+    final result = await _session.execute(sql, parameters: params);
+    return result.rows;
   }
 
   /// Ejecuta una query y retorna una sola fila (o null).
@@ -40,14 +41,14 @@ class PostgresService {
     String sql,
     List<dynamic> params,
   ) async {
-    final result = await _pool.execute(sql, parameters: params);
-    if (result.isEmpty) return null;
-    return result.first.toColumnMap();
+    final result = await _session.execute(sql, parameters: params);
+    if (result.rows.isEmpty) return null;
+    return result.rows.first;
   }
 
   /// Ejecuta un comando (INSERT/UPDATE/DELETE) y retorna filas afectadas.
   Future<int> _execute(String sql, List<dynamic> params) async {
-    final result = await _pool.execute(sql, parameters: params);
+    final result = await _session.execute(sql, parameters: params);
     return result.affectedRows;
   }
 
@@ -198,8 +199,8 @@ class PostgresService {
       }
     }
 
-    final result = await _pool.execute(buffer.toString(), parameters: params);
-    return (result.first.toColumnMap()['count'] as num).toInt();
+    final result = await _session.execute(buffer.toString(), parameters: params);
+    return (result.rows.first['count'] as num).toInt();
   }
 
   // -------------------------------------------------------------------
@@ -214,8 +215,8 @@ class PostgresService {
     final params = encoded.values.toList();
 
     final sql = 'INSERT INTO $table ($columns) VALUES ($placeholders) RETURNING id';
-    final result = await _pool.execute(sql, parameters: params);
-    return (result.first.toColumnMap()['id'] as num).toInt();
+    final result = await _session.execute(sql, parameters: params);
+    return (result.rows.first['id'] as num).toInt();
   }
 
   /// Inserta múltiples filas en lote.
@@ -245,7 +246,7 @@ class PostgresService {
       buffer.write(')');
     }
 
-    await _pool.execute(buffer.toString(), parameters: allParams);
+    await _session.execute(buffer.toString(), parameters: allParams);
   }
 
   // -------------------------------------------------------------------
@@ -274,7 +275,7 @@ class PostgresService {
     buffer.write(' WHERE id = \$$paramIndex');
     params.add(id);
 
-    await _pool.execute(buffer.toString(), parameters: params);
+    await _session.execute(buffer.toString(), parameters: params);
   }
 
   /// Actualiza filas por filtro.
@@ -308,7 +309,7 @@ class PostgresService {
       paramIndex++;
     }
 
-    await _pool.execute(buffer.toString(), parameters: params);
+    await _session.execute(buffer.toString(), parameters: params);
   }
 
   // -------------------------------------------------------------------
@@ -336,8 +337,8 @@ class PostgresService {
       RETURNING id
     ''';
 
-    final result = await _pool.execute(sql, parameters: params);
-    return (result.first.toColumnMap()['id'] as num).toInt();
+    final result = await _session.execute(sql, parameters: params);
+    return (result.rows.first['id'] as num).toInt();
   }
 
   /// Upsert por ID.
@@ -351,7 +352,7 @@ class PostgresService {
 
   /// Elimina una fila por ID.
   Future<void> deleteById(String table, int id) async {
-    await _pool.execute('DELETE FROM $table WHERE id = \$1', parameters: [id]);
+    await _session.execute('DELETE FROM $table WHERE id = \$1', parameters: [id]);
   }
 
   /// Elimina filas por filtro.
@@ -373,7 +374,7 @@ class PostgresService {
       paramIndex++;
     }
 
-    await _pool.execute(buffer.toString(), parameters: params);
+    await _session.execute(buffer.toString(), parameters: params);
   }
 
   // -------------------------------------------------------------------
@@ -381,23 +382,13 @@ class PostgresService {
   // -------------------------------------------------------------------
 
   /// Ejecuta una función dentro de una transacción.
-  Future<T> transaction<T>(Future<T> Function(PostgresService tx) action) async {
-    final conn = await _pool.acquire();
-    try {
-      await conn.execute('BEGIN');
-      final txService = PostgresService._fromConnection(conn);
-      final result = await action(txService);
-      await conn.execute('COMMIT');
-      return result;
-    } catch (e) {
-      await conn.execute('ROLLBACK');
-      rethrow;
-    } finally {
-      await _pool.release(conn);
-    }
+  Future<T> transaction<T>(Future<T> Function(PostgresService tx) action) {
+    return _session.runTx((session) {
+      return action(PostgresService._fromSession(session));
+    });
   }
 
-  PostgresService._fromConnection(this._pool);
+  PostgresService._fromSession(this._session);
 
   // -------------------------------------------------------------------
   // RPC / RAW SQL
