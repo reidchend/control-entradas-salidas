@@ -11,6 +11,7 @@ import '../data/polling_providers.dart';
 import '../state/theme_controller.dart';
 import '../../features/historial/presentation/historial_screen.dart';
 import '../../features/inventario/presentation/inventario_screen.dart';
+import '../../features/activos/presentation/activos_screen.dart';
 import '../../features/producciones/presentation/producciones_screen.dart';
 import '../../features/requisiciones/presentation/requisiciones_screen.dart';
 import '../../features/reportes/presentation/screens/reportes_screen.dart';
@@ -33,6 +34,8 @@ class AppShell extends ConsumerWidget {
         'Ventas, movimientos y estadísticas', '/reportes'),
     _NavDest(Icons.shopping_cart_outlined, 'Inventario',
         'Gestión de existencias', '/inventario'),
+    _NavDest(Icons.inventory_2_outlined, 'Activos',
+        'Inventario de bienes', '/activos'),
     _NavDest(Icons.checklist_outlined, 'Validación',
         'Vincular entradas a facturas', '/validacion'),
     _NavDest(Icons.warehouse_outlined, 'Stock',
@@ -435,6 +438,9 @@ class _DestinoPage extends StatelessWidget {
     }
     if (destino.ruta == '/inventario') {
       return const InventarioScreen();
+    }
+    if (destino.ruta == '/activos') {
+      return const ActivosScreen();
     }
     if (destino.ruta == '/validacion') {
       return const ValidacionScreen();
