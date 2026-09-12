@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/reportes_repository.dart';
 
@@ -217,7 +218,7 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
         builder: (_) => AlertDialog(
           title: Text('Detalle Venta #$ventaId'),
           content: SizedBox(
-            width: 400,
+            width: modalContentWidth(context),
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: items.length,

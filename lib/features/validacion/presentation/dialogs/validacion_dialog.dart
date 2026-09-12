@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/clipboard_utils.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/web_utils.dart';
 import '../../data/ocr_service.dart';
 import '../../data/temporales_repository.dart';
@@ -271,10 +272,9 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
     final scheme = Theme.of(context).colorScheme;
     final screen = MediaQuery.of(context).size;
     final isMobile = screen.width < 600;
-    final maxW = isMobile ? screen.width - 16 : 460.0;
+    final maxW = isMobile ? screen.width - 16 : modalContentWidth(context);
     final maxH = isMobile ? screen.height * 0.82 : 620.0;
     final imgMaxH = isMobile ? 90.0 : 140.0;
-    final pad = isMobile ? 12.0 : 16.0;
     return AlertDialog(
       title: const Text('Validar Entradas'),
       content: ConstrainedBox(

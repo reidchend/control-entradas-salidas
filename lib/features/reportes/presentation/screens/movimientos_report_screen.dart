@@ -215,13 +215,16 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
               final prod = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
               final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
               final almacen = m['almacen'] as String? ?? '—';
+              final obs = ((m['observaciones'] as String?) ?? '').trim();
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: _colorTipo(tipo).withValues(alpha: 0.15),
                   child: Icon(_iconoTipo(tipo), color: _colorTipo(tipo), size: 20),
                 ),
                 title: Text('$prod · ${_tipoLabel(tipo)}'),
-                subtitle: Text('$fecha · $almacen'),
+                subtitle: Text(
+                  obs.isNotEmpty ? '$fecha · $almacen\n$obs' : '$fecha · $almacen',
+                ),
                 trailing: Text(
                   '${cant.toStringAsFixed(3)} ${m['unidad'] ?? ''}',
                   style: TextStyle(fontWeight: FontWeight.bold, color: _colorTipo(tipo), fontSize: 16),

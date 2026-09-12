@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/data/postgres_service.dart';
 
 class ReportesRepository {
@@ -56,31 +57,34 @@ class ReportesRepository {
     String? tipo,
     String? almacen,
   }) async {
-    // Incluye join con productos para obtener nombre del producto
-    dynamic query = _db.client
-        .from('movimientos')
-        .select('*, productos!inner(nombre)')
-        .gte('fecha_movimiento', desde.toUtc().toIso8601String())
-        .lte('fecha_movimiento', hasta.toUtc().toIso8601String());
-
+    final params = <dynamic>[
+      desde.toUtc().toIso8601String(),
+      hasta.toUtc().toIso8601String(),
+    ];
+    var sql =
+        'SELECT m.*, p.nombre AS __producto_nombre FROM movimientos m '
+        'INNER JOIN productos p ON p.id = m.producto_id '
+        'WHERE m.fecha_movimiento >= \$1 AND m.fecha_movimiento <= \$2';
     if (tipo != null && tipo != 'Todos') {
-      query = query.filter('tipo', 'eq', tipo);
+      sql += ' AND m.tipo = \$${params.length + 1}';
+      params.add(tipo);
     }
     if (almacen != null && almacen != 'Todos') {
-      query = query.filter('almacen', 'eq', almacen);
+      sql += ' AND m.almacen = \$${params.length + 1}';
+      params.add(almacen);
     }
+    sql += ' ORDER BY m.fecha_movimiento DESC';
 
-    query = query.order('fecha_movimiento', ascending: false);
+    final rows = await _db.executeSql(sql, params: params);
 
-    final result = (await query) as List<Map<String, dynamic>>;
-    
     // Mapear producto_nombre desde el join
-    return result.map((m) {
-      final producto = m['productos'] as Map<String, dynamic>?;
-      final nombre = producto?['nombre'] as String?;
+    return rows.map((m) {
+      final nombre = m['__producto_nombre'] as String?;
       return {
         ...m,
+        '__producto_nombre': null,
         'producto_nombre': nombre ?? 'Producto #${m['producto_id']}',
+        'productos': nombre == null ? null : {'nombre': nombre},
       };
     }).toList();
   }

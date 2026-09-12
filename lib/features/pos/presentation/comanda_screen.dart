@@ -773,7 +773,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   Widget _panelComanda() {
-    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/categoria.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
 /// Alta/edición de sub-categoría (platos_categorias) con padre opcional
@@ -129,7 +130,7 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar sub-categoría' : 'Nueva sub-categoría'),
       content: SizedBox(
-        width: 380,
+        width: modalContentWidth(context),
         child: _cargando
             ? const Center(child: CircularProgressIndicator())
             : Column(

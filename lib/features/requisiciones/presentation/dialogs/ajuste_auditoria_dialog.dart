@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../calculadora/presentation/calculadora.dart';
 import '../../data/requisiciones_providers.dart';
 import '../../data/requisiciones_repository.dart';
@@ -46,6 +47,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
   final _pesoTotalCtrl = TextEditingController();
   final _finalCtrl = TextEditingController();
   final _inicialCtrl = TextEditingController();
+  final _motivoCtrl = TextEditingController();
   bool _esPesable = false;
   bool _procesando = false;
 
@@ -70,6 +72,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
     _pesoTotalCtrl.dispose();
     _finalCtrl.dispose();
     _inicialCtrl.dispose();
+    _motivoCtrl.dispose();
     super.dispose();
   }
 
@@ -152,7 +155,9 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
         productoId: p,
         almacen: widget.almacen,
         nuevaCantidad: pesoTotal,
-        motivo: 'Ajuste durante auditoría',
+        motivo: _motivoCtrl.text.trim().isEmpty
+            ? 'Ajuste durante auditoría'
+            : _motivoCtrl.text.trim(),
         pesoTotal: pesoTotal,
       );
       if (mounted) {
@@ -173,7 +178,9 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
         productoId: p,
         almacen: widget.almacen,
         nuevaCantidad: nuevaQty,
-        motivo: 'Ajuste durante auditoría',
+        motivo: _motivoCtrl.text.trim().isEmpty
+            ? 'Ajuste durante auditoría'
+            : _motivoCtrl.text.trim(),
       );
       if (mounted) {
         Navigator.pop(context, AjusteStockResult(
@@ -309,7 +316,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
       content: Focus(
         onKeyEvent: _onKeyEvent,
         child: SizedBox(
-          width: 460,
+          width: modalContentWidth(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,6 +325,16 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
                   style: const TextStyle(fontSize: 14)),
               const SizedBox(height: 10),
               campos,
+              const SizedBox(height: 12),
+              TextField(
+                controller: _motivoCtrl,
+                maxLines: 3,
+                minLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo del ajuste (opcional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
             ],
           ),
         ),

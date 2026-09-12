@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 
 /// Diálogo de selección de contornos (port de `_show_contornos_dialog`):
 /// checkboxes de contornos activos, máximo 2 por plato. Devuelve la lista de
@@ -61,7 +62,7 @@ class _ContornosDialogState extends State<_ContornosDialog> {
     return AlertDialog(
       title: Text('Contornos para ${widget.plato.nombre}'),
       content: SizedBox(
-        width: 360,
+        width: modalContentWidth(context),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

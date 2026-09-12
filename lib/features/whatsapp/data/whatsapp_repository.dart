@@ -261,6 +261,7 @@ class WhatsappRepository {
       tipo: 'report_detail',
       mensaje: caption,
       imagenBase64: base64Encode(utf8.encode(content)), // guardamos el contenido en base64
+      imagenPath: fileName,
     );
     return false;
   }
@@ -314,13 +315,37 @@ class WhatsappRepository {
   Future<bool> _enviarDesdeCola(MensajeWhatsapp msg) async {
     if (msg.estado != 'pending' && msg.estado != 'failed') return false;
     await updateEstado(msg.id, 'sending');
-    final success = msg.tipo == 'image'
-        ? await _enviarImagenDirecto(
-            imagenBase64: msg.imagenBase64 != null
-                ? _ensureJpegBase64(msg.imagenBase64!)
-                : null,
-            caption: msg.mensaje ?? '')
-        : await _enviarTextoDirecto(msg.mensaje ?? '');
+    // Cada tipo va a su endpoint/grupo correcto:
+    // - image → foto (grupo principal)
+    // - report_simple / report_detail → grupo de reportes/cierres
+    // - resto → texto del grupo principal
+    final bool success;
+    switch (msg.tipo) {
+      case 'image':
+        success = await _enviarImagenDirecto(
+          imagenBase64: msg.imagenBase64 != null
+              ? _ensureJpegBase64(msg.imagenBase64!)
+              : null,
+          caption: msg.mensaje ?? '',
+        );
+      case 'report_simple':
+        success = await _enviarReporteDirecto(msg.mensaje ?? '');
+      case 'report_detail':
+        String content = '';
+        final b64 = msg.imagenBase64;
+        if (b64 != null && b64.isNotEmpty) {
+          try {
+            content = utf8.decode(base64Decode(b64));
+          } catch (_) {}
+        }
+        success = await _enviarDocumentoDirecto(
+          fileName: msg.imagenPath ?? 'reporte.txt',
+          content: content,
+          caption: msg.mensaje ?? '',
+        );
+      default:
+        success = await _enviarTextoDirecto(msg.mensaje ?? '');
+    }
     if (success) {
       await updateEstado(msg.id, 'sent');
     } else {

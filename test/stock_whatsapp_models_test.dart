@@ -5,8 +5,6 @@ import 'package:control_entradas_salidas/core/models/categoria.dart';
 import 'package:control_entradas_salidas/core/models/existencia.dart';
 import 'package:control_entradas_salidas/core/models/movimiento.dart';
 import 'package:control_entradas_salidas/core/models/mensaje_whatsapp.dart';
-import 'package:control_entradas_salidas/features/validacion/data/temporales_repository.dart';
-import 'dart:typed_data';
 
 void main() {
   group('Producto.fromMap', () {

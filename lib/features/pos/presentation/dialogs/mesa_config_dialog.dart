@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
 /// Alta/edición de mesa POS (port de `ConfigPOSView._show_agregar_mesa_dialog`
@@ -86,7 +87,7 @@ class _MesaConfigDialogState extends ConsumerState<_MesaConfigDialog> {
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar Mesa' : 'Nueva Mesa'),
       content: SizedBox(
-        width: 340,
+        width: modalContentWidth(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

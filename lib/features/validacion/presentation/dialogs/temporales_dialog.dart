@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/temporales_repository.dart';
 import '../../data/validacion_providers.dart';
 
@@ -46,7 +47,7 @@ class _TemporalesDialogState extends ConsumerState<_TemporalesDialog> {
     return AlertDialog(
       title: Text('Temporales (${widget.temporales.length})'),
       content: SizedBox(
-        width: 420,
+        width: modalContentWidth(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

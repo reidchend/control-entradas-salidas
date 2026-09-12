@@ -74,8 +74,8 @@ class RequisicionesRepository {
     return nombres.toList()..sort();
   }
 
-  Future<List<Map<String, dynamic>>> getProductosActivos({int limit = 200}) =>
-      _db.client
+  Future<List<Map<String, dynamic>>> getProductosActivos({int limit = 200}) async =>
+      await _db.client
           .from('productos')
           .select()
           .eq('activo', 1)
@@ -97,11 +97,13 @@ class RequisicionesRepository {
     return _db.fetchById('productos', id);
   }
 
-  Future<double> getExistencia(int productoId, String almacen) async {
-    final rows = await _db.fetchAll(
-      'existencias',
-      filters: {'producto_id': productoId},
-    );
+  Future<double> getExistencia(int productoId, String almacen) =>
+      _getExistenciaEn(_db, productoId, almacen);
+
+  Future<double> _getExistenciaEn(
+      PostgresService db, int productoId, String almacen) async {
+    final rows =
+        await db.fetchAll('existencias', filters: {'producto_id': productoId});
     for (final r in rows) {
       if (r['almacen'] == almacen) {
         return (r['cantidad'] as num?)?.toDouble() ?? 0;
@@ -345,59 +347,66 @@ class RequisicionesRepository {
             d.productoId == null || !productosTrasladados.contains(d.productoId))
         .toList();
 
-    // Si no queda nada por procesar (totalizar anterior se interrumpió solo
-    // en el flag de estado), simplemente marcamos como completada.
-    if (pendientes.isEmpty) {
-      await _marcarCompletada(req, usuario);
-      return;
-    }
+    // Núcleo atómico: movimientos + existencias + flag de estado dentro de
+    // UNA sola transacción PostgreSQL. Si internet falla a mitad, se revierte
+    // TODO (rollback): no quedan movimientos huérfanos, existencias a medias
+    // ni una requisición marcada como completada con traslados incompletos.
+    // Idempotente: un reintento retoma justo donde quedó.
+    await _db.transaction((tx) async {
+      if (pendientes.isEmpty) {
+        await _marcarCompletadaEn(tx, req, usuario);
+        return;
+      }
 
-    for (final d in pendientes) {
-      if (d.productoId == null) continue;
+      for (final d in pendientes) {
+        if (d.productoId == null) continue;
 
-      final actualOrigen = await getExistencia(d.productoId!, req.origen);
-      final actualDestino = await getExistencia(d.productoId!, req.destino);
-      final cantOrigenNueva =
-          (actualOrigen - d.cantidad).clamp(0.0, double.infinity);
-      final cantDestinoNueva = actualDestino + d.cantidad;
+        final actualOrigen = await _getExistenciaEn(tx, d.productoId!, req.origen);
+        final actualDestino =
+            await _getExistenciaEn(tx, d.productoId!, req.destino);
+        final cantOrigenNueva =
+            (actualOrigen - d.cantidad).clamp(0.0, double.infinity);
+        final cantDestinoNueva = actualDestino + d.cantidad;
 
-      await _db.insert('movimientos', {
-        'producto_id': d.productoId,
-        'requisicion_id': req.id,
-        'tipo': 'tr_salida',
-        'cantidad': -d.cantidad,
-        'cantidad_anterior': actualOrigen,
-        'cantidad_nueva': cantOrigenNueva,
-        'peso_total': 0,
-        'registrado_por': usuario,
-        'observaciones': 'Traslado req ${req.numero} → ${req.destino}',
-        'almacen': req.origen,
-        'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
-      });
+        await tx.insert('movimientos', {
+          'producto_id': d.productoId,
+          'requisicion_id': req.id,
+          'tipo': 'tr_salida',
+          'cantidad': -d.cantidad,
+          'cantidad_anterior': actualOrigen,
+          'cantidad_nueva': cantOrigenNueva,
+          'peso_total': 0,
+          'registrado_por': usuario,
+          'observaciones': 'Traslado req ${req.numero} → ${req.destino}',
+          'almacen': req.origen,
+          'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
+        });
 
-      await _db.insert('movimientos', {
-        'producto_id': d.productoId,
-        'requisicion_id': req.id,
-        'tipo': 'tr_entrada',
-        'cantidad': d.cantidad,
-        'cantidad_anterior': actualDestino,
-        'cantidad_nueva': cantDestinoNueva,
-        'peso_total': 0,
-        'registrado_por': usuario,
-        'observaciones': 'Traslado req ${req.numero} ← ${req.origen}',
-        'almacen': req.destino,
-        'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
-      });
+        await tx.insert('movimientos', {
+          'producto_id': d.productoId,
+          'requisicion_id': req.id,
+          'tipo': 'tr_entrada',
+          'cantidad': d.cantidad,
+          'cantidad_anterior': actualDestino,
+          'cantidad_nueva': cantDestinoNueva,
+          'peso_total': 0,
+          'registrado_por': usuario,
+          'observaciones': 'Traslado req ${req.numero} ← ${req.origen}',
+          'almacen': req.destino,
+          'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
+        });
 
-      await _upsertExistencia(d.productoId!, req.origen, cantOrigenNueva);
-      await _upsertExistencia(d.productoId!, req.destino, cantDestinoNueva);
-    }
+        await _upsertExistenciaEn(tx, d.productoId!, req.origen, cantOrigenNueva);
+        await _upsertExistenciaEn(tx, d.productoId!, req.destino, cantDestinoNueva);
+      }
 
-    await _marcarCompletada(req, usuario);
+      await _marcarCompletadaEn(tx, req, usuario);
+    });
   }
 
-  Future<void> _marcarCompletada(domain.Requisicion req, String usuario) async {
-    await _db.updateById('requisiciones', req.id, {
+  Future<void> _marcarCompletadaEn(
+      PostgresService db, domain.Requisicion req, String usuario) async {
+    await db.updateById('requisiciones', req.id, {
       'estado': 'completada',
       'procesada_por': usuario,
       'fecha_procesamiento': DateTime.now().toUtc().toIso8601String(),
@@ -437,29 +446,29 @@ class RequisicionesRepository {
 
     for (final d in await getDetalles(req.id)) {
       if (d.productoId == null) continue;
-      final actualOrigen = await getExistencia(d.productoId!, req.origen);
-      final actualDestino = await getExistencia(d.productoId!, req.destino);
+      final actualOrigen = await _getExistenciaEn(_db, d.productoId!, req.origen);
+      final actualDestino = await _getExistenciaEn(_db, d.productoId!, req.destino);
 
-      await _upsertExistencia(d.productoId!, req.origen,
+      await _upsertExistenciaEn(_db, d.productoId!, req.origen,
           (actualOrigen - d.cantidad).clamp(0.0, double.infinity));
-      await _upsertExistencia(
-          d.productoId!, req.destino, actualDestino + d.cantidad);
+      await _upsertExistenciaEn(
+          _db, d.productoId!, req.destino, actualDestino + d.cantidad);
     }
   }
 
-  Future<void> _upsertExistencia(
-      int productoId, String almacen, double cantidad) async {
-    final rows = await _db.client
+  Future<void> _upsertExistenciaEn(
+      PostgresService db, int productoId, String almacen, double cantidad) async {
+    final rows = await db.client
         .from('existencias')
         .select('id')
         .eq('producto_id', productoId)
         .eq('almacen', almacen)
         .limit(1);
     if (rows.isNotEmpty) {
-      await _db.updateById(
+      await db.updateById(
           'existencias', rows.first['id'] as int, {'cantidad': cantidad});
     } else {
-      await _db.insert('existencias', {
+      await db.insert('existencias', {
         'producto_id': productoId,
         'almacen': almacen,
         'cantidad': cantidad,

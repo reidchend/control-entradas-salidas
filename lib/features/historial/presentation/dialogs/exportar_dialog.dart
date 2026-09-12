@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/historial_providers.dart';
 import '../../data/historial_repository.dart';
+import '../../../../core/utils/modal_sizing.dart';
 
 /// Diálogo de exportación del Libro de Compras (porta `_show_export_dialog` +
 /// `_exportar_excel` de `historial_facturas_view.py`).
@@ -53,7 +54,7 @@ class _ExportarDialogState extends ConsumerState<_ExportarDialog> {
     return AlertDialog(
       title: const Text('Exportar Libro de Compras'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
+        constraints: BoxConstraints(maxWidth: modalContentWidth(context)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

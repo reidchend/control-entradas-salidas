@@ -8,8 +8,6 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../auth/session_controller.dart';
 import '../data/postgres_providers.dart';
 import '../data/polling_providers.dart';
-import '../data/postgres_service.dart';
-import '../state/theme_controller.dart';
 import '../state/theme_controller.dart';
 import '../../features/historial/presentation/historial_screen.dart';
 import '../../features/inventario/presentation/inventario_screen.dart';
@@ -63,8 +61,8 @@ class AppShell extends ConsumerWidget {
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
       themeMode: themeMode,
-      // Diálogos responsivos: en escritorio crecen (min 520, hasta 85% del
-      // ancho con tope de 1000) para aprovechar pantallas grandes; en móvil
+      // Diálogos responsivos: en escritorio crecen (min 520, hasta 95% del
+      // ancho con tope de 1500) para aprovechar pantallas grandes; en móvil
       // conservan el comportamiento por defecto de Material.
       builder: (context, child) {
         final ancho = MediaQuery.sizeOf(context).width;
@@ -72,7 +70,7 @@ class AppShell extends ConsumerWidget {
         final constraints = esEscritorio
             ? BoxConstraints(
                 minWidth: 520,
-                maxWidth: math.min(ancho * 0.85, 1000),
+                maxWidth: math.min(ancho * 0.95, 1500),
               )
             : const BoxConstraints(minWidth: 280);
         return DialogTheme(

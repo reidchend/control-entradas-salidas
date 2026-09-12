@@ -12,8 +12,7 @@ final validacionRepoProvider = Provider<ValidacionRepository?>((ref) {
 
 final temporalesRepoProvider = Provider<TemporalesRepository>((ref) {
   final db = ref.watch(postgresServiceProvider);
-  if (db == null) return null;
-  return TemporalesRepository(db);
+  return TemporalesRepository(db!);
 });
 
 final temporalesProvider = StreamProvider<List<TemporalData>>((ref) {

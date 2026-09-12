@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/producto.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/stock_repository.dart';
 import 'ajuste_dialog.dart';
 
@@ -35,7 +36,7 @@ Future<void> showExistenciasDialog(
         return AlertDialog(
           title: Text('Existencias: ${producto.nombre}'),
           content: SizedBox(
-            width: 460,
+            width: modalContentWidth(context),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,

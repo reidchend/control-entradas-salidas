@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_cierre_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/cierres_repository.dart';
 
@@ -200,7 +201,7 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
       builder: (_) => AlertDialog(
         title: Text('Detalle Cierre #${cierre.sesionId}'),
         content: SizedBox(
-          width: 400,
+          width: modalContentWidth(context),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/web_utils.dart';
 
 /// Vista previa del ticket de comanda (port de la impresión de `printer.py`
@@ -37,7 +38,7 @@ class TicketPreviewDialog extends StatelessWidget {
     return AlertDialog(
       title: Text(titulo),
       content: SizedBox(
-        width: 320,
+        width: modalContentWidth(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

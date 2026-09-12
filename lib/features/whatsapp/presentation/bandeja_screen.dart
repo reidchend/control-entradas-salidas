@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/session_controller.dart';
-import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 import '../data/whatsapp_providers.dart';
 import 'widgets/mensaje_card.dart';
@@ -25,12 +24,8 @@ class _BandejaScreenState extends ConsumerState<BandejaScreen> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) async {
-      try {
-        final repo = ref.read(whatsappRepoProvider)!;
-        await repo.reintentarTodos();
-        _refrescar();
-      } catch (_) {}
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _procesarReintentos();
     });
     _refrescar();
   }

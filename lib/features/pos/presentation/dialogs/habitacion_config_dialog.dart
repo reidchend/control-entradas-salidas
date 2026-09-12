@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
 /// Alta/edición de habitación POS (port de `ConfigPOSView._show_agregar_habitacion_dialog`
@@ -88,7 +89,7 @@ class _HabitacionConfigDialogState
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar Habitación' : 'Nueva Habitación'),
       content: SizedBox(
-        width: 340,
+        width: modalContentWidth(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

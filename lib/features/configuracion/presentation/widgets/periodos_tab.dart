@@ -37,7 +37,6 @@ class _PeriodosTabState extends ConsumerState<PeriodosTab> {
     final scheme = Theme.of(context).colorScheme;
     final periodosAsync = ref.watch(_periodosAsync);
     final periodoActual = _periodoActual();
-    const yaAbierto = false; // Se actualizará al cargar
 
     return ListView(
       padding: const EdgeInsets.all(16),

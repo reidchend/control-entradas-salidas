@@ -17,7 +17,7 @@ class ConfiguracionRepository {
   ConfiguracionRepository(this._db, {CacheService? cache})
       : _cache = cache;
 
-  final SupabaseService _db;
+  final PostgresService _db;
   final CacheService? _cache;
 
   /// TTL para catalogos: 5 minutos.

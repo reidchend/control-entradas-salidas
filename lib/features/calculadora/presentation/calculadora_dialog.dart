@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/modal_sizing.dart';
+
 /// Diálogo de calculadora simple (operaciones + - * /, decimales).
 /// Devuelve el valor calculado al cerrar con "Aceptar".
 Future<double?> showCalculadoraDialog(BuildContext context, {double? initialValue}) {
@@ -131,7 +133,7 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
         autofocus: true,
         onKeyEvent: _onKeyEvent,
         child: SizedBox(
-          width: 320,
+          width: modalContentWidth(context, factor: 0.9, max: 520),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

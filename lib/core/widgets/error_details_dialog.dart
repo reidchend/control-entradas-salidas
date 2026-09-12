@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/modal_sizing.dart';
+
 /// Diálogo que muestra el detalle de un error y permite copiarlo al
 /// portapapeles. Reutilizable para errores de sync, red, etc.
 Future<void> showErrorDetailsDialog(
@@ -31,7 +33,7 @@ class _ErrorDetailsDialog extends StatelessWidget {
         ],
       ),
       content: SizedBox(
-        width: 520,
+        width: modalContentWidth(context),
         child: SingleChildScrollView(
           child: SelectableText(
             detalle,

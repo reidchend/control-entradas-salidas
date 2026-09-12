@@ -8,7 +8,7 @@ import '../data/inventario_repository.dart';
 import 'widgets/categorias_grid.dart';
 import 'widgets/productos_panel.dart';
 import 'widgets/lista_compra_panel.dart';
-import 'dialogs/descargo_consumibles_dialog.dart';
+import 'widgets/descargo_consumibles_panel.dart';
 
 /// Pantalla de Inventario (porta `usr/views/inventario_view.py`).
 ///
@@ -27,6 +27,7 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
   Categoria? _categoria;
   String _search = '';
   bool _vistaListaCompra = false;
+  bool _vistaDescargo = false;
 
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -49,17 +50,22 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
             repo: repo,
             onClose: () => setState(() => _vistaListaCompra = false),
           )
-            : _categoria != null
-                ? _buildProductosDeCategoria(repo, colors)
-                : CategoriasGrid(
+            : _vistaDescargo
+                ? DescargoConsumiblesPanel(
                     repo: repo,
-                    searchTerm: _search,
-                    onSelect: (c) => setState(() {
-                      _categoria = c;
-                      _search = '';
-                      _searchCtrl.clear();
-                    }),
-                  );
+                    onClose: () => setState(() => _vistaDescargo = false),
+                  )
+                : _categoria != null
+                    ? _buildProductosDeCategoria(repo, colors)
+                    : CategoriasGrid(
+                        repo: repo,
+                        searchTerm: _search,
+                        onSelect: (c) => setState(() {
+                          _categoria = c;
+                          _search = '';
+                          _searchCtrl.clear();
+                        }),
+                      );
 
     return Scaffold(
       body: Focus(
@@ -85,7 +91,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
       return KeyEventResult.handled;
     }
     if (lk == LogicalKeyboardKey.f2) {
-      showDescargoConsumiblesDialog(context);
+      setState(() {
+        _vistaDescargo = true;
+        _vistaListaCompra = false;
+      });
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -149,7 +158,26 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
       ),
       child: Row(
         children: [
-          if (!_vistaListaCompra) ...[
+          if (_vistaDescargo)
+            _headerModo(
+              titulo: 'Descargo de consumibles',
+              onClose: () => setState(() => _vistaDescargo = false),
+            )
+          else if (_vistaListaCompra)
+            _headerModo(
+              titulo: 'Lista de Compras',
+              onClose: () => setState(() => _vistaListaCompra = false),
+              acciones: [
+                IconButton(
+                  icon: const Icon(Icons.share),
+                  tooltip: 'Enviar a WhatsApp',
+                  onPressed: () {
+                    // TODO: integrar WhatsApp
+                  },
+                ),
+              ],
+            )
+          else ...[
             Expanded(
               child: TextField(
                 controller: _searchCtrl,
@@ -173,30 +201,41 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
             IconButton(
               icon: const Icon(Icons.inventory_2_outlined),
               tooltip: 'Descargo de consumibles (F2)',
-              onPressed: () => showDescargoConsumiblesDialog(context),
+              onPressed: () => setState(() {
+                _vistaDescargo = true;
+                _vistaListaCompra = false;
+              }),
             ),
             IconButton(
               icon: const Icon(Icons.shopping_cart_outlined),
               tooltip: 'Lista de compras',
-              onPressed: () => setState(() => _vistaListaCompra = true),
-            ),
-          ] else ...[
-            IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => setState(() => _vistaListaCompra = false),
-            ),
-            const Text('Lista de Compras', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.share),
-              tooltip: 'Enviar a WhatsApp',
-              onPressed: () {
-                // TODO: integrar WhatsApp
-              },
+              onPressed: () => setState(() {
+                _vistaListaCompra = true;
+                _vistaDescargo = false;
+              }),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _headerModo(
+      {required String titulo,
+      required VoidCallback onClose,
+      List<Widget> acciones = const []}) {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Volver',
+          onPressed: onClose,
+        ),
+        Text(titulo,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Spacer(),
+        ...acciones,
+      ],
     );
   }
 

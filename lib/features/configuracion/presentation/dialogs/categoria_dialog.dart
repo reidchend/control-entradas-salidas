@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/categoria.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/configuracion_repository.dart';
 
 /// Diálogo para crear/editar una Categoría (porta `show_categoria_dialog`).
@@ -63,7 +64,7 @@ class _CategoriaDialogState extends State<_CategoriaDialog> {
     return AlertDialog(
       title: Text(esEdicion ? 'Editar Categoría' : 'Nueva Categoría'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
+        constraints: BoxConstraints(maxWidth: modalContentWidth(context)),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

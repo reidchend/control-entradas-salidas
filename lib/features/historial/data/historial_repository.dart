@@ -178,7 +178,8 @@ class HistorialRepository {
 
     final allMoves = [...movimientos, ...archivados];
     final productoIds = allMoves
-        .map((m) => m['producto_id'] as int)
+        .map((m) => m['producto_id'])
+        .whereType<int>()
         .toSet()
         .toList();
     final prodMap = <int, String>{};

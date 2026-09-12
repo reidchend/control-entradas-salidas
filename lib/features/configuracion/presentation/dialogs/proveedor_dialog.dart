@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/proveedor.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/configuracion_repository.dart';
 
 /// Diálogo para crear/editar un Proveedor (porta `show_proveedor_dialog` / dialogs.py).
@@ -71,7 +72,8 @@ class _ProveedorDialogState extends State<_ProveedorDialog> {
     return AlertDialog(
       title: Text(esEdicion ? 'Editar Proveedor' : 'Nuevo Proveedor'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
+        constraints: BoxConstraints(
+            maxWidth: modalContentWidth(context), maxHeight: 600),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

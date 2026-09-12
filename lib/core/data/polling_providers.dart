@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/configuracion/data/configuracion_providers.dart';
 import '../../features/historial/data/historial_providers.dart';
 import '../../features/pos/data/pos_providers.dart';
+import 'postgres_service.dart';
 
 /// Configuración de polling para reemplazar Realtime.
 ///
@@ -85,7 +88,7 @@ List<void Function()> initPollingSubscriptions(
         final cutoff = DateTime.now().subtract(b.interval * 2).toIso8601String();
         final result = await db.executeSql(
           'SELECT 1 FROM ${b.table} WHERE updated_at >= \$1 OR created_at >= \$1 LIMIT 1',
-          [cutoff],
+          params: [cutoff],
         );
         if (result.isNotEmpty) {
           b.invalidate(ref);

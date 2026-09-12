@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/clipboard_utils.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/web_utils.dart';
 import '../../data/ocr_service.dart';
 import '../../data/temporales_repository.dart';
@@ -284,7 +285,7 @@ class _PrecargarImagenDialogState extends ConsumerState<_PrecargarImagenDialog> 
     return AlertDialog(
       title: const Text('Precargar imagen (temporal)'),
       content: SizedBox(
-        width: 420,
+        width: modalContentWidth(context),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

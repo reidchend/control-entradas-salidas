@@ -450,11 +450,12 @@ class PosVentasRepository {
         .select('total')
         .eq('estado', 'vigente')
         .gte('created_at', inicio);
+    final lista = rows as List<Map<String, dynamic>>;
     var total = 0.0;
-    for (final v in rows) {
+    for (final v in lista) {
       total += (v['total'] as num? ?? 0).toDouble();
     }
-    return (cantidad: rows.length, total: total);
+    return (cantidad: lista.length, total: total);
   }
 
   /// Resumen de ventas vigentes de una sesión/turno específica
@@ -464,11 +465,12 @@ class PosVentasRepository {
         .select('total')
         .eq('estado', 'vigente')
         .eq('sesion_id', sesionId);
+    final lista = rows as List<Map<String, dynamic>>;
     var total = 0.0;
-    for (final v in rows) {
+    for (final v in lista) {
       total += (v['total'] as num? ?? 0).toDouble();
     }
-    return (cantidad: rows.length, total: total);
+    return (cantidad: lista.length, total: total);
   }
 
   Future<PosVenta?> getVenta(int id) async {

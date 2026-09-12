@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/requisiciones_repository.dart';
 
 const String _todosAlmacenes = 'TODOS';
@@ -69,7 +70,7 @@ Future<void> showHistorialAuditoria(
     builder: (ctx) => AlertDialog(
       title: Text(titulo),
       content: SizedBox(
-        width: 520,
+        width: modalContentWidth(context),
         child: filtrados.isEmpty
             ? const Text('Sin movimientos')
             : ListView.builder(

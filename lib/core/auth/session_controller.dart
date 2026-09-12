@@ -19,7 +19,7 @@ class SessionController extends StateNotifier<SessionState> {
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    final result = await _db!.insert('dispositivo_usuario', {
+    final result = await _db.insert('dispositivo_usuario', {
       'nombre': nombre,
       'pin_hash': pin,
       'device_id': deviceId,
@@ -32,9 +32,9 @@ class SessionController extends StateNotifier<SessionState> {
   Future<bool> verificarPin(String pin) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    final rows = await _db!.executeSql(
+    final rows = await _db.executeSql(
       'SELECT nombre, pin_hash FROM dispositivo_usuario WHERE device_id = \$1 LIMIT 1',
-      [deviceId],
+      params: [deviceId],
     );
     if (rows.isEmpty) return false;
     final u = rows.first;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_models.dart';
 import '../../../../core/models/producto.dart' as domain;
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../../features/inventario/data/inventario_providers.dart';
 import '../../data/pos_providers.dart';
 
@@ -258,7 +259,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar PosPlato' : 'Nuevo PosPlato'),
       content: SizedBox(
-        width: 520,
+        width: modalContentWidth(context),
         child: _cargando
             ? const Padding(
                 padding: EdgeInsets.all(40),

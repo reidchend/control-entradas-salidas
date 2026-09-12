@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/movimiento.dart';
+import '../../../../core/utils/modal_sizing.dart';
 
 const Map<String, (String, Color)> _tipoLabels = {
   'entrada': ('Entrada', Colors.green),
@@ -31,7 +32,7 @@ Future<void> showHistorialDialog(
     builder: (ctx) => AlertDialog(
       title: Text(titulo),
       content: SizedBox(
-        width: 520,
+        width: modalContentWidth(context),
         child: movimientos.isEmpty
             ? const Text('No hay movimientos para este producto')
             : ListView.builder(
@@ -131,11 +132,12 @@ class _MovimientoCard extends StatelessWidget {
             style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
           ),
           if (obs.isNotEmpty)
-            Text(
-              obs,
-              style: TextStyle(fontSize: 9, color: scheme.onSurface),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Tooltip(
+              message: obs,
+              child: Text(
+                obs,
+                style: TextStyle(fontSize: 9, color: scheme.onSurface),
+              ),
             ),
           const SizedBox(height: 3),
           Container(

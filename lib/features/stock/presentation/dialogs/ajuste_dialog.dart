@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/producto.dart';
+import '../../../../core/utils/modal_sizing.dart';
 
 /// Diálogo de ajuste de conteo físico (porta `build_ajuste_dialog`).
 /// Devuelve `(nuevaCantidad, motivo)` o `null` si se cancela.
@@ -27,7 +28,7 @@ Future<(double, String)?> showAjusteDialog(
       builder: (ctx, setSt) => AlertDialog(
         title: Text('Ajustar: ${almacen.capitalize()}'),
         content: SizedBox(
-          width: 440,
+          width: modalContentWidth(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

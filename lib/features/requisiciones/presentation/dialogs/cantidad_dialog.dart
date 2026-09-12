@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../../calculadora/presentation/calculadora.dart';
 import '../../data/requisiciones_providers.dart';
 import '../../data/requisiciones_repository.dart';
@@ -174,7 +175,6 @@ class _CantidadDialogState extends ConsumerState<_CantidadDialog> {
     final unidad = unidadRaw.isEmpty ? 'uds' : unidadRaw;
     final stockColor =
         _disponible > 0 ? Colors.green.shade700 : scheme.error;
-    final isMobile = MediaQuery.of(context).size.width < 700;
 
     Widget stockInfo = Container(
       padding: const EdgeInsets.all(10),
@@ -226,7 +226,7 @@ class _CantidadDialogState extends ConsumerState<_CantidadDialog> {
       content: Focus(
         onKeyEvent: _onKeyEvent,
         child: SizedBox(
-          width: isMobile ? 350 : 400,
+          width: modalContentWidth(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

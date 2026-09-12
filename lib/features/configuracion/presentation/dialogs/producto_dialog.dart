@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/producto.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/configuracion_repository.dart';
 import '../../data/configuracion_providers.dart'
     show categoriasConfigProvider, almacenesConfigProvider;
@@ -106,7 +107,8 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
     return AlertDialog(
       title: Text(esEdicion ? 'Editar Producto' : 'Nuevo Producto'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 650),
+        constraints: BoxConstraints(
+            maxWidth: modalContentWidth(context), maxHeight: 650),
         child: SingleChildScrollView(
           child: categoriasAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),

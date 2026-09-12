@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../data/stock_providers.dart';
@@ -291,8 +290,8 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       },
     );
   }
+}
 
-  extension _StringCapitalize on String {
-    String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
-  }
+extension _StringCapitalize on String {
+  String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }

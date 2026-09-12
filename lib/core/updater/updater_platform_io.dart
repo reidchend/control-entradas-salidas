@@ -175,7 +175,7 @@ start "" ${_q('$exeDir\\$targetExe')}
 del "%~f0"
 ''');
 
-  final proc = await Process.start(
+  await Process.start(
     'cmd.exe',
     ['/c', bat.path],
     mode: ProcessStartMode.detached,

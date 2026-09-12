@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
 /// Alta/edición de categoría POS (port de `ConfigPOSView._show_pos_categoria_dialog`).
@@ -99,7 +100,7 @@ class _PosCategoriaDialogState extends ConsumerState<_PosCategoriaDialog> {
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar categoría POS' : 'Nueva categoría POS'),
       content: SizedBox(
-        width: 380,
+        width: modalContentWidth(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

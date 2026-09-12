@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/modal_sizing.dart';
 import '../../data/requisiciones_providers.dart';
 
 Future<Map<String, dynamic>?> showBuscadorProductos(BuildContext context) {
@@ -42,7 +43,7 @@ class _BuscadorProductosDialogState
     return AlertDialog(
       title: const Text('Buscar producto'),
       content: SizedBox(
-        width: 420,
+        width: modalContentWidth(context),
         height: 420,
         child: Column(
           children: [
