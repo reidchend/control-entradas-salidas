@@ -274,7 +274,7 @@ class PostgresService {
     final encoded = await _normalizedMap(table, data);
     final columns = encoded.keys.join(', ');
     final placeholders =
-        List.generate(encoded.length, (i) => '\${${i + 1}}').join(', ');
+        List.generate(encoded.length, (i) => '\$${i + 1}').join(', ');
     final params = encoded.values.toList();
 
     final sql =
@@ -392,7 +392,7 @@ class PostgresService {
     final encoded = await _normalizedMap(table, data);
     final columns = encoded.keys.join(', ');
     final placeholders =
-        List.generate(encoded.length, (i) => '\${${i + 1}}').join(', ');
+        List.generate(encoded.length, (i) => '\$${i + 1}').join(', ');
     final updates = encoded.keys
         .where((k) => k != 'id')
         .map((k) => '$k = EXCLUDED.$k')
