@@ -64,7 +64,8 @@ class WhatsappRepository {
   }) async {
     var query = _db.client.from('whatsapp_queue').select();
     if (estado != null) query = query.eq('estado', estado);
-    final rows = await query.order('created_at', ascending: false).limit(limit);
+    final rows = await query.order('created_at', ascending: false).limit(limit)
+        as List<Map<String, dynamic>>;
     return rows.map(MensajeWhatsapp.fromMap).toList();
   }
 
@@ -370,7 +371,7 @@ class WhatsappRepository {
         .select()
         .filter('estado', 'in', estados)
         .order('created_at', ascending: true)
-        .limit(limit);
+        .limit(limit) as List<Map<String, dynamic>>;
     return rows.map(MensajeWhatsapp.fromMap).toList();
   }
 

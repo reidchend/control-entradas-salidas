@@ -47,7 +47,7 @@ class ReportesRepository {
     
     final itemsJson = row['items_json'] as String;
     final items = jsonDecode(itemsJson) as List;
-    return items.map((e) => e as Map<String, dynamic>).toList();
+    return items.cast<Map<String, dynamic>>().toList();
   }
 
   /// Movimientos de inventario en un rango de fechas

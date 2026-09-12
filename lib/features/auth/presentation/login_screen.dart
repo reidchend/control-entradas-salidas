@@ -27,11 +27,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _existeNombre = false;
 
   @override
+  void initState() {
+    super.initState();
+    Future(() => _autodetectarOperador());
+  }
+
+  @override
   void dispose() {
     _nombreCtrl.dispose();
     _pinCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
+  }
+
+  // Si este dispositivo ya tiene un operador registrado (misma device_id),
+  // precarga el nombre para que el login sea solo el PIN. Si el dispositivo
+  // es nuevo (reinstalación), sigue el flujo de registro por nombre.
+  Future<void> _autodetectarOperador() async {
+    try {
+      final session = ref.read(sessionProvider.notifier);
+      final nombre = await session.nombrePorDeviceId();
+      if (mounted && nombre != null && nombre.isNotEmpty) {
+        _nombreCtrl.text = nombre;
+        if (!_existeNombre) {
+          setState(() => _existeNombre = true);
+        }
+      }
+    } catch (_) {
+      // Sin conexión: el usuario podrá escribir el nombre manualmente.
+    }
   }
 
   // Determina si el nombre ingresado ya es un operador registrado.

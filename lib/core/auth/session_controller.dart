@@ -47,7 +47,7 @@ class SessionController extends StateNotifier<SessionState> {
     final deviceId = await DeviceIdService.instance.id;
     final rows = await _db.executeSql(
       'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
-      'WHERE nombre = \$1 ORDER BY id LIMIT 1',
+      'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
       params: [nombre],
     );
     if (rows.isEmpty) return false;
@@ -69,14 +69,29 @@ class SessionController extends StateNotifier<SessionState> {
     return false;
   }
 
-  /// ¿Existe un operador con este nombre en la BD?
+  /// ¿Existe un operador con este nombre en la BD? (case-insensitive).
   Future<bool> existeOperador(String nombre) async {
     if (_db == null) return false;
     final rows = await _db.executeSql(
-      'SELECT 1 FROM dispositivo_usuario WHERE nombre = \$1 LIMIT 1',
+      'SELECT 1 FROM dispositivo_usuario '
+      'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) LIMIT 1',
       params: [nombre],
     );
     return rows.isNotEmpty;
+  }
+
+  /// Nombre del operador registrado con este device_id, si existe.
+  /// Permite autodetectar el usuario al abrir la app sin reescribirlo.
+  Future<String?> nombrePorDeviceId() async {
+    if (_db == null) return null;
+    final deviceId = await DeviceIdService.instance.id;
+    final rows = await _db.executeSql(
+      'SELECT nombre FROM dispositivo_usuario '
+      'WHERE device_id = \$1 ORDER BY id LIMIT 1',
+      params: [deviceId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['nombre'] as String?;
   }
 
   void cerrarSesion() {

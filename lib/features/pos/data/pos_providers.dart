@@ -115,7 +115,7 @@ final cierresHistorialProvider = FutureProvider<List<CierreCaja>>((ref) async {
       .from('pos_cierres')
       .select()
       .order('cerrada_en', ascending: false)
-      .limit(50);
+      .limit(50) as List<Map<String, dynamic>>;
   return rows.map((r) => CierreCaja.fromJson({
     'sesion_id': r['sesion_id'],
     'usuario_id': r['usuario_id'],

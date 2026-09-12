@@ -112,7 +112,7 @@ class PosVentasRepository {
     final rows = await _db.client
         .from('pos_comandas')
         .select()
-        .eq('estado', 'abierta');
+        .eq('estado', 'abierta') as List<Map<String, dynamic>>;
     return rows.map(PosComanda.fromMap).toList();
   }
 
@@ -437,7 +437,8 @@ class PosVentasRepository {
   Future<List<PosVenta>> getVentas({int limit = 200, int? beforeId}) async {
     var query = _db.client.from('pos_ventas').select();
     if (beforeId != null) query = query.lt('id', beforeId);
-    final rows = await query.order('id', ascending: false).limit(limit);
+    final rows = await query.order('id', ascending: false).limit(limit)
+        as List<Map<String, dynamic>>;
     return rows.map(PosVenta.fromMap).toList();
   }
 
@@ -487,7 +488,7 @@ class PosVentasRepository {
         .from('pos_ventas')
         .select()
         .eq('sesion_id', sesionId)
-        .order('id', ascending: false);
+        .order('id', ascending: false) as List<Map<String, dynamic>>;
     return rows.map(PosVenta.fromMap).toList();
   }
 

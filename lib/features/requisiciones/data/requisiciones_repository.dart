@@ -76,12 +76,12 @@ class RequisicionesRepository {
   }
 
   Future<List<Map<String, dynamic>>> getProductosActivos({int limit = 200}) async =>
-      await _db.client
+      (await _db.client
           .from('productos')
           .select()
           .eq('activo', true)
           .order('nombre', ascending: true)
-          .limit(limit);
+          .limit(limit)) as List<Map<String, dynamic>>;
 
   Future<List<Map<String, dynamic>>> buscarProductos(String texto,
       {int limit = 30}) async {
@@ -91,7 +91,7 @@ class RequisicionesRepository {
       builder = builder.ilike('nombre', '%$texto%');
     }
     builder = builder.order('nombre', ascending: true).limit(limit);
-    return builder;
+    return (await builder) as List<Map<String, dynamic>>;
   }
 
   Future<Map<String, dynamic>?> getProducto(int id) async {
@@ -117,7 +117,7 @@ class RequisicionesRepository {
     final rows = await _db.client
         .from('requisiciones')
         .select()
-        .order('fecha_creacion', ascending: false);
+        .order('fecha_creacion', ascending: false) as List<Map<String, dynamic>>;
     return rows.map(domain.Requisicion.fromMap).toList();
   }
 
@@ -127,7 +127,7 @@ class RequisicionesRepository {
     final rows = await _db.client
         .from('requisicion_detalles')
         .select('requisicion_id')
-        .inFilter('requisicion_id', requisicionIds);
+        .inFilter('requisicion_id', requisicionIds) as List<Map<String, dynamic>>;
     final counts = <int, int>{};
     for (final r in rows) {
       final rid = r['requisicion_id'] as int;
@@ -140,7 +140,7 @@ class RequisicionesRepository {
     final rows = await _db.client
         .from('requisicion_detalles')
         .select('id')
-        .eq('requisicion_id', requisicionId);
+        .eq('requisicion_id', requisicionId) as List<Map<String, dynamic>>;
     return rows.length;
   }
 
@@ -149,7 +149,7 @@ class RequisicionesRepository {
         .from('requisicion_detalles')
         .select()
         .eq('requisicion_id', requisicionId)
-        .order('id', ascending: true);
+        .order('id', ascending: true) as List<Map<String, dynamic>>;
     return rows.map(domain.RequisicionDetalle.fromMap).toList();
   }
 

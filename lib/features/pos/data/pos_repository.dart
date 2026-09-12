@@ -156,7 +156,7 @@ class PosRepository {
     final rows = await _db.client
         .from('pos_sesiones')
         .select('usuario_id')
-        .filter('cerrada_en', 'is', null);
+        .filter('cerrada_en', 'is', null) as List<Map<String, dynamic>>;
     return rows.map((r) => r['usuario_id'] as int).toSet();
   }
 
@@ -203,7 +203,7 @@ class PosRepository {
   Future<List<PosUsuario>> getUsuarios({bool soloActivos = true}) async {
     var query = _db.client.from('pos_usuarios').select();
     if (soloActivos) query = query.eq('activo', 1);
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosUsuario.fromMap).toList();
   }
 
@@ -277,7 +277,7 @@ class PosRepository {
   Future<List<PosMesa>> getMesas({bool soloActivos = false}) async {
     var query = _db.client.from('pos_mesas').select();
     if (soloActivos) query = query.eq('activo', 1);
-    final rows = await query.order('zona').order('numero');
+    final rows = await query.order('zona').order('numero') as List<Map<String, dynamic>>;
     return rows.map(PosMesa.fromMap).toList();
   }
 
@@ -326,7 +326,7 @@ class PosRepository {
   Future<List<PosHabitacion>> getHabitaciones({bool soloActivos = false}) async {
     var query = _db.client.from('pos_habitaciones').select();
     if (soloActivos) query = query.eq('activo', 1);
-    final rows = await query.order('numero');
+    final rows = await query.order('numero') as List<Map<String, dynamic>>;
     return rows.map(PosHabitacion.fromMap).toList();
   }
 
@@ -376,7 +376,7 @@ class PosRepository {
   Future<List<PosCategoria>> getPosCategorias({bool soloActivas = false}) async {
     var query = _db.client.from('pos_categorias').select();
     if (soloActivas) query = query.eq('activo', 1);
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosCategoria.fromMap).toList();
   }
 
@@ -420,7 +420,7 @@ class PosRepository {
       {bool soloActivas = false}) async {
     var query = _db.client.from('platos_categorias').select();
     if (soloActivas) query = query.eq('activo', 1);
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosPlatoCategoria.fromMap).toList();
   }
 
@@ -466,7 +466,7 @@ class PosRepository {
     if (soloActivos) query = query.eq('activo', 1);
     if (categoriaId != null) query = query.eq('categoria_id', categoriaId);
     if (esContorno != null) query = query.eq('es_contorno', esContorno ? 1 : 0);
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosPlato.fromMap).toList();
   }
 
@@ -482,7 +482,7 @@ class PosRepository {
         .select()
         .eq('activo', 1)
         .eq('visible_en_pos', 1)
-        .order('nombre');
+        .order('nombre') as List<Map<String, dynamic>>;
     return rows.map(Categoria.fromMap).toList();
   }
 
@@ -493,7 +493,7 @@ class PosRepository {
         .eq('activo', 1)
         .eq('tipo', 'Productos para la venta');
     if (categoriaId != null) query = query.eq('categoria_id', categoriaId);
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(Producto.fromMap).toList();
   }
 
@@ -511,7 +511,7 @@ class PosRepository {
     if (posCategoriaPadreId != null) {
       query = query.eq('pos_categoria_padre_id', posCategoriaPadreId);
     }
-    final rows = await query.order('nombre');
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosPlatoCategoria.fromMap).toList();
   }
 
@@ -535,7 +535,7 @@ class PosRepository {
     final rows = await _db.client
         .from('plato_ingredientes')
         .select()
-        .eq('plato_id', platoId);
+        .eq('plato_id', platoId) as List<Map<String, dynamic>>;
     return rows.map(PlatoIngrediente.fromMap).toList();
   }
 
@@ -543,7 +543,7 @@ class PosRepository {
     final rows = await _db.client
         .from('plato_contornos')
         .select()
-        .eq('plato_id', platoId);
+        .eq('plato_id', platoId) as List<Map<String, dynamic>>;
     return rows.map(PlatoContorno.fromMap).toList();
   }
 
