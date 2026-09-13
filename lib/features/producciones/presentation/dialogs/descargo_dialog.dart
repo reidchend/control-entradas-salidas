@@ -177,6 +177,7 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
   late String _almacen;
   late final List<TextEditingController> _cantCtrls;
   final List<GlobalKey> _stockKeys = [];
+  bool _registrando = false;
 
   @override
   void initState() {
@@ -216,58 +217,63 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
 
   void _actualizarStock() async {
     final repo = widget.repo;
-    for (var i = 0; i < widget.data.items.length; i++) {
+    final items = widget.data.items;
+    final mapa = await repo.getExistenciasParaDescargo(
+      [for (final i in items) i.productoId],
+      _almacen,
+    );
+    if (!mounted) return;
+    for (var i = 0; i < items.length; i++) {
       final state = _stockKeys[i].currentState as _StockTextState?;
       if (state == null) continue;
-      final cant =
-          await repo.getExistencia(widget.data.items[i].productoId, _almacen);
-      if (!mounted) return;
       state.actualizar(
-        cant,
-        widget.data.items[i].unidadLabel,
+        mapa[items[i].productoId] ?? 0,
+        items[i].unidadLabel,
       );
     }
   }
 
   Future<void> _confirmar() async {
-    final itemsCantidades = <DescargoItem>[];
-    final errores = <String>[];
-
-    for (var i = 0; i < widget.data.items.length; i++) {
-      final item = widget.data.items[i];
-      final raw = _cantCtrls[i].text.trim().replaceAll(',', '.');
-      double cantidad;
-      try {
-        cantidad = double.tryParse(raw) ?? 0;
-      } catch (_) {
-        errores.add('Cantidad inválida para producto ${item.productoId}');
-        continue;
-      }
-      if (cantidad <= 0) {
-        errores.add('Cantidad debe ser > 0 para producto ${item.productoId}');
-        continue;
-      }
-      itemsCantidades.add(DescargoItem(
-        productoId: item.productoId,
-        nombre: item.nombre,
-        cantidadSugerida: cantidad,
-        pesoVariable: item.esPesable,
-        unidad: item.unidad,
-        esPesable: item.esPesable,
-        almacen: _almacen,
-      ));
-    }
-
-    if (errores.isNotEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errores.join('\n'))),
-        );
-      }
-      return;
-    }
-
+    if (_registrando) return;
+    setState(() => _registrando = true);
     try {
+      final itemsCantidades = <DescargoItem>[];
+      final errores = <String>[];
+
+      for (var i = 0; i < widget.data.items.length; i++) {
+        final item = widget.data.items[i];
+        final raw = _cantCtrls[i].text.trim().replaceAll(',', '.');
+        double cantidad;
+        try {
+          cantidad = double.tryParse(raw) ?? 0;
+        } catch (_) {
+          errores.add('Cantidad inválida para producto ${item.productoId}');
+          continue;
+        }
+        if (cantidad <= 0) {
+          errores.add('Cantidad debe ser > 0 para producto ${item.productoId}');
+          continue;
+        }
+        itemsCantidades.add(DescargoItem(
+          productoId: item.productoId,
+          nombre: item.nombre,
+          cantidadSugerida: cantidad,
+          pesoVariable: item.esPesable,
+          unidad: item.unidad,
+          esPesable: item.esPesable,
+          almacen: _almacen,
+        ));
+      }
+
+      if (errores.isNotEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errores.join('\n'))),
+          );
+        }
+        return;
+      }
+
       final (ok, errs) = await widget.repo.ejecutarDescargo(
         produccion: widget.produccion,
         receta: widget.receta,
@@ -302,6 +308,8 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
           SnackBar(content: Text('Error al ejecutar descargo: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _registrando = false);
     }
   }
 
@@ -411,8 +419,14 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _confirmar,
-          child: const Text('Confirmar Descargo'),
+          onPressed: _registrando ? null : _confirmar,
+          child: _registrando
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Confirmar Descargo'),
         ),
       ],
     );

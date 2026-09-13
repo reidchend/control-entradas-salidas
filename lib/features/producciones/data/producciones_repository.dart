@@ -373,6 +373,21 @@ class ProduccionesRepository {
     return (e?['cantidad'] as num?)?.toDouble() ?? 0;
   }
 
+  /// Existencias de varios productos en un almacén, en una sola consulta.
+  Future<Map<int, double>> getExistenciasParaDescargo(
+      List<int> productoIds, String almacen) async {
+    if (productoIds.isEmpty) return {};
+    final rows = await _db.executeSql(
+      'SELECT producto_id, cantidad FROM existencias '
+      'WHERE producto_id = ANY(\$1) AND almacen = \$2',
+      params: [productoIds, almacen],
+    );
+    return {
+      for (final r in rows)
+        r['producto_id'] as int: (r['cantidad'] as num).toDouble(),
+    };
+  }
+
   Future<List<String>> getAlmacenes() async {
     final data = await _db.client.from('existencias').select('almacen');
     final almacenes = {
@@ -481,6 +496,7 @@ class ProduccionesRepository {
     String? almacen,
     int? produccionId,
     String usuario = 'Sistema',
+    String? observaciones,
   }) async {
     return _registrarProduccionPendienteInternal(
       productoId: producto.id,
@@ -492,6 +508,7 @@ class ProduccionesRepository {
       almacen: almacen,
       produccionId: produccionId,
       usuario: usuario,
+      observaciones: observaciones,
     );
   }
 
@@ -507,6 +524,7 @@ class ProduccionesRepository {
     String? almacen,
     int? produccionId,
     String usuario = 'Sistema',
+    String? observaciones,
   }) async {
     return _registrarProduccionPendienteInternal(
       productoId: productoId,
@@ -518,6 +536,7 @@ class ProduccionesRepository {
       almacen: almacen,
       produccionId: produccionId,
       usuario: usuario,
+      observaciones: observaciones,
     );
   }
 
@@ -532,10 +551,15 @@ class ProduccionesRepository {
     String? almacen,
     int? produccionId,
     String usuario = 'Sistema',
+    String? observaciones,
   }) async {
-    final observaciones = produccionId == null
+    final obsExtra = (observaciones ?? '').trim();
+    final obsAuto = produccionId == null
         ? "Producción pendiente - Receta '${receta.nombre}'"
         : "Entrada vinculada al lote #$produccionId - Receta '${receta.nombre}'";
+    final obs = obsExtra.isEmpty
+        ? obsAuto
+        : '$obsAuto | $obsExtra';
 
     final movimientoId = await _registrarMovimientoRaw(
       productoId: productoId,
@@ -545,7 +569,7 @@ class ProduccionesRepository {
       cantidad: cantidad,
       pesoTotal: pesoTotal,
       almacen: almacen,
-      observaciones: observaciones,
+      observaciones: obs,
       registradoPor: usuario,
     );
     if (movimientoId == null) return (produccionId: null, movimientoId: null);
@@ -557,7 +581,7 @@ class ProduccionesRepository {
         cantidad: cantidad,
         estado: 'pendiente',
         usuario: usuario,
-        observaciones: observaciones,
+        observaciones: obs,
         fechaProduccion: DateTime.now(),
       );
     } else {
@@ -569,6 +593,7 @@ class ProduccionesRepository {
         total += d.cantidad;
       }
       await _updateProduccionCantidad(pid, total);
+      _appendProduccionObservaciones(pid, obsExtra);
     }
 
     await _insertProduccionDetalle(
@@ -639,61 +664,140 @@ class ProduccionesRepository {
     String? cocineros,
     String usuario = 'Sistema',
   }) async {
-    final errores = <String>[];
+    try {
+      final (ok, errs) = await _db.transaction((tx) async {
+        final errores = <String>[];
 
-    for (final item in items) {
-      final cantidad = item.cantidadSugerida;
-      if (cantidad <= 0) continue;
-      final prod = await getProducto(item.productoId);
-      if (prod == null) {
-        errores.add('Producto ${item.productoId} no encontrado');
-        continue;
-      }
-      final esPesable = item.esPesable || prod.esPesable;
-      final pesoTotal = esPesable ? cantidad : 0.0;
-      final almacen = item.almacen.isEmpty
-          ? (prod.almacenPredeterminado.isEmpty
-              ? 'principal'
-              : prod.almacenPredeterminado)
-          : item.almacen;
+        // Resolver productos de todos los items en una sola consulta.
+        final pids = [
+          for (final i in items)
+            if (i.cantidadSugerida > 0) i.productoId,
+        ];
+        final prodRows = pids.isEmpty
+            ? <Map<String, dynamic>>[]
+            : await tx.executeSql(
+                'SELECT * FROM productos WHERE id = ANY(\$1)',
+                params: [pids],
+              );
+        final prods = <int, Producto>{
+          for (final r in prodRows) r['id'] as int: Producto.fromMap(r),
+        };
 
-      final movId = await _registrarMovimiento(
-        producto: prod,
-        tipo: 'salida_produccion',
-        cantidad: cantidad,
-        pesoTotal: pesoTotal,
-        almacen: almacen,
-        observaciones:
-            "Descargo Producción #${produccion.id} - ${receta.nombre}",
-        registradoPor: usuario,
-      );
-      if (movId == null) {
-        errores.add('Stock insuficiente para ${prod.nombre}');
-        continue;
-      }
+        // Items procesables con campos resueltos (nombre, almacén, unidad).
+        final procesables = <DescargoItem>[];
+        for (final item in items) {
+          if (item.cantidadSugerida <= 0) continue;
+          final prod = prods[item.productoId];
+          if (prod == null) {
+            errores.add('Producto ${item.productoId} no encontrado');
+            continue;
+          }
+          final esPesable = item.esPesable || prod.esPesable;
+          procesables.add(DescargoItem(
+            productoId: item.productoId,
+            nombre: item.nombre.isEmpty ? prod.nombre : item.nombre,
+            cantidadSugerida: item.cantidadSugerida,
+            pesoVariable: item.pesoVariable || esPesable,
+            unidad: esPesable
+                ? 'kg'
+                : (item.unidad.isEmpty ? prod.unidadMedida : item.unidad),
+            esPesable: esPesable,
+            almacen: item.almacen.isEmpty
+                ? (prod.almacenPredeterminado.isEmpty
+                    ? 'principal'
+                    : prod.almacenPredeterminado)
+                : item.almacen,
+          ));
+        }
+        if (errores.isNotEmpty) return (false, errores);
+        if (procesables.isEmpty) return (true, <String>[]);
 
-      await _insertProduccionDetalle(
-        produccionId: produccion.id,
-        productoId: prod.id,
-        tipo: 'salida',
-        cantidad: cantidad,
-        unidad: (esPesable && pesoTotal > 0)
-            ? 'kg'
-            : (item.unidad.isEmpty ? prod.unidadMedida : item.unidad),
-        movimientoId: movId,
-      );
+        // Existencias actuales de todos los items en una sola consulta.
+        final exRows = await tx.executeSql(
+          'SELECT * FROM existencias WHERE producto_id = ANY(\$1)',
+          params: [pids],
+        );
+        final existencias = <String, Map<String, dynamic>>{
+          for (final r in exRows) '${r['producto_id']}|${r['almacen']}': r,
+        };
+
+        // Construir lotes de movimientos, existencias y detalles.
+        final ahora = DateTime.now();
+        final movimientos = <Map<String, dynamic>>[];
+        final upserts = <Map<String, dynamic>>[];
+        final detalles = <Map<String, dynamic>>[];
+
+        for (final item in procesables) {
+          final pesoTotal = item.esPesable ? item.cantidadSugerida : 0.0;
+          final unidad = item.esPesable ? 'kg' : item.unidad;
+          final k = '${item.productoId}|${item.almacen}';
+          final prev = existencias[k];
+          final cantAnterior = (prev?['cantidad'] as num?)?.toDouble() ?? 0;
+          if (cantAnterior < item.cantidadSugerida) {
+            errores.add('Stock insuficiente para ${item.nombre}');
+            continue;
+          }
+          final cantNueva = cantAnterior - item.cantidadSugerida;
+
+          movimientos.add({
+            'producto_id': item.productoId,
+            'tipo': 'salida_produccion',
+            'cantidad': item.cantidadSugerida,
+            'cantidad_anterior': cantAnterior,
+            'cantidad_nueva': cantNueva,
+            'peso_total': pesoTotal,
+            'registrado_por': usuario,
+            'observaciones':
+                "Descargo Producción #${produccion.id} - ${receta.nombre}",
+            'almacen': item.almacen,
+            'fecha_movimiento': ahora.toIso8601String(),
+          });
+          upserts.add({
+            'producto_id': item.productoId,
+            'almacen': item.almacen,
+            'cantidad': cantNueva,
+            'unidad': unidad,
+          });
+          detalles.add({
+            'produccion_id': produccion.id,
+            'producto_id': item.productoId,
+            'tipo': 'salida',
+            'cantidad': item.cantidadSugerida,
+            'unidad': unidad,
+            'movimiento_id': -1,
+          });
+        }
+        if (errores.isNotEmpty) return (false, errores);
+
+        // Insertar movimientos (batch) y vincular los ids a los detalles.
+        final movIds = await tx.insertBatch('movimientos', movimientos);
+        for (var i = 0; i < detalles.length; i++) {
+          detalles[i]['movimiento_id'] = movIds[i];
+        }
+        await tx.insertBatch('produccion_detalles', detalles);
+        await tx.upsertBatch(
+          'existencias',
+          upserts,
+          conflictColumns: ['producto_id', 'almacen'],
+        );
+
+        // Marcar la producción completada dentro de la misma transacción.
+        final p = await tx.fetchById('producciones', produccion.id);
+        if (p == null) {
+          throw StateError('Producción ${produccion.id} no encontrada');
+        }
+        await tx.updateById('producciones', produccion.id, {
+          'estado': 'completado',
+          'observaciones':
+              'Descargado por $usuario el ${_fechaTexto(ahora)}',
+          'cocineros': cocineros ?? (p['cocineros'] as String?),
+        });
+        return (true, <String>[]);
+      });
+      return (ok, errs);
+    } catch (e) {
+      return (false, ['Error en transacción: $e']);
     }
-
-    if (errores.isNotEmpty) return (false, errores);
-
-    await _updateProduccionEstado(
-      produccion.id,
-      'completado',
-      observaciones:
-          'Descargado por $usuario el ${_fechaTexto(DateTime.now())}',
-      cocineros: cocineros,
-    );
-    return (true, <String>[]);
   }
 
   /// Revierte todas las entradas del lote y marca la producción cancelada
@@ -905,6 +1009,20 @@ class ProduccionesRepository {
 
   Future<void> _updateProduccionCantidad(int id, double cantidad) async {
     await _db.updateById('producciones', id, {'cantidad': cantidad});
+  }
+
+  /// Agrega las observaciones del usuario a una producción existente
+  /// (sin duplicar texto ya presente).
+  Future<void> _appendProduccionObservaciones(int id, String texto) async {
+    if (texto.trim().isEmpty) return;
+    final p = await _db.fetchById('producciones', id);
+    if (p == null) return;
+    final actual = (p['observaciones'] as String?) ?? '';
+    if (actual.contains(texto.trim())) return;
+    final combinado = actual.trim().isEmpty
+        ? texto.trim()
+        : '$actual | ${texto.trim()}';
+    await _db.updateById('producciones', id, {'observaciones': combinado});
   }
 
   Future<void> _updateProduccionEstado(
