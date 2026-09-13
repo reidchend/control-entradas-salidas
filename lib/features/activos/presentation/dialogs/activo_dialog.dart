@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../data/activo.dart';
+import '../../data/activos_categoria.dart';
 
 const _estados = ['Activo', 'Mantenimiento', 'Baja', 'Reservado', 'Traslado'];
 
 /// Muestra el diálogo crear/editar y devuelve el activo capturado,
-/// o `null` si se canceló.
+/// o `null` si se canceló. [categorias] alimenta el selector de categoría.
 Future<Activo?> showActivoDialog(
   BuildContext context, {
   Activo? activo,
+  List<ActivosCategoria> categorias = const [],
 }) async {
   final nombreCtrl = TextEditingController(text: activo?.nombre ?? '');
-  final categoriaCtrl =
-      TextEditingController(text: activo?.categoria?.trim() ?? '');
+  final categoriaIdSeleccionada = activo?.categoriaId;
   final ubicacionCtrl =
       TextEditingController(text: activo?.ubicacion?.trim() ?? '');
   final estadoValor = (activo?.estado ?? 'Activo').trim().isEmpty
@@ -30,6 +31,7 @@ Future<Activo?> showActivoDialog(
   final obsCtrl =
       TextEditingController(text: activo?.observaciones?.trim() ?? '');
   var estadoSeleccionado = estadoValor;
+  var categoriaId = categoriaIdSeleccionada;
 
   return showDialog<Activo>(
     context: context,
@@ -44,16 +46,28 @@ Future<Activo?> showActivoDialog(
               decoration: const InputDecoration(labelText: 'Nombre *'),
               autofocus: true,
             ),
-            TextField(
-              controller: categoriaCtrl,
+            DropdownButtonFormField<int?>(
+              value: categoriaId,
               decoration: const InputDecoration(labelText: 'Categoría'),
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Sin categoría'),
+                ),
+                for (final c in categorias)
+                  DropdownMenuItem<int?>(
+                    value: c.id,
+                    child: Text(c.nombre),
+                  ),
+              ],
+              onChanged: (v) => categoriaId = v,
             ),
             TextField(
               controller: ubicacionCtrl,
               decoration: const InputDecoration(labelText: 'Ubicación'),
             ),
             DropdownButtonFormField<String>(
-              initialValue: _estados.contains(estadoValor)
+              value: _estados.contains(estadoValor)
                   ? estadoValor
                   : _estados.first,
               decoration: const InputDecoration(labelText: 'Estado'),
@@ -116,9 +130,7 @@ Future<Activo?> showActivoDialog(
               Activo(
                 id: activo?.id ?? 0,
                 nombre: nombre,
-                categoria: categoriaCtrl.text.trim().isEmpty
-                    ? null
-                    : categoriaCtrl.text.trim(),
+                categoriaId: categoriaId,
                 ubicacion: ubicacionCtrl.text.trim().isEmpty
                     ? null
                     : ubicacionCtrl.text.trim(),

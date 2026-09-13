@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/activo.dart';
+import '../data/activos_categoria.dart';
 import '../data/activos_providers.dart';
 import '../data/activos_repository.dart';
-import 'dialogs/activo_dialog.dart';
-import 'widgets/activo_card.dart';
+import 'dialogs/activos_categoria_dialog.dart';
+import 'widgets/activos_categorias_grid.dart';
+import 'widgets/activos_panel.dart';
 
-/// Pantalla de Inventario de Activos — CRUD de bienes.
+/// Pantalla de Inventario de Activos (estilo InventarioScreen de productos):
+/// - Raíz: grid de categorías.
+/// - Click en una categoría → panel de activos de esa categoría con back.
+/// - Se pueden crear categorías nuevas y activos dentro de cada categoría.
 class ActivosScreen extends ConsumerStatefulWidget {
   const ActivosScreen({super.key});
 
@@ -17,6 +21,7 @@ class ActivosScreen extends ConsumerStatefulWidget {
 }
 
 class _ActivosScreenState extends ConsumerState<ActivosScreen> {
+  ActivosCategoria? _categoria;
   String _search = '';
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -40,14 +45,9 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         child: Column(
           children: [
             _buildHeader(repo, colors),
-            Expanded(child: _buildListado(colors)),
+            Expanded(child: _buildCuerpo(repo, colors)),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _crear(repo),
-        tooltip: 'Nuevo activo',
-        child: const Icon(Icons.add),
       ),
     );
   }
@@ -59,6 +59,56 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  Widget _buildCuerpo(ActivosRepository repo, ColorScheme colors) {
+    if (_categoria != null) {
+      return Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Volver a categorías',
+                  onPressed: () => setState(() {
+                    _categoria = null;
+                    _search = '';
+                    _searchCtrl.clear();
+                  }),
+                ),
+                Expanded(
+                  child: Text(
+                    _categoria!.nombre,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ActivosPanel(
+              repo: repo,
+              categoria: _categoria!,
+              searchTerm: _search,
+            ),
+          ),
+        ],
+      );
+    }
+    return ActivosCategoriasGrid(
+      repo: repo,
+      onSelect: (c) => setState(() {
+        _categoria = c;
+        _search = '';
+        _searchCtrl.clear();
+      }),
+      onCreate: () => _crearCategoria(repo),
+    );
   }
 
   Widget _buildHeader(ActivosRepository repo, ColorScheme colors) {
@@ -75,7 +125,9 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
               controller: _searchCtrl,
               focusNode: _searchFocus,
               decoration: InputDecoration(
-                hintText: 'Buscar activo... (F1)',
+                hintText: _categoria != null
+                    ? 'Buscar en ${_categoria!.nombre}...'
+                    : 'Buscar activo... (F1)',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -89,132 +141,27 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
               onChanged: (v) => setState(() => _search = v),
             ),
           ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            tooltip: 'Recargar',
-            onPressed: () => setState(() {}),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildListado(ColorScheme colors) {
-    final repo = ref.watch(activosRepoProvider)!;
-    return FutureBuilder<List<Activo>>(
-      future: repo.getActivos(search: _search.isEmpty ? null : _search),
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: TextStyle(color: colors.error),
-            ),
-          );
-        }
-        final activos = snap.data ?? const <Activo>[];
-        if (activos.isEmpty) {
-          return Center(
-            child: Text(
-              _search.isEmpty ? 'No hay activos registrados' : 'Sin resultados',
-              style: TextStyle(color: colors.onSurfaceVariant),
-            ),
-          );
-        }
-        return ListView.builder(
-          itemCount: activos.length,
-          itemBuilder: (context, i) {
-            final a = activos[i];
-            return ActivoCard(
-              activo: a,
-              onEdit: () => _editar(repo, a),
-              onDeactivate: () => _desactivar(repo, a),
-              onDelete: () => _eliminar(repo, a),
-            );
-          },
+  Future<void> _crearCategoria(ActivosRepository repo) async {
+    final nueva = await showActivosCategoriaDialog(context);
+    if (nueva == null) return;
+    try {
+      final id = await repo.createCategoria(nueva.nombre, color: nueva.color);
+      setState(() {});
+      if (mounted) {
+        // Entra directo a la categoría recién creada.
+        _categoria = ActivosCategoria(
+          id: id,
+          nombre: nueva.nombre,
+          color: nueva.color,
         );
-      },
-    );
-  }
-
-  Future<void> _crear(ActivosRepository repo) async {
-    final nuevo = await showActivoDialog(context);
-    if (nuevo == null) return;
-    try {
-      await repo.createActivo(nuevo);
-      setState(() {});
+      }
     } catch (e) {
-      _snack('Error al crear: $e');
-    }
-  }
-
-  Future<void> _editar(ActivosRepository repo, Activo activo) async {
-    final editado = await showActivoDialog(context, activo: activo);
-    if (editado == null) return;
-    try {
-      await repo.updateActivo(activo.id, editado);
-      setState(() {});
-    } catch (e) {
-      _snack('Error al editar: $e');
-    }
-  }
-
-  Future<void> _desactivar(ActivosRepository repo, Activo activo) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Desactivar activo'),
-        content: Text('¿Desactivar "${activo.nombre}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Desactivar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await repo.deactivateActivo(activo.id);
-      setState(() {});
-    } catch (e) {
-      _snack('Error: $e');
-    }
-  }
-
-  Future<void> _eliminar(ActivosRepository repo, Activo activo) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar activo'),
-        content: Text('¿Eliminar definitivamente "${activo.nombre}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await repo.deleteActivo(activo.id);
-      setState(() {});
-    } catch (e) {
-      _snack('Error: $e');
+      _snack('Error al crear categoría: $e');
     }
   }
 

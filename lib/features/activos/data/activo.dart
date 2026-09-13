@@ -6,6 +6,7 @@ class Activo {
     required this.id,
     required this.nombre,
     this.categoria,
+    this.categoriaId,
     this.ubicacion,
     this.estado = 'Activo',
     this.valor = 0,
@@ -22,6 +23,7 @@ class Activo {
   final int id;
   final String nombre;
   final String? categoria;
+  final int? categoriaId;
   final String? ubicacion;
   final String estado;
   final double valor;
@@ -38,6 +40,9 @@ class Activo {
         id: m['id'] as int,
         nombre: m['nombre'] as String,
         categoria: m['categoria'] as String?,
+        categoriaId: m['categoria_id'] == null
+            ? null
+            : (m['categoria_id'] as num).toInt(),
         ubicacion: m['ubicacion'] as String?,
         estado: (m['estado'] as String?) ?? 'Activo',
         valor: _toDouble(m['valor']) ?? 0,
@@ -53,7 +58,7 @@ class Activo {
 
   Map<String, dynamic> toMap() => {
         'nombre': nombre,
-        'categoria': categoria,
+        'categoria_id': categoriaId,
         'ubicacion': ubicacion,
         'estado': estado,
         'valor': valor,

@@ -1,26 +1,90 @@
 import '../../../core/data/postgres_service.dart';
 import 'activo.dart';
+import 'activos_categoria.dart';
 
-/// Repositorio de activos — CRUD de bienes del inventario.
-/// Opera contra la tabla `activos` en PostgreSQL.
+/// Repositorio de activos — CRUD de bienes y sus categorías.
+/// Opera contra las tablas `activos` y `activos_categorias`.
 class ActivosRepository {
   ActivosRepository(this._db);
 
   final PostgresService _db;
 
-  /// Lista activos con filtros opcionales (por categoría/estado/ubicación/búsqueda).
+  // ---------------------------------------------------------------------
+  // Categorías
+  // ---------------------------------------------------------------------
+
+  Future<List<ActivosCategoria>> getCategorias() async {
+    final rows = await _db.fetchAll(
+      'activos_categorias',
+      orderBy: 'nombre',
+      filters: {'activo': true},
+    );
+    return rows.map(ActivosCategoria.fromMap).toList();
+  }
+
+  /// Categorías activas con su conteo de activos (para cards del grid).
+  Future<List<Map<String, dynamic>>> getCategoriasConConteo() async {
+    final rows = await _db.fetchAll(
+      'activos_categorias',
+      orderBy: 'nombre',
+      filters: {'activo': true},
+    );
+    final conteos = <int, int>{};
+    final activos = await _db.fetchAll('activos');
+    for (final a in activos) {
+      final cid = a['categoria_id'];
+      if (cid is num) {
+        conteos[cid.toInt()] = (conteos[cid.toInt()] ?? 0) + 1;
+      }
+    }
+    return [
+      for (final r in rows)
+        {
+          'categoria': ActivosCategoria.fromMap(r),
+          'conteo': conteos[(r['id'] as num).toInt()] ?? 0,
+        }
+    ];
+  }
+
+  Future<int> createCategoria(String nombre, {String color = '#2196F3'}) {
+    return _db.insert('activos_categorias', {
+      'nombre': nombre,
+      'color': color,
+      'activo': true,
+    });
+  }
+
+  Future<void> updateCategoria(ActivosCategoria categoria) {
+    return _db.updateById(
+        'activos_categorias', categoria.id, categoria.toMap());
+  }
+
+  Future<void> deactivateCategoria(int id) async {
+    await _db.updateById('activos_categorias', id, {'activo': false});
+  }
+
+  Future<void> deleteCategoria(int id) async {
+    // Los activos de la categoría quedan sin categoría.
+    await _db.updateWhere(
+      'activos',
+      {'categoria_id': id},
+      {'categoria_id': null},
+    );
+    await _db.deleteById('activos_categorias', id);
+  }
+
+  // ---------------------------------------------------------------------
+  // Activos
+  // ---------------------------------------------------------------------
+
   Future<List<Activo>> getActivos({
-    String? categoria,
-    String? estado,
-    bool? soloActivos = true,
+    int? categoriaId,
     String? search,
   }) async {
-    final filters = <String, dynamic>{
-      if (categoria != null && categoria.isNotEmpty)
-        'categoria': categoria,
-      if (estado != null && estado.isNotEmpty) 'estado': estado,
-      if (soloActivos == true) 'activo': true,
-    };
+    final filters = <String, dynamic>{};
+    if (categoriaId != null) {
+      filters['categoria_id'] = categoriaId;
+    }
     final rows = await _db.fetchAll(
       'activos',
       orderBy: 'nombre',
@@ -32,33 +96,6 @@ class ActivosRepository {
     return rows.map(Activo.fromMap).toList();
   }
 
-  /// Categorías distintas (para filtros), ordenadas por uso descendente.
-  Future<List<String>> getCategorias() async {
-    final rows = await _db.fetchAll('activos');
-    final map = <String, int>{};
-    for (final r in rows) {
-      final c = (r['categoria'] as String?)?.trim();
-      if (c != null && c.isNotEmpty) {
-        map[c] = (map[c] ?? 0) + 1;
-      }
-    }
-    final list = map.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return list.map((e) => e.key).toList();
-  }
-
-  /// Ubicaciones distintas (para filtros).
-  Future<List<String>> getUbicaciones() async {
-    final rows = await _db.fetchAll('activos');
-    final set = <String>{};
-    for (final r in rows) {
-      final u = (r['ubicacion'] as String?)?.trim();
-      if (u != null && u.isNotEmpty) set.add(u);
-    }
-    final list = set.toList()..sort();
-    return list;
-  }
-
   Future<int> createActivo(Activo activo) async {
     return _db.insert('activos', activo.toMap());
   }
@@ -67,7 +104,6 @@ class ActivosRepository {
     return _db.updateById('activos', id, activo.toMap());
   }
 
-  /// Baja lógica: activo=false (el registro permanece como histórico).
   Future<void> deactivateActivo(int id) async {
     await _db.updateById('activos', id, {'activo': false});
   }
