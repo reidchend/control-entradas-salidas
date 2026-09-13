@@ -283,12 +283,12 @@ class PostgresService {
     return (result.rows.first['id'] as num).toInt();
   }
 
-  /// Inserta múltiples filas en lote.
-  Future<void> insertBatch(
+  /// Inserta múltiples filas en lote y devuelve sus ids generados.
+  Future<List<int>> insertBatch(
     String table,
     List<Map<String, dynamic>> rows,
   ) async {
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) return const [];
     final encoded = <Map<String, dynamic>>[];
     for (final row in rows) {
       encoded.add(await _normalizedMap(table, row));
@@ -313,12 +313,55 @@ class PostgresService {
       buffer.write(')');
     }
 
-    await _session.execute(buffer.toString(), parameters: allParams);
+    buffer.write(' RETURNING id');
+    final result =
+        await _session.execute(buffer.toString(), parameters: allParams);
+    return [for (final r in result.rows) (r['id'] as num).toInt()];
   }
 
-  // -------------------------------------------------------------------
-  // UPDATE
-  // -------------------------------------------------------------------
+  /// Upsert múltiple de filas por una columna de conflicto (ej: `(producto_id, almacen)`).
+  /// Un solo round-trip para todo el lote.
+  Future<void> upsertBatch(
+    String table,
+    List<Map<String, dynamic>> rows, {
+    required List<String> conflictColumns,
+  }) async {
+    if (rows.isEmpty) return;
+    final encoded = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      encoded.add(await _normalizedMap(table, row));
+    }
+    final columns = encoded.first.keys.join(', ');
+    final conflict = conflictColumns.join(', ');
+
+    final buffer = StringBuffer(
+        'INSERT INTO $table ($columns) VALUES ');
+    final allParams = <dynamic>[];
+    var paramIndex = 1;
+
+    for (var i = 0; i < encoded.length; i++) {
+      if (i > 0) buffer.write(', ');
+      buffer.write('(');
+      var first = true;
+      for (final v in encoded[i].values) {
+        if (!first) buffer.write(', ');
+        first = false;
+        buffer.write('\$$paramIndex');
+        allParams.add(v);
+        paramIndex++;
+      }
+      buffer.write(')');
+    }
+
+    final updates = encoded.first.keys
+        .where((k) => !conflictColumns.contains(k))
+        .map((k) => '$k = EXCLUDED.$k')
+        .join(', ');
+    buffer.write(
+        ' ON CONFLICT ($conflict) DO UPDATE SET $updates');
+
+    await _session.execute(buffer.toString(), parameters: allParams);
+  }
 
   /// Actualiza una fila por ID.
   Future<void> updateById(

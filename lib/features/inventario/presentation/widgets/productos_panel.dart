@@ -55,6 +55,11 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
     }
   }
 
+  /// Recarga la lista de productos (p. ej. tras un descargo de consumibles).
+  void recargar() {
+    setState(() => _future = _loadProductos());
+  }
+
   @override
   void dispose() {
     _listaFocus.dispose();

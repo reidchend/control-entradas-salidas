@@ -40,6 +40,11 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
     super.dispose();
   }
 
+  /// Recarga las vistas que muestran stock/consumibles tras un descargo.
+  void _recargarStockVisible() {
+    _productosKey.currentState?.recargar();
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(inventarioRepoProvider)!;
@@ -54,6 +59,7 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                 ? DescargoConsumiblesPanel(
                     repo: repo,
                     onClose: () => setState(() => _vistaDescargo = false),
+                    onRegistrado: _recargarStockVisible,
                   )
                 : _categoria != null
                     ? _buildProductosDeCategoria(repo, colors)

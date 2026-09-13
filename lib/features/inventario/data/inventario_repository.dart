@@ -80,6 +80,97 @@ class InventarioRepository {
     return rows.map(Existencia.fromMap).toList();
   }
 
+  /// Existencias de varios productos en **una sola query** agrupadas por producto.
+  /// Sustituye el patrón N+1 al cargar el listado de consumibles.
+  Future<Map<int, List<Existencia>>> getExistenciasDeProductos(
+      List<int> productoIds) async {
+    if (productoIds.isEmpty) return {};
+    final rows = await _db.executeSql(
+      'SELECT * FROM existencias WHERE producto_id = ANY(\$1) ORDER BY almacen',
+      params: [productoIds],
+    );
+    final map = <int, List<Existencia>>{};
+    for (final r in rows) {
+      final pid = r['producto_id'] as int;
+      map.putIfAbsent(pid, () => []).add(Existencia.fromMap(r));
+    }
+    return map;
+  }
+
+  /// Descarga en lote de consumibles dentro de una transacción.
+  ///
+  /// Una sola lectura de existencias + un INSERT batch de movimientos + un
+  /// UPSERT batch de existencias, en lugar de 4 queries por consumible.
+  /// Devuelve cuántos se descargaron y cuáles fallaron por stock insuficiente.
+  Future<ResultadoDescargo> descargarConsumibles({
+    required List<DescargoItemInput> items,
+    required String registradoPor,
+    String observaciones = 'Descargo consumible',
+  }) async {
+    if (items.isEmpty) return const ResultadoDescargo(ok: 0);
+    return _db.transaction((tx) async {
+      final ids = {for (final i in items) i.productoId}.toList();
+      final exRows = await tx.executeSql(
+        'SELECT * FROM existencias WHERE producto_id = ANY(\$1)',
+        params: [ids],
+      );
+      final previos = <String, Map<String, dynamic>>{
+        for (final r in exRows) '${r['producto_id']}|${r['almacen']}': r,
+      };
+
+      final movimientos = <Map<String, dynamic>>[];
+      final upserts = <Map<String, dynamic>>[];
+      final fallos = <String>[];
+      final ahora = DateTime.now();
+
+      for (final item in items) {
+        final k = '${item.productoId}|${item.almacen}';
+        final prev = previos[k];
+        final cantAnterior =
+            prev == null ? 0.0 : (prev['cantidad'] as num?)?.toDouble() ?? 0;
+        final cantAMover =
+            (item.esPesable && item.pesoTotal > 0) ? item.pesoTotal : item.cantidad;
+        if (cantAnterior < cantAMover) {
+          fallos.add('${item.nombre} (${item.almacen})');
+          continue;
+        }
+        final cantNueva = cantAnterior - cantAMover;
+        final unidad = item.esPesable ? 'kg' : item.unidadMedida;
+
+        movimientos.add({
+          'producto_id': item.productoId,
+          'tipo': 'consumo',
+          'cantidad': item.cantidad,
+          'cantidad_anterior': cantAnterior,
+          'cantidad_nueva': cantNueva,
+          'peso_total': item.pesoTotal,
+          'registrado_por': registradoPor,
+          'observaciones': observaciones,
+          'almacen': item.almacen,
+          'fecha_movimiento': ahora.toIso8601String(),
+        });
+        upserts.add({
+          'producto_id': item.productoId,
+          'almacen': item.almacen,
+          'cantidad': cantNueva,
+          'unidad': unidad,
+        });
+      }
+
+      if (movimientos.isNotEmpty) {
+        await tx.insertBatch('movimientos', movimientos);
+      }
+      if (upserts.isNotEmpty) {
+        await tx.upsertBatch(
+          'existencias',
+          upserts,
+          conflictColumns: ['producto_id', 'almacen'],
+        );
+      }
+      return ResultadoDescargo(ok: movimientos.length, fallos: fallos);
+    });
+  }
+
   Future<void> insertProducto({
     required String nombre,
     String? codigo,
@@ -289,4 +380,32 @@ class ComprasListaItem {
   final String categoriaNombre;
   final String categoriaColor;
   final bool esPesable;
+}
+
+/// Item de descargo (producto + cantidades + almacén de origen).
+class DescargoItemInput {
+  const DescargoItemInput({
+    required this.productoId,
+    required this.nombre,
+    required this.cantidad,
+    required this.pesoTotal,
+    required this.almacen,
+    required this.esPesable,
+    required this.unidadMedida,
+  });
+
+  final int productoId;
+  final String nombre;
+  final double cantidad;
+  final double pesoTotal;
+  final String almacen;
+  final bool esPesable;
+  final String unidadMedida;
+}
+
+/// Resultado de un descargo batch.
+class ResultadoDescargo {
+  const ResultadoDescargo({required this.ok, this.fallos = const []});
+  final int ok;
+  final List<String> fallos;
 }

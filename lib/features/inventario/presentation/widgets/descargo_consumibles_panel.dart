@@ -18,10 +18,15 @@ class DescargoConsumiblesPanel extends ConsumerStatefulWidget {
     super.key,
     required this.repo,
     required this.onClose,
+    this.onRegistrado,
   });
 
   final InventarioRepository repo;
   final VoidCallback onClose;
+
+  /// Se invoca tras un descargo exitoso para recargar la vista de inventario
+  /// (stock de productos cambiante).
+  final VoidCallback? onRegistrado;
 
   @override
   ConsumerState<DescargoConsumiblesPanel> createState() =>
@@ -53,10 +58,8 @@ class _DescargoConsumiblesPanelState
   Future<void> _cargar() async {
     try {
       final prods = await widget.repo.getProductosConsumibles();
-      final exis = <int, List<Existencia>>{};
-      for (final p in prods) {
-        exis[p.id] = await widget.repo.getExistenciasByProducto(p.id);
-      }
+      final exis = await widget.repo
+          .getExistenciasDeProductos([for (final p in prods) p.id]);
       // Solo consumibles con stock > 0 fuera del almacén principal.
       final visibles = prods
           .where((p) => _almacenPara(exis[p.id] ?? const <Existencia>[]) != null)
@@ -119,39 +122,43 @@ class _DescargoConsumiblesPanelState
     }
 
     setState(() => _registrando = true);
-    var ok = 0;
-    final fallos = <String>[];
-    for (final (p, cantidad, peso, almacen) in aProcesar) {
-      final res = await widget.repo.registrarMovimiento(
-        productoId: p.id,
-        tipo: 'consumo',
-        cantidad: cantidad,
-        pesoTotal: peso,
-        almacen: almacen,
+    try {
+      final res = await widget.repo.descargarConsumibles(
+        items: [
+          for (final (p, cantidad, peso, almacen) in aProcesar)
+            DescargoItemInput(
+              productoId: p.id,
+              nombre: p.nombre,
+              cantidad: cantidad,
+              pesoTotal: peso,
+              almacen: almacen,
+              esPesable: p.esPesable,
+              unidadMedida: p.unidadMedida,
+            ),
+        ],
         registradoPor: usuario,
-        esPesable: p.esPesable,
-        unidadMedida: p.unidadMedida,
-        observaciones: 'Descargo consumible',
       );
-      if (res) {
-        ok++;
-      } else {
-        fallos.add('${p.nombre} ($almacen)');
-      }
-    }
-    if (!mounted) return;
-    setState(() => _registrando = false);
+      if (!mounted) return;
+      setState(() => _registrando = false);
 
-    if (fallos.isNotEmpty) {
-      showErrorSnackBar(
-        context,
-        'Se descargaron $ok consumible(s). Sin stock: ${fallos.join(', ')}',
-      );
-    } else {
-      showSuccessSnackBar(context,
-          '$ok descargo(s) registrado(s)');
+      if (res.fallos.isNotEmpty) {
+        showErrorSnackBar(
+          context,
+          'Se descargaron ${res.ok} consumible(s). '
+          'Sin stock: ${res.fallos.join(', ')}',
+        );
+      } else {
+        showSuccessSnackBar(context, '${res.ok} descargo(s) registrado(s)');
+      }
+      if (res.ok > 0) {
+        _cargar();
+        widget.onRegistrado?.call();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _registrando = false);
+      showErrorSnackBar(context, 'Error al descargar: $e');
     }
-    if (ok > 0) _cargar();
   }
 
   String _fmtCant(double v, bool pesable) =>
