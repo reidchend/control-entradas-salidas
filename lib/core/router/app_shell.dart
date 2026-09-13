@@ -32,7 +32,7 @@ class AppShell extends ConsumerWidget {
   static const List<_NavDest> _destinos = [
     _NavDest(Icons.assessment_outlined, 'Reportes',
         'Ventas, movimientos y estadísticas', '/reportes'),
-    _NavDest(Icons.shopping_cart_outlined, 'Inventario',
+    _NavDest(Icons.shopping_cart_outlined, 'Productos',
         'Gestión de existencias', '/inventario'),
     _NavDest(Icons.inventory_2_outlined, 'Activos',
         'Inventario de bienes', '/activos'),
