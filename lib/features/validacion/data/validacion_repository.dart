@@ -14,6 +14,7 @@ class EntradaPendiente {
     required this.fecha,
     required this.cantidadAnterior,
     required this.cantidadNueva,
+    this.observaciones,
   });
 
   final int id;
@@ -27,6 +28,7 @@ class EntradaPendiente {
   final DateTime? fecha;
   final double cantidadAnterior;
   final double cantidadNueva;
+  final String? observaciones;
 
   String get cantidadTexto {
     if (esPesable && pesoTotal > 0) return '${pesoTotal.toStringAsFixed(3)} kg';
@@ -96,6 +98,7 @@ class ValidacionRepository {
         cantidadAnterior:
             (m['cantidad_anterior'] as num?)?.toDouble() ?? 0,
         cantidadNueva: (m['cantidad_nueva'] as num?)?.toDouble() ?? 0,
+        observaciones: (m['observaciones'] as String?)?.trim(),
       ));
     }
     return result;

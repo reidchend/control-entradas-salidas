@@ -70,6 +70,14 @@ class EntradaPendienteCard extends StatelessWidget {
               Text('Entrada: $_fecha',
                   style: TextStyle(
                       fontSize: 12, color: scheme.onSurfaceVariant)),
+            if ((entrada.observaciones ?? '').isNotEmpty)
+              Text(
+                entrada.observaciones!,
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
           ],
         ),
         trailing: IconButton(

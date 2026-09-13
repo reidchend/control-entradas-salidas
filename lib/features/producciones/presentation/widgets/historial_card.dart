@@ -84,6 +84,13 @@ class HistorialCard extends StatelessWidget {
                 'Cocineros: ${produccion.cocineros}',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
+            if ((produccion.observaciones ?? '').isNotEmpty)
+              Text(
+                'Obs: ${produccion.observaciones}',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

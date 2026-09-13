@@ -90,6 +90,15 @@ class PendienteCard extends StatelessWidget {
               'Entradas del lote (${entradas.length}): $entradasTxt',
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
+            if ((produccion.observaciones ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Obs: ${produccion.observaciones}',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [

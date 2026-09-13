@@ -39,6 +39,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
 
   final _cantCtrl = TextEditingController(text: '1');
   final _pesoTotalCtrl = TextEditingController();
+  final _obsCtrl = TextEditingController();
 
   final _cantFocus = FocusNode();
   final _pesoTotalFocus = FocusNode();
@@ -149,6 +150,9 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
       cantidad = cant;
       pesoTotal = 0;
     }
+    final observaciones = _obsCtrl.text.trim().isEmpty
+        ? null
+        : _obsCtrl.text.trim();
 
     final repo = ref.read(inventarioRepoProvider)!;
 
@@ -171,6 +175,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
         almacen: almacenSel,
         produccionId: _produccionId,
         usuario: usuario,
+        observaciones: observaciones,
       );
       if (!mounted) return;
       if (res.movimientoId == null) {
@@ -193,6 +198,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
       registradoPor: usuario,
       esPesable: _esPesable,
       unidadMedida: _producto.unidadMedida,
+      observaciones: observaciones,
     );
     if (!mounted) return;
     if (!ok) {
@@ -216,6 +222,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   void dispose() {
     _cantCtrl.dispose();
     _pesoTotalCtrl.dispose();
+    _obsCtrl.dispose();
     _cantFocus.dispose();
     _pesoTotalFocus.dispose();
     super.dispose();
@@ -343,6 +350,17 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
                           const TextInputType.numberWithOptions(decimal: true),
                       onSubmitted: (_) => _registrar(),
                     ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _obsCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Observaciones',
+                      hintText: 'Opcional',
+                    ),
+                    maxLines: 2,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _registrar(),
+                  ),
                   if (_esProduccion) ...[
                     const SizedBox(height: 16),
                     if (_recetasQueProducen.length > 1)
