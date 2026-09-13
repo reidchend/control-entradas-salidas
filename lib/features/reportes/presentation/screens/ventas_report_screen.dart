@@ -181,7 +181,7 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final v = _ventas[index];
-              final fecha = (v['created_at'] as String?)?.substring(0, 16) ?? '—';
+              final fecha = _fmtFecha(v['created_at']);
               final cajero = v['cajero'] as String? ?? '—';
               final formaPago = v['forma_pago'] as String? ?? '—';
               final totalV = (v['total'] as num?)?.toDouble() ?? 0;
@@ -268,6 +268,16 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
 
   void _snack(String msg) {
     showErrorSnackBar(context, msg);
+  }
+
+  /// Formatea una fecha que puede venir como String ISO (proxy web) o como
+  /// DateTime (driver nativo `package:postgres`) sin reventar el render.
+  String _fmtFecha(dynamic v) {
+    final dt = DateTime.tryParse(v?.toString() ?? '');
+    if (dt == null) return '—';
+    final l = dt.toLocal();
+    String p(int n) => n.toString().padLeft(2, '0');
+    return '${l.year}-${p(l.month)}-${p(l.day)} ${p(l.hour)}:${p(l.minute)}';
   }
 }
 

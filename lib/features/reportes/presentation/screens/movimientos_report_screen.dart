@@ -210,7 +210,7 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final m = _movimientos[index];
-              final fecha = (m['fecha_movimiento'] as String?)?.substring(0, 16) ?? '—';
+              final fecha = _fmtFecha(m['fecha_movimiento']);
               final tipo = m['tipo'] as String? ?? '—';
               final prod = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
               final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
@@ -263,6 +263,16 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
 
   void _snack(String msg) {
     showErrorSnackBar(context, msg);
+  }
+
+  /// Formatea una fecha que puede venir como String ISO (proxy web) o como
+  /// DateTime (driver nativo `package:postgres`) sin reventar el render.
+  String _fmtFecha(dynamic v) {
+    final dt = DateTime.tryParse(v?.toString() ?? '');
+    if (dt == null) return '—';
+    final l = dt.toLocal();
+    String p(int n) => n.toString().padLeft(2, '0');
+    return '${l.year}-${p(l.month)}-${p(l.day)} ${p(l.hour)}:${p(l.minute)}';
   }
 }
 
