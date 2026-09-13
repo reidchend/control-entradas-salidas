@@ -11,6 +11,7 @@ Future<Activo?> showActivoDialog(
   BuildContext context, {
   Activo? activo,
   List<ActivosCategoria> categorias = const [],
+  List<String> grupos = const [],
 }) async {
   final nombreCtrl = TextEditingController(text: activo?.nombre ?? '');
   final categoriaIdSeleccionada = activo?.categoriaId;
@@ -25,6 +26,7 @@ Future<Activo?> showActivoDialog(
           : '');
   final fechaCtrl = TextEditingController(text: activo?.fecha ?? '');
   final grupoCtrl = TextEditingController(text: activo?.grupo?.trim() ?? '');
+  final grupoFocus = FocusNode();
   final modeloCtrl = TextEditingController(text: activo?.modelo?.trim() ?? '');
   final cantidadCtrl =
       TextEditingController(text: (activo?.cantidad ?? 1).toString());
@@ -66,10 +68,55 @@ Future<Activo?> showActivoDialog(
               controller: ubicacionCtrl,
               decoration: const InputDecoration(labelText: 'Ubicación'),
             ),
+            RawAutocomplete<String>(
+              textEditingController: grupoCtrl,
+              focusNode: grupoFocus,
+              optionsBuilder: (TextEditingValue tev) {
+                if (grupos.isEmpty || tev.text.isEmpty) return const <String>[];
+                final q = tev.text.toLowerCase();
+                return grupos.where((g) => g.toLowerCase().contains(q)).toList();
+              },
+              onSelected: (_) {},
+              fieldViewBuilder:
+                  (context, tc, focusNode, onFieldSubmitted) => TextField(
+                controller: tc,
+                focusNode: focusNode,
+                decoration: const InputDecoration(
+                  labelText: 'Grupo',
+                  hintText: 'Escribe uno nuevo o elige uno existente',
+                  suffixIcon: Icon(Icons.create_new_folder_outlined),
+                ),
+              ),
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: const BorderRadius.all(Radius.circular(8)),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: options.length,
+                        itemBuilder: (context, i) {
+                          final g = options.elementAt(i);
+                          return ListTile(
+                            dense: true,
+                            title: Text(g),
+                            onTap: () => onSelected(g),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
             DropdownButtonFormField<String>(
               value: _estados.contains(estadoValor)
-                  ? estadoValor
-                  : _estados.first,
+                  ? _estados.first
+                  : estadoValor,
               decoration: const InputDecoration(labelText: 'Estado'),
               items: [
                 if (!_estados.contains(estadoValor))
@@ -94,10 +141,6 @@ Future<Activo?> showActivoDialog(
                 labelText: 'Fecha (AAAA-MM-DD)',
                 hintText: '2025-01-15',
               ),
-            ),
-            TextField(
-              controller: grupoCtrl,
-              decoration: const InputDecoration(labelText: 'Grupo'),
             ),
             TextField(
               controller: modeloCtrl,

@@ -100,6 +100,95 @@ class ActivosRepository {
     return _db.insert('activos', activo.toMap());
   }
 
+  /// Todos los activos (incluye desactivados) con el nombre de su categoría
+  /// resuelto por JOIN, listos para exportar.
+  Future<List<Map<String, dynamic>>> getActivosParaExportar() async {
+    return _db.executeSql(
+      'SELECT a.*, COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
+      'FROM activos a '
+      'LEFT JOIN activos_categorias c ON c.id = a.categoria_id '
+      'ORDER BY categoria_nombre, a.grupo, a.nombre',
+    );
+  }
+
+  /// Totales por grupo (por categoría): nº de activos, unidades y valor total.
+  Future<List<Map<String, dynamic>>> getTotalesPorGrupo() async {
+    return _db.executeSql(
+      'SELECT COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre, '
+      'COALESCE(NULLIF(a.grupo, \'\'), \'Sin grupo\') AS grupo, '
+      'COUNT(*) AS n_activos, '
+      'COALESCE(SUM(a.cantidad), 0) AS unidades, '
+      'COALESCE(SUM(a.valor), 0) AS valor_total '
+      'FROM activos a '
+      'LEFT JOIN activos_categorias c ON c.id = a.categoria_id '
+      'GROUP BY c.nombre, a.grupo '
+      'ORDER BY categoria_nombre, a.grupo',
+    );
+  }
+
+  /// Grupos existentes (distintos) entre todos los activos, ordenados.
+  Future<List<String>> getGrupos() async {
+    try {
+      final rows = await _db.executeSql(
+        'SELECT DISTINCT grupo FROM activos '
+        'WHERE grupo IS NOT NULL AND grupo <> \'\' '
+        'ORDER BY grupo',
+      );
+      return [for (final r in rows) r['grupo'] as String];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Ubicaciones existentes (distintas) entre todos los activos, ordenadas.
+  Future<List<String>> getUbicaciones() async {
+    try {
+      final rows = await _db.executeSql(
+        'SELECT DISTINCT ubicacion FROM activos '
+        'WHERE ubicacion IS NOT NULL AND ubicacion <> \'\' '
+        'ORDER BY ubicacion',
+      );
+      return [for (final r in rows) r['ubicacion'] as String];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Activos que cumplen los filtros seleccionados (todos los campos
+  /// opcionales), con nombre de categoría resuelto por JOIN.
+  Future<List<Map<String, dynamic>>> getActivosConFiltros({
+    int? categoriaId,
+    String? grupo,
+    String? ubicacion,
+    String? estado,
+  }) async {
+    final condiciones = <String>[];
+    final params = <dynamic>[];
+    var i = 1;
+    void add(String col, dynamic v) {
+      condiciones.add('a.$col = \$$i');
+      params.add(v);
+      i++;
+    }
+
+    if (categoriaId != null) add('categoria_id', categoriaId);
+    if (grupo != null && grupo.trim().isNotEmpty) add('grupo', grupo.trim());
+    if (ubicacion != null && ubicacion.trim().isNotEmpty) {
+      add('ubicacion', ubicacion.trim());
+    }
+    if (estado != null && estado.trim().isNotEmpty) add('estado', estado.trim());
+
+    final where =
+        condiciones.isEmpty ? '' : ' WHERE ${condiciones.join(' AND ')}';
+    final sql =
+        'SELECT a.*, COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
+        'FROM activos a '
+        'LEFT JOIN activos_categorias c ON c.id = a.categoria_id'
+        '$where '
+        'ORDER BY categoria_nombre, a.grupo, a.nombre';
+    return _db.executeSql(sql, params: params);
+  }
+
   Future<void> updateActivo(int id, Activo activo) {
     return _db.updateById('activos', id, activo.toMap());
   }

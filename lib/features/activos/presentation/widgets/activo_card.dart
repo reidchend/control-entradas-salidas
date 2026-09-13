@@ -42,11 +42,28 @@ class ActivoCard extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if ((activo.grupo ?? '').isNotEmpty)
-              Text('Grupo: ${activo.grupo}')
-            else
-              Text(
-                  '${activo.categoria ?? 'Sin categoría'} · ${activo.ubicacion ?? 'Sin ubicación'}'),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1.5),
+                  child: Icon(Icons.place_outlined,
+                      size: 14, color: colors.outline),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    (activo.ubicacion ?? '').trim().isNotEmpty
+                        ? activo.ubicacion!.trim()
+                        : 'Sin ubicación',
+                    style: TextStyle(
+                        fontSize: 12.5, color: colors.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             Row(
               children: [
                 _chip(context, activo.estado, color: lider),

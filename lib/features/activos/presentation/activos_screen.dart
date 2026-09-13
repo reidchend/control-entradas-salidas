@@ -5,8 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/activos_categoria.dart';
 import '../data/activos_providers.dart';
 import '../data/activos_repository.dart';
+import 'dialogs/activo_dialog.dart';
 import 'dialogs/activos_categoria_dialog.dart';
+import 'dialogs/activos_excel_dialog.dart';
+import 'dialogs/activos_filtro_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
+import 'widgets/activos_filtrados_panel.dart';
 import 'widgets/activos_panel.dart';
 
 /// Pantalla de Inventario de Activos (estilo InventarioScreen de productos):
@@ -22,6 +26,7 @@ class ActivosScreen extends ConsumerStatefulWidget {
 
 class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   ActivosCategoria? _categoria;
+  ActivosFiltro? _filtro;
   String _search = '';
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -39,6 +44,13 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
+      floatingActionButton: _categoria == null
+          ? FloatingActionButton.extended(
+              onPressed: () => _crearActivo(repo),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo activo'),
+            )
+          : null,
       body: Focus(
         autofocus: true,
         onKeyEvent: _onScreenKey,
@@ -62,6 +74,18 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   }
 
   Widget _buildCuerpo(ActivosRepository repo, ColorScheme colors) {
+    final filtro = _filtro;
+    if (filtro != null) {
+      return ActivosFiltradosPanel(
+        repo: repo,
+        filtro: filtro,
+        onLimpiar: () => setState(() {
+          _filtro = null;
+          _search = '';
+          _searchCtrl.clear();
+        }),
+      );
+    }
     if (_categoria != null) {
       return Column(
         children: [
@@ -141,9 +165,51 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
               onChanged: (v) => setState(() => _search = v),
             ),
           ),
+          if (_categoria == null && _filtro == null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.filter_alt_outlined),
+              tooltip: 'Filtrar activos',
+              onPressed: () => _abrirFiltro(repo),
+            ),
+          ],
+          if (_categoria == null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined),
+              tooltip: 'Exportar a Excel',
+              onPressed: () => showActivosExcelDialog(context),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _abrirFiltro(ActivosRepository repo) async {
+    final filtro = await showActivosFiltroDialog(context, repo,
+        actual: _filtro);
+    if (filtro == null) return;
+    setState(() {
+      _filtro = filtro.vacio ? null : filtro;
+      _search = '';
+      _searchCtrl.clear();
+    });
+  }
+
+  Future<void> _crearActivo(ActivosRepository repo) async {
+    final categorias = await repo.getCategorias();
+    final grupos = await repo.getGrupos();
+    if (!mounted) return;
+    final nuevo = await showActivoDialog(
+        context, categorias: categorias, grupos: grupos);
+    if (nuevo == null) return;
+    try {
+      await repo.createActivo(nuevo);
+      if (mounted) setState(() {});
+    } catch (e) {
+      _snack('Error al crear activo: $e');
+    }
   }
 
   Future<void> _crearCategoria(ActivosRepository repo) async {

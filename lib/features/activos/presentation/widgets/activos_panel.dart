@@ -56,10 +56,12 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
 
   Future<void> _crear() async {
     final categorias = await widget.repo.getCategorias();
+    final grupos = await widget.repo.getGrupos();
     if (!mounted) return;
     final nuevo = await showActivoDialog(
       context,
       categorias: categorias,
+      grupos: grupos,
       activo: Activo(
         id: 0,
         nombre: '',
@@ -77,9 +79,10 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
 
   Future<void> _editar(Activo activo) async {
     final categorias = await widget.repo.getCategorias();
+    final grupos = await widget.repo.getGrupos();
     if (!mounted) return;
     final editado = await showActivoDialog(context,
-        activo: activo, categorias: categorias);
+        activo: activo, categorias: categorias, grupos: grupos);
     if (editado == null) return;
     try {
       await widget.repo.updateActivo(activo.id, editado);
@@ -144,6 +147,44 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
     }
   }
 
+  /// Activos agrupados por `grupo`, con headers de sección. Sin grupo al final.
+  List<Widget> _buildAgrupado(List<Activo> activos, ColorScheme colors) {
+    final grupos = <String, List<Activo>>{};
+    for (final a in activos) {
+      final g = (a.grupo ?? '').trim();
+      grupos.putIfAbsent(g, () => []).add(a);
+    }
+    final llaves = grupos.keys.toList()
+      ..sort((x, y) {
+        if (x.isEmpty) return 1;
+        if (y.isEmpty) return -1;
+        return x.toLowerCase().compareTo(y.toLowerCase());
+      });
+
+    final filas = <Widget>[];
+    for (final g in llaves) {
+      final items = grupos[g]!;
+      filas.add(_GrupoHeader(
+        nombre: g.isEmpty ? 'Sin grupo' : g,
+        cantidad: items.length,
+        color: colors.primary,
+      ));
+      for (var i = 0; i < items.length; i++) {
+        final a = items[i];
+        filas.add(ActivoCard(
+          activo: a,
+          onEdit: () => _editar(a),
+          onDeactivate: () => _desactivar(a),
+          onDelete: () => _eliminar(a),
+        ));
+        if (i < items.length - 1) {
+          filas.add(const Divider(height: 1, indent: 60));
+        }
+      }
+    }
+    return filas;
+  }
+
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -203,23 +244,60 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
                   ),
                 );
               }
-              return ListView.builder(
+              return ListView(
                 padding: const EdgeInsets.only(bottom: 12),
-                itemCount: activos.length,
-                itemBuilder: (context, i) {
-                  final a = activos[i];
-                  return ActivoCard(
-                    activo: a,
-                    onEdit: () => _editar(a),
-                    onDeactivate: () => _desactivar(a),
-                    onDelete: () => _eliminar(a),
-                  );
-                },
+                children: _buildAgrupado(activos, colors),
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Encabezado de sección para un grupo de activos (nombre + conteo).
+class _GrupoHeader extends StatelessWidget {
+  const _GrupoHeader({
+    required this.nombre,
+    required this.cantidad,
+    required this.color,
+  });
+
+  final String nombre;
+  final int cantidad;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 4),
+      child: Row(
+        children: [
+          Icon(Icons.folder_outlined, size: 16, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              nombre,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$cantidad',
+              style: TextStyle(
+                  fontSize: 11, color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
