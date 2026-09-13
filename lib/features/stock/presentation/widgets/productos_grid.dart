@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/existencia.dart';
 import '../../../../core/models/producto.dart';
 import 'producto_stock_card.dart';
 
 /// Grid de productos de stock (porta `_render_productos` de stock_view.py).
 /// 1 columna en móvil (<720px) y 2 columnas en escritorio, con las tarjetas
-/// de cada fila a igual altura.
+/// de cada fila a igual altura. Recibe las existencias agrupadas por producto
+/// (una sola query) para evitar N+1.
 class ProductosGrid extends StatelessWidget {
   const ProductosGrid({
     super.key,
     required this.productos,
+    required this.existencias,
     required this.categorias,
     required this.onAction,
     this.almacen,
   });
 
   final List<Producto> productos;
+  final Map<int, List<Existencia>> existencias;
   final Map<int, String> categorias;
   final String? almacen;
   final void Function(String action, Producto producto) onAction;
@@ -35,6 +39,7 @@ class ProductosGrid extends StatelessWidget {
           for (final p in productos)
             ProductoStockCard(
               producto: p,
+              existencias: existencias[p.id] ?? const [],
               categorias: categorias,
               almacen: almacen,
               onAction: onAction,

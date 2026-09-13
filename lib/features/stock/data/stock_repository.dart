@@ -25,10 +25,10 @@ class StockRepository {
   }
 
   Future<List<String>> getAlmacenes() async {
-    final rows = await _db.fetchAll('existencias');
-    final almacenes = rows.map((r) => r['almacen'] as String).toSet().toList();
-    almacenes.sort();
-    return almacenes;
+    final rows = await _db.executeSql(
+      'SELECT DISTINCT almacen FROM existencias ORDER BY almacen',
+    );
+    return rows.map((r) => r['almacen'] as String).toList();
   }
 
   Future<List<Producto>> loadProductos({int limit = 50}) async {
@@ -204,6 +204,24 @@ class StockRepository {
       orderBy: 'almacen',
     );
     return rows.map(Existencia.fromMap).toList();
+  }
+
+  /// Existencias de varios productos en **una sola query** (`producto_id = ANY`)
+  /// agrupadas por producto. Sustituye el patrón N+1 de la rejilla de stock.
+  Future<Map<int, List<Existencia>>> getExistenciasDeProductos(
+      List<int> productoIds) async {
+    if (productoIds.isEmpty) return {};
+    final rows = await _db.executeSql(
+      'SELECT * FROM existencias WHERE producto_id = ANY(\$1) '
+      'ORDER BY almacen',
+      params: [productoIds],
+    );
+    final map = <int, List<Existencia>>{};
+    for (final r in rows) {
+      final pid = r['producto_id'] as int;
+      map.putIfAbsent(pid, () => []).add(Existencia.fromMap(r));
+    }
+    return map;
   }
 
   Future<List<Movimiento>> getProductoHistorial(int productoId,

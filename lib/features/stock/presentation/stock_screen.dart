@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/categoria.dart';
+import '../../../core/models/existencia.dart';
 import '../../../core/models/producto.dart';
 import '../data/stock_providers.dart';
 import '../data/stock_repository.dart';
@@ -15,6 +16,10 @@ import 'dialogs/existencias_dialog.dart';
 /// Pantalla de Stock / Toma de inventario (porta `usr/views/stock_view.py`).
 /// Cabecera de estadisticas (total/bajo/agotado) + filtros + grid de
 /// productos con historial, existencias y ajuste de conteo fisico.
+///
+/// Carga: contiene datos y los refresca en background. Durante una recarga
+/// (poll o cambio de filtro) conserva los datos previos en pantalla para
+/// evitar el parpadeo, y solo pinta el primer spinner cuando no hay nada.
 class StockScreen extends ConsumerStatefulWidget {
   const StockScreen({super.key});
 
@@ -30,8 +35,12 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   List<Categoria> _categorias = [];
   List<String> _almacenes = [];
   Map<int, String> _categoriasMap = {};
-  Future<StockStats>? _statsFuture;
-  Future<List<Producto>>? _productosFuture;
+
+  StockStats _stats = const StockStats();
+  List<Producto> _productos = [];
+  Map<int, List<Existencia>> _existencias = {};
+  bool _cargando = false;
+  bool _statsCargados = false;
   Timer? _pollTimer;
 
   @override
@@ -47,7 +56,6 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _reload();
     });
-    _reload();
   }
 
   @override
@@ -69,17 +77,39 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     }
   }
 
+  /// Recarga en background: conserva los datos actuales mientras consulta,
+  /// de modo que no hay parpadeo al refrescar (poll periódico o filtros).
   void _reload() {
     final repo = ref.read(stockRepoProvider)!;
-    setState(() {
-      _statsFuture = repo.getStockStats(almacen: _almacen);
-      _productosFuture = repo.filterProductos(
+    _cargar(repo);
+  }
+
+  Future<void> _cargar(StockRepository repo) async {
+    if (_statsCargados == false) {
+      setState(() => _cargando = true);
+    }
+    try {
+      final stats = await repo.getStockStats(almacen: _almacen);
+      final productos = await repo.filterProductos(
         search: _search,
         categoriaId: _categoriaId,
         almacen: _almacen,
         stockStatus: _stockStatus,
       );
-    });
+      final ids = [for (final p in productos) p.id];
+      final exis = await repo.getExistenciasDeProductos(ids);
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _statsCargados = true;
+        _productos = productos;
+        _existencias = exis;
+        _cargando = false;
+      });
+    } catch (e, st) {
+      debugPrint('Error cargando stock: $e\n$st');
+      if (mounted) setState(() => _cargando = false);
+    }
   }
 
   void _onAction(String action, Producto p) {
@@ -129,56 +159,51 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   }
 
   Widget _buildStats(ColorScheme scheme) {
-    return FutureBuilder<StockStats>(
-      future: _statsFuture,
-      builder: (context, snap) {
-        final stats = snap.data ?? const StockStats();
-        final cargando = snap.connectionState == ConnectionState.waiting;
+    final cargando = _cargando && !_statsCargados;
+    final stats = _stats;
 
-        String v(int n) => cargando ? '...' : '$n';
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              StockStatCard(
-                title: 'Total',
-                value: v(stats.total),
-                icon: Icons.inventory_2_outlined,
-                color: Colors.blue,
-                active: _stockStatus == null,
-                onTap: () {
-                  setState(() => _stockStatus = null);
-                  _reload();
-                },
-              ),
-              const SizedBox(width: 12),
-              StockStatCard(
-                title: 'Bajo Stock',
-                value: v(stats.bajo),
-                icon: Icons.warning_amber_rounded,
-                color: const Color(0xFFFB8C00),
-                active: _stockStatus == 'low',
-                onTap: () {
-                  setState(() => _stockStatus = 'low');
-                  _reload();
-                },
-              ),
-              const SizedBox(width: 12),
-              StockStatCard(
-                title: 'Agotado',
-                value: v(stats.agotado),
-                icon: Icons.error_outline,
-                color: scheme.error,
-                active: _stockStatus == 'out',
-                onTap: () {
-                  setState(() => _stockStatus = 'out');
-                  _reload();
-                },
-              ),
-            ],
+    String v(int n) => _statsCargados ? '$n' : (cargando ? '...' : '');
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          StockStatCard(
+            title: 'Total',
+            value: v(stats.total),
+            icon: Icons.inventory_2_outlined,
+            color: Colors.blue,
+            active: _stockStatus == null,
+            onTap: () {
+              setState(() => _stockStatus = null);
+              _reload();
+            },
           ),
-        );
-      },
+          const SizedBox(width: 12),
+          StockStatCard(
+            title: 'Bajo Stock',
+            value: v(stats.bajo),
+            icon: Icons.warning_amber_rounded,
+            color: const Color(0xFFFB8C00),
+            active: _stockStatus == 'low',
+            onTap: () {
+              setState(() => _stockStatus = 'low');
+              _reload();
+            },
+          ),
+          const SizedBox(width: 12),
+          StockStatCard(
+            title: 'Agotado',
+            value: v(stats.agotado),
+            icon: Icons.error_outline,
+            color: scheme.error,
+            active: _stockStatus == 'out',
+            onTap: () {
+              setState(() => _stockStatus = 'out');
+              _reload();
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -274,20 +299,15 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   }
 
   Widget _buildLista() {
-    return FutureBuilder<List<Producto>>(
-      future: _productosFuture,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final prods = snap.data ?? [];
-        return ProductosGrid(
-          productos: prods,
-          categorias: _categoriasMap,
-          almacen: _almacen,
-          onAction: _onAction,
-        );
-      },
+    if (_cargando && _productos.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ProductosGrid(
+      productos: _productos,
+      existencias: _existencias,
+      categorias: _categoriasMap,
+      almacen: _almacen,
+      onAction: _onAction,
     );
   }
 }
