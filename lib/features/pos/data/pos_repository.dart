@@ -94,7 +94,7 @@ class PosRepository {
         .from('pos_ventas')
         .select('total')
         .eq('sesion_id', sesionId)
-        .eq('estado', 'vigente');
+        .eq('estado', 'vigente') as List<Map<String, dynamic>>;
     return rows.fold<double>(
         0, (sum, r) => sum + (r['total'] as num? ?? 0).toDouble());
   }

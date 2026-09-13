@@ -213,7 +213,8 @@ class PosVentasRepository {
   // Ventas
 
   Future<int> siguienteCorrelativo() async {
-    final rows = await _db.client.from('pos_ventas').select('correlativo');
+    final rows = await _db.client.from('pos_ventas').select('correlativo')
+        as List<Map<String, dynamic>>;
     if (rows.isEmpty) return 1;
     final max = rows.fold<int>(
         0, (m, r) => (r['correlativo'] as int? ?? 0) > m ? r['correlativo'] as int : m);
