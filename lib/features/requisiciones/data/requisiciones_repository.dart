@@ -434,6 +434,8 @@ class RequisicionesRepository {
       'ingrediente': item.nombre,
       'cantidad': item.cantidad,
       'unidad': item.unidad,
+      'peso': item.peso ?? 0,
+      'es_pesable': item.esPesable,
       'cantidad_surtida': 0,
       'verificado': (item.verificado || verificado) ? 1 : 0,
     }).then((_) {});

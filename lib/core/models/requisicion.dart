@@ -104,6 +104,8 @@ class RequisicionDetalle {
     this.unidad = 'unidad',
     this.cantidadSurtida = 0,
     this.verificado = false,
+    this.peso = 0,
+    this.esPesable = false,
   });
 
   final int id;
@@ -114,6 +116,8 @@ class RequisicionDetalle {
   final String unidad;
   final double cantidadSurtida;
   final bool verificado;
+  final double peso;
+  final bool esPesable;
 
   factory RequisicionDetalle.fromMap(Map<String, dynamic> m) =>
       RequisicionDetalle(
@@ -125,6 +129,8 @@ class RequisicionDetalle {
         unidad: (m['unidad'] as String?) ?? 'unidad',
         cantidadSurtida: (m['cantidad_surtida'] as num?)?.toDouble() ?? 0,
         verificado: toBool(m['verificado']),
+        peso: (m['peso'] as num?)?.toDouble() ?? 0,
+        esPesable: toBool(m['es_pesable']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -136,6 +142,8 @@ class RequisicionDetalle {
         'unidad': unidad,
         'cantidad_surtida': cantidadSurtida,
         'verificado': verificado ? 1 : 0,
+        'peso': peso,
+        'es_pesable': esPesable,
       };
 
   RequisicionDetalle copyWith({
@@ -147,6 +155,8 @@ class RequisicionDetalle {
     String? unidad,
     double? cantidadSurtida,
     bool? verificado,
+    double? peso,
+    bool? esPesable,
   }) =>
       RequisicionDetalle(
         id: id ?? this.id,
@@ -157,6 +167,8 @@ class RequisicionDetalle {
         unidad: unidad ?? this.unidad,
         cantidadSurtida: cantidadSurtida ?? this.cantidadSurtida,
         verificado: verificado ?? this.verificado,
+        peso: peso ?? this.peso,
+        esPesable: esPesable ?? this.esPesable,
       );
 
   static int? _toInt(dynamic v) => v is num ? v.toInt() : int.tryParse('$v');

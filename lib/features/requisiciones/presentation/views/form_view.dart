@@ -64,6 +64,9 @@ class _FormViewState extends ConsumerState<FormView> {
           ingrediente: d.ingrediente,
           cantidad: d.cantidad,
           unidad: d.unidad.isEmpty ? 'unidad' : d.unidad,
+          peso: d.peso,
+          esPesable: d.esPesable,
+          verificado: d.verificado,
         ));
       }
     }
