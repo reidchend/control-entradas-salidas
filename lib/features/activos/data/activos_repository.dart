@@ -154,12 +154,38 @@ class ActivosRepository {
     }
   }
 
+  /// Modelos existentes (distintos) entre todos los activos, ordenados.
+  Future<List<String>> getModelos() async {
+    try {
+      final rows = await _db.executeSql(
+        'SELECT DISTINCT modelo FROM activos '
+        'WHERE modelo IS NOT NULL AND modelo <> \'\' '
+        'ORDER BY modelo',
+      );
+      return [for (final r in rows) r['modelo'] as String];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Valores de una columna (ubicacion, grupo, modelo, estado...) con el nº
+  /// de activos activos que lo usan, para el grid de valores.
+  Future<List<Map<String, dynamic>>> getValoresConConteo(String columna) async {
+    return _db.executeSql(
+      'SELECT a.$columna AS valor, COUNT(*) AS n '
+      'FROM activos a '
+      'WHERE a.$columna IS NOT NULL AND a.$columna <> \'\' AND a.activo = TRUE '
+      'GROUP BY a.$columna ORDER BY a.$columna',
+    );
+  }
+
   /// Activos que cumplen los filtros seleccionados (todos los campos
   /// opcionales), con nombre de categoría resuelto por JOIN.
   Future<List<Map<String, dynamic>>> getActivosConFiltros({
     int? categoriaId,
     String? grupo,
     String? ubicacion,
+    String? modelo,
     String? estado,
   }) async {
     final condiciones = <String>[];
@@ -176,6 +202,7 @@ class ActivosRepository {
     if (ubicacion != null && ubicacion.trim().isNotEmpty) {
       add('ubicacion', ubicacion.trim());
     }
+    if (modelo != null && modelo.trim().isNotEmpty) add('modelo', modelo.trim());
     if (estado != null && estado.trim().isNotEmpty) add('estado', estado.trim());
 
     final where =

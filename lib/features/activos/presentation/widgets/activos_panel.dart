@@ -57,11 +57,15 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
   Future<void> _crear() async {
     final categorias = await widget.repo.getCategorias();
     final grupos = await widget.repo.getGrupos();
+    final ubicaciones = await widget.repo.getUbicaciones();
+    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
     final nuevo = await showActivoDialog(
       context,
       categorias: categorias,
       grupos: grupos,
+      ubicaciones: ubicaciones,
+      modelos: modelos,
       activo: Activo(
         id: 0,
         nombre: '',
@@ -80,9 +84,15 @@ class _ActivosPanelState extends ConsumerState<ActivosPanel> {
   Future<void> _editar(Activo activo) async {
     final categorias = await widget.repo.getCategorias();
     final grupos = await widget.repo.getGrupos();
+    final ubicaciones = await widget.repo.getUbicaciones();
+    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
     final editado = await showActivoDialog(context,
-        activo: activo, categorias: categorias, grupos: grupos);
+        activo: activo,
+        categorias: categorias,
+        grupos: grupos,
+        ubicaciones: ubicaciones,
+        modelos: modelos);
     if (editado == null) return;
     try {
       await widget.repo.updateActivo(activo.id, editado);

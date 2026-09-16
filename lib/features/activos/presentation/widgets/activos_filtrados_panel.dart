@@ -2,25 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/activo.dart';
+import '../../data/activos_filtro.dart';
 import '../../data/activos_repository.dart';
 import '../dialogs/activo_dialog.dart';
-import '../dialogs/activos_filtro_dialog.dart';
 import 'activo_card.dart';
 
-/// Panel global de activos filtrados. Muestra todos los activos que cumplen
-/// el filtro (de cualquier categoría), agrupados por categoría y grupo,
-/// con opción de limpiar el filtro.
+/// Panel de activos filtrados. Muestra todos los activos que cumplen el
+/// filtro (de cualquier categoría), agrupados por categoría y grupo.
+/// También se usa como vista "por valor" de una dimensión (ubicación, grupo,
+/// modelo, estado...) con título, botón agregar y búsqueda local.
 class ActivosFiltradosPanel extends ConsumerStatefulWidget {
   const ActivosFiltradosPanel({
     super.key,
     required this.repo,
     required this.filtro,
     required this.onLimpiar,
+    this.titulo,
+    this.onAgregar,
+    this.searchTerm = '',
   });
 
   final ActivosRepository repo;
   final ActivosFiltro filtro;
   final VoidCallback onLimpiar;
+  final String? titulo;
+  final VoidCallback? onAgregar;
+  final String searchTerm;
 
   @override
   ConsumerState<ActivosFiltradosPanel> createState() =>
@@ -40,22 +47,38 @@ class _ActivosFiltradosPanelState
   @override
   void didUpdateWidget(ActivosFiltradosPanel old) {
     super.didUpdateWidget(old);
-    if (old.filtro.categoriaId != widget.filtro.categoriaId ||
-        old.filtro.grupo != widget.filtro.grupo ||
-        old.filtro.ubicacion != widget.filtro.ubicacion ||
-        old.filtro.estado != widget.filtro.estado) {
+    final f = widget.filtro;
+    final o = old.filtro;
+    if (o.categoriaId != f.categoriaId ||
+        o.grupo != f.grupo ||
+        o.ubicacion != f.ubicacion ||
+        o.modelo != f.modelo ||
+        o.estado != f.estado ||
+        old.searchTerm != widget.searchTerm) {
       _fut = _load();
     }
   }
 
-  Future<List<Map<String, dynamic>>> _load() {
+  Future<List<Map<String, dynamic>>> _load() async {
     final f = widget.filtro;
-    return widget.repo.getActivosConFiltros(
+    final filas = await widget.repo.getActivosConFiltros(
       categoriaId: f.categoriaId,
       grupo: f.grupo,
       ubicacion: f.ubicacion,
+      modelo: f.modelo,
       estado: f.estado,
     );
+    final q = widget.searchTerm.trim().toLowerCase();
+    if (q.isEmpty) return filas;
+    return filas.where((r) {
+      final t = <String>[
+        r['nombre'] as String? ?? '',
+        r['modelo'] as String? ?? '',
+        r['ubicacion'] as String? ?? '',
+        r['grupo'] as String? ?? '',
+      ].join(' ').toLowerCase();
+      return t.contains(q);
+    }).toList();
   }
 
   Future<void> _recargar() async {
@@ -66,9 +89,15 @@ class _ActivosFiltradosPanelState
     final activo = Activo.fromMap(row);
     final categorias = await widget.repo.getCategorias();
     final grupos = await widget.repo.getGrupos();
+    final ubicaciones = await widget.repo.getUbicaciones();
+    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
     final editado = await showActivoDialog(context,
-        activo: activo, categorias: categorias, grupos: grupos);
+        activo: activo,
+        categorias: categorias,
+        grupos: grupos,
+        ubicaciones: ubicaciones,
+        modelos: modelos);
     if (editado == null) return;
     try {
       await widget.repo.updateActivo(activo.id, editado);
@@ -151,34 +180,58 @@ class _ActivosFiltradosPanelState
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
           color: colors.surfaceContainerHighest.withValues(alpha: .4),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 4,
+          child: Row(
             children: [
-              Text('Filtro:',
-                  style: TextStyle(
+              if (widget.titulo != null) ...[
+                Expanded(
+                  child: Text(
+                    widget.titulo!,
+                    style: const TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: colors.onSurfaceVariant)),
-              for (final c in desc)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(8),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  child: Text(c,
-                      style: TextStyle(
-                          fontSize: 11.5, color: colors.onSurfaceVariant)),
                 ),
-              const SizedBox(width: 4),
+                const SizedBox(width: 8),
+              ],
+              if (widget.titulo == null && desc.isNotEmpty)
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final c in desc)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(c,
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: colors.onSurfaceVariant)),
+                        ),
+                    ],
+                  ),
+                ),
+              if (widget.onAgregar != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Agregar activo',
+                  onPressed: widget.onAgregar,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
-                tooltip: 'Quitar filtro',
+                tooltip: 'Salir de esta vista',
                 onPressed: widget.onLimpiar,
                 visualDensity: VisualDensity.compact,
               ),

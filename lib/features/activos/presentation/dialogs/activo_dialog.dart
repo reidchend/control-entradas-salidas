@@ -6,12 +6,15 @@ import '../../data/activos_categoria.dart';
 const _estados = ['Activo', 'Mantenimiento', 'Baja', 'Reservado', 'Traslado'];
 
 /// Muestra el diálogo crear/editar y devuelve el activo capturado,
-/// o `null` si se canceló. [categorias] alimenta el selector de categoría.
+/// o `null` si se canceló. [categorias], [grupos], [ubicaciones] y [modelos]
+/// alimentan los selectores con los valores existentes.
 Future<Activo?> showActivoDialog(
   BuildContext context, {
   Activo? activo,
   List<ActivosCategoria> categorias = const [],
   List<String> grupos = const [],
+  List<String> ubicaciones = const [],
+  List<String> modelos = const [],
 }) async {
   final nombreCtrl = TextEditingController(text: activo?.nombre ?? '');
   final categoriaIdSeleccionada = activo?.categoriaId;
@@ -64,59 +67,21 @@ Future<Activo?> showActivoDialog(
               ],
               onChanged: (v) => categoriaId = v,
             ),
-            TextField(
+            _OpcionesField(
               controller: ubicacionCtrl,
-              decoration: const InputDecoration(labelText: 'Ubicación'),
+              label: 'Ubicación',
+              opciones: ubicaciones,
+              icono: Icons.place_outlined,
             ),
-            RawAutocomplete<String>(
-              textEditingController: grupoCtrl,
+            _OpcionesField(
+              controller: grupoCtrl,
               focusNode: grupoFocus,
-              optionsBuilder: (TextEditingValue tev) {
-                if (grupos.isEmpty || tev.text.isEmpty) return const <String>[];
-                final q = tev.text.toLowerCase();
-                return grupos.where((g) => g.toLowerCase().contains(q)).toList();
-              },
-              onSelected: (_) {},
-              fieldViewBuilder:
-                  (context, tc, focusNode, onFieldSubmitted) => TextField(
-                controller: tc,
-                focusNode: focusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Grupo',
-                  hintText: 'Escribe uno nuevo o elige uno existente',
-                  suffixIcon: Icon(Icons.create_new_folder_outlined),
-                ),
-              ),
-              optionsViewBuilder: (context, onSelected, options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    borderRadius: const BorderRadius.all(Radius.circular(8)),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        itemCount: options.length,
-                        itemBuilder: (context, i) {
-                          final g = options.elementAt(i);
-                          return ListTile(
-                            dense: true,
-                            title: Text(g),
-                            onTap: () => onSelected(g),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                );
-              },
+              label: 'Grupo',
+              opciones: grupos,
+              icono: Icons.create_new_folder_outlined,
             ),
             DropdownButtonFormField<String>(
-              value: _estados.contains(estadoValor)
-                  ? _estados.first
-                  : estadoValor,
+              value: estadoValor,
               decoration: const InputDecoration(labelText: 'Estado'),
               items: [
                 if (!_estados.contains(estadoValor))
@@ -142,9 +107,11 @@ Future<Activo?> showActivoDialog(
                 hintText: '2025-01-15',
               ),
             ),
-            TextField(
+            _OpcionesField(
               controller: modeloCtrl,
-              decoration: const InputDecoration(labelText: 'Modelo'),
+              label: 'Modelo',
+              opciones: modelos,
+              icono: Icons.memory_outlined,
             ),
             TextField(
               controller: cantidadCtrl,
@@ -201,4 +168,71 @@ Future<Activo?> showActivoDialog(
       ],
     ),
   );
+}
+
+/// Campo editable que además lista los valores existentes de esa propiedad
+/// para seleccionar con un tap. Soporta escribir un valor nuevo.
+class _OpcionesField extends StatelessWidget {
+  const _OpcionesField({
+    required this.controller,
+    required this.label,
+    required this.opciones,
+    required this.icono,
+    this.focusNode,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final List<String> opciones;
+  final IconData icono;
+  final FocusNode? focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<String>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      optionsBuilder: (TextEditingValue tev) {
+        if (opciones.isEmpty) return const <String>[];
+        final q = tev.text.toLowerCase();
+        if (q.isEmpty) return opciones;
+        return opciones.where((o) => o.toLowerCase().contains(q)).toList();
+      },
+      onSelected: (_) {},
+      fieldViewBuilder: (context, tc, focusNode, onFieldSubmitted) => TextField(
+        controller: tc,
+        focusNode: focusNode,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'Elige uno existente o escribe uno nuevo',
+          suffixIcon: Icon(icono),
+        ),
+      ),
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: const BorderRadius.all(Radius.circular(8)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: options.length,
+                itemBuilder: (context, i) {
+                  final o = options.elementAt(i);
+                  return ListTile(
+                    dense: true,
+                    title: Text(o),
+                    onTap: () => onSelected(o),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
