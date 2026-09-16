@@ -73,6 +73,7 @@ class StockRepository {
     String? almacen,
     String? stockStatus,
     int limit = 50,
+    int offset = 0,
   }) async {
     // Filtros de activo/categoría/búsqueda se aplican en SQL para que el
     // LIMIT no corte productos de la categoría seleccionada.
@@ -110,7 +111,7 @@ class StockRepository {
     } else {
       rows = await _db.executeSql(
         'SELECT p.* FROM productos p WHERE $where '
-        'ORDER BY p.nombre ASC LIMIT $limit',
+        'ORDER BY p.nombre ASC LIMIT $limit OFFSET $offset',
         params: params,
       );
     }
@@ -131,10 +132,11 @@ class StockRepository {
             return s > 0 &&
                 s <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity);
           })
+          .skip(offset)
           .take(limit)
           .toList();
     }
-    return productos.take(limit).toList();
+    return productos.skip(offset).take(limit).toList();
   }
 
   Future<Map<int, double>> getStockTotalAlmacenBase(

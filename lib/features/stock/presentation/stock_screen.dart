@@ -41,6 +41,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Map<int, List<Existencia>> _existencias = {};
   bool _cargando = false;
   bool _statsCargados = false;
+  bool _cargandoMas = false;
+  bool _hasMore = true;
+  static const int _pageSize = 50;
+  final ScrollController _scrollCtrl = ScrollController();
   Timer? _pollTimer;
 
   @override
@@ -54,13 +58,16 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) _reload();
+      // Saltar el refresco si hay una carga incremental en vuelo para no
+      // pisar la lista que se está extendiendo.
+      if (mounted && !_cargandoMas) _reload();
     });
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -80,21 +87,26 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   /// Recarga en background: conserva los datos actuales mientras consulta,
   /// de modo que no hay parpadeo al refrescar (poll periódico o filtros).
   void _reload() {
-    final repo = ref.read(stockRepoProvider)!;
+    final repo = ref.read(stockRepoProvider);
+    if (repo == null) return;
     _cargar(repo);
   }
 
-  Future<void> _cargar(StockRepository repo) async {
+  Future<void> _cargar(StockRepository repo, {bool reset = true}) async {
     if (_statsCargados == false) {
       setState(() => _cargando = true);
     }
     try {
       final stats = await repo.getStockStats(almacen: _almacen);
+      // En refrescos sin reset (poll) se recarga hasta lo que ya se ve para
+      // conservar el scroll; en reset (filtros) se vuelve a la primera página.
+      final volver = reset ? _pageSize : _productos.length + _pageSize;
       final productos = await repo.filterProductos(
         search: _search,
         categoriaId: _categoriaId,
         almacen: _almacen,
         stockStatus: _stockStatus,
+        limit: volver,
       );
       final ids = [for (final p in productos) p.id];
       final exis = await repo.getExistenciasDeProductos(ids);
@@ -105,10 +117,44 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         _productos = productos;
         _existencias = exis;
         _cargando = false;
+        _cargandoMas = false;
+        _hasMore = productos.length >= volver;
       });
     } catch (e, st) {
       debugPrint('Error cargando stock: $e\n$st');
       if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  /// Carga la siguiente página de productos (scroll infinito) y la agrega
+  /// a la lista actual sin perder lo ya visible.
+  Future<void> _cargarMas() async {
+    if (_cargandoMas || !_hasMore) return;
+    final repo = ref.read(stockRepoProvider);
+    if (repo == null) return;
+    setState(() => _cargandoMas = true);
+    try {
+      final offset = _productos.length;
+      final nuevos = await repo.filterProductos(
+        search: _search,
+        categoriaId: _categoriaId,
+        almacen: _almacen,
+        stockStatus: _stockStatus,
+        limit: _pageSize,
+        offset: offset,
+      );
+      final exis = await repo.getExistenciasDeProductos(
+          [for (final p in nuevos) p.id]);
+      if (!mounted) return;
+      setState(() {
+        _productos = [..._productos, ...nuevos];
+        _existencias = {..._existencias, ...exis};
+        _cargandoMas = false;
+        _hasMore = nuevos.length == _pageSize;
+      });
+    } catch (e, st) {
+      debugPrint('Error cargando más stock: $e\n$st');
+      if (mounted) setState(() => _cargandoMas = false);
     }
   }
 
@@ -175,6 +221,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             active: _stockStatus == null,
             onTap: () {
               setState(() => _stockStatus = null);
+              _irAlInicio();
               _reload();
             },
           ),
@@ -187,6 +234,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             active: _stockStatus == 'low',
             onTap: () {
               setState(() => _stockStatus = 'low');
+              _irAlInicio();
               _reload();
             },
           ),
@@ -199,6 +247,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             active: _stockStatus == 'out',
             onTap: () {
               setState(() => _stockStatus = 'out');
+              _irAlInicio();
               _reload();
             },
           ),
@@ -223,6 +272,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             ),
             onChanged: (v) {
               _search = v;
+              _irAlInicio();
               _reload();
             },
           );
@@ -245,6 +295,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             ],
             onChanged: (v) {
               _categoriaId = v == null ? null : int.parse(v);
+              _irAlInicio();
               _reload();
             },
           );
@@ -264,6 +315,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             ],
             onChanged: (v) {
               _almacen = v;
+              _irAlInicio();
               _reload();
             },
           );
@@ -298,6 +350,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     );
   }
 
+  void _irAlInicio() {
+    if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+  }
+
   Widget _buildLista() {
     if (_cargando && _productos.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -307,6 +363,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       existencias: _existencias,
       categorias: _categoriasMap,
       almacen: _almacen,
+      scrollController: _scrollCtrl,
+      onLoadMore: _cargarMas,
+      hasMore: _hasMore,
+      cargandoMas: _cargandoMas,
       onAction: _onAction,
     );
   }
