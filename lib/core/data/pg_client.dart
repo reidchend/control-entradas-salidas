@@ -155,11 +155,14 @@ class PgQueryBuilder implements Future<dynamic> {
     return this;
   }
 
-  /// Filtro genérico estilo PostgREST: `.filter(col, 'eq', v)` o
-  /// `.filter(col, 'in', [..])`.
+  /// Filtro genérico estilo PostgREST: `.filter(col, 'eq', v)`,
+  /// `.filter(col, 'in', [..])` o `.filter(col, 'is', null)`.
   PgQueryBuilder filter(String column, String op, Object? value) {
     if (op == 'in') {
       return inFilter(column, value as List<Object?>);
+    }
+    if (op == 'is') {
+      return isFilter(column, value);
     }
     return eq(column, value);
   }
