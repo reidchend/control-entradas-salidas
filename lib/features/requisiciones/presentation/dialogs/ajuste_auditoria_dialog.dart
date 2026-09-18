@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 
 import '../../../../core/utils/modal_sizing.dart';
 import '../../../calculadora/presentation/calculadora.dart';
@@ -144,6 +145,8 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
       return;
     }
     final p = widget.item.productoId ?? -1;
+    final session = ref.read(sessionProvider);
+    final usuario = session is Authenticated ? session.nombre : 'Sistema';
     if (_esPesable) {
       final pesoTotal = double.tryParse(_pesoTotalCtrl.text.replaceAll(',', '.')) ?? -1;
       if (pesoTotal <= 0) {
@@ -159,6 +162,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
             ? 'Ajuste durante auditoría'
             : _motivoCtrl.text.trim(),
         pesoTotal: pesoTotal,
+        usuario: usuario,
       );
       if (mounted) {
         Navigator.pop(context, AjusteStockResult(
@@ -181,6 +185,7 @@ class _AjusteDialogState extends ConsumerState<_AjusteDialog> {
         motivo: _motivoCtrl.text.trim().isEmpty
             ? 'Ajuste durante auditoría'
             : _motivoCtrl.text.trim(),
+        usuario: usuario,
       );
       if (mounted) {
         Navigator.pop(context, AjusteStockResult(

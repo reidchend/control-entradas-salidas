@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 
 import '../../../../core/models/requisicion.dart';
 import '../../data/requisiciones_providers.dart';
@@ -129,12 +130,15 @@ class _FormViewState extends ConsumerState<FormView> {
       if (repo == null) {
         throw Exception('Supabase no configurado');
       }
+      final session = ref.read(sessionProvider);
+      final usuario = session is Authenticated ? session.nombre : 'Sistema';
       await repo.guardarRequisicion(
         origen: _origen ?? 'principal',
         destino: _destino ?? 'restaurante',
         observaciones: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
         detalles: _items,
         editando: widget.requisicion,
+        usuario: usuario,
       );
       if (mounted) {
         _snack(_editando

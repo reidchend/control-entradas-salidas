@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 
 import '../../../../core/models/producto.dart';
 import '../../../../core/utils/modal_sizing.dart';
@@ -95,12 +96,16 @@ Future<void> showExistenciasDialog(
                                       cantidadActual: e.cantidad,
                                     );
                                     if (resultado != null && dialogCtx.mounted) {
+                                      final session = ref.read(sessionProvider);
+                                      final usuario = session is Authenticated
+                                          ? session.nombre
+                                          : 'Sistema';
                                       await repo.ajustarExistencia(
                                         productoId: producto.id,
                                         almacen: e.almacen,
                                         nuevaCantidad: resultado.$1,
                                         motivo: resultado.$2,
-                                        usuario: 'Admin',
+                                        usuario: usuario,
                                       );
                                       if (!dialogCtx.mounted) return;
                                       // Reabrir con valores actualizados.

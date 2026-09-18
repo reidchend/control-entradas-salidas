@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 
 import '../../../../features/calculadora/presentation/calculadora.dart';
 import '../../../../core/models/requisicion.dart';
@@ -114,7 +115,9 @@ class _AuditViewState extends ConsumerState<AuditView> {
     try {
       final repo = ref.read(requisicionesRepoProvider);
       if (repo == null) throw Exception('Supabase no configurado');
-      await repo.totalizarRequisicion(widget.req.id);
+      final session = ref.read(sessionProvider);
+      final usuario = session is Authenticated ? session.nombre : 'Sistema';
+      await repo.totalizarRequisicion(widget.req.id, usuario: usuario);
       if (mounted) {
         _snack('Requisición totalizada y stock trasladado');
         widget.onTotalizada();
