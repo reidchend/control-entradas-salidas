@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../pos/presentation/config_screen.dart';
 import 'widgets/categorias_tab.dart';
 import 'widgets/productos_tab.dart';
 import 'widgets/proveedores_tab.dart';
@@ -10,6 +11,7 @@ import 'widgets/periodos_tab.dart';
 /// Pantalla de Configuración / Ajustes (porta `usr/views/configuracion_view.py`).
 ///
 /// 5 pestañas: Categorias, Productos, Proveedores, Sistema, Periodos.
+/// Incluye un botón para abrir la configuración del POS desde este módulo.
 class ConfiguracionScreen extends ConsumerStatefulWidget {
   const ConfiguracionScreen({super.key});
 
@@ -20,6 +22,7 @@ class ConfiguracionScreen extends ConsumerStatefulWidget {
 class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _verPos = false;
 
   @override
   void initState() {
@@ -37,8 +40,27 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    if (_verPos) {
+      return ConfigScreen(onBack: () => setState(() => _verPos = false));
+    }
+
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Row(
+            children: [
+              Text('Ajustes',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _verPos = true),
+                icon: const Icon(Icons.point_of_sale_outlined),
+                label: const Text('Configuración del POS'),
+              ),
+            ],
+          ),
+        ),
         TabBar(
           controller: _tabController,
           isScrollable: true,
