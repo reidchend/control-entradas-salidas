@@ -236,7 +236,6 @@ class PgQueryBuilder implements Future<dynamic> {
   }
 
   PgQueryBuilder upsert(Map<String, dynamic> data, {String? onConflict}) {
-    _willUpsert = true;
     _write = _PgWrite.upsert(data);
     _onConflict = onConflict;
     return this;
@@ -251,8 +250,6 @@ class PgQueryBuilder implements Future<dynamic> {
     _write = const _PgWrite.delete();
     return this;
   }
-
-  bool _willUpsert = false;
 
   int _nextParam() => ++_paramSeq;
 
@@ -303,24 +300,21 @@ class PgQueryBuilder implements Future<dynamic> {
       case _PgWriteKind.upsert:
         final data = w.data ?? {};
         final cols = data.keys.join(', ');
-        final inserts = _registerValues(data.values.toList());
-        final ph = inserts.join(', ');
+        final ph = _registerValues(data.values.toList()).join(', ');
         final onConflict = _onConflict ?? _inferConflict(data);
-        if (!hasReturning) {
-          var sql = 'INSERT INTO $_table ($cols) VALUES ($ph)';
-          if (_willUpsert && onConflict != null) {
-            sql += ' ON CONFLICT ($onConflict) DO NOTHING';
-          }
-          await _run(sql);
-          return null;
-        }
+        final isUpsert = w.kind == _PgWriteKind.upsert && onConflict != null;
         var sql = 'INSERT INTO $_table ($cols) VALUES ($ph)';
-        if (_willUpsert && onConflict != null) {
+        if (isUpsert) {
+          final conflictCols = onConflict.split(',');
           final updates = data.keys
-              .where((k) => k != onConflict)
+              .where((k) => !conflictCols.contains(k))
               .map((k) => '$k = EXCLUDED.$k')
               .join(', ');
           sql += ' ON CONFLICT ($onConflict) DO UPDATE SET $updates';
+        }
+        if (!hasReturning) {
+          await _run(sql);
+          return null;
         }
         sql += ' RETURNING $returning';
         final rows = await _query(sql);
