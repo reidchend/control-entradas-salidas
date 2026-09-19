@@ -85,19 +85,40 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        alignment: WrapAlignment.center,
-        children: [
-          _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-          _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-          FilledButton.icon(
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Actualizar'),
-            onPressed: _cargando ? null : _cargar,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (esMovil) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
+                const SizedBox(height: 12),
+                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Actualizar'),
+                  onPressed: _cargando ? null : _cargar,
+                ),
+              ],
+            );
+          }
+          return Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
+              _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
+              FilledButton.icon(
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Actualizar'),
+                onPressed: _cargando ? null : _cargar,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

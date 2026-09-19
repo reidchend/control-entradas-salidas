@@ -29,6 +29,7 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
     _desde = DateTime(now.year, now.month, now.day)
         .subtract(const Duration(days: 7));
     _hasta = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    _buscar();
   }
 
   @override
@@ -69,55 +70,109 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        alignment: WrapAlignment.center,
-        children: [
-          _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day))),
-          _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59))),
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<String>(
-              value: _tipo,
-              decoration: const InputDecoration(
-                labelText: 'Tipo de movimiento',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              isExpanded: true,
-              items: [
-                const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                ..._tiposInfo.entries.map((e) =>
-                    DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (esMovil) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day))),
+                const SizedBox(height: 12),
+                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59))),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _tipo,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de movimiento',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                    ..._tiposInfo.entries.map((e) =>
+                        DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
+                  ],
+                  onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _almacen,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Almacén',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                    DropdownMenuItem(value: 'principal', child: Text('Principal')),
+                    DropdownMenuItem(value: 'restaurante', child: Text('Restaurante')),
+                    DropdownMenuItem(value: 'bodega', child: Text('Bodega')),
+                  ],
+                  onChanged: (v) => setState(() => _almacen = v ?? 'Todos'),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Buscar'),
+                  onPressed: _buscar,
+                ),
               ],
-              onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
-            ),
-          ),
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<String>(
-              value: _almacen,
-              decoration: const InputDecoration(
-                labelText: 'Almacén',
-                isDense: true,
-                border: OutlineInputBorder(),
+            );
+          }
+          return Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day))),
+              _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59))),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  value: _tipo,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de movimiento',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                    ..._tiposInfo.entries.map((e) =>
+                        DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
+                  ],
+                  onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
+                ),
               ),
-              items: const [
-                DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                DropdownMenuItem(value: 'principal', child: Text('Principal')),
-                DropdownMenuItem(value: 'restaurante', child: Text('Restaurante')),
-                DropdownMenuItem(value: 'bodega', child: Text('Bodega')),
-              ],
-              onChanged: (v) => setState(() => _almacen = v ?? 'Todos'),
-            ),
-          ),
-          FilledButton.icon(
-            icon: const Icon(Icons.search, size: 18),
-            label: const Text('Buscar'),
-            onPressed: _buscar,
-          ),
-        ],
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  value: _almacen,
+                  decoration: const InputDecoration(
+                    labelText: 'Almacén',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                    DropdownMenuItem(value: 'principal', child: Text('Principal')),
+                    DropdownMenuItem(value: 'restaurante', child: Text('Restaurante')),
+                    DropdownMenuItem(value: 'bodega', child: Text('Bodega')),
+                  ],
+                  onChanged: (v) => setState(() => _almacen = v ?? 'Todos'),
+                ),
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Buscar'),
+                onPressed: _buscar,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'ventas_report_screen.dart';
 import 'movimientos_report_screen.dart';
 import 'estadisticas_report_screen.dart';
 import 'cierres_screen.dart';
+import 'producto_detalle_report_screen.dart';
 
 /// Pantalla principal de Reportes: dashboard con botones grandes.
 class ReportesScreen extends ConsumerWidget {
@@ -81,6 +82,16 @@ class ReportesScreen extends ConsumerWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const CierresHistorialScreen()),
+                        ),
+                      ),
+                      _ReporteCard(
+                        icon: Icons.inventory_outlined,
+                        titulo: 'Producto Detalle',
+                        subtitulo: 'Ventas, entradas, salidas,\ntraslados, ajustes + frecuencia',
+                        color: Colors.teal.shade700,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProductoDetalleReportScreen()),
                         ),
                       ),
                     ],

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/models/pos_models.dart';
 import '../../../../core/utils/modal_sizing.dart';
 import '../../../../core/utils/snackbar_utils.dart';
+import '../../../pos/data/pos_providers.dart';
 import '../../data/reportes_repository.dart';
 
 /// Pantalla de reporte de ventas con filtros y resultados.
@@ -19,7 +21,31 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
   String _cajero = 'Todos';
   String _formaPago = 'Todas';
   List<Map<String, dynamic>> _ventas = [];
+  List<PosUsuario> _cajeros = [];
   bool _cargando = false;
+  bool _cargandoCajeros = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarCajeros();
+    _buscar();
+  }
+
+  Future<void> _cargarCajeros() async {
+    setState(() => _cargandoCajeros = true);
+    try {
+      final repo = ref.read(posRepoProvider);
+      if (repo != null) {
+        final cajeros = await repo.getUsuarios();
+        if (mounted) setState(() => _cajeros = cajeros);
+      }
+    } catch (e) {
+      if (mounted) _snack('Error cargando cajeros: $e');
+    } finally {
+      if (mounted) setState(() => _cargandoCajeros = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,54 +85,113 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        alignment: WrapAlignment.center,
-        children: [
-          _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-          _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<String>(
-              value: _cajero,
-              decoration: const InputDecoration(
-                labelText: 'Cajero',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                DropdownMenuItem(value: 'Cajero 1', child: Text('Cajero 1')),
-                DropdownMenuItem(value: 'Cajero 2', child: Text('Cajero 2')),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (esMovil) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
+                const SizedBox(height: 12),
+                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
+                const SizedBox(height: 12),
+                _cargandoCajeros
+                    ? const Center(child: CircularProgressIndicator())
+                    : DropdownButtonFormField<String>(
+                        value: _cajero,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Cajero',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                          ..._cajeros.map((c) =>
+                              DropdownMenuItem(value: c.nombre, child: Text(c.nombre))),
+                        ],
+                        onChanged: (v) => setState(() => _cajero = v ?? 'Todos'),
+                      ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _formaPago,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Forma de pago',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Todas', child: Text('Todas')),
+                    DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                    DropdownMenuItem(value: 'Tarjeta', child: Text('Tarjeta')),
+                    DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                  ],
+                  onChanged: (v) => setState(() => _formaPago = v ?? 'Todas'),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Buscar'),
+                  onPressed: _buscar,
+                ),
               ],
-              onChanged: (v) => setState(() => _cajero = v ?? 'Todos'),
-            ),
-          ),
-          SizedBox(
-            width: 160,
-            child: DropdownButtonFormField<String>(
-              value: _formaPago,
-              decoration: const InputDecoration(
-                labelText: 'Forma de pago',
-                isDense: true,
-                border: OutlineInputBorder(),
+            );
+          }
+          return Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
+              _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
+              SizedBox(
+                width: 180,
+                child: _cargandoCajeros
+                    ? const Center(child: CircularProgressIndicator())
+                    : DropdownButtonFormField<String>(
+                        value: _cajero,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Cajero',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                          ..._cajeros.map((c) =>
+                              DropdownMenuItem(value: c.nombre, child: Text(c.nombre))),
+                        ],
+                        onChanged: (v) => setState(() => _cajero = v ?? 'Todos'),
+                      ),
               ),
-              items: const [
-                DropdownMenuItem(value: 'Todas', child: Text('Todas')),
-                DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
-                DropdownMenuItem(value: 'Tarjeta', child: Text('Tarjeta')),
-                DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
-              ],
-              onChanged: (v) => setState(() => _formaPago = v ?? 'Todas'),
-            ),
-          ),
-          FilledButton.icon(
-            icon: const Icon(Icons.search, size: 18),
-            label: const Text('Buscar'),
-            onPressed: _buscar,
-          ),
-        ],
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String>(
+                  value: _formaPago,
+                  decoration: const InputDecoration(
+                    labelText: 'Forma de pago',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Todas', child: Text('Todas')),
+                    DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                    DropdownMenuItem(value: 'Tarjeta', child: Text('Tarjeta')),
+                    DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                  ],
+                  onChanged: (v) => setState(() => _formaPago = v ?? 'Todas'),
+                ),
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Buscar'),
+                onPressed: _buscar,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -182,17 +267,34 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
             itemBuilder: (context, index) {
               final v = _ventas[index];
               final fecha = _fmtFecha(v['created_at']);
-              final cajero = v['cajero'] as String? ?? '—';
+              final cajero = v['cajero_nombre'] as String? ?? v['usuario_id']?.toString() ?? '—';
               final formaPago = v['forma_pago'] as String? ?? '—';
               final totalV = (v['total'] as num?)?.toDouble() ?? 0;
               final correlativo = v['correlativo'] as int? ?? v['id'] as int? ?? 0;
+              final mesaNombre = v['mesa_nombre'] as String?;
+              final habitacionNumero = v['habitacion_numero'] as String?;
+
+              String ubicacion = '';
+              if (mesaNombre != null && mesaNombre.isNotEmpty) {
+                ubicacion = 'Mesa: $mesaNombre';
+              } else if (habitacionNumero != null && habitacionNumero.isNotEmpty) {
+                ubicacion = 'Hab. $habitacionNumero';
+              }
+
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: scheme.primaryContainer,
                   child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
                 ),
                 title: Text('Venta #$correlativo · $fecha'),
-                subtitle: Text('$cajero · $formaPago'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$cajero · $formaPago'),
+                    if (ubicacion.isNotEmpty)
+                      Text(ubicacion, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
                 trailing: Text('\$${totalV.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
                 onTap: () => _verDetalle(v),
               );
