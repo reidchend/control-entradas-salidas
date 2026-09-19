@@ -131,6 +131,17 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
     });
   }
 
+  void _onCancel() {
+    _haptic();
+    Navigator.pop(context);
+  }
+
+  void _onAccept() {
+    _haptic();
+    final val = double.tryParse(_display);
+    Navigator.pop(context, val);
+  }
+
   double _compute(double a, double b, String op) {
     switch (op) {
       case '+': return a + b;
@@ -223,6 +234,39 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
                       padding: EdgeInsets.only(bottom: bottomPadding + 8),
                       child: _buildKeypad(scheme),
                     ),
+                  ),
+                ),
+                // Action buttons (Cancelar / Aceptar)
+                Container(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPadding + 8),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    border: Border(top: BorderSide(color: scheme.outlineVariant)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _onCancel,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Cancelar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _onAccept,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Aceptar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
