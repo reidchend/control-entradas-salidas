@@ -2,26 +2,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/utils/modal_sizing.dart';
-
-/// Diálogo de calculadora simple (operaciones + - * /, decimales).
-/// Devuelve el valor calculado al cerrar con "Aceptar".
+/// Diálogo de calculadora optimizado (estilo nativo Android).
+/// Usa bottom sheet modal sin chrome de AlertDialog, botones con feedback
+/// háptico y visual inmediato, y rebuild mínimo.
 Future<double?> showCalculadoraDialog(BuildContext context, {double? initialValue}) {
-  return showDialog<double>(
+  return showGeneralDialog<double>(
     context: context,
-    builder: (_) => _CalculadoraDialog(initialValue: initialValue ?? 0),
+    barrierDismissible: true,
+    barrierLabel: 'Calculadora',
+    barrierColor: Colors.black54,
+    transitionDuration: const Duration(milliseconds: 120),
+    transitionBuilder: (ctx, anim, _, child) {
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+        child: child,
+      );
+    },
+    pageBuilder: (_, __, ___) => _CalculadoraSheet(initialValue: initialValue ?? 0),
   );
 }
 
-class _CalculadoraDialog extends ConsumerStatefulWidget {
-  const _CalculadoraDialog({required this.initialValue});
+class _CalculadoraSheet extends ConsumerStatefulWidget {
+  const _CalculadoraSheet({required this.initialValue});
   final double initialValue;
 
   @override
-  ConsumerState<_CalculadoraDialog> createState() => _CalculadoraDialogState();
+  ConsumerState<_CalculadoraSheet> createState() => _CalculadoraSheetState();
 }
 
-class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
+class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
   String _display = '';
   String _expression = '';
   double _operand1 = 0;
@@ -42,7 +54,10 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
     return v.toString();
   }
 
+  void _haptic() => HapticFeedback.lightImpact();
+
   void _onDigit(String d) {
+    _haptic();
     setState(() {
       if (_newEntry || _display == '0') {
         final newDigit = d == '.' ? '0.' : d;
@@ -67,6 +82,7 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
   }
 
   void _onOperator(String op) {
+    _haptic();
     final val = double.tryParse(_display) ?? 0;
     if (_operator != null && !_newEntry) {
       _operand1 = _compute(_operand1, val, _operator!);
@@ -81,6 +97,7 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
 
   void _onEquals() {
     if (_operator == null) return;
+    _haptic();
     final val = double.tryParse(_display) ?? 0;
     final res = _compute(_operand1, val, _operator!);
     setState(() {
@@ -93,6 +110,7 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
   }
 
   void _onClear() {
+    _haptic();
     setState(() {
       _display = '0';
       _expression = '';
@@ -103,6 +121,7 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
   }
 
   void _onBackspace() {
+    _haptic();
     setState(() {
       if (_display.length <= 1 || (_display.length == 2 && _display.startsWith('-'))) {
         _display = '0';
@@ -125,122 +144,93 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
 
-    return AlertDialog(
-      title: const Text('Calculadora'),
-      content: Focus(
-        autofocus: true,
-        onKeyEvent: _onKeyEvent,
-        child: SizedBox(
-          width: modalContentWidth(context, factor: 0.9, max: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Display
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? scheme.surfaceContainerHighest : scheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.outlineVariant),
+    return Material(
+      color: Colors.transparent,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          width: double.infinity,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_expression.isNotEmpty)
+                // Display
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_expression.isNotEmpty)
+                        Text(
+                          _expression,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'monospace',
+                            color: scheme.onSurfaceVariant,
+                            height: 1.2,
+                          ),
+                        ),
+                      const SizedBox(height: 6),
                       Text(
-                        _expression,
+                        _display,
                         textAlign: TextAlign.right,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w500,
                           fontFamily: 'monospace',
-                          color: scheme.onSurfaceVariant,
+                          color: scheme.onSurface,
+                          height: 1.1,
                         ),
                       ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _display,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Teclado
-              _buildKeypad(scheme),
-            ],
+                // Keypad
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: bottomPadding + 8),
+                      child: _buildKeypad(scheme),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final val = double.tryParse(_display);
-            Navigator.pop(context, val);
-          },
-          child: const Text('Aceptar'),
-        ),
-      ],
     );
-  }
-
-  /// Soporte de teclado físico: dígitos, operadores, Enter (=), Backspace,
-  /// Esc (cancelar). Se usa el mismo patrón Focus(onKeyEvent) del diálogo
-  /// de movimientos.
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final lk = event.logicalKey;
-
-    if (lk == LogicalKeyboardKey.enter ||
-        lk == LogicalKeyboardKey.numpadEnter) {
-      _onEquals();
-      return KeyEventResult.handled;
-    }
-    if (lk == LogicalKeyboardKey.backspace) {
-      _onBackspace();
-      return KeyEventResult.handled;
-    }
-    if (lk == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
-      return KeyEventResult.handled;
-    }
-    if (lk == LogicalKeyboardKey.numpadAdd) return _tecla('+');
-    if (lk == LogicalKeyboardKey.numpadSubtract) return _tecla('-');
-    if (lk == LogicalKeyboardKey.numpadMultiply) return _tecla('×');
-    if (lk == LogicalKeyboardKey.numpadDivide) return _tecla('÷');
-    if (lk == LogicalKeyboardKey.numpadDecimal) return _tecla('.');
-
-    final ch = event.character;
-    if (ch == null || ch.isEmpty) return KeyEventResult.ignored;
-    final c = ch[0];
-    if ('0123456789.'.contains(c)) return _tecla(c);
-    if (c == '+' || c == '-') return _tecla(c);
-    if (c == '*') return _tecla('×');
-    if (c == '/') return _tecla('÷');
-    if (c == '%') return _tecla('%');
-    if (c == '=') {
-      _onEquals();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  KeyEventResult _tecla(String k) {
-    _handleKey(k);
-    return KeyEventResult.handled;
   }
 
   Widget _buildKeypad(ColorScheme scheme) {
@@ -253,16 +243,18 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
     ];
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: keys.map((row) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(
             children: row.map((k) => Expanded(
-              child: _KeyButton(
+              child: _FastKeyButton(
                 label: k,
                 onTap: () => _handleKey(k),
                 isOperator: ['÷', '×', '-', '+', '='].contains(k),
                 isSpecial: ['C', '⌫', '%'].contains(k),
+                scheme: scheme,
               ),
             )).toList(),
           ),
@@ -288,50 +280,72 @@ class _CalculadoraDialogState extends ConsumerState<_CalculadoraDialog> {
   }
 }
 
-class _KeyButton extends StatelessWidget {
-  const _KeyButton({
+class _FastKeyButton extends StatefulWidget {
+  const _FastKeyButton({
     required this.label,
     required this.onTap,
-    this.isOperator = false,
-    this.isSpecial = false,
+    required this.isOperator,
+    required this.isSpecial,
+    required this.scheme,
   });
   final String label;
   final VoidCallback onTap;
   final bool isOperator;
   final bool isSpecial;
+  final ColorScheme scheme;
+
+  @override
+  State<_FastKeyButton> createState() => _FastKeyButtonState();
+}
+
+class _FastKeyButtonState extends State<_FastKeyButton> {
+  bool _pressed = false;
+
+  Color get _bgColor {
+    if (widget.isOperator) return widget.scheme.primaryContainer;
+    if (widget.isSpecial) return widget.scheme.secondaryContainer;
+    return widget.scheme.surfaceContainerHighest;
+  }
+
+  Color get _fgColor {
+    if (widget.isOperator) return widget.scheme.onPrimaryContainer;
+    if (widget.isSpecial) return widget.scheme.onSecondaryContainer;
+    return widget.scheme.onSurface;
+  }
+
+  Color get _pressedBg {
+    if (widget.isOperator) {
+      return widget.scheme.primaryContainer.withValues(alpha: 0.7);
+    }
+    if (widget.isSpecial) {
+      return widget.scheme.secondaryContainer.withValues(alpha: 0.7);
+    }
+    return widget.scheme.surfaceContainerHighest.withValues(alpha: 0.7);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    Color bg, fg;
-    if (isOperator) {
-      bg = scheme.primaryContainer;
-      fg = scheme.onPrimaryContainer;
-    } else if (isSpecial) {
-      bg = scheme.secondaryContainer;
-      fg = scheme.onSecondaryContainer;
-    } else {
-      bg = scheme.surfaceContainerHighest;
-      fg = scheme.onSurface;
-    }
     return Padding(
       padding: const EdgeInsets.all(4),
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: SizedBox(
-            height: 56,
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: fg,
-                ),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 50),
+          height: 64,
+          decoration: BoxDecoration(
+            color: _pressed ? _pressedBg : _bgColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                color: _fgColor,
               ),
             ),
           ),
