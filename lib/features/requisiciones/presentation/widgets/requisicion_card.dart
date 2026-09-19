@@ -90,6 +90,19 @@ class RequisicionCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (req.observaciones != null && req.observaciones!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          req.observaciones!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
