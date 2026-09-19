@@ -16,22 +16,39 @@ class ReportesRepository {
     String? cajero,
     String? formaPago,
   }) async {
-    dynamic query = _db.client
-        .from('pos_ventas')
-        .select()
-        .gte('created_at', desde.toUtc().toIso8601String())
-        .lte('created_at', hasta.toUtc().toIso8601String());
-
-    if (cajero != null && cajero != 'Todos') {
-      query = query.filter('cajero', 'eq', cajero);
-    }
-    if (formaPago != null && formaPago != 'Todas') {
-      query = query.filter('forma_pago', 'eq', formaPago);
-    }
-
-    query = query.order('created_at', ascending: false);
-
-    return await query;
+    final rows = await _db.executeSql('''
+      SELECT
+        v.id,
+        v.comanda_id,
+        v.correlativo,
+        v.total,
+        v.items_json,
+        v.mesa_id,
+        v.habitacion_id,
+        v.usuario_id,
+        v.sesion_id,
+        v.estado,
+        v.tasa_bs,
+        v.created_at,
+        v.updated_at,
+        m.nombre AS mesa_nombre,
+        h.numero AS habitacion_numero,
+        u.nombre AS cajero_nombre
+      FROM pos_ventas v
+      LEFT JOIN pos_mesas m ON m.id = v.mesa_id
+      LEFT JOIN pos_habitaciones h ON h.id = v.habitacion_id
+      LEFT JOIN pos_usuarios u ON u.id = v.usuario_id
+      WHERE v.created_at >= \$1 AND v.created_at <= \$2
+      ${cajero != null && cajero != 'Todos' ? 'AND u.nombre = \$${3}' : ''}
+      ${formaPago != null && formaPago != 'Todas' ? 'AND v.forma_pago = \$${3 + (cajero != null && cajero != 'Todos' ? 1 : 0)}' : ''}
+      ORDER BY v.created_at DESC
+    ''', params: [
+      desde.toUtc().toIso8601String(),
+      hasta.toUtc().toIso8601String(),
+      if (cajero != null && cajero != 'Todos') cajero,
+      if (formaPago != null && formaPago != 'Todas') formaPago,
+    ]);
+    return rows;
   }
 
   /// Detalle de items de una venta (desde items_json de pos_ventas)
@@ -173,6 +190,94 @@ class ReportesRepository {
       'fecha': r['fecha'] as String? ?? '',
       'total': (r['total'] as num?)?.toDouble() ?? 0,
     }).toList();
+  }
+
+  /// Historial detallado de un producto: ventas, entradas, salidas, traslados, ajustes.
+  /// Para entradas calcula la frecuencia promedio (días entre entradas).
+  Future<Map<String, dynamic>> getProductoDetalle({
+    required int productoId,
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    // Ventas del producto
+    final ventasRows = await _db.executeSql('''
+      SELECT
+        v.id,
+        v.correlativo,
+        v.total,
+        v.created_at,
+        v.cajero_nombre,
+        v.mesa_nombre,
+        v.habitacion_numero,
+        (item->>'cantidad')::numeric AS cantidad,
+        (item->>'precio')::numeric AS precio,
+        (item->>'cantidad')::numeric * COALESCE((item->>'precio')::numeric, 0) AS subtotal
+      FROM pos_ventas v
+      CROSS JOIN LATERAL json_array_elements(v.items_json::json) item
+      WHERE v.created_at >= \$1 AND v.created_at <= \$2
+        AND COALESCE(item->>'producto_id', item->>'id') = \$3
+      ORDER BY v.created_at DESC
+    ''', params: [
+      desde.toUtc().toIso8601String(),
+      hasta.toUtc().toIso8601String(),
+      productoId.toString(),
+    ]);
+
+    // Movimientos de inventario del producto
+    final movRows = await _db.executeSql('''
+      SELECT
+        m.id,
+        m.tipo,
+        m.cantidad,
+        m.cantidad_anterior,
+        m.cantidad_nueva,
+        m.peso_total,
+        m.observaciones,
+        m.almacen,
+        m.fecha_movimiento,
+        m.registrado_por
+      FROM movimientos m
+      WHERE m.producto_id = \$1
+        AND m.fecha_movimiento >= \$2 AND m.fecha_movimiento <= \$3
+      ORDER BY m.fecha_movimiento DESC
+    ''', params: [
+      productoId,
+      desde.toUtc().toIso8601String(),
+      hasta.toUtc().toIso8601String(),
+    ]);
+
+    // Calcular frecuencia de entradas (días promedio entre entradas)
+    final entradas = movRows.where((m) => m['tipo'] == 'entrada' || m['tipo'] == 'entrada_produccion').toList();
+    double? frecuenciaEntradasDias;
+    if (entradas.length >= 2) {
+      final fechas = entradas.map((e) => DateTime.parse(e['fecha_movimiento'] as String)).toList();
+      fechas.sort();
+      final intervalos = <int>[];
+      for (int i = 1; i < fechas.length; i++) {
+        intervalos.add(fechas[i].difference(fechas[i - 1]).inDays);
+      }
+      frecuenciaEntradasDias = intervalos.reduce((a, b) => a + b) / intervalos.length;
+    }
+
+    return {
+      'ventas': ventasRows,
+      'movimientos': movRows,
+      'frecuencia_entradas_dias': frecuenciaEntradasDias,
+      'total_entradas': entradas.length,
+    };
+  }
+
+  /// Buscar productos para autocomplete
+  Future<List<Map<String, dynamic>>> buscarProductos(String query, {int limit = 20}) async {
+    final rows = await _db.executeSql('''
+      SELECT id, nombre, codigo, unidad_medida, es_pesable, stock_minimo
+      FROM productos
+      WHERE activo = true
+        AND (nombre ILIKE \$1 OR codigo ILIKE \$1)
+      ORDER BY nombre
+      LIMIT \$2
+    ''', params: ['%$query%', limit]);
+    return rows;
   }
 }
 
