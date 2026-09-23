@@ -131,6 +131,104 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
     });
   }
 
+  void _onPercent() {
+    final v = double.tryParse(_display) ?? 0;
+    setState(() => _display = _fmt(v / 100));
+  }
+
+  static final Map<LogicalKeyboardKey, String> _numpadDigits = {
+    LogicalKeyboardKey.numpad0: '0',
+    LogicalKeyboardKey.numpad1: '1',
+    LogicalKeyboardKey.numpad2: '2',
+    LogicalKeyboardKey.numpad3: '3',
+    LogicalKeyboardKey.numpad4: '4',
+    LogicalKeyboardKey.numpad5: '5',
+    LogicalKeyboardKey.numpad6: '6',
+    LogicalKeyboardKey.numpad7: '7',
+    LogicalKeyboardKey.numpad8: '8',
+    LogicalKeyboardKey.numpad9: '9',
+  };
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final lk = event.logicalKey;
+    final ch = event.character;
+
+    if (ch != null && ch.isNotEmpty) {
+      if (RegExp(r'[0-9]').hasMatch(ch)) {
+        _onDigit(ch);
+        return KeyEventResult.handled;
+      }
+      switch (ch) {
+        case '.':
+          _onDigit('.');
+          return KeyEventResult.handled;
+        case '+':
+          _onOperator('+');
+          return KeyEventResult.handled;
+        case '-':
+          _onOperator('-');
+          return KeyEventResult.handled;
+        case '*':
+          _onOperator('×');
+          return KeyEventResult.handled;
+        case '/':
+          _onOperator('÷');
+          return KeyEventResult.handled;
+        case '%':
+          _onPercent();
+          return KeyEventResult.handled;
+        case '=':
+          _onEquals();
+          return KeyEventResult.handled;
+        case 'c':
+        case 'C':
+          _onClear();
+          return KeyEventResult.handled;
+      }
+    }
+
+    final numpad = _numpadDigits[lk];
+    if (numpad != null) {
+      _onDigit(numpad);
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.numpadDecimal) {
+      _onDigit('.');
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.numpadAdd) {
+      _onOperator('+');
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.numpadSubtract) {
+      _onOperator('-');
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.numpadMultiply) {
+      _onOperator('×');
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.numpadDivide) {
+      _onOperator('÷');
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.enter || lk == LogicalKeyboardKey.numpadEnter) {
+      _onEquals();
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.backspace || lk == LogicalKeyboardKey.delete) {
+      _onBackspace();
+      return KeyEventResult.handled;
+    }
+    if (lk == LogicalKeyboardKey.escape) {
+      _onCancel();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _onCancel() {
     _haptic();
     Navigator.pop(context);
@@ -180,7 +278,10 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
           child: SafeArea(
             top: false,
             bottom: true,
-            child: Column(
+            child: Focus(
+              autofocus: true,
+              onKeyEvent: _onKeyEvent,
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Handle bar
@@ -274,6 +375,7 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -312,10 +414,7 @@ class _CalculadoraSheetState extends ConsumerState<_CalculadoraSheet> {
       case 'C': _onClear(); break;
       case '⌫': _onBackspace(); break;
       case '=': _onEquals(); break;
-      case '%':
-        final v = double.tryParse(_display) ?? 0;
-        setState(() => _display = _fmt(v / 100));
-        break;
+      case '%': _onPercent(); break;
       case '÷': case '×': case '-': case '+':
         _onOperator(k);
         break;
