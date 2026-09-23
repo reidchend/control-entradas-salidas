@@ -232,7 +232,7 @@ class ConfiguracionRepository {
     // sin registrar el movimiento intermedio (que hacían fallar la suma de
     // deltas y sobre/infra-estimaban el stock).
     const tipos =
-        'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.venta,tipo.eq.devolucion,tipo.eq.consumo';
+        'tipo.eq.entrada,tipo.eq.salida,tipo.eq.ajuste,tipo.eq.tr_salida,tipo.eq.tr_entrada,tipo.eq.entrada_produccion,tipo.eq.salida_produccion,tipo.eq.devolucion_produccion,tipo.eq.venta,tipo.eq.devolucion,tipo.eq.consumo';
     onProgreso?.call(0.10, 'Leyendo movimientos...');
     final activos = (await _db.client
             .from('movimientos')

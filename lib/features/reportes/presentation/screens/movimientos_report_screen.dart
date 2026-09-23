@@ -345,6 +345,7 @@ const Map<String, (String, Color, IconData)> _tiposInfo = {
   'venta': ('Venta', Colors.deepOrange, Icons.point_of_sale),
   'entrada_produccion': ('Ent. Producción', Colors.green, Icons.arrow_downward),
   'salida_produccion': ('Sal. Producción', Colors.red, Icons.arrow_upward),
+  'devolucion_produccion': ('Dev. Producción', Colors.purple, Icons.replay),
   'consumo': ('Consumo', Colors.deepPurple, Icons.delete_sweep_outlined),
 };
 

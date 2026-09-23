@@ -14,10 +14,11 @@ const Map<String, (String, Color)> _tipoLabels = {
   'devolucion': ('Devolución', Colors.blue),
   'entrada_produccion': ('Ent. Producción', Colors.green),
   'salida_produccion': ('Sal. Producción', Colors.red),
+  'devolucion_produccion': ('Dev. Producción', Colors.purple),
   'consumo': ('Consumo', Colors.deepPurple),
 };
 
-const Set<String> _tiposSalida = {'salida', 'salida_produccion', 'venta', 'consumo'};
+const Set<String> _tiposSalida = {'salida', 'salida_produccion', 'devolucion_produccion', 'venta', 'consumo'};
 
 /// Diálogo de historial de movimientos (porta `build_historial_dialog` de
 /// `usr/views/common/movimientos.py`).

@@ -573,6 +573,10 @@ class _ProductoDetalleReportScreenState extends ConsumerState<ProductoDetalleRep
             tipoColor = Colors.red;
             tipoIcon = Icons.arrow_upward;
             break;
+          case 'devolucion_produccion':
+            tipoColor = Colors.purple;
+            tipoIcon = Icons.replay;
+            break;
           case 'ajuste':
             tipoColor = Colors.orange;
             tipoIcon = Icons.tune;

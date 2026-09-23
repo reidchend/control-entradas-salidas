@@ -834,7 +834,7 @@ class ProduccionesRepository {
 
       await _registrarMovimiento(
         producto: prod,
-        tipo: 'salida_produccion',
+        tipo: 'devolucion_produccion',
         cantidad: cantidad,
         pesoTotal: pesoTotal,
         almacen: almacen,

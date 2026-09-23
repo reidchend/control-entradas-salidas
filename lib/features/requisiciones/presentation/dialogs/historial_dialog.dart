@@ -16,9 +16,10 @@ const Map<String, (String, Color)> _tipoLabels = {
   'devolucion': ('Devolución', Colors.blue),
   'entrada_produccion': ('Ent. Producción', Colors.green),
   'salida_produccion': ('Sal. Producción', Colors.red),
+  'devolucion_produccion': ('Dev. Producción', Colors.purple),
 };
 
-const Set<String> _tiposSalida = {'salida', 'salida_produccion', 'venta'};
+const Set<String> _tiposSalida = {'salida', 'salida_produccion', 'devolucion_produccion', 'venta'};
 
 Future<void> showHistorialAuditoria(
   BuildContext context, {
