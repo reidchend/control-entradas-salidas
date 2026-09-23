@@ -1,13 +1,24 @@
 import '../../../core/data/postgres_service.dart';
 import 'activo.dart';
+import 'activo_tipo.dart';
 import 'activos_categoria.dart';
 
-/// Repositorio de activos — CRUD de bienes y sus categorías.
-/// Opera contra las tablas `activos` y `activos_categorias`.
+/// Repositorio de activos — CRUD del catálogo de tipos y sus unidades.
+///
+/// Opera contra tres tablas:
+/// - `activos_categorias`: agrupación de primer nivel.
+/// - `activos_tipos`: catálogo maestro (nombre, grupo, modelo, categoría).
+/// - `activos`: una unidad física por fila (ubicación, estado, valor, ...),
+///   referenciando su tipo con `tipo_id`.
 class ActivosRepository {
   ActivosRepository(this._db);
 
   final PostgresService _db;
+
+  /// Columnas base de una unidad más los campos resueltos por JOIN.
+  static const _colsActivo =
+      'a.id, a.tipo_id, a.ubicacion, a.estado, a.valor, a.fecha, '
+      'a.observaciones, a.activo, a.created_at, a.updated_at';
 
   // ---------------------------------------------------------------------
   // Categorías
@@ -22,26 +33,23 @@ class ActivosRepository {
     return rows.map(ActivosCategoria.fromMap).toList();
   }
 
-  /// Categorías activas con su conteo de activos (para cards del grid).
+  /// Categorías activas con su conteo de unidades (vía tipos), para las
+  /// cards del grid.
   Future<List<Map<String, dynamic>>> getCategoriasConConteo() async {
-    final rows = await _db.fetchAll(
-      'activos_categorias',
-      orderBy: 'nombre',
-      filters: {'activo': true},
+    final rows = await _db.executeSql(
+      'SELECT c.*, COUNT(a.id) AS n '
+      'FROM activos_categorias c '
+      'LEFT JOIN activos_tipos t ON t.categoria_id = c.id '
+      'LEFT JOIN activos a ON a.tipo_id = t.id '
+      'WHERE c.activo = TRUE '
+      'GROUP BY c.id '
+      'ORDER BY c.nombre',
     );
-    final conteos = <int, int>{};
-    final activos = await _db.fetchAll('activos');
-    for (final a in activos) {
-      final cid = a['categoria_id'];
-      if (cid is num) {
-        conteos[cid.toInt()] = (conteos[cid.toInt()] ?? 0) + 1;
-      }
-    }
     return [
       for (final r in rows)
         {
           'categoria': ActivosCategoria.fromMap(r),
-          'conteo': conteos[(r['id'] as num).toInt()] ?? 0,
+          'conteo': (r['n'] as num?)?.toInt() ?? 0,
         }
     ];
   }
@@ -64,9 +72,8 @@ class ActivosRepository {
   }
 
   Future<void> deleteCategoria(int id) async {
-    // Los activos de la categoría quedan sin categoría.
     await _db.updateWhere(
-      'activos',
+      'activos_tipos',
       {'categoria_id': id},
       {'categoria_id': null},
     );
@@ -74,73 +81,121 @@ class ActivosRepository {
   }
 
   // ---------------------------------------------------------------------
-  // Activos
+  // Tipos (catálogo)
   // ---------------------------------------------------------------------
 
-  Future<List<Activo>> getActivos({
+  /// Tipos activos de una categoría (o todos) con su conteo de unidades.
+  /// [search] filtra por nombre, grupo o modelo (insensible a mayúsculas).
+  Future<List<Map<String, dynamic>>> getTipos({
     int? categoriaId,
     String? search,
   }) async {
-    final filters = <String, dynamic>{};
+    final condiciones = <String>['t.activo = TRUE'];
+    final params = <dynamic>[];
+    var i = 1;
     if (categoriaId != null) {
-      filters['categoria_id'] = categoriaId;
+      condiciones.add('t.categoria_id = \$${i++}');
+      params.add(categoriaId);
     }
-    final rows = await _db.fetchAll(
-      'activos',
-      orderBy: 'nombre',
-      ascending: true,
-      filters: filters,
-      search: (search == null || search.isEmpty) ? null : search,
-      searchColumn: 'nombre',
+    final q = search?.trim().toLowerCase();
+    if (q != null && q.isNotEmpty) {
+      condiciones.add(
+          '(LOWER(t.nombre) LIKE \$${i++} OR '
+          'LOWER(COALESCE(t.grupo, \'\')) LIKE \$${i++} OR '
+          'LOWER(COALESCE(t.modelo, \'\')) LIKE \$${i++})');
+      params
+        ..add('%$q%')
+        ..add('%$q%')
+        ..add('%$q%');
+    }
+
+    final rows = await _db.executeSql(
+      'SELECT t.*, COUNT(a.id) AS unidades '
+      'FROM activos_tipos t '
+      'LEFT JOIN activos a ON a.tipo_id = t.id '
+      'WHERE ${condiciones.join(' AND ')} '
+      'GROUP BY t.id '
+      'ORDER BY t.nombre',
+      params: params,
+    );
+    return [
+      for (final r in rows)
+        {
+          'tipo': ActivoTipo.fromMap(r),
+          'unidades': (r['unidades'] as num?)?.toInt() ?? 0,
+        }
+    ];
+  }
+
+  Future<int> createTipo(ActivoTipo tipo) {
+    return _db.insert('activos_tipos', tipo.toMap());
+  }
+
+  Future<void> updateTipo(int id, ActivoTipo tipo) {
+    return _db.updateById('activos_tipos', id, tipo.toMap());
+  }
+
+  Future<void> deactivateTipo(int id) async {
+    await _db.updateById('activos_tipos', id, {'activo': false});
+  }
+
+  /// Elimina el tipo y sus unidades (transacción atómica).
+  Future<void> deleteTipo(int id) {
+    return _db.transaction((tx) async {
+      await tx.deleteWhere('activos', {'tipo_id': id});
+      await tx.deleteById('activos_tipos', id);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Unidades (activos físicos)
+  // ---------------------------------------------------------------------
+
+  /// Unidades de un tipo, con los campos del catálogo resueltos por JOIN.
+  Future<List<Activo>> getUnidadesDeTipo(int tipoId, {String? search}) async {
+    final q = search?.trim().toLowerCase();
+    final list = q != null && q.isNotEmpty;
+    final sql =
+        'SELECT $_colsActivo, '
+        't.nombre AS tipo_nombre, t.grupo, t.modelo, t.categoria_id, '
+        'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
+        'FROM activos a '
+        'JOIN activos_tipos t ON t.id = a.tipo_id '
+        'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+        'WHERE a.tipo_id = \$1'
+        '${list ? ' AND (LOWER(COALESCE(a.ubicacion, \'\')) LIKE \$2 OR LOWER(COALESCE(a.observaciones, \'\')) LIKE \$2)' : ''} '
+        'ORDER BY a.ubicacion NULLS LAST, a.id';
+    final rows = await _db.executeSql(
+      sql,
+      params: list ? [tipoId, '%$q%'] : [tipoId],
     );
     return rows.map(Activo.fromMap).toList();
   }
 
-  Future<int> createActivo(Activo activo) async {
+  Future<int> createActivo(Activo activo) {
     return _db.insert('activos', activo.toMap());
   }
 
-  /// Todos los activos (incluye desactivados) con el nombre de su categoría
-  /// resuelto por JOIN, listos para exportar.
-  Future<List<Map<String, dynamic>>> getActivosParaExportar() async {
-    return _db.executeSql(
-      'SELECT a.*, COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
-      'FROM activos a '
-      'LEFT JOIN activos_categorias c ON c.id = a.categoria_id '
-      'ORDER BY categoria_nombre, a.grupo, a.nombre',
-    );
+  Future<void> updateActivo(int id, Activo activo) {
+    return _db.updateById('activos', id, activo.toMap());
   }
 
-  /// Totales por grupo (por categoría): nº de activos, unidades y valor total.
-  Future<List<Map<String, dynamic>>> getTotalesPorGrupo() async {
-    return _db.executeSql(
-      'SELECT COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre, '
-      'COALESCE(NULLIF(a.grupo, \'\'), \'Sin grupo\') AS grupo, '
-      'COUNT(*) AS n_activos, '
-      'COALESCE(SUM(a.cantidad), 0) AS unidades, '
-      'COALESCE(SUM(a.valor), 0) AS valor_total '
-      'FROM activos a '
-      'LEFT JOIN activos_categorias c ON c.id = a.categoria_id '
-      'GROUP BY c.nombre, a.grupo '
-      'ORDER BY categoria_nombre, a.grupo',
-    );
+  Future<void> deactivateActivo(int id) async {
+    await _db.updateById('activos', id, {'activo': false});
   }
 
-  /// Grupos existentes (distintos) entre todos los activos, ordenados.
-  Future<List<String>> getGrupos() async {
-    try {
-      final rows = await _db.executeSql(
-        'SELECT DISTINCT grupo FROM activos '
-        'WHERE grupo IS NOT NULL AND grupo <> \'\' '
-        'ORDER BY grupo',
-      );
-      return [for (final r in rows) r['grupo'] as String];
-    } catch (_) {
-      return const [];
-    }
+  Future<void> deleteActivo(int id) async {
+    await _db.deleteById('activos', id);
   }
 
-  /// Ubicaciones existentes (distintas) entre todos los activos, ordenadas.
+  // ---------------------------------------------------------------------
+  // Valores de dimensión (grid "por valor")
+  // ---------------------------------------------------------------------
+
+  Future<List<String>> getGrupos() => _distintosTipos('grupo');
+
+  Future<List<String>> getModelos() => _distintosTipos('modelo');
+
   Future<List<String>> getUbicaciones() async {
     try {
       final rows = await _db.executeSql(
@@ -154,23 +209,33 @@ class ActivosRepository {
     }
   }
 
-  /// Modelos existentes (distintos) entre todos los activos, ordenados.
-  Future<List<String>> getModelos() async {
+  Future<List<String>> _distintosTipos(String col) async {
     try {
       final rows = await _db.executeSql(
-        'SELECT DISTINCT modelo FROM activos '
-        'WHERE modelo IS NOT NULL AND modelo <> \'\' '
-        'ORDER BY modelo',
+        'SELECT DISTINCT t.$col FROM activos_tipos t '
+        'WHERE t.$col IS NOT NULL AND t.$col <> \'\' AND t.activo = TRUE '
+        'ORDER BY t.$col',
       );
-      return [for (final r in rows) r['modelo'] as String];
+      return [for (final r in rows) r[col] as String];
     } catch (_) {
       return const [];
     }
   }
 
-  /// Valores de una columna (ubicacion, grupo, modelo, estado...) con el nº
-  /// de activos activos que lo usan, para el grid de valores.
+  /// Valores de una columna con el nº de unidades activas que lo usan.
+  /// `grupo` y `modelo` viven en el catálogo (tipos); `ubicacion` y
+  /// `estado` en las unidades.
   Future<List<Map<String, dynamic>>> getValoresConConteo(String columna) async {
+    if (columna == 'grupo' || columna == 'modelo') {
+      return _db.executeSql(
+        'SELECT t.$columna AS valor, COUNT(a.id) AS n '
+        'FROM activos_tipos t '
+        'LEFT JOIN activos a ON a.tipo_id = t.id '
+        'WHERE t.$columna IS NOT NULL AND t.$columna <> \'\' '
+        'AND a.activo = TRUE '
+        'GROUP BY t.$columna ORDER BY t.$columna',
+      );
+    }
     return _db.executeSql(
       'SELECT a.$columna AS valor, COUNT(*) AS n '
       'FROM activos a '
@@ -179,8 +244,8 @@ class ActivosRepository {
     );
   }
 
-  /// Activos que cumplen los filtros seleccionados (todos los campos
-  /// opcionales), con nombre de categoría resuelto por JOIN.
+  /// Unidades que cumplen los filtros (categoría/grupo/modelo desde el
+  /// catálogo; ubicación/estado desde la unidad), con campos resueltos.
   Future<List<Map<String, dynamic>>> getActivosConFiltros({
     int? categoriaId,
     String? grupo,
@@ -191,40 +256,64 @@ class ActivosRepository {
     final condiciones = <String>[];
     final params = <dynamic>[];
     var i = 1;
-    void add(String col, dynamic v) {
-      condiciones.add('a.$col = \$$i');
+    void add(String cond, dynamic v) {
+      condiciones.add(cond);
       params.add(v);
       i++;
     }
 
-    if (categoriaId != null) add('categoria_id', categoriaId);
-    if (grupo != null && grupo.trim().isNotEmpty) add('grupo', grupo.trim());
+    if (categoriaId != null) add('t.categoria_id = \$${i++}', categoriaId);
+    if (grupo != null && grupo.trim().isNotEmpty) add('t.grupo = \$${i++}', grupo.trim());
+    if (modelo != null && modelo.trim().isNotEmpty) add('t.modelo = \$${i++}', modelo.trim());
     if (ubicacion != null && ubicacion.trim().isNotEmpty) {
-      add('ubicacion', ubicacion.trim());
+      add('a.ubicacion = \$${i++}', ubicacion.trim());
     }
-    if (modelo != null && modelo.trim().isNotEmpty) add('modelo', modelo.trim());
-    if (estado != null && estado.trim().isNotEmpty) add('estado', estado.trim());
+    if (estado != null && estado.trim().isNotEmpty) add('a.estado = \$${i++}', estado.trim());
 
     final where =
         condiciones.isEmpty ? '' : ' WHERE ${condiciones.join(' AND ')}';
     final sql =
-        'SELECT a.*, COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
+        'SELECT $_colsActivo, '
+        't.nombre AS tipo_nombre, t.grupo, t.modelo, t.categoria_id, '
+        'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
         'FROM activos a '
-        'LEFT JOIN activos_categorias c ON c.id = a.categoria_id'
+        'JOIN activos_tipos t ON t.id = a.tipo_id '
+        'LEFT JOIN activos_categorias c ON c.id = t.categoria_id'
         '$where '
-        'ORDER BY categoria_nombre, a.grupo, a.nombre';
+        'ORDER BY categoria_nombre, t.grupo, t.nombre, a.id';
     return _db.executeSql(sql, params: params);
   }
 
-  Future<void> updateActivo(int id, Activo activo) {
-    return _db.updateById('activos', id, activo.toMap());
+  // ---------------------------------------------------------------------
+  // Exportación (Excel)
+  // ---------------------------------------------------------------------
+
+  /// Todas las unidades (incluye desactivadas) con datos de su tipo y
+  /// categoría resueltos por JOIN.
+  Future<List<Map<String, dynamic>>> getActivosParaExportar() async {
+    return _db.executeSql(
+      'SELECT a.*, t.nombre, t.grupo, t.modelo, t.categoria_id, '
+      'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
+      'FROM activos a '
+      'JOIN activos_tipos t ON t.id = a.tipo_id '
+      'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+      'ORDER BY categoria_nombre, t.grupo, t.nombre, a.id',
+    );
   }
 
-  Future<void> deactivateActivo(int id) async {
-    await _db.updateById('activos', id, {'activo': false});
-  }
-
-  Future<void> deleteActivo(int id) async {
-    await _db.deleteById('activos', id);
+  /// Totales por grupo (por categoría): nº de unidades y valor total.
+  Future<List<Map<String, dynamic>>> getTotalesPorGrupo() async {
+    return _db.executeSql(
+      'SELECT COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre, '
+      'COALESCE(NULLIF(t.grupo, \'\'), \'Sin grupo\') AS grupo, '
+      'COUNT(a.id) AS n_activos, '
+      'COUNT(a.id) AS unidades, '
+      'COALESCE(SUM(a.valor), 0) AS valor_total '
+      'FROM activos a '
+      'JOIN activos_tipos t ON t.id = a.tipo_id '
+      'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+      'GROUP BY c.nombre, t.grupo '
+      'ORDER BY categoria_nombre, t.grupo',
+    );
   }
 }

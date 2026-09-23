@@ -9,6 +9,21 @@ class ReportesRepository {
   ReportesRepository(this._db);
   final PostgresService _db;
 
+  /// Convierte un valor que puede venir como `num` o `String` a `double`
+  /// (Postgres devuelve `numeric` como String según el driver).
+  static double _toDouble(dynamic v, [double fallback = 0]) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? fallback;
+    return fallback;
+  }
+
+  /// Igual que [_toDouble] pero a `int`.
+  static int _toInt(dynamic v, [int fallback = 0]) {
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? fallback;
+    return fallback;
+  }
+
   /// Ventas en un rango de fechas con filtros opcionales
   Future<List<Map<String, dynamic>>> getVentas({
     required DateTime desde,
@@ -48,7 +63,14 @@ class ReportesRepository {
       if (cajero != null && cajero != 'Todos') cajero,
       if (formaPago != null && formaPago != 'Todas') formaPago,
     ]);
-    return rows;
+    // Normalizar campos numéricos (Postgres puede devolver `numeric` como String)
+    return rows.map((v) {
+      return {
+        ...v,
+        'total': _toDouble(v['total']),
+        'tasa_bs': _toDouble(v['tasa_bs']),
+      };
+    }).toList();
   }
 
   /// Detalle de items de una venta (desde items_json de pos_ventas)
@@ -127,9 +149,9 @@ class ReportesRepository {
     ]);
 
     final r = rows.isNotEmpty ? rows.first : null;
-    final totalVentas = (r?['total_ventas'] as num?)?.toDouble() ?? 0;
-    final numComandas = (r?['num_comandas'] as num?)?.toInt() ?? 0;
-    final productosVendidos = (r?['productos_vendidos'] as num?)?.toInt() ?? 0;
+    final totalVentas = _toDouble(r?['total_ventas']);
+    final numComandas = _toInt(r?['num_comandas']);
+    final productosVendidos = _toInt(r?['productos_vendidos']);
 
     return {
       'total_ventas': totalVentas,
@@ -165,8 +187,8 @@ class ReportesRepository {
     return rows.map((r) => {
       'producto_id': int.tryParse('${r['producto_id']}') ?? 0,
       'nombre': r['nombre'] as String? ?? 'Producto #${r['producto_id']}',
-      'cantidad': (r['cantidad'] as num?)?.toDouble() ?? 0,
-      'total': (r['total'] as num?)?.toDouble() ?? 0,
+      'cantidad': _toDouble(r['cantidad']),
+      'total': _toDouble(r['total']),
     }).toList();
   }
 
@@ -188,7 +210,7 @@ class ReportesRepository {
 
     return rows.map((r) => {
       'fecha': r['fecha'] as String? ?? '',
-      'total': (r['total'] as num?)?.toDouble() ?? 0,
+      'total': _toDouble(r['total']),
     }).toList();
   }
 
@@ -206,14 +228,17 @@ class ReportesRepository {
         v.correlativo,
         v.total,
         v.created_at,
-        v.cajero_nombre,
-        v.mesa_nombre,
-        v.habitacion_numero,
+        u.nombre AS cajero_nombre,
+        m.nombre AS mesa_nombre,
+        h.numero AS habitacion_numero,
         (item->>'cantidad')::numeric AS cantidad,
         (item->>'precio')::numeric AS precio,
         (item->>'cantidad')::numeric * COALESCE((item->>'precio')::numeric, 0) AS subtotal
       FROM pos_ventas v
       CROSS JOIN LATERAL json_array_elements(v.items_json::json) item
+      LEFT JOIN pos_usuarios u ON u.id = v.usuario_id
+      LEFT JOIN pos_mesas m ON m.id = v.mesa_id
+      LEFT JOIN pos_habitaciones h ON h.id = v.habitacion_id
       WHERE v.created_at >= \$1 AND v.created_at <= \$2
         AND COALESCE(item->>'producto_id', item->>'id') = \$3
       ORDER BY v.created_at DESC
@@ -246,8 +271,26 @@ class ReportesRepository {
       hasta.toUtc().toIso8601String(),
     ]);
 
+    // Normalizar campos numéricos (Postgres devuelve `numeric` como String)
+    final ventasNorm = ventasRows.map((v) {
+      return {
+        ...v,
+        'total': _toDouble(v['total']),
+        'cantidad': _toDouble(v['cantidad']),
+        'precio': _toDouble(v['precio']),
+        'subtotal': _toDouble(v['subtotal']),
+      };
+    }).toList();
+    final movNorm = movRows.map((m) => {
+      ...m,
+      'cantidad': _toDouble(m['cantidad']),
+      'cantidad_anterior': _toDouble(m['cantidad_anterior']),
+      'cantidad_nueva': _toDouble(m['cantidad_nueva']),
+      'peso_total': _toDouble(m['peso_total']),
+    }).toList();
+
     // Calcular frecuencia de entradas (días promedio entre entradas)
-    final entradas = movRows.where((m) => m['tipo'] == 'entrada' || m['tipo'] == 'entrada_produccion').toList();
+    final entradas = movNorm.where((m) => m['tipo'] == 'entrada' || m['tipo'] == 'entrada_produccion').toList();
     double? frecuenciaEntradasDias;
     if (entradas.length >= 2) {
       final fechas = entradas.map((e) => DateTime.parse(e['fecha_movimiento'] as String)).toList();
@@ -260,8 +303,8 @@ class ReportesRepository {
     }
 
     return {
-      'ventas': ventasRows,
-      'movimientos': movRows,
+      'ventas': ventasNorm,
+      'movimientos': movNorm,
       'frecuencia_entradas_dias': frecuenciaEntradasDias,
       'total_entradas': entradas.length,
     };

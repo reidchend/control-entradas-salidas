@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/pos_cierre_models.dart';
 import '../../../../core/models/pos_models.dart';
-import '../../../../features/whatsapp/data/whatsapp_providers.dart';
-
-/// Resultado del diálogo de cierre de turno.
 enum CierreTurnoResultado {
-  /// El usuario confirmó el cierre (guarda, envía WhatsApp automático, cierra sesión).
+  /// El usuario confirmó el cierre (guarda, cierra sesión; el WhatsApp se
+  /// envía después de la persistencia desde el flujo llamador).
   confirmar,
 
   /// El usuario canceló o solo quiere salir sin cerrar.
@@ -15,8 +12,9 @@ enum CierreTurnoResultado {
 }
 
 /// Diálogo de cierre de turno con corte de inventario.
-/// Muestra resumen, aviso por turno corto (<8h), y requiere tipear "CONFIRMAR".
-/// Al confirmar, envía los reportes por WhatsApp automáticamente y cierra la sesión.
+/// Muestra resumen y aviso por turno corto (<8h). Al confirmar, devuelve
+/// `confirmar`; la persistencia y el envío de WhatsApp los hace el flujo
+/// llamador DESPUÉS, para no enviar el reporte sin haber guardado el cierre.
 Future<CierreTurnoResultado?> showCierreTurnoDialog(
   BuildContext context,
   CierreCaja cierre,
@@ -29,7 +27,7 @@ Future<CierreTurnoResultado?> showCierreTurnoDialog(
   );
 }
 
-class _CierreTurnoDialog extends ConsumerStatefulWidget {
+class _CierreTurnoDialog extends StatefulWidget {
   const _CierreTurnoDialog({
     required this.cierre,
     required this.sesion,
@@ -39,31 +37,10 @@ class _CierreTurnoDialog extends ConsumerStatefulWidget {
   final PosSesion sesion;
 
   @override
-  ConsumerState<_CierreTurnoDialog> createState() => _CierreTurnoDialogState();
+  State<_CierreTurnoDialog> createState() => _CierreTurnoDialogState();
 }
 
-class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
-  final _confirmCtrl = TextEditingController();
-  bool _confirmarHabilitado = false;
-  bool _enviando = false;
-
-  @override
-  void dispose() {
-    _confirmCtrl.dispose();
-    super.dispose();
-  }
-
-  void _onConfirmChange(String value) {
-    setState(() {
-      _confirmarHabilitado = value.trim() == 'CONFIRMAR';
-    });
-  }
-
-  String _fmtNum(double v) {
-    if (v == v.truncateToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-  }
-
+class _CierreTurnoDialogState extends State<_CierreTurnoDialog> {
   bool get _turnoCorto {
     final abierta = DateTime.tryParse(widget.sesion.abiertaEn ?? '');
     if (abierta == null) return false;
@@ -80,138 +57,9 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
     return '${h}h ${m}m';
   }
 
-  /// Genera el texto del reporte simple para WhatsApp
-  String _generarReporteSimpleTexto() {
-    final c = widget.cierre;
-    final sb = StringBuffer();
-    sb.writeln('📊 *CIERRE DE TURNO*');
-    sb.writeln('Cajero: ${c.usuarioNombre}');
-    sb.writeln('Apertura: ${_fmtFecha(c.abiertaEn)}');
-    sb.writeln('Cierre: ${_fmtFecha(c.cerradaEn)}');
-    sb.writeln('Duración: ${_duracionTexto()}');
-    sb.writeln('');
-    sb.writeln('💰 *CAJA*');
-    sb.writeln('Inicial: \$${_fmtNum(c.cajaInicial)}');
-    sb.writeln('Ventas:  \$${_fmtNum(c.totalVentas)}');
-    sb.writeln('──────────────');
-    sb.writeln('Final:   \$${_fmtNum(c.cajaFinal)}');
-    sb.writeln('');
-
-    // Agrupar por categoría
-    final porCategoria = <String, List<LineaVenta>>{};
-    for (final l in c.reporteSimple.lineas) {
-      porCategoria.putIfAbsent(l.categoria, () => []).add(l);
-    }
-
-    sb.writeln('📦 *VENTAS POR CATEGORÍA*');
-    for (final entry in porCategoria.entries) {
-      final categoria = entry.key;
-      final items = entry.value;
-      final subtotal = items.fold<double>(0, (s, l) => s + l.total);
-      
-      sb.writeln('');
-      sb.writeln('*${categoria.toUpperCase()}*');
-      sb.writeln('━━━━━━━━━━━━━━━━━━');
-      for (final l in items) {
-        sb.writeln('**${l.nombre}**');
-        sb.writeln('  ${_fmtNum(l.cantidad)} x \$${_fmtNum(l.precioUnitario)} = *\$${_fmtNum(l.total)}*');
-      }
-      sb.writeln('  *Subtotal: \$${_fmtNum(subtotal)}*');
-    }
-    sb.writeln('');
-    final contornos = c.reporteSimple.contornos;
-    if (contornos.isNotEmpty) {
-      sb.writeln('🍽️ *CONTORNOS SERVIDOS*');
-      for (final cn in contornos) {
-        sb.writeln('  ${cn.nombre}: ${_fmtNum(cn.cantidad)}');
-      }
-      sb.writeln('');
-    }
-    sb.writeln('💰 *TOTAL GENERAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}*');
-    sb.writeln('');
-    sb.writeln('_Lycoris POS_');
-    return sb.toString();
-  }
-
-  /// Genera el contenido del reporte detallado (.txt) para WhatsApp
-  String _generarReporteDetalladoTexto() {
-    final c = widget.cierre;
-    final sb = StringBuffer();
-    sb.writeln('CIERRE DE TURNO - DETALLADO');
-    sb.writeln('============================');
-    sb.writeln('');
-    sb.writeln('Cajero: ${c.usuarioNombre}');
-    sb.writeln('Apertura: ${_fmtFecha(c.abiertaEn)}');
-    sb.writeln('Cierre: ${_fmtFecha(c.cerradaEn)}');
-    sb.writeln('Duración: ${_duracionTexto()}');
-    sb.writeln('');
-    sb.writeln('CAJA');
-    sb.writeln('----');
-    sb.writeln('Inicial: ${_fmtNum(c.cajaInicial)}');
-    sb.writeln('Ventas:  ${_fmtNum(c.totalVentas)}');
-    sb.writeln('Final:   ${_fmtNum(c.cajaFinal)}');
-    sb.writeln('');
-    sb.writeln('DESGLOSE POR INGREDIENTE');
-    sb.writeln('------------------------');
-    for (final d in c.reporteDetallado.desgloses) {
-      sb.writeln('');
-      sb.writeln('Ingrediente: ${d.ingrediente}');
-      sb.writeln('  Total consumido: ${_fmtNum(d.totalConsumido)}');
-      sb.writeln('  Stock final:     ${_fmtNum(d.stockFinal)}');
-      sb.writeln('  Usos:');
-      for (final u in d.usos) {
-        sb.writeln('    - ${u.plato}: ${_fmtNum(u.cantidad)}');
-      }
-    }
-    sb.writeln('');
-    sb.writeln('============================');
-    sb.writeln('Lycoris POS');
-    return sb.toString();
-  }
-
-  Future<void> _confirmarYEnviar() async {
-    final waRepo = ref.read(whatsappRepoProvider);
-    if (waRepo == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('WhatsApp no configurado; cierre sin envío')),
-      );
-      Navigator.pop(context, CierreTurnoResultado.confirmar);
-      return;
-    }
-
-    setState(() => _enviando = true);
-
-    try {
-      final reporteSimple = _generarReporteSimpleTexto();
-      final reporteDetallado = _generarReporteDetalladoTexto();
-      final fileName = 'cierre_${widget.sesion.id}_${DateTime.now().millisecondsSinceEpoch}.txt';
-
-      // Enviar reporte simple (texto)
-      await waRepo.enviarReporteSimple(reporteSimple);
-
-      // Enviar reporte detallado (documento .txt)
-      await waRepo.enviarReporteDetallado(
-        fileName: fileName,
-        content: reporteDetallado,
-        caption: 'Cierre de turno - Detalle ingredientes',
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reportes enviados por WhatsApp ✅')),
-      );
-
-      Navigator.pop(context, CierreTurnoResultado.confirmar);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error enviando WhatsApp: $e; cierre continúa')),
-      );
-      Navigator.pop(context, CierreTurnoResultado.confirmar);
-    } finally {
-      if (mounted) setState(() => _enviando = false);
-    }
+  String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
 
   @override
@@ -282,12 +130,12 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
             _ResumenRow(label: 'Duración', valor: _duracionTexto()),
             const SizedBox(height: 16),
 
-            // Nota de envío automático
+            // Nota
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: scheme.primaryContainer.withOpacity(0.3),
+                color: scheme.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -296,7 +144,8 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Al confirmar, se envían los reportes (simple + detallado) por WhatsApp automáticamente.',
+                      'Al confirmar se cierra el turno y se guarda el corte. '
+                      'Los reportes se envían por WhatsApp automáticamente.',
                       style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer),
                     ),
                   ),
@@ -305,51 +154,19 @@ class _CierreTurnoDialogState extends ConsumerState<_CierreTurnoDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Confirmación por texto
-            Text(
-              'Para confirmar el cierre, escribe "CONFIRMAR" en el campo:',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _confirmCtrl,
-              onChanged: _onConfirmChange,
-              decoration: InputDecoration(
-                hintText: 'CONFIRMAR',
-                border: const OutlineInputBorder(),
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest,
-                counterText: '',
-              ),
-              maxLength: 9,
-              textCapitalization: TextCapitalization.characters,
-            ),
-            const SizedBox(height: 16),
-
-            // Botón único de confirmar (envía WhatsApp + cierra)
+            // Botón único de confirmar
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                icon: _enviando
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle),
-                label: Text(_enviando ? 'Enviando y cerrando...' : 'Confirmar cierre y enviar WhatsApp'),
-                onPressed: _confirmarHabilitado && !_enviando
-                    ? _confirmarYEnviar
-                    : null,
+                icon: const Icon(Icons.check_circle),
+                label: const Text('Confirmar cierre'),
+                onPressed: () =>
+                    Navigator.pop(context, CierreTurnoResultado.confirmar),
               ),
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: _enviando
-                  ? null
-                  : () => Navigator.pop(context, CierreTurnoResultado.cancelar),
+              onPressed: () => Navigator.pop(context, CierreTurnoResultado.cancelar),
               child: const Text('Cancelar'),
             ),
           ],

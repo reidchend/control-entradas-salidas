@@ -731,22 +731,31 @@ class PosRepository {
     );
   }
 
-  /// Guarda el cierre en la tabla histórica pos_cierres
-  Future<int> guardarCierre(CierreCaja cierre) async {
-    final now = DateTime.now().toIso8601String();
-    return await _db.insert('pos_cierres', {
-      'sesion_id': cierre.sesionId,
-      'usuario_id': cierre.usuarioId,
-      'abierta_en': cierre.abiertaEn,
-      'cerrada_en': cierre.cerradaEn,
-      'caja_inicial': cierre.cajaInicial,
-      'total_ventas': cierre.totalVentas,
-      'caja_final': cierre.cajaFinal,
-      'reporte_simple_json': jsonEncode(cierre.reporteSimple.toJson()),
-      'reporte_detallado_json': jsonEncode(cierre.reporteDetallado.toJson()),
-      'sync_uuid': cierre.syncUuid,
-      'created_at': now,
-      'updated_at': now,
+  /// Persiste el cierre y cierra el turno de caja de forma atómica
+  /// (transacción). Si algo falla, se revierte todo y el turno queda abierto,
+  /// de modo que nunca se envían reportes sin haber guardado el cierre.
+  Future<void> finalizarCierreYTurno(CierreCaja cierre) async {
+    await _db.transaction((tx) async {
+      final now = DateTime.now().toIso8601String();
+      await tx.insert('pos_cierres', {
+        'sesion_id': cierre.sesionId,
+        'usuario_id': cierre.usuarioId,
+        'abierta_en': cierre.abiertaEn,
+        'cerrada_en': cierre.cerradaEn,
+        'caja_inicial': cierre.cajaInicial,
+        'total_ventas': cierre.totalVentas,
+        'caja_final': cierre.cajaFinal,
+        'reporte_simple_json': jsonEncode(cierre.reporteSimple.toJson()),
+        'reporte_detallado_json': jsonEncode(cierre.reporteDetallado.toJson()),
+        'sync_uuid': cierre.syncUuid,
+        'created_at': now,
+        'updated_at': now,
+      });
+      await tx.updateById('pos_sesiones', cierre.sesionId, {
+        'cerrada_en': cierre.cerradaEn,
+        'caja_final': cierre.cajaFinal,
+        'updated_at': now,
+      });
     });
   }
 }

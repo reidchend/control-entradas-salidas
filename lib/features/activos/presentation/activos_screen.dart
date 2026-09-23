@@ -2,25 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/activo.dart';
+import '../data/activo_tipo.dart';
 import '../data/activos_categoria.dart';
 import '../data/activos_filtro.dart';
 import '../data/activos_providers.dart';
 import '../data/activos_repository.dart';
-import 'dialogs/activo_dialog.dart';
 import 'dialogs/activos_categoria_dialog.dart';
 import 'dialogs/activos_excel_dialog.dart';
+import 'dialogs/tipo_dialog.dart';
+import 'dialogs/unidad_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
-import 'widgets/activos_panel.dart';
 import 'widgets/activos_valores_grid.dart';
+import 'widgets/tipos_panel.dart';
+import 'widgets/unidades_panel.dart';
 
-/// Pantalla de Inventario de Activos:
+/// Pantalla de Inventario de Activos (catálogo de tipos + unidades):
 /// - Raíz: grid de categorías + selector de dimensión (Ubicación, Grupo,
-///   Modelo, Estado) que muestra un grid con los valores de esa dimensión.
-/// - Click en un valor → panel de activos que lo usan (con back).
-/// - Se pueden crear categorías nuevas y valores nuevos (ubicación, grupo,
-///   modelo) entrando directamente a agregar el primer activo.
+///   Modelo, Estado).
+/// - Categoría → el nivel de tipos del catálogo (con su conteo de unidades).
+/// - Tipo → el detalle de sus unidades físicas (por ubicación).
+/// El selector por valor (ubicación/grupo/modelo/estado) muestra las
+/// unidades que cumplen esa dimensión.
 class ActivosScreen extends ConsumerStatefulWidget {
   const ActivosScreen({super.key});
 
@@ -58,6 +61,7 @@ const _dims = <String, _DimInfo>{
 class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   String _dim = 'categoria';
   ActivosCategoria? _categoria;
+  ActivoTipo? _tipo;
   String? _valor;
   int _tick = 0;
   String _search = '';
@@ -75,9 +79,10 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   Widget build(BuildContext context) {
     final repo = ref.watch(activosRepoProvider)!;
     final colors = Theme.of(context).colorScheme;
+    final enRaiz = _categoria == null && _tipo == null && _valor == null;
 
     return Scaffold(
-      floatingActionButton: _categoria == null && _valor == null
+      floatingActionButton: enRaiz
           ? FloatingActionButton.extended(
               onPressed: () => _crearActivo(repo),
               icon: const Icon(Icons.add),
@@ -107,49 +112,80 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   }
 
   Widget _buildCuerpo(ActivosRepository repo, ColorScheme colors) {
-    if (_categoria != null) {
-      return _categoriaPanel(repo, colors);
-    }
+    final tipo = _tipo;
+    if (tipo != null) return _tipoUnidades(repo, colors, tipo);
+    if (_categoria != null) return _categoriaPanel(repo, colors);
     final valor = _valor;
-    if (valor != null) {
-      return _valorPanel(repo, colors, valor);
-    }
+    if (valor != null) return _valorPanel(repo, colors, valor);
     return _raiz(repo, colors);
+  }
+
+  Widget _backHeader(ColorScheme colors, String titulo, VoidCallback onBack) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Volver',
+            onPressed: onBack,
+          ),
+          Expanded(
+            child: Text(
+              titulo,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _volverRaiz() {
+    setState(() {
+      _categoria = null;
+      _tipo = null;
+      _valor = null;
+      _search = '';
+      _searchCtrl.clear();
+    });
   }
 
   Widget _categoriaPanel(ActivosRepository repo, ColorScheme colors) {
     return Column(
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back),
-                tooltip: 'Volver',
-                onPressed: () => setState(() {
-                  _categoria = null;
-                  _valor = null;
-                  _search = '';
-                  _searchCtrl.clear();
-                }),
-              ),
-              Expanded(
-                child: Text(
-                  _categoria!.nombre,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
+        _backHeader(colors, _categoria!.nombre, _volverRaiz),
         Expanded(
-          child: ActivosPanel(
+          child: TiposPanel(
             repo: repo,
             categoria: _categoria!,
+            searchTerm: _search,
+            onOpenTipo: (t) => setState(() {
+              _tipo = t;
+              _valor = null;
+              _tick++;
+              _search = '';
+              _searchCtrl.clear();
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tipoUnidades(
+      ActivosRepository repo, ColorScheme colors, ActivoTipo tipo) {
+    return Column(
+      children: [
+        _backHeader(colors, tipo.nombre,
+            () => setState(() => _tipo = null)),
+        Expanded(
+          child: UnidadesPanel(
+            repo: repo,
+            tipo: tipo,
             searchTerm: _search,
           ),
         ),
@@ -233,6 +269,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         repo: repo,
         onSelect: (c) => setState(() {
           _categoria = c;
+          _tipo = null;
           _valor = null;
           _tick++;
           _search = '';
@@ -261,9 +298,11 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   Widget _buildHeader(ActivosRepository repo, ColorScheme colors) {
     final hint = _categoria != null
         ? 'Buscar en ${_categoria!.nombre}...'
-        : _valor != null
-            ? 'Buscar activos...'
-            : 'Buscar activo... (F1)';
+        : _tipo != null
+            ? 'Buscar unidad...'
+            : _valor != null
+                ? 'Buscar activos...'
+                : 'Buscar activo... (F1)';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -291,7 +330,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
               onChanged: (v) => setState(() => _search = v),
             ),
           ),
-          if (_categoria == null && _valor == null) ...[
+          if (_categoria == null && _tipo == null && _valor == null) ...[
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.file_download_outlined),
@@ -304,17 +343,23 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     );
   }
 
+  Future<List<ActivoTipo>> _tipos(ActivosRepository repo) async {
+    final maps = await repo.getTipos();
+    return [for (final m in maps) m['tipo'] as ActivoTipo];
+  }
+
   Future<void> _crearActivo(ActivosRepository repo) async {
+    final tipos = await _tipos(repo);
     final categorias = await repo.getCategorias();
-    final grupos = await repo.getGrupos();
     final ubicaciones = await repo.getUbicaciones();
-    final modelos = await repo.getModelos();
     if (!mounted) return;
-    final nuevo = await showActivoDialog(context,
-        categorias: categorias,
-        grupos: grupos,
-        ubicaciones: ubicaciones,
-        modelos: modelos);
+    final nuevo = await showUnidadDialog(
+      context,
+      tipos: tipos,
+      categorias: categorias,
+      onCrearTipo: (t) => repo.createTipo(t),
+      ubicacionesSugeridas: ubicaciones,
+    );
     if (nuevo == null) return;
     try {
       await repo.createActivo(nuevo);
@@ -352,47 +397,75 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     await _agregarAValor(repo, columna, nombre);
   }
 
-  /// Abre el diálogo de activo con [columna]=[valor] prefijado y, al guardar,
-  /// entra a la vista del valor.
+  /// Agrega una unidad prefijando [columna]=[valor].
+  /// - ubicación: nueva unidad (elige o crea el tipo).
+  /// - grupo/modelo: nuevo tipo con ese valor prefijado, y entra a su detalle.
   Future<void> _agregarAValor(ActivosRepository repo, String columna,
       String valor) async {
+    if (columna == 'ubicacion') {
+      final tipos = await _tipos(repo);
+      final categorias = await repo.getCategorias();
+      final ubicaciones = await repo.getUbicaciones();
+      if (!mounted) return;
+      final nuevo = await showUnidadDialog(
+        context,
+        tipos: tipos,
+        categorias: categorias,
+        onCrearTipo: (t) => repo.createTipo(t),
+        ubicacionPreset: valor,
+        ubicacionesSugeridas: ubicaciones,
+      );
+      if (nuevo == null) return;
+      try {
+        await repo.createActivo(nuevo);
+        if (mounted) {
+          setState(() {
+            _categoria = null;
+            _tipo = null;
+            _valor = valor;
+            _tick++;
+          });
+        }
+      } catch (e) {
+        _snack('Error al crear activo: $e');
+      }
+      return;
+    }
+
     final categorias = await repo.getCategorias();
     final grupos = await repo.getGrupos();
-    final ubicaciones = await repo.getUbicaciones();
     final modelos = await repo.getModelos();
     if (!mounted) return;
-    final plantilla = _activoParaValor(columna, valor);
-    final nuevo = await showActivoDialog(context,
-        activo: plantilla,
-        categorias: categorias,
-        grupos: grupos,
-        ubicaciones: ubicaciones,
-        modelos: modelos);
-    if (nuevo == null) return;
+    final tipo = await showTipoDialog(
+      context,
+      categorias: categorias,
+      grupos: grupos,
+      modelos: modelos,
+      grupoPreset: columna == 'grupo' ? valor : null,
+      modeloPreset: columna == 'modelo' ? valor : null,
+    );
+    if (tipo == null) return;
     try {
-      await repo.createActivo(nuevo);
+      final id = await repo.createTipo(tipo);
       if (mounted) {
         setState(() {
+          _tipo = ActivoTipo(
+            id: id,
+            nombre: tipo.nombre,
+            grupo: tipo.grupo,
+            modelo: tipo.modelo,
+            categoriaId: tipo.categoriaId,
+          );
           _categoria = null;
-          _valor = valor;
+          _valor = null;
           _tick++;
+          _search = '';
+          _searchCtrl.clear();
         });
       }
     } catch (e) {
-      _snack('Error al crear activo: $e');
+      _snack('Error al crear tipo: $e');
     }
-  }
-
-  Activo _activoParaValor(String columna, String valor) {
-    switch (columna) {
-      case 'ubicacion':
-        return Activo(id: 0, nombre: '', ubicacion: valor);
-      case 'grupo':
-        return Activo(id: 0, nombre: '', grupo: valor);
-      case 'modelo':
-        return Activo(id: 0, nombre: '', modelo: valor);
-    }
-    return const Activo(id: 0, nombre: '');
   }
 
   Future<String?> _pedirNuevoValor(String singular) async {

@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/activo.dart';
+import '../../data/activo_tipo.dart';
 import '../../data/activos_filtro.dart';
 import '../../data/activos_repository.dart';
-import '../dialogs/activo_dialog.dart';
+import '../dialogs/unidad_dialog.dart';
 import 'activo_card.dart';
+import 'seccion_header.dart';
 
-/// Panel de activos filtrados. Muestra todos los activos que cumplen el
-/// filtro (de cualquier categoría), agrupados por categoría y grupo.
-/// También se usa como vista "por valor" de una dimensión (ubicación, grupo,
-/// modelo, estado...) con título, botón agregar y búsqueda local.
+/// Panel de unidades que cumplen un filtro (de cualquier tipo/categoría),
+/// agrupadas por categoría y tipo. También se usa como vista "por valor"
+/// de una dimensión (ubicación, grupo, modelo, estado...) con título, botón
+/// agregar y búsqueda local.
 class ActivosFiltradosPanel extends ConsumerStatefulWidget {
   const ActivosFiltradosPanel({
     super.key,
@@ -72,7 +74,7 @@ class _ActivosFiltradosPanelState
     if (q.isEmpty) return filas;
     return filas.where((r) {
       final t = <String>[
-        r['nombre'] as String? ?? '',
+        r['tipo_nombre'] as String? ?? '',
         r['modelo'] as String? ?? '',
         r['ubicacion'] as String? ?? '',
         r['grupo'] as String? ?? '',
@@ -85,19 +87,25 @@ class _ActivosFiltradosPanelState
     setState(() => _fut = _load());
   }
 
+  Future<List<ActivoTipo>> _tipos() async {
+    final maps = await widget.repo.getTipos();
+    return [for (final m in maps) m['tipo'] as ActivoTipo];
+  }
+
   Future<void> _editar(Map<String, dynamic> row) async {
     final activo = Activo.fromMap(row);
+    final tipos = await _tipos();
     final categorias = await widget.repo.getCategorias();
-    final grupos = await widget.repo.getGrupos();
     final ubicaciones = await widget.repo.getUbicaciones();
-    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
-    final editado = await showActivoDialog(context,
-        activo: activo,
-        categorias: categorias,
-        grupos: grupos,
-        ubicaciones: ubicaciones,
-        modelos: modelos);
+    final editado = await showUnidadDialog(
+      context,
+      tipos: tipos,
+      unidad: activo,
+      categorias: categorias,
+      onCrearTipo: (t) => widget.repo.createTipo(t),
+      ubicacionesSugeridas: ubicaciones,
+    );
     if (editado == null) return;
     try {
       await widget.repo.updateActivo(activo.id, editado);
@@ -112,7 +120,7 @@ class _ActivosFiltradosPanelState
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Desactivar activo'),
+        title: const Text('Desactivar unidad'),
         content: Text('¿Desactivar "${activo.nombre}"?'),
         actions: [
           TextButton(
@@ -140,7 +148,7 @@ class _ActivosFiltradosPanelState
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar activo'),
+        title: const Text('Eliminar unidad'),
         content: Text('¿Eliminar definitivamente "${activo.nombre}"?'),
         actions: [
           TextButton(
@@ -224,7 +232,7 @@ class _ActivosFiltradosPanelState
                 const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'Agregar activo',
+                  tooltip: 'Agregar unidad',
                   onPressed: widget.onAgregar,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -268,6 +276,7 @@ class _ActivosFiltradosPanelState
     );
   }
 
+  /// Unidades agrupadas por categoría y luego por tipo.
   List<Widget> _buildAgrupado(
       List<Map<String, dynamic>> filas, ColorScheme colors) {
     final porCategoria = <String, List<Map<String, dynamic>>>{};
@@ -280,84 +289,41 @@ class _ActivosFiltradosPanelState
     final out = <Widget>[];
     for (final cat in cats) {
       final items = porCategoria[cat]!;
-      out.add(_SeccionHeader(
+      out.add(SeccionHeader(
         titulo: cat,
         icono: Icons.category_outlined,
         color: colors.primary,
+        conteo: items.length,
       ));
-      final porGrupo = <String, List<Map<String, dynamic>>>{};
+      final porTipo = <String, List<Map<String, dynamic>>>{};
       for (final f in items) {
-        final g = ((f['grupo'] as String?) ?? '').trim();
-        porGrupo.putIfAbsent(g, () => []).add(f);
+        final t = ((f['tipo_nombre'] as String?) ?? '').trim();
+        porTipo.putIfAbsent(t.isEmpty ? 'Sin nombre' : t, () => []).add(f);
       }
-      final grupos = porGrupo.keys.toList()
-        ..sort((x, y) {
-          if (x.isEmpty) return 1;
-          if (y.isEmpty) return -1;
-          return x.toLowerCase().compareTo(y.toLowerCase());
-        });
-      for (final g in grupos) {
-        out.add(_SeccionHeader(
-          titulo: g.isEmpty ? 'Sin grupo' : g,
-          icono: Icons.folder_outlined,
+      final tipos = porTipo.keys.toList()..sort();
+      for (final t in tipos) {
+        out.add(SeccionHeader(
+          titulo: t,
+          icono: Icons.inventory_2_outlined,
           color: colors.onSurfaceVariant,
           pequeno: true,
+          conteo: porTipo[t]!.length,
         ));
-        final gItems = porGrupo[g]!;
-        for (var i = 0; i < gItems.length; i++) {
-          final f = gItems[i];
+        final itemsTipo = porTipo[t]!;
+        for (var i = 0; i < itemsTipo.length; i++) {
+          final f = itemsTipo[i];
           out.add(ActivoCard(
             activo: Activo.fromMap(f),
             onEdit: () => _editar(f),
             onDeactivate: () => _desactivar(f),
             onDelete: () => _eliminar(f),
           ));
-          if (i < gItems.length - 1) {
+          if (i < itemsTipo.length - 1) {
             out.add(const Divider(height: 1, indent: 60));
           }
         }
       }
     }
     return out;
-  }
-}
-
-/// Encabezado de sección reutilizable (categoría o grupo).
-class _SeccionHeader extends StatelessWidget {
-  const _SeccionHeader({
-    required this.titulo,
-    required this.icono,
-    required this.color,
-    this.pequeno = false,
-  });
-
-  final String titulo;
-  final IconData icono;
-  final Color color;
-  final bool pequeno;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, pequeno ? 12 : 16, 12, 4),
-      child: Row(
-        children: [
-          Icon(icono, size: pequeno ? 16 : 18, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              titulo,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: pequeno ? 13 : 15,
-                color: color,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

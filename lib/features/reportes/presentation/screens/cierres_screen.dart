@@ -66,14 +66,26 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildFiltros(scheme),
-          const Divider(height: 1),
-          Expanded(
-            child: _buildContenido(scheme),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (!esMovil) {
+            return Column(
+              children: [
+                _buildFiltros(scheme),
+                const Divider(height: 1),
+                Expanded(child: _buildContenido(scheme)),
+              ],
+            );
+          }
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildFiltros(scheme)),
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+              ..._buildContenidoSlivers(scheme),
+            ],
+          );
+        },
       ),
     );
   }
@@ -92,10 +104,18 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-                const SizedBox(height: 12),
-                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d), width: double.infinity),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d), width: double.infinity),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Actualizar'),
@@ -123,9 +143,9 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
     );
   }
 
-  Widget _buildDatePicker(String label, DateTime? value, ValueChanged<DateTime> onChanged) {
+  Widget _buildDatePicker(String label, DateTime? value, ValueChanged<DateTime> onChanged, {double? width}) {
     return SizedBox(
-      width: 160,
+      width: width ?? 160,
       child: InkWell(
         onTap: () async {
           final picked = await showDatePicker(
@@ -172,43 +192,94 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
 
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: scheme.surfaceContainerHighest,
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 24,
-            runSpacing: 12,
-            children: [
-              _ResumenCard(label: 'Total Cierres', valor: _cierres.length.toString(), icon: Icons.history, color: Colors.blue),
-              _ResumenCard(label: 'Caja Inicial Total', valor: '\$${_totalInicial.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
-              _ResumenCard(label: 'Ventas Totales', valor: '\$${_totalVentas.toStringAsFixed(2)}', icon: Icons.point_of_sale, color: Colors.orange),
-              _ResumenCard(label: 'Caja Final Total', valor: '\$${_totalFinal.toStringAsFixed(2)}', icon: Icons.savings, color: Colors.purple),
-            ],
-          ),
-        ),
+        _buildResumen(scheme),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: _cierres.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final c = _cierres[index];
-              final fecha = (c.cerradaEn as String?)?.substring(0, 16) ?? '—';
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: scheme.primaryContainer,
-                  child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
-                ),
-                title: Text('Cierre #${c.sesionId} · $fecha'),
-                subtitle: Text('${c.usuarioNombre} · Duración: ${_duracionTexto(c)}'),
-                trailing: Text('\$${c.cajaFinal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
-                onTap: () => _verDetalle(c),
-              );
-            },
-          ),
+          child: _buildLista(scheme),
         ),
       ],
+    );
+  }
+
+  List<Widget> _buildContenidoSlivers(ColorScheme scheme) {
+    if (_cargando) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (_cierres.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.history, size: 64, color: scheme.primary.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                Text('Sin cierres en el período', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                Text('Ajusta los filtros e intenta de nuevo', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverToBoxAdapter(child: _buildResumen(scheme)),
+      SliverPadding(
+        padding: const EdgeInsets.all(16),
+        sliver: SliverList.separated(
+          itemCount: _cierres.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) => _buildItem(context, index, scheme),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildResumen(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: scheme.surfaceContainerHighest,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 24,
+        runSpacing: 12,
+        children: [
+          _ResumenCard(label: 'Total Cierres', valor: _cierres.length.toString(), icon: Icons.history, color: Colors.blue),
+          _ResumenCard(label: 'Caja Inicial Total', valor: '\$${_totalInicial.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
+          _ResumenCard(label: 'Ventas Totales', valor: '\$${_totalVentas.toStringAsFixed(2)}', icon: Icons.point_of_sale, color: Colors.orange),
+          _ResumenCard(label: 'Caja Final Total', valor: '\$${_totalFinal.toStringAsFixed(2)}', icon: Icons.savings, color: Colors.purple),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLista(ColorScheme scheme) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _cierres.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) => _buildItem(context, index, scheme),
+    );
+  }
+
+  Widget _buildItem(BuildContext context, int index, ColorScheme scheme) {
+    final c = _cierres[index];
+    final fecha = (c.cerradaEn as String?)?.substring(0, 16) ?? '—';
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: scheme.primaryContainer,
+        child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+      ),
+      title: Text('Cierre #${c.sesionId} · $fecha'),
+      subtitle: Text('${c.usuarioNombre} · Duración: ${_duracionTexto(c)}'),
+      trailing: Text('\$${c.cajaFinal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
+      onTap: () => _verDetalle(c),
     );
   }
 

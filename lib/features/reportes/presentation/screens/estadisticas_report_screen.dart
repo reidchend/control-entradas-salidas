@@ -45,14 +45,26 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildFiltros(scheme),
-          const Divider(height: 1),
-          Expanded(
-            child: _buildContenido(scheme),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (!esMovil) {
+            return Column(
+              children: [
+                _buildFiltros(scheme),
+                const Divider(height: 1),
+                Expanded(child: _buildContenido(scheme)),
+              ],
+            );
+          }
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildFiltros(scheme)),
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+              ..._buildContenidoSlivers(scheme),
+            ],
+          );
+        },
       ),
     );
   }
@@ -71,10 +83,18 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-                const SizedBox(height: 12),
-                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d), width: double.infinity),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d), width: double.infinity),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Actualizar KPIs'),
@@ -102,9 +122,9 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
     );
   }
 
-  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged) {
+  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged, {double? width}) {
     return SizedBox(
-      width: 160,
+      width: width ?? 160,
       child: InkWell(
         onTap: () async {
           final picked = await showDatePicker(
@@ -135,22 +155,43 @@ class _EstadisticasReportScreenState extends ConsumerState<EstadisticasReportScr
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('KPIs Principales', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          _buildKPIsGrid(scheme),
-          const SizedBox(height: 32),
-          Text('Top Productos', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          _buildTopProductos(scheme),
-          const SizedBox(height: 32),
-          Text('Tendencia de Ventas', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          _buildTendenciaChart(scheme),
-        ],
+      child: _buildBodyContenido(scheme),
+    );
+  }
+
+  List<Widget> _buildContenidoSlivers(ColorScheme scheme) {
+    if (_cargando) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.all(24),
+        sliver: SliverToBoxAdapter(child: _buildBodyContenido(scheme)),
       ),
+    ];
+  }
+
+  Widget _buildBodyContenido(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('KPIs Principales', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        _buildKPIsGrid(scheme),
+        const SizedBox(height: 32),
+        Text('Top Productos', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        _buildTopProductos(scheme),
+        const SizedBox(height: 32),
+        Text('Tendencia de Ventas', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        _buildTendenciaChart(scheme),
+      ],
     );
   }
 

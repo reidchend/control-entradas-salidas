@@ -137,13 +137,12 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     const headers = [
       'Categoría',
       'Grupo',
-      'Nombre',
+      'Tipo',
       'Ubicación',
       'Estado',
       'Valor (Bs)',
       'Fecha',
       'Modelo',
-      'Cantidad',
       'Observaciones',
     ];
     sheet.appendRow([for (final h in headers) TextCellValue(h)]);
@@ -159,13 +158,12 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
       sheet.appendRow([
         TextCellValue((a['categoria_nombre'] as String?) ?? 'Sin categoría'),
         TextCellValue((a['grupo'] as String?) ?? 'Sin grupo'),
-        TextCellValue((a['nombre'] as String?) ?? ''),
+        TextCellValue((a['nombre'] as String?) ?? 'Sin tipo'),
         TextCellValue((a['ubicacion'] as String?) ?? ''),
         TextCellValue((a['estado'] as String?) ?? ''),
         DoubleCellValue(_toDouble(a['valor'])),
         TextCellValue(_fechaCorta(a['fecha'])),
         TextCellValue((a['modelo'] as String?) ?? ''),
-        TextCellValue('${(a['cantidad'] as num?)?.toInt() ?? 1}'),
         TextCellValue((a['observaciones'] as String?) ?? ''),
       ]);
     }

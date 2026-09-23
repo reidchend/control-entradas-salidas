@@ -79,15 +79,15 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
     return SesionLoginResult.nueva;
   }
 
-/// Cierra el turno y la caja (monto final automático) y vuelve al login.
-/// Solo cierra el turno del cajero actual; los turnos de otros cajeros no se
-/// ven afectados.
+/// Cierra la sesión local del POS y vuelve al login.
+/// El turno/caja ya fue cerrado y persistido atómicamente en la transacción
+/// de cierre (`posRepoProvider.finalizarCierreYTurno`); aquí solo se limpia
+/// el estado local y se invalidan los turnos activos.
+/// `sesionId == 0` = sesión de desarrollador sin turno (nada que cerrar).
 Future<void> cerrarSesion() async {
     final s = state;
     state = null;
-    // `sesionId == 0` = sesión de desarrollador sin turno (nada que cerrar).
     if (s != null && s.sesionId > 0) {
-      await ref.read(posRepoProvider)!.cerrarSesion(s.sesionId);
       // Invalidar proveedor de turnos activos para actualizar login
       ref.invalidate(turnosActivosProvider);
     }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/updater/auto_update_checker.dart';
+import '../../../features/whatsapp/data/whatsapp_providers.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
 import 'comanda_screen.dart';
@@ -218,20 +219,63 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       return; // Usuario canceló, no hace nada
     }
 
-    // 4. Guardar el cierre en BD
+    // 4. Persistir el cierre y cerrar el turno (transacción atómica).
+    //    Si falla, el turno queda abierto y NO se envían reportes, para evitar
+    //    el reporte por WhatsApp sin cierre registrado.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _CerrandoSesionDialog(),
+    );
     try {
-      await repo.guardarCierre(cierre);
+      await repo.finalizarCierreYTurno(cierre);
     } catch (e) {
       if (!mounted) return;
+      Navigator.pop(context); // cerrar loading
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error guardando cierre: $e')),
+        SnackBar(content: Text('Error guardando cierre; el turno queda abierto: $e')),
       );
       return;
     }
 
-    // 5. Cerrar la sesión (turno + caja)
-    // El diálogo ya envió los reportes por WhatsApp automáticamente
+    // 5. Cerrar la sesión local (turno ya cerrado en BD)
     await ref.read(posSessionProvider.notifier).cerrarSesion();
+    if (!mounted) return;
+
+    // 6. Enviar reportes por WhatsApp (post-persistencia).
+    //    Si falla, solo avisamos: el cierre ya quedó registrado y el turno cerrado.
+    final waRepo = ref.read(whatsappRepoProvider);
+    if (waRepo == null) {
+      Navigator.pop(context); // cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cierre realizado. WhatsApp no configurado; sin envío')),
+      );
+      return;
+    }
+
+    try {
+      final reporteSimple = _generarReporteSimpleTexto(cierre);
+      final reporteDetallado = _generarReporteDetalladoTexto(cierre);
+      final fileName = 'cierre_${cierre.sesionId}_${DateTime.now().millisecondsSinceEpoch}.txt';
+
+      await waRepo.enviarReporteSimple(reporteSimple);
+      await waRepo.enviarReporteDetallado(
+        fileName: fileName,
+        content: reporteDetallado,
+        caption: 'Cierre de turno - Detalle ingredientes',
+      );
+      if (!mounted) return;
+      Navigator.pop(context); // cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cierre realizado; reportes enviados por WhatsApp ✅')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cierre realizado, pero falló WhatsApp: $e')),
+      );
+    }
   }
 
   /// Retoma una comanda activa desde el home (resuelve mesa/habitación por id
@@ -350,6 +394,121 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           onAbrirComanda: _abrirComandaActiva,
         );
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Generación de reportes para WhatsApp (se envían tras persistir el cierre)
+  // -------------------------------------------------------------------------
+
+  String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+  }
+
+  String _duracionCierre(CierreCaja c) {
+    final a = DateTime.tryParse(c.abiertaEn);
+    final b = DateTime.tryParse(c.cerradaEn);
+    if (a == null || b == null) return 'Desconocida';
+    final d = b.difference(a);
+    return '${d.inHours}h ${d.inMinutes % 60}m';
+  }
+
+  String _fmtFechaReporte(String? iso) {
+    if (iso == null) return '—';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  /// Genera el texto del reporte simple para WhatsApp
+  String _generarReporteSimpleTexto(CierreCaja c) {
+    final sb = StringBuffer();
+    sb.writeln('📊 *CIERRE DE TURNO*');
+    sb.writeln('Cajero: ${c.usuarioNombre}');
+    sb.writeln('Apertura: ${_fmtFechaReporte(c.abiertaEn)}');
+    sb.writeln('Cierre: ${_fmtFechaReporte(c.cerradaEn)}');
+    sb.writeln('Duración: ${_duracionCierre(c)}');
+    sb.writeln('');
+    sb.writeln('💰 *CAJA*');
+    sb.writeln('Inicial: \$${_fmtNum(c.cajaInicial)}');
+    sb.writeln('Ventas:  \$${_fmtNum(c.totalVentas)}');
+    sb.writeln('──────────────');
+    sb.writeln('Final:   \$${_fmtNum(c.cajaFinal)}');
+    sb.writeln('');
+
+    // Agrupar por categoría
+    final porCategoria = <String, List<LineaVenta>>{};
+    for (final l in c.reporteSimple.lineas) {
+      porCategoria.putIfAbsent(l.categoria, () => []).add(l);
+    }
+
+    sb.writeln('📦 *VENTAS POR CATEGORÍA*');
+    for (final entry in porCategoria.entries) {
+      final categoria = entry.key;
+      final items = entry.value;
+      final subtotal = items.fold<double>(0, (s, l) => s + l.total);
+
+      sb.writeln('');
+      sb.writeln('*${categoria.toUpperCase()}*');
+      sb.writeln('━━━━━━━━━━━━━━━━━━');
+      for (final l in items) {
+        sb.writeln('**${l.nombre}**');
+        sb.writeln('  ${_fmtNum(l.cantidad)} x \$${_fmtNum(l.precioUnitario)} = *\$${_fmtNum(l.total)}*');
+      }
+      sb.writeln('  *Subtotal: \$${_fmtNum(subtotal)}*');
+    }
+    sb.writeln('');
+    final contornos = c.reporteSimple.contornos;
+    if (contornos.isNotEmpty) {
+      sb.writeln('🍽️ *CONTORNOS SERVIDOS*');
+      for (final cn in contornos) {
+        sb.writeln('  ${cn.nombre}: ${_fmtNum(cn.cantidad)}');
+      }
+      sb.writeln('');
+    }
+    sb.writeln('💰 *TOTAL GENERAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}*');
+    sb.writeln('');
+    sb.writeln('_Lycoris POS_');
+    return sb.toString();
+  }
+
+  /// Genera el contenido del reporte detallado (.txt) para WhatsApp
+  String _generarReporteDetalladoTexto(CierreCaja c) {
+    final sb = StringBuffer();
+    sb.writeln('CIERRE DE TURNO - DETALLADO');
+    sb.writeln('============================');
+    sb.writeln('');
+    sb.writeln('Cajero: ${c.usuarioNombre}');
+    sb.writeln('Apertura: ${_fmtFechaReporte(c.abiertaEn)}');
+    sb.writeln('Cierre: ${_fmtFechaReporte(c.cerradaEn)}');
+    sb.writeln('Duración: ${_duracionCierre(c)}');
+    sb.writeln('');
+    sb.writeln('CAJA');
+    sb.writeln('----');
+    sb.writeln('Inicial: ${_fmtNum(c.cajaInicial)}');
+    sb.writeln('Ventas:  ${_fmtNum(c.totalVentas)}');
+    sb.writeln('Final:   ${_fmtNum(c.cajaFinal)}');
+    sb.writeln('');
+    sb.writeln('DESGLOSE POR INGREDIENTE');
+    sb.writeln('------------------------');
+    for (final d in c.reporteDetallado.desgloses) {
+      sb.writeln('');
+      sb.writeln('Ingrediente: ${d.ingrediente}');
+      sb.writeln('  Total consumido: ${_fmtNum(d.totalConsumido)}');
+      sb.writeln('  Stock final:     ${_fmtNum(d.stockFinal)}');
+      sb.writeln('  Usos:');
+      for (final u in d.usos) {
+        sb.writeln('    - ${u.plato}: ${_fmtNum(u.cantidad)}');
+      }
+    }
+    sb.writeln('');
+    sb.writeln('============================');
+    sb.writeln('Lycoris POS');
+    return sb.toString();
   }
 }
 

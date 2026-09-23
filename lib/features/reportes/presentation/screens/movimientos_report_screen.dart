@@ -51,14 +51,26 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildFiltros(scheme),
-          const Divider(height: 1),
-          Expanded(
-            child: _buildContenido(scheme),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (!esMovil) {
+            return Column(
+              children: [
+                _buildFiltros(scheme),
+                const Divider(height: 1),
+                Expanded(child: _buildContenido(scheme)),
+              ],
+            );
+          }
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildFiltros(scheme)),
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+              ..._buildContenidoSlivers(scheme),
+            ],
+          );
+        },
       ),
     );
   }
@@ -77,43 +89,59 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day))),
-                const SizedBox(height: 12),
-                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59))),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _tipo,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Tipo de movimiento',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                    ..._tiposInfo.entries.map((e) =>
-                        DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = DateTime(d.year, d.month, d.day)), width: double.infinity),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = DateTime(d.year, d.month, d.day, 23, 59, 59)), width: double.infinity),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _almacen,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Almacén',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                    DropdownMenuItem(value: 'principal', child: Text('Principal')),
-                    DropdownMenuItem(value: 'restaurante', child: Text('Restaurante')),
-                    DropdownMenuItem(value: 'bodega', child: Text('Bodega')),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _tipo,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de movimiento',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                          ..._tiposInfo.entries.map((e) =>
+                              DropdownMenuItem(value: e.key, child: Text(e.value.$1))),
+                        ],
+                        onChanged: (v) => setState(() => _tipo = v ?? 'Todos'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _almacen,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Almacén',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                          DropdownMenuItem(value: 'principal', child: Text('Principal')),
+                          DropdownMenuItem(value: 'restaurante', child: Text('Restaurante')),
+                          DropdownMenuItem(value: 'bodega', child: Text('Bodega')),
+                        ],
+                        onChanged: (v) => setState(() => _almacen = v ?? 'Todos'),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _almacen = v ?? 'Todos'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   icon: const Icon(Icons.search, size: 18),
                   label: const Text('Buscar'),
@@ -177,9 +205,9 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
     );
   }
 
-  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged) {
+  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged, {double? width}) {
     return SizedBox(
-      width: 160,
+      width: width ?? 160,
       child: InkWell(
         onTap: () async {
           final picked = await showDatePicker(
@@ -221,74 +249,122 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
         ),
       );
     }
+    return Column(
+      children: [
+        _buildResumen(scheme),
+        Expanded(
+          child: _buildLista(),
+        ),
+      ],
+    );
+  }
 
-    // Resumen por tipo
+  List<Widget> _buildContenidoSlivers(ColorScheme scheme) {
+    if (_cargando) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (_movimientos.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 64, color: scheme.primary.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                Text('Sin movimientos en el período', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                Text('Ajusta los filtros e intenta de nuevo', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverToBoxAdapter(child: _buildResumen(scheme)),
+      SliverPadding(
+        padding: const EdgeInsets.all(16),
+        sliver: SliverList.separated(
+          itemCount: _movimientos.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: _buildItem,
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildResumen(ColorScheme scheme) {
     final Map<String, int> porTipo = {};
     for (final m in _movimientos) {
       final tipo = m['tipo'] as String? ?? '—';
       porTipo[tipo] = (porTipo[tipo] ?? 0) + 1;
     }
-
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-          color: scheme.surfaceContainerHighest,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _ResumenChip(
-                  label: 'Total Movs.',
-                  valor: _movimientos.length.toString(),
-                  icon: Icons.inventory_2,
-                  color: Colors.blue,
-                ),
-                const SizedBox(width: 12),
-                ...porTipo.entries.map((e) => Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _ResumenChip(
-                    label: _tipoLabel(e.key),
-                    valor: e.value.toString(),
-                    icon: _iconoTipo(e.key),
-                    color: _colorTipo(e.key),
-                  ),
-                )),
-              ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      color: scheme.surfaceContainerHighest,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ResumenChip(
+              label: 'Total Movs.',
+              valor: _movimientos.length.toString(),
+              icon: Icons.inventory_2,
+              color: Colors.blue,
             ),
-          ),
+            const SizedBox(width: 12),
+            ...porTipo.entries.map((e) => Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: _ResumenChip(
+                label: _tipoLabel(e.key),
+                valor: e.value.toString(),
+                icon: _iconoTipo(e.key),
+                color: _colorTipo(e.key),
+              ),
+            )),
+          ],
         ),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: _movimientos.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final m = _movimientos[index];
-              final fecha = _fmtFecha(m['fecha_movimiento']);
-              final tipo = m['tipo'] as String? ?? '—';
-              final prod = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
-              final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
-              final almacen = m['almacen'] as String? ?? '—';
-              final obs = ((m['observaciones'] as String?) ?? '').trim();
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: _colorTipo(tipo).withValues(alpha: 0.15),
-                  child: Icon(_iconoTipo(tipo), color: _colorTipo(tipo), size: 20),
-                ),
-                title: Text('$prod · ${_tipoLabel(tipo)}'),
-                subtitle: Text(
-                  obs.isNotEmpty ? '$fecha · $almacen\n$obs' : '$fecha · $almacen',
-                ),
-                trailing: Text(
-                  '${cant.toStringAsFixed(3)} ${m['unidad'] ?? ''}',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: _colorTipo(tipo), fontSize: 16),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildLista() {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _movimientos.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: _buildItem,
+    );
+  }
+
+  Widget _buildItem(BuildContext context, int index) {
+    final m = _movimientos[index];
+    final fecha = _fmtFecha(m['fecha_movimiento']);
+    final tipo = m['tipo'] as String? ?? '—';
+    final prod = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
+    final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
+    final almacen = m['almacen'] as String? ?? '—';
+    final obs = ((m['observaciones'] as String?) ?? '').trim();
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: _colorTipo(tipo).withValues(alpha: 0.15),
+        child: Icon(_iconoTipo(tipo), color: _colorTipo(tipo), size: 20),
+      ),
+      title: Text('$prod · ${_tipoLabel(tipo)}'),
+      subtitle: Text(
+        obs.isNotEmpty ? '$fecha · $almacen\n$obs' : '$fecha · $almacen',
+      ),
+      trailing: Text(
+        '${cant.toStringAsFixed(3)} ${m['unidad'] ?? ''}',
+        style: TextStyle(fontWeight: FontWeight.bold, color: _colorTipo(tipo), fontSize: 16),
+      ),
     );
   }
 

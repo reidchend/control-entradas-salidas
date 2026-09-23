@@ -66,21 +66,33 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildFiltros(scheme),
-          const Divider(height: 1),
-          Expanded(
-            child: _buildContenido(scheme),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final esMovil = constraints.maxWidth < 600;
+          if (!esMovil) {
+            return Column(
+              children: [
+                _buildFiltros(scheme),
+                const Divider(height: 1),
+                Expanded(child: _buildContenido(scheme)),
+              ],
+            );
+          }
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildFiltros(scheme)),
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+              ..._buildContenidoSlivers(scheme),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildFiltros(ColorScheme scheme) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
@@ -89,48 +101,62 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
         builder: (context, constraints) {
           final esMovil = constraints.maxWidth < 600;
           if (esMovil) {
+            final cajeroField = _cargandoCajeros
+                ? const Center(child: CircularProgressIndicator())
+                : DropdownButtonFormField<String>(
+                    value: _cajero,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Cajero',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+                      ..._cajeros.map((c) =>
+                          DropdownMenuItem(value: c.nombre, child: Text(c.nombre))),
+                    ],
+                    onChanged: (v) => setState(() => _cajero = v ?? 'Todos'),
+                  );
+            final formaPagoField = DropdownButtonFormField<String>(
+              value: _formaPago,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Forma de pago',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Todas', child: Text('Todas')),
+                DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                DropdownMenuItem(value: 'Tarjeta', child: Text('Tarjeta')),
+                DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+              ],
+              onChanged: (v) => setState(() => _formaPago = v ?? 'Todas'),
+            );
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-                const SizedBox(height: 12),
-                _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-                const SizedBox(height: 12),
-                _cargandoCajeros
-                    ? const Center(child: CircularProgressIndicator())
-                    : DropdownButtonFormField<String>(
-                        value: _cajero,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Cajero',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          const DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                          ..._cajeros.map((c) =>
-                              DropdownMenuItem(value: c.nombre, child: Text(c.nombre))),
-                        ],
-                        onChanged: (v) => setState(() => _cajero = v ?? 'Todos'),
-                      ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _formaPago,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Forma de pago',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Todas', child: Text('Todas')),
-                    DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
-                    DropdownMenuItem(value: 'Tarjeta', child: Text('Tarjeta')),
-                    DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d), width: double.infinity),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d), width: double.infinity),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _formaPago = v ?? 'Todas'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: cajeroField),
+                    const SizedBox(width: 8),
+                    Expanded(child: formaPagoField),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   icon: const Icon(Icons.search, size: 18),
                   label: const Text('Buscar'),
@@ -196,9 +222,9 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
     );
   }
 
-  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged) {
+  Widget _buildDatePicker(String label, DateTime value, ValueChanged<DateTime> onChanged, {double? width}) {
     return SizedBox(
-      width: 160,
+      width: width ?? 160,
       child: InkWell(
         onTap: () async {
           final picked = await showDatePicker(
@@ -241,67 +267,117 @@ class _VentasReportScreenState extends ConsumerState<VentasReportScreen> {
       );
     }
 
-    final total = _ventas.fold<double>(0, (sum, v) => sum + ((v['total'] as num?)?.toDouble() ?? 0));
-
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: scheme.surfaceContainerHighest,
-          child: Wrap(
-            alignment: WrapAlignment.spaceEvenly,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              _ResumenCard(label: 'Total Ventas', valor: '\$${total.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
-              _ResumenCard(label: 'Comandas', valor: _ventas.length.toString(), icon: Icons.receipt_long, color: Colors.blue),
-              _ResumenCard(label: 'Ticket Prom.', valor: _ventas.isNotEmpty ? '\$${(total / _ventas.length).toStringAsFixed(2)}' : '\$0.00', icon: Icons.analytics, color: Colors.orange),
-            ],
-          ),
-        ),
+        _buildResumen(scheme),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: _ventas.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final v = _ventas[index];
-              final fecha = _fmtFecha(v['created_at']);
-              final cajero = v['cajero_nombre'] as String? ?? v['usuario_id']?.toString() ?? '—';
-              final formaPago = v['forma_pago'] as String? ?? '—';
-              final totalV = (v['total'] as num?)?.toDouble() ?? 0;
-              final correlativo = v['correlativo'] as int? ?? v['id'] as int? ?? 0;
-              final mesaNombre = v['mesa_nombre'] as String?;
-              final habitacionNumero = v['habitacion_numero'] as String?;
-
-              String ubicacion = '';
-              if (mesaNombre != null && mesaNombre.isNotEmpty) {
-                ubicacion = 'Mesa: $mesaNombre';
-              } else if (habitacionNumero != null && habitacionNumero.isNotEmpty) {
-                ubicacion = 'Hab. $habitacionNumero';
-              }
-
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: scheme.primaryContainer,
-                  child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
-                ),
-                title: Text('Venta #$correlativo · $fecha'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('$cajero · $formaPago'),
-                    if (ubicacion.isNotEmpty)
-                      Text(ubicacion, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-                trailing: Text('\$${totalV.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
-                onTap: () => _verDetalle(v),
-              );
-            },
-          ),
+          child: _buildLista(scheme),
         ),
       ],
+    );
+  }
+
+  List<Widget> _buildContenidoSlivers(ColorScheme scheme) {
+    if (_cargando) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (_ventas.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.point_of_sale, size: 64, color: scheme.primary.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                Text('Sin ventas en el período', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                Text('Ajusta los filtros e intenta de nuevo', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverToBoxAdapter(child: _buildResumen(scheme)),
+      SliverPadding(
+        padding: const EdgeInsets.all(16),
+        sliver: SliverList.separated(
+          itemCount: _ventas.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) => _buildItem(context, index, scheme),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildResumen(ColorScheme scheme) {
+    final total = _ventas.fold<double>(0, (sum, v) => sum + ((v['total'] as num?)?.toDouble() ?? 0));
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: scheme.surfaceContainerHighest,
+      child: Wrap(
+        alignment: WrapAlignment.spaceEvenly,
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          _ResumenCard(label: 'Total Ventas', valor: '\$${total.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
+          _ResumenCard(label: 'Comandas', valor: _ventas.length.toString(), icon: Icons.receipt_long, color: Colors.blue),
+          _ResumenCard(label: 'Ticket Prom.', valor: _ventas.isNotEmpty ? '\$${(total / _ventas.length).toStringAsFixed(2)}' : '\$0.00', icon: Icons.analytics, color: Colors.orange),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLista(ColorScheme scheme) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _ventas.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) => _buildItem(context, index, scheme),
+    );
+  }
+
+  Widget _buildItem(BuildContext context, int index, ColorScheme scheme) {
+    final v = _ventas[index];
+    final fecha = _fmtFecha(v['created_at']);
+    final cajero = v['cajero_nombre'] as String? ?? v['usuario_id']?.toString() ?? '—';
+    final formaPago = v['forma_pago'] as String? ?? '—';
+    final totalV = (v['total'] as num?)?.toDouble() ?? 0;
+    final correlativo = v['correlativo'] as int? ?? v['id'] as int? ?? 0;
+    final mesaNombre = v['mesa_nombre'] as String?;
+    final habitacionNumero = v['habitacion_numero'] as String?;
+
+    String ubicacion = '';
+    if (mesaNombre != null && mesaNombre.isNotEmpty) {
+      ubicacion = 'Mesa: $mesaNombre';
+    } else if (habitacionNumero != null && habitacionNumero.isNotEmpty) {
+      ubicacion = 'Hab. $habitacionNumero';
+    }
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: scheme.primaryContainer,
+        child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+      ),
+      title: Text('Venta #$correlativo · $fecha'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$cajero · $formaPago'),
+          if (ubicacion.isNotEmpty)
+            Text(ubicacion, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+        ],
+      ),
+      trailing: Text('\$${totalV.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
+      onTap: () => _verDetalle(v),
     );
   }
 

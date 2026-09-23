@@ -1,72 +1,87 @@
 import '../../../core/utils/supabase_cast.dart';
 
-/// Activo del inventario (bienes muebles/inmuebles de la posada).
+/// Unidad física de un activo del inventario (bienes de la posada).
+///
+/// En el esquema de "catálogo de tipos + unidades", cada fila es una sola
+/// unidad: su identidad/especificación (nombre, grupo, modelo, categoría)
+/// vive en su [tipoId] (tabla `activos_tipos`); aquí queda lo individual:
+/// ubicación, estado, valor, fecha y observaciones.
 class Activo {
   const Activo({
     required this.id,
-    required this.nombre,
-    this.categoria,
-    this.categoriaId,
+    this.tipoId,
     this.ubicacion,
     this.estado = 'Activo',
     this.valor = 0,
     this.fecha,
     this.observaciones,
+    this.activo = true,
+    this.categoriaId,
+    this.categoriaNombre,
+    this.tipoNombre,
     this.grupo,
     this.modelo,
-    this.cantidad = 1,
-    this.activo = true,
     this.createdAt,
     this.updatedAt,
   });
 
   final int id;
-  final String nombre;
-  final String? categoria;
-  final int? categoriaId;
+  final int? tipoId;
   final String? ubicacion;
   final String estado;
   final double valor;
   final String? fecha;
   final String? observaciones;
+  final bool activo;
+
+  /// Campos resueltos por JOIN al catálogo (para display y agrupación).
+  final int? categoriaId;
+  final String? categoriaNombre;
+  final String? tipoNombre;
   final String? grupo;
   final String? modelo;
-  final int cantidad;
-  final bool activo;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// Nombre del tipo al que pertenece (o un placeholder).
+  String get nombre {
+    final t = (tipoNombre ?? '').trim();
+    return t.isEmpty ? 'Sin nombre' : t;
+  }
+
+  String get categoria => (categoriaNombre ?? '').trim().isEmpty
+      ? 'Sin categoría'
+      : categoriaNombre!.trim();
+
   factory Activo.fromMap(Map<String, dynamic> m) => Activo(
         id: m['id'] as int,
-        nombre: m['nombre'] as String,
-        categoria: m['categoria'] as String?,
-        categoriaId: m['categoria_id'] == null
+        tipoId: m['tipo_id'] == null
             ? null
-            : (m['categoria_id'] as num).toInt(),
+            : (m['tipo_id'] as num).toInt(),
         ubicacion: m['ubicacion'] as String?,
         estado: (m['estado'] as String?) ?? 'Activo',
         valor: _toDouble(m['valor']) ?? 0,
         fecha: _fechaTexto(m['fecha']),
         observaciones: m['observaciones'] as String?,
+        activo: toBool(m['activo'], fallback: true),
+        categoriaId: m['categoria_id'] == null
+            ? null
+            : (m['categoria_id'] as num).toInt(),
+        categoriaNombre: m['categoria_nombre'] as String?,
+        tipoNombre: m['tipo_nombre'] as String?,
         grupo: m['grupo'] as String?,
         modelo: m['modelo'] as String?,
-        cantidad: (m['cantidad'] as num?)?.toInt() ?? 1,
-        activo: toBool(m['activo'], fallback: true),
         createdAt: _parseDt(m['created_at']),
         updatedAt: _parseDt(m['updated_at']),
       );
 
   Map<String, dynamic> toMap() => {
-        'nombre': nombre,
-        'categoria_id': categoriaId,
+        'tipo_id': tipoId,
         'ubicacion': ubicacion,
         'estado': estado,
         'valor': valor,
         'fecha': fecha,
         'observaciones': observaciones,
-        'grupo': grupo,
-        'modelo': modelo,
-        'cantidad': cantidad,
         'activo': activo ? 1 : 0,
       };
 
