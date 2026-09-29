@@ -371,21 +371,46 @@ Solo hace falta si los equipos que usan la app **no** están en la red de
 Tailscale. Si todos los clientes tienen Tailscale, usar el modo TCP directo y
 saltar esta sección.
 
-Instalar `cloudflared` y crear un túnel con nombre (la URL de un túnel rápido
-cambia cada vez que se reinicia, y las apps nativas la guardan):
+Instalar `cloudflared`:
 
 ```powershell
 winget install --id Cloudflare.cloudflared
-cloudflared tunnel login
-cloudflared tunnel create control-entradas
 ```
 
-Apuntar el túnel a `tool\server.py` en el puerto `8501` y asociar el
-hostname en el DNS:
+### Túnel rápido (predeterminado)
+
+Es lo que usa el proyecto, porque no necesita cuenta de Cloudflare ni dominio
+propio. La URL cambia en cada reinicio, y eso no rompe las apps: la toman del
+Gist (sección 5.5).
 
 ```powershell
+cd C:\Lycoris
+tool\iniciar_api.bat
+```
+
+Un `.bat` levanta el servidor en 8501, espera a que responda, levanta el túnel
+y publica la URL. Si `cloudflared` se cae, el launcher lo vuelve a levantar
+solo y republica la URL nueva.
+
+Conviene tenerlo como tarea de arranque, así sigue arriba solo:
+
+```powershell
+.\registrar_autostart.ps1
+```
+
+### Túnel con nombre (si tenés un dominio en Cloudflare)
+
+La URL queda fija, que es lo más cómodo a largo plazo, pero Cloudflare pide un
+dominio propio administered desde una cuenta de Cloudflare. Se configura una
+sola vez:
+
+```powershell
+cloudflared tunnel login
+cloudflared tunnel create control-entradas
 cloudflared tunnel route dns control-entradas api.tudominio.cl
 ```
+
+Después se levanta con `tool\iniciar_api.bat --con-nombre`.
 
 Y en `C:\Users\<TU_USUARIO>\.cloudflared\config.yml`:
 

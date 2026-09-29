@@ -3,13 +3,16 @@ REM =====================================================================
 REM Levanta la API de base de datos y su tunel de Cloudflare. Para arranque
 REM automatico.
 REM =====================================================================
-REM   tool\iniciar_api.bat --rapido    tunel rapido (trycloudflare.com). La URL
-REM                                    cambia en cada arranque; sirve para probar
-REM                                    y no necesita cuenta de Cloudflare.
-REM   tool\iniciar_api.bat            tunel con nombre. La URL es estable, que es
-REM                                    lo que necesitan las apps nativas, pero
-REM                                    exige `cloudflared tunnel login` y crear
-REM                                    el tunel una vez.
+REM Por defecto usa el tunel rapido (trycloudflare.com): no necesita cuenta de
+REM Cloudflare ni dominio, y su URL cambia en cada reinicio. Las apps no se
+ROMPEN por eso, porque la toman del Gist.
+REM
+REM Para un tunel con nombre (URL fija, la que de verdad da Cloudflare para
+REM produccion) hace falta un dominio propio y configurar una vez:
+REM   cloudflared tunnel login
+REM   cloudflared tunnel create control-entradas
+REM   cloudflared tunnel route dns control-entradas api.tudominio.cl
+REM y despues pasar --con-nombre en vez de --rapido.
 REM
 REM Se apoya en tool\iniciar_tunnel_api.js, que publica la URL del tunel en el
 REM Gist para que las apps Windows y Android la descubran solas y el usuario
@@ -124,10 +127,15 @@ exit /b 1
 echo [api] Servidor respondiendo.
 
 REM Se pasa %* al launcher, asi que el modo se elige desde aca:
-REM   tool\iniciar_api.bat --rapido    tunel rapido, URL nueva en cada arranque
-REM   tool\iniciar_api.bat            tunel con nombre, URL estable (produccion)
-echo [api] Iniciando tunel y publicando la URL en el Gist...
-start "Lycoris Tunel API" /b node "%TUNEL%" %*
+REM   tool\iniciar_api.bat --con-nombre    tunel con nombre (URL estable)
+REM   tool\iniciar_api.bat --rapido        tunel rapido (es el predeterminado)
+if "%~1"=="" (
+    echo [api] Iniciando tunel rapido y publicando la URL en el Gist...
+    start "Lycoris Tunel API" /b node "%TUNEL%"
+) else (
+    echo [api] Iniciando tunel y publicando la URL en el Gist...  %*
+    start "Lycoris Tunel API" /b node "%TUNEL%" %*
+)
 
 echo [api] API y tunel lanzados.
 echo [api]   Procesos:  tasklist ^| findstr /i "python node cloudflared"
