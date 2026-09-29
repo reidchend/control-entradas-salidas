@@ -22,8 +22,13 @@ const API_LOCAL_PORT = process.env.API_LOCAL_PORT || '8501';
 const TUNNEL_NAME = process.env.TUNNEL_NAME || 'control-entradas';
 
 if (!process.env.GITHUB_TOKEN) {
-  console.error('[TUNEL] Falta GITHUB_TOKEN: sin el no se puede publicar la URL.');
-  console.error('[TUNEL] Las apps no van a encontrar el servidor.');
+  // No se aborta: el túnel tiene que levantar igual, así sea por una prueba.
+  // Pero sin esto el Gist nunca se actualiza y las apps quedan apuntando a la
+  // URL vieja, así que hay que dejarlo bien claro.
+  console.warn('[TUNEL] AVISO: sin GITHUB_TOKEN el túnel levanta pero NO se');
+  console.warn('[TUNEL] publica la URL. Las apps van a seguir usando la');
+  console.warn('[TUNEL] anterior. Defini GITHUB_TOKEN en el entorno o en');
+  console.warn('[TUNEL] whatsapp_bot\\.env');
 }
 
 if (!process.argv.includes('--rapido') && !TUNNEL_NAME) {
