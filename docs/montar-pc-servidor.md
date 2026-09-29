@@ -443,22 +443,29 @@ Para que en cada equipo haya que escribir **solo el token**, la URL del túnel
 se publica en el Gist y la app la lee al arrancar. Si después el túnel cambia
 de URL, alcanza con republicarla: no hay que ir equipo por equipo.
 
-Necesita `GITHUB_TOKEN` con permiso de escritura sobre el Gist:
+Necesita `GITHUB_TOKEN` con permiso de escritura sobre el Gist. Es un token
+**classic** (los fine-grained no sirven para la API de Gists) con el scope
+`gist`. Si no lo tenés o venció, generalo en
+<https://github.com/settings/tokens> y guardalo en `whatsapp_bot\.env`:
 
-```powershell
-cd C:\Lycoris
-$env:GITHUB_TOKEN="ghp_..."   # token de GitHub con scope gist
-node tool\iniciar_tunnel_api.js
+```
+GITHUB_TOKEN=ghp_...
 ```
 
-Cada vez que arranca, publica en `api_url.json`:
+Ese archivo es el mismo que usa el bot, y `tool\iniciar_api.bat` lo lee de
+ahí, así que no hay que exportar la variable en cada arranque. Si el token
+está vencido o mal copiado, el `.bat` avisa antes de arrancar y el launcher
+explica el error 401 en vez de dejar la URL sin publicar.
+
+Cada vez que arranca, el túnel publica en `api_url.json`:
 
 ```json
-{"url":"https://api.tudominio.cl","actualizado":"2026-09-29T21:06:36.032Z","puerto":8501,"rapido":false}
+{"url":"https://algo.trycloudflare.com","actualizado":"2026-09-29T21:06:36.032Z","puerto":8501,"rapido":true}
 ```
 
-Ese archivo **no contiene el token**, solo la dirección. Es público por
-diseño: la URL no es un secreto.
+Ese archivo **no contiene el token**, solo la dirección. El Gist es secreto (no
+listado), pero la app lo lee **sin autenticación** porque solo necesita el
+`GIST_ID`; la dirección del túnel no es un secreto, el token sí.
 
 En la app, el paso 5.3 queda así:
 

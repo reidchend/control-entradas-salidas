@@ -64,6 +64,15 @@ function updateGist(archivo, contenido) {
         if (res.statusCode === 200) {
           console.log(`[GIST] ${archivo} actualizado: ${data}`);
           resolve(true);
+        } else if (res.statusCode === 401 || res.statusCode === 403) {
+          // El body crudo de GitHub ("Bad credentials") no orienta nada. Lo
+          // mas comun es un token vencido o revocado, que es justo lo que no
+          // se nota hasta que las apps dejan de encontrar la URL.
+          console.error(`[GIST] Error ${res.statusCode}: el GITHUB_TOKEN no sirve.`);
+          console.error('[GIST] Suele ser token vencido, revocado o mal copiado.');
+          console.error('[GIST] Genera uno nuevo tipo "classic" con permiso gist');
+          console.error(`[GIST] y ponelo en ${path.join(__dirname, '.env')}`);
+          resolve(false);
         } else {
           console.error(`[GIST] Error ${res.statusCode}: ${body}`);
           resolve(false);

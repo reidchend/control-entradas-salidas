@@ -83,13 +83,24 @@ function publicar(url) {
   });
 }
 
-function alDetectar(chunk) {
+// El tunel rapido imprime su URL en el log, y siempre es *.trycloudflare.com.
+//
+// El patron tiene que ser estricto. cloudflared imprime un banner que menciona
+// sus propios links (terminos de uso, documentacion) ANTES de anunciar la URL
+// real. Un regex laxo como https://[a-z0-9.-]+\.(com|net|org) tomaba
+// https://www.cloudflare.com como si fuera la del tunel y publicaba esa en el
+// Gist, dejando a todas las apps apuntando a la pagina de Cloudflare.
+const RE_URL_RAPIDA = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+
+function alSalida(chunk) {
   const salida = chunk.toString();
   ultimaSalida += salida;
   process.stdout.write(salida);
-  // El rapido imprime la URL; el con nombre no, y hay que sacarla de
-  // `cloudflared tunnel info`.
-  const match = salida.match(/https:\/\/[a-zA-Z0-9.-]+\.(trycloudflare\.com|com|net|org|cl)/);
+  // Solo el rapido anuncia la URL en el log. El con nombre la saca mas abajo
+  // de `cloudflared tunnel info`, asi que aca no hay nada que buscar: si se
+  // buscara, el banner de Cloudflare daria un falso positivo.
+  if (!rapido) return;
+  const match = salida.match(RE_URL_RAPIDA);
   if (match) publicar(match[0]);
 }
 
@@ -141,8 +152,8 @@ async function arrancar() {
   if (!rapido) console.log(`[TUNEL] Gist: ${GIST_ID}`);
 
   tunnel = spawn(CLOUDFLARED, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  tunnel.stdout.on('data', alDetectar);
-  tunnel.stderr.on('data', alDetectar);
+  tunnel.stdout.on('data', alSalida);
+  tunnel.stderr.on('data', alSalida);
 
   // Sin esto, si no se encuentra el binario Node tira un stack trace crudo y
   // el mensaje real (ENOENT) queda en la ultima linea.

@@ -5,7 +5,7 @@ REM automatico.
 REM =====================================================================
 REM Por defecto usa el tunel rapido (trycloudflare.com): no necesita cuenta de
 REM Cloudflare ni dominio, y su URL cambia en cada reinicio. Las apps no se
-ROMPEN por eso, porque la toman del Gist.
+REM rompen por eso, porque la toman del Gist.
 REM
 REM Para un tunel con nombre (URL fija, la que de verdad da Cloudflare para
 REM produccion) hace falta un dominio propio y configurar una vez:
@@ -74,6 +74,23 @@ echo   Instalalo con:  winget install --id Cloudflare.cloudflared
 exit /b 1
 
 :cloudflared_ok
+
+REM El Gist es como las apps descubren la URL del tunel. Sin GITHUB_TOKEN el
+REM tunel igual levanta, pero la URL no se publica y las apps quedan apuntando
+REM a la anterior: fallan todas y el motivo no se ve por ningun lado. Mejor no
+REM arrancar que arrancar a medias.
+set "GIST_OK=0"
+if exist "..\whatsapp_bot\.env" (
+    for /f "usebackq tokens=1 delims==" %%k in (`findstr /b /c:"GITHUB_TOKEN=" "..\whatsapp_bot\.env"`) do set "GIST_OK=1"
+)
+if "!GIST_OK!"=="0" (
+    echo ERROR: falta GITHUB_TOKEN en ..\whatsapp_bot\.env
+    echo   Sin el, la URL del tunel no se publica y las apps no la encuentran.
+    echo   Genera uno tipo "classic" con permiso gist en:
+    echo     https://github.com/settings/tokens
+    exit /b 1
+)
+
 echo [api] Entorno OK (puerto !API_PORT!).
 
 REM Espera a que haya Internet: como tarea ONSTART se dispara al prender la
