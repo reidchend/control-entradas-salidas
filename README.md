@@ -155,11 +155,40 @@ Suscripciones WebSocket en tiempo real para sync entre dispositivos:
 
 ---
 
-## Base de datos Supabase
+## Base de datos
+
+PostgreSQL, servido desde una PC propia. El proveedor anterior era Supabase
+(Neon) y quedo decommissionado por cuota; la transicion esta documentada en
+[`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
+
+### Levantar la base local (PC Windows)
+
+Los scripts estan en [`tool/windows/`](tool/windows/README.md), con el orden
+de pasos:
+
+```powershell
+# 1. Rol, base y pg_hba.conf restringido a Tailscale (como Administrador)
+powershell -ExecutionPolicy Bypass -File tool\windows\configurar_postgres.ps1 -DbPassword "..."
+
+# 2. Tablas y entorno Python
+tool\windows\crear_estructura.bat
+
+# 3. Arranque automatico al prender el equipo
+powershell -ExecutionPolicy Bypass -File tool\windows\registrar_autostart.ps1
+```
+
+### Conectar desde la app
+
+En Windows y Android: **Ajustes → Sistema → Configurar conexion**, con la
+IP de Tailscale de la PC servidor. Se guarda en el dispositivo, asi que
+cambiar la IP del servidor no requiere recompilar.
+
+En web no hay que hacer nada: el navegador va siempre contra
+`tool/server.py`, que es quien habla con PostgreSQL.
 
 ### Tabla requerida: `dispositivo_usuario`
 
-Ejecutar en Supabase SQL Editor el archivo:
+Ejecutar en el SQL Editor:
 
 ```sql
 supabase/migrations/20250101000000_add_dispositivo_usuario.sql
@@ -282,6 +311,13 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 | `APP_ID` | `inventario` | `pos` o `inventario` — define icono, binario y asset del updater |
 | `APP_LABEL` | segun `APP_ID` | Nombre mostrado en dialogos y titulos |
 | `UPDATE_REPO` | `reidchend/control-entradas-salidas` | Repo de releases para el updater |
+| `DATABASE_URL` | — | Solo si se necesita forzar la BD al compilar. Las apps Windows/Android pueden configurar la conexion desde la app (Ajustes → Sistema), que tiene prioridad sobre este valor |
+
+> **La base ya no es Supabase.** La app usa PostgreSQL. En web el
+> `DATABASE_URL` lo resuelve el proxy `/proxy-sql` de `tool/server.py`; en
+> Windows y Android se configura en el dispositivo, y por eso no hay
+> credenciales en el repositorio. Ver
+> [`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
 
 ---
 
@@ -328,5 +364,8 @@ Tests actuales (28):
 ## Documentacion
 
 - `lib/` — codigo organizado por feature (core, features/...), siguiendo la estructura modular de `AGENTS.md`.
-- `supabase/schema.sql` — esquema remoto (idempotente).
+- `supabase/schema.sql` — esquema base (idempotente).
+- `supabase/schema_activos.sql` — categorias, tipos y unidades de activos.
 - `supabase/migrations/` — migraciones SQL.
+- `docs/migracion-bd-local.md` — transicion de Neon a PostgreSQL local.
+- `tool/windows/` — scripts para preparar la PC servidor.

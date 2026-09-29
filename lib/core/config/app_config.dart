@@ -1,19 +1,23 @@
 /// Configuración de la app, equivalente a `config/config.py` + `config/db_config.py`.
 ///
 /// Fuente de valores:
-/// - `--dart-define=DATABASE_URL=...` (connection string PostgreSQL con pooler)
+/// - `--dart-define=DATABASE_URL=...` (connection string PostgreSQL).
 ///   (los define de compilación viajan en el bundle como `String.fromEnvironment`).
-/// - Fallback a constante compilada (development).
+/// - Configuración guardada por el usuario en Ajustes → Base de datos
+///   (tiene prioridad; ver `DbConfig`).
+///
+/// No hay fallback embebido: las credenciales no se versionan ni se
+/// distribuyen dentro del binario.
 class AppConfig {
   AppConfig._();
 
-  /// Connection string PostgreSQL (pooler Neon) para conexión directa.
-  /// Formato: postgresql://user:pass@host/db?sslmode=require&channel_binding=require
-  static String get databaseUrl {
-    const fromEnv = String.fromEnvironment('DATABASE_URL');
-    if (fromEnv.isNotEmpty) return fromEnv;
-    return 'postgresql://neondb_owner:npg_hzl8u2rOLMQe@ep-fragrant-thunder-ayji1cvq-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-  }
+  /// Connection string PostgreSQL embebido al compilar, o vacío.
+  ///
+  /// Windows y Android conectan directo a PostgreSQL; en la instalacion de
+  /// produccion apunta a la base local del servidor. Web usa el proxy
+  /// `/proxy-sql` y no lee este valor.
+  static String get databaseUrl =>
+      const String.fromEnvironment('DATABASE_URL');
 
   /// URL del updater (equivalent a UPDATE_URL del .env).
   static String get updateUrl {
@@ -50,6 +54,4 @@ class AppConfig {
   /// Intervalo del sync background en segundos (sync.py start_background_sync).
   /// Subido de 20s a 300s para no exceder la cuota de egress de Supabase.
   static const int syncIntervalSeconds = 300;
-
-  static bool get hasDatabaseUrl => databaseUrl.isNotEmpty;
 }

@@ -14,6 +14,7 @@ import '../../data/configuracion_providers.dart'
         usuarioDispositivoProvider;
 import '../../data/configuracion_repository.dart';
 import 'almacenes_panel.dart';
+import 'db_config_panel.dart';
 
 /// Pestaña de Sistema (porta `usr/views/configuracion/sistema.py`).
 class SistemaTab extends ConsumerStatefulWidget {
@@ -84,6 +85,22 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
                 child: Text(_testResult, style: TextStyle(color: _testResultColor ?? scheme.onSurface, fontSize: 13)),
               ),
             ],
+          ],
+        ),
+        _sectionCard(
+          scheme,
+          title: 'Base de datos',
+          subtitle:
+              'Host, puerto, usuario y contraseña del servidor PostgreSQL. '
+              'Se guarda en este equipo; no requiere recompilar.',
+          icon: Icons.dns_outlined,
+          iconBg: scheme.primaryContainer,
+          children: [
+            FilledButton.icon(
+              icon: const Icon(Icons.settings_ethernet),
+              label: const Text('Configurar conexión'),
+              onPressed: _abrirDbConfig,
+            ),
           ],
         ),
         _sectionCard(
@@ -259,6 +276,43 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
             const Divider(height: 20),
             ...children,
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Abre el panel de conexión a PostgreSQL en un diálogo.
+  ///
+  /// En web se avisa que no aplica: la conexión pasa por el proxy
+  /// `/proxy-sql` del servidor, no por un socket del navegador.
+  Future<void> _abrirDbConfig() async {
+    if (kIsWeb) {
+      setState(() {
+        _testResult =
+            'En web la conexión la resuelve el proxy del servidor. '
+            'Esta configuración aplica a Windows y Android.';
+        _testResultColor = Colors.orange;
+      });
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 640),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              const Expanded(child: DbConfigPanel()),
+            ],
+          ),
         ),
       ),
     );

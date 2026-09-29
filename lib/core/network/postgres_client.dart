@@ -3,24 +3,44 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:postgres/postgres.dart';
 
 import '../config/app_config.dart';
+import '../config/db_config.dart';
 import '../data/http_sql_session.dart';
 import '../data/native_sql_session.dart';
 import '../data/sql_session.dart';
 
 /// Inicializa la sesión SQL según la plataforma.
 ///
-/// - Escritorio/móvil: pool de conexiones PostgreSQL (pooler Neon) con el
-///   driver nativo `package:postgres`.
-/// - Web: proxy HTTP `/proxy-sql` del servidor (el driver nativo usa
-///   `dart:io`, que no existe en Flutter web).
+/// - Escritorio/móvil: pool de conexiones PostgreSQL directo con el driver
+///   nativo `package:postgres` (no soporta sockets en web).
+/// - Web: proxy HTTP `/proxy-sql` del servidor, que habla con PostgreSQL
+///   server-side.
+///
+/// La connection string se resuelve en este orden:
+/// 1. Configuración guardada en Ajustes → Base de datos ([DbConfig]).
+/// 2. `--dart-define=DATABASE_URL` embebido al compilar.
 Future<SqlSession> initializePostgres() async {
   if (kIsWeb) {
     return HttpSqlSession();
   }
-  if (!AppConfig.hasDatabaseUrl) {
-    throw StateError('DATABASE_URL no configurado');
+  final url = await resolveDatabaseUrl();
+  if (url.isEmpty) {
+    throw StateError(
+      'Base de datos no configurada. Abrí Ajustes → Sistema → '
+      'Configurar conexión y guardá los datos.',
+    );
   }
-  return NativeSqlSession(Pool.withUrl(_normalizeUrl(AppConfig.databaseUrl)));
+  return NativeSqlSession(Pool.withUrl(_normalizeUrl(url)));
+}
+
+/// Connection string efectiva para esta plataforma.
+///
+/// Vacía en web (el proxy resuelve la conexión) y cuando no hay ninguna
+/// fuente configurada.
+Future<String> resolveDatabaseUrl() async {
+  if (kIsWeb) return '';
+  final guardada = await DbConfig.load();
+  if (guardada != null && guardada.isComplete) return guardada.toUrl();
+  return AppConfig.databaseUrl;
 }
 
 /// El driver `postgres` rechaza parámetros de query que no entiende (p. ej.
