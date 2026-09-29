@@ -132,14 +132,18 @@ if ($RepoPath -and $psql) {
     # Que la base exista no dice nada de que tenga el esquema. Se cuentan
     # las tablas reales: un schema.sql que falló a medias deja la base viva
     # pero inútil, y eso no lo detecta ningún otro chequeo.
-    $nTablas = (& $psql -U postgres -d $DbName -tAc
-        "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>$null)
+    #
+    # OJO: el & va PEGADO al $psql, no dentro del paréntesis. `(& $psql ...)`
+    # es un error de parseo en PowerShell: el & de llamada se interpreta
+    # distinto al de la subexpresión y se desarma toda la expresión.
+    $nTablas = & $psql -U postgres -d $DbName -tAc `
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>$null
     if ($nTablas -match '^\s*(\d+)\s*$') {
         $n = [int]$Matches[1]
         if ($n -ge 20) {
             Ok "$n tablas en public"
-            $faltan = (& $psql -U postgres -d $DbName -tAc
-                "SELECT count(*) FROM (VALUES ('activos_tipos'),('activos'),('activos_unidades'),('productos'),('ventas')) AS t(nombre) WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables x WHERE x.table_schema='public' AND x.table_name=t.nombre)" 2>$null)
+            $faltan = & $psql -U postgres -d $DbName -tAc `
+                "SELECT count(*) FROM (VALUES ('activos_tipos'),('activos'),('activos_unidades'),('productos'),('ventas')) AS t(nombre) WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables x WHERE x.table_schema='public' AND x.table_name=t.nombre)" 2>$null
             if ($faltan -match '^\s*(\d+)\s*$' -and [int]$Matches[1] -eq 0) {
                 Ok "tablas clave de Activos presentes"
             } else {

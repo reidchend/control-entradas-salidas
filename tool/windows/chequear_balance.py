@@ -59,13 +59,36 @@ def revisar_here_strings(texto: str) -> list[str]:
     return problemas
 
 
+def revisar_llamadas(texto: str) -> list[str]:
+    """Detecta el patron `(& $var ...)` con salto de linea antes del cierre.
+
+    En PowerShell, un parentesis seguido de & $var sin cerrar en la misma
+    linea no parsea: el & de llamada dentro de la subexpresion se
+    interpreta distinto y se desarma la expresion entera. Ya rompio dos
+    veces, asi que se avisa.
+    """
+    problemas: list[str] = []
+    lineas = texto.splitlines()
+    for i, linea in enumerate(lineas):
+        s = linea.strip()
+        if s.startswith("#"):
+            continue
+        # (& $var ... seguido de algo que no cierra en la misma linea
+        if re.search(r'\(\s*&\s*\$', linea) and not re.search(r'\)\s*(;|$|2>)', linea):
+            problemas.append(
+                f"  línea {i + 1}: '(' seguido de '& $var' sin cierre en la misma "
+                f"línea. Mover el cierre o sacar el paréntesis."
+            )
+    return problemas
+
+
 def revisar(ruta: Path) -> list[str]:
     crudo = ruta.read_text(encoding="utf-8")
     problemas_here = revisar_here_strings(crudo)
     limpio = sin_comentarios(sin_cadenas(sin_here_strings(crudo)))
 
     pila: list[tuple[str, int]] = []
-    problemas: list[str] = problemas_here
+    problemas: list[str] = problemas_here + revisar_llamadas(crudo)
     linea = 1
     for ch in limpio:
         if ch == "\n":
