@@ -114,6 +114,27 @@ if ($botDisponible) {
     Write-Host "       log: $botLog" -ForegroundColor Gray
 }
 
+# Tunel de la API de base de datos. Publica la URL en el Gist para que las
+# apps Windows y Android la descubran solas: si no, habria que escribirla en
+# cada equipo cada vez que el tunel cambia.
+$tunelApi = Join-Path $PSScriptRoot '..\iniciar_tunnel_api.js'
+if (Test-Path $tunelApi) {
+    $tunelLog = Join-Path $logDir 'tunel_api.log'
+    $node = (Get-Command node -ErrorAction SilentlyContinue)
+    if ($node) {
+        $cmd = "cmd /c `"`"$($node.Source)`" `"$tunelApi`" >> `"$tunelLog`" 2>&1`""
+        $nombre = 'LycorisTunelApi'
+        Registrar-Tarea -Nombre $nombre -Comando $cmd
+        $nombres += $nombre
+        Write-Host "    -> $nombre (tunel API + publica URL)" -ForegroundColor Green
+        Write-Host "       log: $tunelLog" -ForegroundColor Gray
+    } else {
+        Write-Host "    -> tunel API omitido: node no esta en el PATH" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "    -> tunel API omitido: no esta iniciar_tunnel_api.js" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Para probarlas sin reiniciar:" -ForegroundColor Cyan
 foreach ($n in $nombres) {
@@ -137,8 +158,10 @@ Write-Host ""
 Write-Host "Para eliminarlas:" -ForegroundColor Cyan
 Write-Host "  schtasks /Delete /TN LycorisServidor8501 /F" -ForegroundColor Gray
 Write-Host "  schtasks /Delete /TN LycorisServidor8502 /F" -ForegroundColor Gray
+Write-Host "  schtasks /Delete /TN LycorisTunelApi /F" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Tareas registradas. Se inician solas con el equipo." -ForegroundColor Green
 Write-Host ""
-Write-Host "Nota: Tailscale debe estar conectado para que las apps puedan" -ForegroundColor Yellow
-Write-Host "alcanzar la base. Ver README.md de esta carpeta." -ForegroundColor Yellow
+Write-Host "Nota: con el tunel API andando, las apps NO necesitan Tailscale:" -ForegroundColor Yellow
+Write-Host "van por HTTPS y descubren la URL solas. Tailscale solo hace falta" -ForegroundColor Yellow
+Write-Host "para administrar la PC servidor." -ForegroundColor Yellow

@@ -322,9 +322,40 @@ Es normal en esta fase.
 
 ### 5.3 Probar la app nativa contra la base
 
-En el celular (o en una notebook):
+Hay dos modos, y el panel deja cambiar entre ellos en cualquier momento.
 
-1. Abrí la app → **Ajustes → Sistema → Configurar conexión**.
+**Proxy HTTPS (recomendado)**
+
+La app no habla con PostgreSQL: le pregunta al servidor, que le responde. No
+necesita Tailscale en el equipo, ni abrir el 5432.
+
+1. Generar un token y ponerlo en `.env.local` de la PC servidor:
+
+   ```powershell
+   cd C:\Lycoris
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+   Copiar el valor y agregarlo a `.env.local`:
+
+   ```
+   PROXY_SQL_TOKEN=EL_VALOR_QUE_COPIASTE
+   ```
+
+   Después reiniciar `tool\server.py` para que lo tome.
+
+2. En la app: **Ajustes → Base de datos → Proxy HTTPS**.
+   - URL del servidor: `https://api.tudominio.cl` (sin `/proxy-sql`, se
+     agrega sola).
+   - Token del proxy: el mismo valor de arriba.
+3. **Probar conexión** → tiene que decir "Conexión correcta".
+4. **Guardar**, y reiniciar la app.
+
+**TCP directo**
+
+Solo si el equipo ya llega al 5432 por Tailscale o red local.
+
+1. Abrí la app → **Ajustes → Base de datos → TCP directo**.
 2. Host: la IP de Tailscale de la PC servidor. Puerto: `5432`.
    Base: `control_entradas`. Usuario: `control_app`.
    Contraseña: la del paso 2.1.
@@ -332,9 +363,95 @@ En el celular (o en una notebook):
 4. **Guardar**.
 
 Si falla con `connection refused`: casi siempre es que falta la regla de
-firewall (paso 2.1) o que Tailscale no está conectado en el celular.
+firewall (paso 2.1) o que Tailscale no está conectado.
 
-### 5.4 Probar con datos sintéticos
+### 5.4 Exponer el proxy con Cloudflare Tunnel
+
+Solo hace falta si los equipos que usan la app **no** están en la red de
+Tailscale. Si todos los clientes tienen Tailscale, usar el modo TCP directo y
+saltar esta sección.
+
+Instalar `cloudflared` y crear un túnel con nombre (la URL de un túnel rápido
+cambia cada vez que se reinicia, y las apps nativas la guardan):
+
+```powershell
+winget install --id Cloudflare.cloudflared
+cloudflared tunnel login
+cloudflared tunnel create control-entradas
+```
+
+Apuntar el túnel a `tool\server.py` en el puerto `8501` y asociar el
+hostname en el DNS:
+
+```powershell
+cloudflared tunnel route dns control-entradas api.tudominio.cl
+```
+
+Y en `C:\Users\<TU_USUARIO>\.cloudflared\config.yml`:
+
+```yaml
+tunnel: control-entradas
+credentials-file: C:\Users\<TU_USUARIO>\.cloudflared\<ID_DEL_TUNEL>.json
+
+ingress:
+  - hostname: api.tudominio.cl
+    service: http://localhost:8501
+  - service: http_status:404
+```
+
+Comprobar que el proxy exige el token **desde internet**:
+
+```powershell
+# Sin token: tiene que responder 401
+curl.exe -X POST https://api.tudominio.cl/proxy-sql -d '{\"action\":\"execute\",\"sql\":\"SELECT 1\"}'
+
+# Con token: tiene que responder con filas
+curl.exe -X POST https://api.tudominio.cl/proxy-sql -H "X-Proxy-Token: EL_TOKEN" -d '{\"action\":\"execute\",\"sql\":\"SELECT 1\"}'
+```
+
+Si el primero devuelve filas, el proxy está abierto: hay que borrar el
+túnel, definir `PROXY_SQL_TOKEN` y volver a levantarlo.
+
+### 5.5 Publicar la URL para que las apps la encuentren solos
+
+Para que en cada equipo haya que escribir **solo el token**, la URL del túnel
+se publica en el Gist y la app la lee al arrancar. Si después el túnel cambia
+de URL, alcanza con republicarla: no hay que ir equipo por equipo.
+
+Necesita `GITHUB_TOKEN` con permiso de escritura sobre el Gist:
+
+```powershell
+cd C:\Lycoris
+$env:GITHUB_TOKEN="ghp_..."   # token de GitHub con scope gist
+node tool\iniciar_tunnel_api.js
+```
+
+Cada vez que arranca, publica en `api_url.json`:
+
+```json
+{"url":"https://api.tudominio.cl","actualizado":"2026-09-29T21:06:36.032Z","puerto":8501,"rapido":false}
+```
+
+Ese archivo **no contiene el token**, solo la dirección. Es público por
+diseño: la URL no es un secreto.
+
+En la app, el paso 5.3 queda así:
+
+1. **Ajustes → Base de datos → Proxy HTTPS**.
+2. La **URL aparece sola** y el campo queda bloqueado. No hay que escribirla.
+3. **Token del proxy**: el valor de `PROXY_SQL_TOKEN`. Es el único campo que
+   se completa a mano.
+4. **Probar conexión** → "Conexión correcta".
+5. **Guardar**.
+
+Si el Gist no responde, el campo URL se desbloquea solo y avisa qué revisar.
+Ahí se puede escribir la URL a mano, y con **Usar la URL automática** se
+vuelve al modo normal.
+
+Si el Gist no responde pero la app ya conocía una URL de antes, usa esa y no
+molesta: no se queda sin conexión por un problema puntual de GitHub.
+
+### 5.6 Probar con datos sintéticos
 
 Creá un producto, vendelo en el POS, cerrá la caja. Después verificá que
 quedó en la base:
@@ -425,6 +542,9 @@ Esperado: **216** tipos y **750** unidades.
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
 | `connection refused` desde la app | Tailscale desconectado, o falta la regla de firewall | `tailscale status`, y repetir el paso 2.1 |
+| `Token invalido` (HTTP 401) | Token distinto al del `.env.local`, o el servidor no se reinició después de cambiarlo | Comparar con `PROXY_SQL_TOKEN` y reiniciar `tool\server.py` |
+| `Proxy SQL sin token configurado` (HTTP 401) | Falta `PROXY_SQL_TOKEN` en `.env.local` | Agregarlo (paso 5.3) y reiniciar el servidor |
+| La web da error 401 en cada consulta | El build web se compiló sin el token | Recompilar con `--dart-define=PROXY_SQL_TOKEN=<token>` |
 | `password authentication failed` | La contraseña de `.env.local` no es la del rol | Repetir 2.1 y corregir 2.4 |
 | El puerto responde pero la web sale en blanco | Falta el build en `build\web` o `build\pos` | `dir C:\Lycoris\build\web\index.html` |
 | `schema.sql` falla al aplicarse | Se corrió `schema_activos.sql` primero | El orden importa: siempre `schema.sql` después |
@@ -446,6 +566,9 @@ schtasks /Delete /TN LycorisBotWhatsapp /F
 # Quitar las reglas de firewall
 Get-NetFirewallRule -DisplayName 'Lycoris*' | Remove-NetFirewallRule
 Get-NetFirewallRule -DisplayName 'PostgreSQL*' | Remove-NetFirewallRule
+
+# Bajar el túnel de Cloudflare (si se llegó a crearlo)
+cloudflared tunnel delete control-entradas
 
 # Restaurar los .conf originales
 copy "C:\Program Files\PostgreSQL\18\data\postgresql.conf.bak" "C:\Program Files\PostgreSQL\18\data\postgresql.conf"
