@@ -17,8 +17,9 @@
 # Idempotente: se puede volver a ejecutar sin romper nada.
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$DbPassword,
+    # Opcional a propósito: si se pasa por línea de comandos queda escrito en
+    # ConsoleHost_history.txt para siempre. Mejor prompt interactivo.
+    [string]$DbPassword = '',
     [string]$DbName = 'control_entradas',
     [string]$DbUser = 'control_app',
     [string]$PgVersion = '18',
@@ -91,6 +92,27 @@ try {
     $env:PGPASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
 } finally {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+}
+
+# --- 0b. Contraseña del rol de la app ---------------------------------
+# Se pide también oculta, y con confirmación: es la que va a usar la app.
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    while ($true) {
+        Write-Host "[0b/5] Contraseña del rol '$DbUser' (la usará la app)..." -ForegroundColor Cyan
+        $p1 = Read-Host '  Contraseña' -AsSecureString
+        $p2 = Read-Host '  Repetir' -AsSecureString
+        $a = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1)
+        $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($p2)
+        try {
+            $DbPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($a)
+            $repeat = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)
+        } finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($a)
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
+        }
+        if ($DbPassword -eq $repeat -and $DbPassword.Length -ge 8) { break }
+        Write-Host "      No coinciden o son muy cortas (minimo 8). De nuevo." -ForegroundColor Yellow
+    }
 }
 
 # --- 1. postgresql.conf: escuchar en la red -------------------------
@@ -195,6 +217,7 @@ Restart-Service -Name $serviceName -Force
 Start-Sleep -Seconds 3
 
 $env:PGPASSWORD = $null
+$DbPassword = $null
 
 $state = (Get-Service -Name $serviceName).Status
 Write-Host ""

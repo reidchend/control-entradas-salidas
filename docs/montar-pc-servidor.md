@@ -132,7 +132,7 @@ administrador"), desde `C:\Lycoris`:
 
 ```powershell
 cd C:\Lycoris
-powershell -ExecutionPolicy Bypass -File tool\windows\configurar_postgres.ps1 -DbPassword "ACA_VA_TU_CONTRASENA_DE_LA_APP"
+powershell -ExecutionPolicy Bypass -File tool\windows\configurar_postgres.ps1
 ```
 
 Te va a pedir la contraseña de `postgres` (la del instalador, paso 0.1),
