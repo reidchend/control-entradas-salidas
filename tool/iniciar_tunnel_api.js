@@ -102,8 +102,11 @@ tunnel.on('error', (err) => {
   process.exit(1);
 });
 
+let ultimaSalida = '';
+
 function alDetectar(chunk) {
   const salida = chunk.toString();
+  ultimaSalida += salida;
   process.stdout.write(salida);
   // Con tunnel con nombre Cloudflare no imprime la URL: hay que leerla de
   // `cloudflared tunnel info`, así que se consulta una vez.
@@ -139,6 +142,18 @@ if (!rapido) {
 }
 
 tunnel.on('close', (code) => {
+  // El mensaje de cloudflared dice que falta cert.pem, pero no dice que eso
+  // es normal la primera vez y que hay dos caminos. El de `--rapido` no
+  // necesita cuenta de Cloudflare y es el que conviene para empezar.
+  if (!rapido && /origincert|cert\.pem/i.test(ultimaSalida)) {
+    console.error('');
+    console.error('[TUNEL] El tunel con nombre necesita iniciar sesion en Cloudflare.');
+    console.error('[TUNEL] Para empezar ya, usar el rapido:');
+    console.error('[TUNEL]   tool\\iniciar_api.bat --rapido');
+    console.error('[TUNEL] Para dejarlo bien (URL estable), una sola vez:');
+    console.error('[TUNEL]   cloudflared tunnel login');
+    console.error('[TUNEL]   cloudflared tunnel create control-entradas');
+  }
   console.log(`[TUNEL] Cloudflared terminó con código ${code}`);
   process.exit(code ?? 0);
 });
