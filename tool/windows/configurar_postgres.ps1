@@ -49,13 +49,27 @@ function Invoke-Psql {
     }
 }
 
-# Set-Content en Windows PowerShell 5.1 escribe ASCII, lo que destruye los
-# acentos de los comentarios de los .conf. Se escribe explícito en UTF-8
-# sin BOM, que es lo que PostgreSQL espera.
-$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-function Write-TextFile {
+# Los .conf del instalador de PostgreSQL vienen en la página de códigos ANSI
+# del Windows (Windows-1252 en una instalación en español), NO en UTF-8.
+#
+# Leerlos con .NET los decodifica como UTF-8 y cada acento no representable
+# se vuelve un caracter de reemplazo U+FFFD. Al reescribir, el archivo queda
+# corrupto y PostgreSQL deja de arrancar con "no se pudo cargar pg_hba.conf".
+#
+# ISO-8859-1 (28591) es el único códec con mapeo 1:1 byte<->char, así que
+# ReadAllText/Latin1 + WriteBytes/Latin1 deja los bytes originales intactos
+# pase lo que pase. El bloque que agregamos es ASCII puro, válido en
+# cualquier codificación.
+$Latin1 = [System.Text.Encoding]::GetEncoding(28591)
+
+function Read-RawText {
+    param([string]$Path)
+    return $Latin1.GetString([System.IO.File]::ReadAllBytes($Path))
+}
+
+function Write-RawText {
     param([string]$Path, [string]$Content)
-    [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
+    [System.IO.File]::WriteAllBytes($Path, $Latin1.GetBytes($Content))
 }
 
 function Assert-Admin {
@@ -115,12 +129,38 @@ if ([string]::IsNullOrWhiteSpace($DbPassword)) {
     }
 }
 
+# --- Respaldo antes de tocar nada ------------------------------------
+# Se crean los dos .bak acá arriba, no en cada paso, para que el `trap` de
+# abajo siempre encuentre un respaldo completo. Un pg_hba.conf roto deja la
+# base sin aceptar conexiones, así que el fallo tiene que ser reversible.
+$backup = "$confFile.bak"
+$hbaBackup = "$hbaFile.bak"
+foreach ($pair in @(@($confFile, $backup), @($hbaFile, $hbaBackup))) {
+    if (-not (Test-Path $pair[1])) { Copy-Item $pair[0] $pair[1] }
+}
+
+trap {
+    Write-Host ""
+    Write-Host "FALLO: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Restaurando postgresql.conf y pg_hba.conf desde los .bak..." -ForegroundColor Yellow
+    try {
+        Copy-Item $hbaBackup $hbaFile -Force
+        Copy-Item $backup $confFile -Force
+        Restart-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+        Write-Host "Configuracion original restaurada. La base deberia volver a responder." -ForegroundColor Green
+    } catch {
+        Write-Host "LA RESTAURACION FALLO: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Copia a mano los .bak que quedaron junto a los .conf originales." -ForegroundColor Red
+    }
+    $env:PGPASSWORD = $null
+    exit 1
+}
+
 # --- 1. postgresql.conf: escuchar en la red -------------------------
 Write-Host "[1/5] Configurando listen_addresses..." -ForegroundColor Cyan
-$backup = "$confFile.bak"
-if (-not (Test-Path $backup)) { Copy-Item $confFile $backup }
 
-$conf = [System.IO.File]::ReadAllText($confFile)
+$conf = Read-RawText -Path $confFile
 # '*' escucha en todas las interfaces; el firewall de Windows y el rango
 # de Tailscale en pg_hba son los que filtran el acceso real.
 # Se exige un valor numérico para no pisar otra tecla que empiece por "port".
@@ -128,12 +168,10 @@ $conf = [regex]::Replace(
     $conf, "(?m)^\s*#?\s*listen_addresses\s*=.*$", "listen_addresses = '*'")
 $conf = [regex]::Replace(
     $conf, "(?m)^\s*#?\s*port\s*=\s*\d+.*$", "port = $Port")
-Write-TextFile -Path $confFile -Value $conf
+Write-RawText -Path $confFile -Content $conf
 
 # --- 2. pg_hba.conf: solo Tailscale --------------------------------
 Write-Host "[2/5] Configurando pg_hba.conf (solo $TrustedSubnet)..." -ForegroundColor Cyan
-$hbaBackup = "$hbaFile.bak"
-if (-not (Test-Path $hbaBackup)) { Copy-Item $hbaFile $hbaBackup }
 
 # Marcador para reemplazar el bloque en re-ejecuciones.
 $begin = '# >>> control-entradas-app >>>'
@@ -147,13 +185,13 @@ host    all             all             $TrustedSubnet        scram-sha-256
 $end
 "@
 
-$hba = [System.IO.File]::ReadAllText($hbaFile)
+$hba = Read-RawText -Path $hbaFile
 # Quita el bloque previo si existe (re-ejecución).
 $hba = [regex]::Replace($hba, "(?ms)^$begin.*?^$end\r?\n?", '')
 # Las reglas por defecto de Postgres quedan intactas: local por socket y
 # loopback. El bloque de la app se antepone para que coincida primero.
 $hba = $block + "`r`n" + $hba
-Write-TextFile -Path $hbaFile -Value $hba
+Write-RawText -Path $hbaFile -Content $hba
 
 # --- 3. Firewall de Windows ----------------------------------------
 # Sin esta regla la app no conecta: Windows bloquea por defecto el tráfico
