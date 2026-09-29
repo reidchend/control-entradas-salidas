@@ -5,8 +5,8 @@
 #   powershell -ExecutionPolicy Bypass -File registrar_autostart.ps1
 #
 # Crea tareas programadas que se ejecutan al iniciar el equipo:
-#   - LycorisServidor8501  : tool/server.py sirviendo la web de inventario
-#   - LycorisServidor8502  : tool/server.py sirviendo el POS
+#   - LycorisApi            : tool/iniciar_api.bat = server.py en 8501 + tunel
+#   - LycorisServidor8502   : tool/server.py sirviendo la web del POS
 #
 # Requiere que .env.local tenga DATABASE_URL apuntando a la base local y
 # que el bot de WhatsApp se registre aparte (ver README.md de esta carpeta).
@@ -81,12 +81,31 @@ Write-Host ""
 
 $nombres = @()
 
+# ---------------------------------------------------------------------------
+# API de base de datos: servidor en 8501 + tunel, en una sola tarea.
+#
+# Antes eran dos tareas sueltas (LycorisServidor8501 y LycorisTunelApi) y
+# ambas se disparan en paralelo al prender la maquina: el tunel podia
+# empezar antes de que el servidor escuchara, y la app se conectaba a un 502.
+# iniciar_api.bat espera a que el puerto responda antes de levantar el tunel.
+# ---------------------------------------------------------------------------
+$apiLauncher = Join-Path $RepoPath 'tool\iniciar_api.bat'
+if (Test-Path $apiLauncher) {
+    $apiLog = Join-Path $logDir 'api.log'
+    $cmd = "cmd /c `"`"$apiLauncher`" >> `"$apiLog`" 2>&1`""
+    $nombre = 'LycorisApi'
+    Registrar-Tarea -Nombre $nombre -Comando $cmd
+    $nombres += $nombre
+    Write-Host "    -> $nombre (servidor 8501 + tunel + Gist)" -ForegroundColor Green
+    Write-Host "       log: $apiLog" -ForegroundColor Gray
+}
+
 # server.py lee el puerto en argv[1] y el directorio web en argv[2], relativo
 # a la raiz del repo. Si se omite argv[2] usa build/web, asi que sin esto el
 # POS (8502) serviria el build de inventario.
-$webPorPuerto = @{ 8501 = 'build\web'; 8502 = 'build\pos' }
+$webPorPuerto = @{ 8502 = 'build\pos' }
 
-foreach ($puerto in 8501, 8502) {
+foreach ($puerto in 8502) {
     $log = Join-Path $logDir "server$puerto.log"
     $web = $webPorPuerto[$puerto]
     # Se envuelve en `cmd /c` porque schtasks desarma mal un /TR con comillas
@@ -114,27 +133,6 @@ if ($botDisponible) {
     Write-Host "       log: $botLog" -ForegroundColor Gray
 }
 
-# Tunel de la API de base de datos. Publica la URL en el Gist para que las
-# apps Windows y Android la descubran solas: si no, habria que escribirla en
-# cada equipo cada vez que el tunel cambia.
-$tunelApi = Join-Path $PSScriptRoot '..\iniciar_tunnel_api.js'
-if (Test-Path $tunelApi) {
-    $tunelLog = Join-Path $logDir 'tunel_api.log'
-    $node = (Get-Command node -ErrorAction SilentlyContinue)
-    if ($node) {
-        $cmd = "cmd /c `"`"$($node.Source)`" `"$tunelApi`" >> `"$tunelLog`" 2>&1`""
-        $nombre = 'LycorisTunelApi'
-        Registrar-Tarea -Nombre $nombre -Comando $cmd
-        $nombres += $nombre
-        Write-Host "    -> $nombre (tunel API + publica URL)" -ForegroundColor Green
-        Write-Host "       log: $tunelLog" -ForegroundColor Gray
-    } else {
-        Write-Host "    -> tunel API omitido: node no esta en el PATH" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "    -> tunel API omitido: no esta iniciar_tunnel_api.js" -ForegroundColor Yellow
-}
-
 Write-Host ""
 Write-Host "Para probarlas sin reiniciar:" -ForegroundColor Cyan
 foreach ($n in $nombres) {
@@ -147,18 +145,9 @@ foreach ($log in (Get-ChildItem $logDir -Filter *.log -ErrorAction SilentlyConti
 }
 
 Write-Host ""
-Write-Host "Para probarlas sin reiniciar:" -ForegroundColor Cyan
-Write-Host "  schtasks /Run /TN LycorisServidor8501" -ForegroundColor Gray
-Write-Host "  schtasks /Run /TN LycorisServidor8502" -ForegroundColor Gray
-Write-Host ""
-Write-Host "Si algo falla, el detalle queda en:" -ForegroundColor Cyan
-Write-Host "  tool\logs\server8501.log" -ForegroundColor Gray
-Write-Host "  tool\logs\server8502.log" -ForegroundColor Gray
-Write-Host ""
-Write-Host "Para eliminarlas:" -ForegroundColor Cyan
-Write-Host "  schtasks /Delete /TN LycorisServidor8501 /F" -ForegroundColor Gray
-Write-Host "  schtasks /Delete /TN LycorisServidor8502 /F" -ForegroundColor Gray
+Write-Host "Tarea vieja (ya no se usa, se puede borrar):" -ForegroundColor Cyan
 Write-Host "  schtasks /Delete /TN LycorisTunelApi /F" -ForegroundColor Gray
+Write-Host "  schtasks /Delete /TN LycorisServidor8501 /F" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Tareas registradas. Se inician solas con el equipo." -ForegroundColor Green
 Write-Host ""
