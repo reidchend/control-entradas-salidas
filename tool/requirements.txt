@@ -1,0 +1,14 @@
+# Dependencias de tool/server.py (el proxy que habla con PostgreSQL).
+#
+# Un solo lugar de verdad: si algo se agrega acá, no hay que acordarse de
+# tocar el .bat, el README ni los mensajes de error.
+#
+#   python -m venv tool/venv
+#   tool/venv/bin/pip install -r tool/requirements.txt      # Linux
+#   tool\venv\Scripts\pip install -r tool\requirements.txt  # Windows
+#
+# [binary] evita tener que instalar libpq aparte. Es lo que funciona en
+# Windows, donde no viene PostgreSQL.
+# [pool]   es ConnectionPool, que server.py importa para las consultas.
+#          Sin esto el servidor arranca pero responde 503 en cada request.
+psycopg[binary,pool]

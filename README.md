@@ -273,12 +273,15 @@ tool/venv/bin/python tool/server.py 8502 build/pos
 
 `tool/server.py` expone `/proxy-bcv` (tasa del BCV con cache y *stale-while-revalidate*), `/proxy-sql` (acceso a PostgreSQL desde Flutter web) y recibe los logs de Flutter web (`POST /log`).
 
-**Proxy SQL con psycopg** (requerido en web): el driver nativo `package:postgres` usa sockets de `dart:io`, inexistentes en Flutter web; por eso las queries viajan por `POST /proxy-sql`. El servidor aplica las transacciones iniciadas con `HttpSqlSession` y limpia las olvidadas. Se instala una sola vez:
+**Proxy SQL con psycopg** (requerido en web): el driver nativo `package:postgres` usa sockets de `dart:io`, inexistentes en Flutter web; por eso las queries viajan por `POST /proxy-sql`. El servidor aplica las transacciones iniciadas con `HttpSqlSession` y limpia las olvidadas. Las dependencias están todas en `tool/requirements.txt` y se instalan una sola vez:
 
 ```bash
 python3 -m venv tool/venv
-tool/venv/bin/pip install "psycopg[binary]"
+tool/venv/bin/pip install -r tool/requirements.txt
 ```
+
+Ojo: los extras `[binary,pool]` no son opcionales. Sin `[pool]` el servidor
+arranca pero contesta 503 en cada consulta.
 
 La `DATABASE_URL` se lee de la variable de entorno o de `.env.local` (prioriza `DATABASE_URL_UNPOOLED`).
 

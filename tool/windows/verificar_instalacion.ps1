@@ -129,6 +129,17 @@ if ($RepoPath -and $psql) {
     if (Test-Path $venvPy) { Ok "entorno Python listo" }
     else { Falta "falta tool\venv. Corre crear_estructura.bat" }
 
+    # Que el venv exista no dice que tenga todo lo que importa. El error es
+    # invisible si no se prueba: el server.py arranca igual y contesta 503 en
+    # cada consulta, recien cuando la app ya esta configurada.
+    if (Test-Path $venvPy) {
+        $probe = & $venvPy -c "import psycopg, psycopg_pool" 2>&1
+        if ($LASTEXITCODE -eq 0) { Ok "psycopg y psycopg_pool disponibles" }
+        else {
+            Falta "faltan dependencias en tool\venv. Corre: tool\venv\Scripts\python.exe -m pip install -r tool\requirements.txt"
+        }
+    }
+
     # Que la base exista no dice nada de que tenga el esquema. Se cuentan
     # las tablas reales: un schema.sql que falló a medias deja la base viva
     # pero inútil, y eso no lo detecta ningún otro chequeo.

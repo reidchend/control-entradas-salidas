@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Servidor de desarrollo con logs en la terminal.
+r"""Servidor de desarrollo con logs en la terminal.
 
 Sirve el build de Flutter web elegido y recibe los print() de Flutter web
 (LogBridge) imprimiéndolos en la consola, igual que en un script de Python.
@@ -9,13 +9,17 @@ ejecutar consultas parametrizadas contra PostgreSQL sin conexiones TCP directas
 (el driver package:postgres usa sockets `dart:io`, que no existen en web).
 
 Uso:
-    tool/venv/bin/python tool/server.py [puerto] [web_dir_rel]
+    tool/server.py [puerto] [web_dir_rel]
 
 web_dir_rel por defecto "build/web" (app de inventario). Para el POS:
-    tool/venv/bin/python tool/server.py 8501 build/pos
+    tool/server.py 8501 build/pos
 
-Requiere psycopg (se instala en el venv con:
-    python3 -m venv tool/venv && tool/venv/bin/pip install "psycopg[binary]")
+Con el virtualenv de tool/venv (Windows: tool\venv\Scripts\python.exe):
+    tool\venv\Scripts\python.exe tool\server.py 8501
+    tool/venv/bin/python tool/server.py 8501        (Linux)
+
+Dependencias (ver tool/requirements.txt):
+    python -m venv tool/venv && tool/venv/bin/pip install -r tool/requirements.txt
 La DATABASE_URL se toma de la variable de entorno o de .env.local.
 """
 import base64
@@ -215,8 +219,9 @@ def _get_pool():
             raise RuntimeError("DATABASE_URL no configurada (env o .env.local)")
         if ConnectionPool is None:
             raise RuntimeError(
-                "psycopg_pool no instalado (ejecuta: "
-                "tool/venv/bin/pip install 'psycopg[pool]')"
+                "psycopg_pool no instalado. Instalá las dependencias con: "
+                "pip install -r tool/requirements.txt (dentro de tool/venv). "
+                "Falta el extra [pool]."
             )
         _POOL = ConnectionPool(
             conninfo=url,

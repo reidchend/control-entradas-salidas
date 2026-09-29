@@ -24,9 +24,9 @@ if not exist "tool\venv\Scripts\python.exe" (
     echo       El virtualenv ya existe.
 )
 
-echo       Instalando psycopg...
+echo       Instalando psycopg (desde tool\requirements.txt)...
 call tool\venv\Scripts\python.exe -m pip install --quiet --upgrade pip
-call tool\venv\Scripts\python.exe -m pip install --quiet "psycopg[binary]"
+call tool\venv\Scripts\python.exe -m pip install --quiet -r tool\requirements.txt
 if errorlevel 1 (
     echo ERROR: fallo la instalacion de psycopg.
     exit /b 1
