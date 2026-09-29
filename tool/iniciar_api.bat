@@ -75,10 +75,13 @@ exit /b 1
 
 :cloudflared_ok
 
-REM El Gist es como las apps descubren la URL del tunel. Sin GITHUB_TOKEN el
-REM tunel igual levanta, pero la URL no se publica y las apps quedan apuntando
-REM a la anterior: fallan todas y el motivo no se ve por ningun lado. Mejor no
-REM arrancar que arrancar a medias.
+REM El Gist es como las apps descubren la URL del tunel. Sin un GITHUB_TOKEN
+REM utilizable el tunel igual levanta, pero la URL no se publica y las apps
+REM quedan apuntando a la anterior: fallan todas y el motivo no se ve por
+REM ningun lado. Mejor no arrancar que arrancar a medias.
+REM
+REM Esto solo mira que la linea exista. Si el token esta mal, el launcher lo
+REM dice; node diagnostico_gist.js muestra por que.
 set "GIST_OK=0"
 if exist "..\whatsapp_bot\.env" (
     for /f "usebackq tokens=1 delims==" %%k in (`findstr /b /c:"GITHUB_TOKEN=" "..\whatsapp_bot\.env"`) do set "GIST_OK=1"
