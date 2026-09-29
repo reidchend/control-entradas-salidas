@@ -86,6 +86,13 @@ set "GIST_OK=0"
 if exist "..\whatsapp_bot\.env" (
     for /f "usebackq tokens=1 delims==" %%k in (`findstr /b /c:"GITHUB_TOKEN=" "..\whatsapp_bot\.env"`) do set "GIST_OK=1"
 )
+REM Una variable de entorno GITHUB_TOKEN pisa al archivo, y es la causa mas
+REM comun de un 401 con un token que sigue vigente. Si existe, avisar.
+if defined GITHUB_TOKEN (
+    echo [api] AVISO: hay una variable de entorno GITHUB_TOKEN que pisa al
+    echo [api]        archivo .env. Si esta vieja o mal escrita, el token
+    echo [api]        bueno no se usa nunca. Para verla:  node diagnostico_gist.js
+)
 if "!GIST_OK!"=="0" (
     echo ERROR: falta GITHUB_TOKEN en ..\whatsapp_bot\.env
     echo   Sin el, la URL del tunel no se publica y las apps no la encuentran.

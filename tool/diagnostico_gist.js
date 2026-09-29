@@ -56,27 +56,40 @@ async function main() {
 
   const { envPath, encontradas } = leerDelEnvFile();
   const delEntorno = !!process.env.GITHUB_TOKEN;
+  const delArchivo = encontradas.length
+    ? encontradas[encontradas.length - 1]
+    : null;
 
   if (delEntorno) {
-    console.log('Origen: variable de entorno GITHUB_TOKEN.');
-    console.log('  OJO: esta pisa al archivo .env. Si el valor esta viejo,');
-    console.log('        el token bueno del .env no se usa nunca.');
-  } else if (encontradas.length === 0) {
-    console.log('Origen: no encontrado.');
-    console.log(`  No hay GITHUB_TOKEN en el entorno ni en ${envPath}`);
-    return;
-  } else if (encontradas.length === 1) {
-    console.log(`Origen: ${envPath}, linea ${encontradas[0].linea}`);
+    console.log('Ganador: variable de entorno GITHUB_TOKEN.');
+  } else if (delArchivo) {
+    console.log(`Ganador: ${envPath}, linea ${delArchivo.linea}`);
   } else {
-    console.log(`Origen: ${envPath}, linea ${encontradas[encontradas.length - 1].linea}`);
-    console.log(`  OJO: el archivo tiene ${encontradas.length} lineas GITHUB_TOKEN.`);
-    console.log('        Se usa la ultima. Las anteriores podrian estar viejas:');
-    for (const e of encontradas) {
-      console.log(`        linea ${e.linea}: ${e.token.length} caracteres`);
-    }
+    console.log('Ganador: no encontrado.');
   }
 
-  titulo('2. Como se ve el valor (sin imprimirlo)');
+  // Se muestran las dos fuentes, no solo la que gana. Si la variable de
+  // entorno esta tapando un token bueno del archivo, mirar solo una deja la
+  // pregunta abierta y hay que correr el script otra vez.
+  const fuentes = [];
+  if (delEntorno) {
+    fuentes.push({ que: 'entorno', linea: '-', token: normalizarToken(process.env.GITHUB_TOKEN) });
+  }
+  for (const e of encontradas) {
+    fuentes.push({ que: `archivo linea ${e.linea}`, linea: e.linea, token: e.token });
+  }
+  if (!fuentes.length) {
+    console.log(`  No hay GITHUB_TOKEN ni en el entorno ni en ${envPath}`);
+    return;
+  }
+  console.log('\nTodos los valores encontrados:');
+  for (const f of fuentes) {
+    const gana = f.token === token ? '  <-- se usa este' : '  (ignorado)';
+    console.log(`  ${f.que.padEnd(20)} ${String(f.token.length).padStart(3)} car., ` +
+                `prefijo ${prefijoDe(f.token)}${gana}`);
+  }
+
+  titulo('2. Como se ve el valor que se manda (sin imprimirlo)');
   if (!token) {
     console.log('Token vacio.');
     return;
@@ -84,9 +97,28 @@ async function main() {
   console.log(`Largo:            ${token.length} caracteres`);
   console.log(`Prefijo:          ${prefijoDe(token)}`);
   console.log(`Tiene espacios:   ${/\s/.test(token) ? 'SI  <-- no deberia' : 'no'}`);
-  if (prefijoDe(token) === 'desconocido') {
-    console.log('  OJO: no arranca con ghp_ ni github_pat_. Puede estar pegado');
-    console.log('       con el prefijo del encabezado, o con texto de mas.');
+
+  const sospechoso = prefijoDe(token) === 'desconocido' || token.length < 20;
+  if (sospechoso) {
+    console.log('');
+    console.log('  ESTE VALOR NO ES UN TOKEN. No es largo ni arranca con');
+    console.log('  ghp_ ni github_pat_, asi que GitHub lo va a rechazar siempre.');
+    if (delEntorno) {
+      console.log('');
+      console.log('  Viene de la variable de entorno, que pisa al archivo. Hay que');
+      console.log('  despejarla en esta sesion:');
+      console.log('    Remove-Item Env:\\GITHUB_TOKEN');
+      console.log('  y para que no vuelva al reiniciar:');
+      console.log('    [Environment]::SetEnvironmentVariable("GITHUB_TOKEN", $null, "User")');
+      console.log('    [Environment]::SetEnvironmentVariable("GITHUB_TOKEN", $null, "Machine")');
+      console.log('  Despues, corre este mismo script otra vez: ahi se vera el');
+      console.log('  token del archivo.');
+    }
+  } else if (delArchivo && delEntorno) {
+    console.log('');
+    console.log('  Hay un token en el entorno y tambien en el archivo. Pide dejar');
+    console.log('  solo el del archivo, para no depender de una variable que se');
+    console.log('  puede pisar por error.');
   }
 
   titulo('3. Le pregunto a GitHub');
