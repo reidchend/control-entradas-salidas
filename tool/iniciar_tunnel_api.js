@@ -12,12 +12,29 @@
 // Uso:  node tool/iniciar_tunnel_api.js
 // Env:   CLOUDFLARED, API_LOCAL_PORT, GITHUB_TOKEN, GIST_ID, TUNNEL_NAME
 
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const { updateApiUrl, GIST_ID } = require('../whatsapp_bot/update_gist');
 
-const CLOUDFLARED = process.env.CLOUDFLARED ||
-  path.join(__dirname, '..', 'whatsapp_bot', 'cloudflared.exe');
+// Busca cloudflared en este orden:
+//   1. CLOUDFLARED del entorno (ruta explicita)
+//   2. el .exe que usa el bot, si esta ahi
+//   3. el PATH, que es donde lo deja winget
+//
+// Antes se usaba siempre (2) y si no existia el proceso moria con un stack
+// trace de Node, sin decir que faltava instalar nada.
+function resolverCloudflared() {
+  if (process.env.CLOUDFLARED) return process.env.CLOUDFLARED;
+  const enBot = path.join(__dirname, '..', 'whatsapp_bot', 'cloudflared.exe');
+  if (fs.existsSync(enBot)) return enBot;
+  if (fs.existsSync(path.join(__dirname, '..', 'whatsapp_bot', 'cloudflared'))) {
+    return path.join(__dirname, '..', 'whatsapp_bot', 'cloudflared');
+  }
+  return 'cloudflared'; // que lo resuelva el PATH
+}
+
+const CLOUDFLARED = resolverCloudflared();
 const API_LOCAL_PORT = process.env.API_LOCAL_PORT || '8501';
 const TUNNEL_NAME = process.env.TUNNEL_NAME || 'control-entradas';
 
@@ -71,6 +88,19 @@ function publicar(url) {
 }
 
 const tunnel = spawn(CLOUDFLARED, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+// Sin esto, si no se encuentra el binario Node tira un stack trace crudo y el
+// mensaje real (ENOENT) queda en la ultima linea.
+tunnel.on('error', (err) => {
+  if (err.code === 'ENOENT') {
+    console.error(`[TUNEL] No se encontro cloudflared (probei: ${CLOUDFLARED}).`);
+    console.error('[TUNEL] Instalalo con:  winget install --id Cloudflare.cloudflared');
+    console.error('[TUNEL] O decile donde esta con:  $env:CLOUDFLARED="C:\\ruta\\cloudflared.exe"');
+  } else {
+    console.error(`[TUNEL] No se pudo lanzar cloudflared: ${err.message}`);
+  }
+  process.exit(1);
+});
 
 function alDetectar(chunk) {
   const salida = chunk.toString();
