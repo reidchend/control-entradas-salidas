@@ -6,16 +6,33 @@ pendiente de ejecutar en la PC.
 ## Por que
 
 El proyecto usaba Neon (Supabase) como base de datos, y el plan Free se
-quedo sin cuota:
+quedo sin cuota de compute:
 
 ```
 ERROR: Your account or project has exceeded the quota.
 Upgrade your plan to increase limits.
 ```
 
-El plan Free de Neon esta limitado a 100 CU-horas/proyecto/mes, 0.5 GB de
-storage y 5 GB de transferencia. No deja margen: cualquier mes con uso real
-lo vuelve a tumbar, y una cuota agotada deja la app sin poder ni leer.
+Confirmado en el dashboard de Neon (ciclo iniciado el 2026-08-31):
+
+| Métrica | Consumido | Límite Free | Estado |
+|---|---|---|---|
+| Compute | **110.14 CU-hrs** | 100 CU-hrs/mes | **excedido** |
+| Storage | 40.27 MB | 0.5 GB | ok |
+| Network transfer | 3.22 GB | 5 GB | ok |
+| History | 730.7 kB | — | ok |
+
+Solo el compute se pasó, y por poco: 10% sobre el límite, a 29 días de
+ciclo. No es margen para trabajar. Volvería a caer alrededor del 26 de
+octubre, así que la migración no es opcional.
+
+> Los 3.22 GB de transferencia para una base de 40 MB son ~80x de
+> amplificacion: la app esta bajando por la red muchas veces lo que ya
+> tiene en cache. No es urgente (con Tailscale el trafico es local y no
+> cuesta nada), pero queda como tarea pendiente de revisar.
+
+Mientras la cuota esté excedida, **la app no conecta**: los despliegues web de
+8501 y 8502 están caídos por falta de base, no por un bug.
 
 En vez de pagar por un plan que puede volver a quedar chico, la base se
 mueve a **una PC Windows 10 dedicada en la casa**, conectada por Tailscale.
@@ -133,20 +150,23 @@ Antes de tocar los datos reales, con la base vacia:
 Ultima fase, a proposito: si el restore falla, la base local ya esta
 probada y solo se descarta lo importado.
 
-El problema: con la cuota agotada, `pg_dump` a Neon falla por conexion.
-Depende de cual barra se haya vaciado (ver dashboard de Neon):
+Con la cuota de compute excedida, `pg_dump` a Neon falla por conexion. Pero
+el ciclo se reinicia el **30 de septiembre**, asi que la secuencia es
+esperar, no pagar:
 
-- **Cuota de compute (CU-horas)** — se reinicia al empezar el mes.
-- **Cuota de transferencia** — tambien mensual.
-- **Storage** — ese error se ve distinto, y es independiente de los dos
-  anteriores.
+1. Montar y probar la base local (Fases 2 y 3). No hay prisa: la cuota no
+   vuelve a acumularse hasta que la app vuelva a pegarle a Neon, y eso
+   solo pasa si algo sigue apuntando alla.
+2. Reinicio de cuota el 2026-09-30.
+3. `pg_dump` inmediatamente, antes de que la app vuelva a consumir.
 
-Opciones, en orden de preference:
+La base son 40 MB, asi que el dump tarda segundos, no horas.
 
-1. **Esperar el reinicio mensual.** Sin costo, pero deja la app sin base
-   hasta entonces.
-2. **Upgrade temporal de un mes**, `pg_dump`, y cancelar. Cuesta un mes de
-   un plan pagado, y solo si el dump se descarga dentro de ese mes.
+Si el reinicio se atrasara, el orden de preferencia seria:
+
+1. **Esperar el reinicio mensual.** Sin costo, y es lo que corresponde.
+2. **Upgrade temporal de un mes**, `pg_dump`, y cancelar. Solo tiene sentido
+   si el reinicio se demora mas de lo que vale el mes.
 3. **Reconstruir los datos a mano.** Ultimo recurso; hay movimientos
    historicos que no se pueden recalcular.
 
