@@ -143,7 +143,7 @@ if ($RepoPath -and $psql) {
         if ($n -ge 20) {
             Ok "$n tablas en public"
             $faltan = & $psql -U postgres -d $DbName -tAc `
-                "SELECT count(*) FROM (VALUES ('activos_tipos'),('activos'),('activos_unidades'),('productos'),('ventas')) AS t(nombre) WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables x WHERE x.table_schema='public' AND x.table_name=t.nombre)" 2>$null
+                "SELECT count(*) FROM (VALUES ('activos_categorias'),('activos_tipos'),('activos'),('productos'),('movimientos'),('pos_ventas'),('pos_mesas'),('facturas')) AS t(nombre) WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables x WHERE x.table_schema='public' AND x.table_name=t.nombre)" 2>$null
             if ($faltan -match '^\s*(\d+)\s*$' -and [int]$Matches[1] -eq 0) {
                 Ok "tablas clave de Activos presentes"
             } else {
