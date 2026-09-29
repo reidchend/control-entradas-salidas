@@ -168,6 +168,13 @@ $conf = [regex]::Replace(
     $conf, "(?m)^\s*#?\s*listen_addresses\s*=.*$", "listen_addresses = '*'")
 $conf = [regex]::Replace(
     $conf, "(?m)^\s*#?\s*port\s*=\s*\d+.*$", "port = $Port")
+
+if ($conf -notmatch "listen_addresses\s*=\s*'\*'") {
+    throw 'No se pudo fijar listen_addresses. Se aborta sin escribir.'
+}
+if ($conf -notmatch "(?m)^\s*port\s*=\s*$Port\s*$") {
+    throw "No se pudo fijar el puerto a $Port. Se aborta sin escribir."
+}
 Write-RawText -Path $confFile -Content $conf
 
 # --- 2. pg_hba.conf: solo Tailscale --------------------------------
@@ -186,12 +193,30 @@ $end
 "@
 
 $hba = Read-RawText -Path $hbaFile
-# Quita el bloque previo si existe (re-ejecución).
-$hba = [regex]::Replace($hba, "(?ms)^$begin.*?^$end\r?\n?", '')
+$before = $hba.Length
+
+# Escape por disciplina: los marcadores son texto fijo y no deben depender
+# de que sus caracteres sean inofensivos para regex.
+$hba = [regex]::Replace($hba,
+    "(?ms)^" + [regex]::Escape($begin) + ".*?^" + [regex]::Escape($end) + "\r?\n?", '')
+
+# Barrera de seguridad. NO es la causa del fallo anterior (esa sigue sin
+# explicarse), pero un pg_hba.conf que perdió casi todo su contenido deja la
+# base entera inaccesible, así que es mejor abortar y dejar que el trap
+# restaure el .bak que escribir un archivo que PostgreSQL no va a poder leer.
+if ($hba.Length -lt ($before / 2) -or $hba.Length -lt 200) {
+    throw "La limpieza del bloque anterior redujo pg_hba.conf de $before a $($hba.Length) bytes. Se aborta sin escribir."
+}
+
 # Las reglas por defecto de Postgres quedan intactas: local por socket y
 # loopback. El bloque de la app se antepone para que coincida primero.
-$hba = $block + "`r`n" + $hba
-Write-RawText -Path $hbaFile -Content $hba
+$newHba = $block + "`r`n" + $hba
+
+# Última barrera antes de tocar disco: un .conf sin reglas de host no sirve.
+if ($newHba -notmatch '(?m)^\s*host\s') {
+    throw 'El resultado no contiene ninguna regla host. Se aborta sin escribir.'
+}
+Write-RawText -Path $hbaFile -Content $newHba
 
 # --- 3. Firewall de Windows ----------------------------------------
 # Sin esta regla la app no conecta: Windows bloquea por defecto el tráfico
