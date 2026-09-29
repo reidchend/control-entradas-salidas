@@ -4,16 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/db_config.dart';
+import '../../../../core/data/servidor_discovery_providers.dart';
 import '../../../../core/network/postgres_client.dart';
+import 'db_fields_directo.dart';
+import 'db_fields_proxy.dart';
 
-/// Panel de configuración de la conexión a PostgreSQL.
+/// Panel de configuración de la conexión, elegible en runtime.
 ///
-/// En Windows y Android la app abre un socket directo a la base, así que el
-/// host/puerto/usuario se defines acá y quedan guardados en el dispositivo.
-/// Es la vía soportada para apuntar a la base local del servidor sin tener
-/// que recompilar la app en cada cambio de IP.
+/// Dos modos, según cómo el equipo del cliente llega a la base:
 ///
-/// En web no aplica: la conexión pasa por el proxy `/proxy-sql` del servidor.
+/// - **Proxy HTTP** (por defecto): la app habla HTTPS con el servidor, que
+///   habla con PostgreSQL. No hay que abrir el 5432 ni instalar Tailscale en
+///   el equipo. Cada query es un viaje HTTP.
+/// - **TCP directo**: la app abre un pool al 5432. Es más rápido por query,
+///   pero exige que el equipo alcance la base por una red privada.
+///
+/// En web no aplica ninguno: la conexión pasa por el proxy del servidor y el
+/// panel no se muestra.
 class DbConfigPanel extends ConsumerStatefulWidget {
   const DbConfigPanel({super.key});
 
@@ -21,14 +28,26 @@ class DbConfigPanel extends ConsumerStatefulWidget {
   ConsumerState<DbConfigPanel> createState() => _DbConfigPanelState();
 }
 
+/// Cómo llega la app a la base. Proxy primero porque es la opción que no
+/// depende de la red del equipo donde corre la app.
+enum _ModoConexion { proxy, directo }
+
 class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
   final _formKey = GlobalKey<FormState>();
+  final _proxyUrlCtrl = TextEditingController();
+  final _proxyTokenCtrl = TextEditingController();
   final _hostCtrl = TextEditingController();
   final _puertoCtrl = TextEditingController(text: '5432');
   final _dbCtrl = TextEditingController();
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  _ModoConexion _modo = _ModoConexion.proxy;
   bool _ssl = false;
+  bool _buscandoUrl = false;
+
+  /// Permite escribir la URL a mano. Viene en `false` porque lo normal es que
+  /// la app la descubra sola: lo único que el usuario escribe es el token.
+  bool _urlEditable = false;
   bool _cargando = true;
   bool _probando = false;
   String _resultado = '';
@@ -42,6 +61,8 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
 
   @override
   void dispose() {
+    _proxyUrlCtrl.dispose();
+    _proxyTokenCtrl.dispose();
     _hostCtrl.dispose();
     _puertoCtrl.dispose();
     _dbCtrl.dispose();
@@ -54,12 +75,21 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
     try {
       final config = await DbConfig.load();
       if (config != null) {
+        _proxyUrlCtrl.text = config.proxyUrl;
+        _proxyTokenCtrl.text = config.proxyToken;
         _hostCtrl.text = config.host;
         _puertoCtrl.text = '${config.port}';
         _dbCtrl.text = config.database;
         _userCtrl.text = config.user;
         _passCtrl.text = config.password;
         _ssl = config.ssl;
+        // La URL guardada manda; la del Gist solo se usa si falta, para no
+        // pisar una URL que el usuario haya cambiado a mano.
+        if (config.usesProxy && config.proxyUrl.isNotEmpty) {
+          _modo = _ModoConexion.proxy;
+        } else if (config.host.isNotEmpty) {
+          _modo = _ModoConexion.directo;
+        }
       } else {
         final url = await resolveDatabaseUrl();
         final uri = url.isEmpty ? null : Uri.tryParse(url);
@@ -78,10 +108,80 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
       _resultadoColor = Colors.red;
     }
     if (mounted) setState(() => _cargando = false);
+
+    // Si falta la URL, se busca sola. Es el primer arranque típico: el
+    // usuario instaló la app y todavía no escribió nada.
+    final faltaUrl = _proxyUrlCtrl.text.trim().isEmpty;
+    if (faltaUrl && _modo == _ModoConexion.proxy) {
+      await _buscarUrl(silencioso: true);
+    }
+  }
+
+  /// Busca la URL que el servidor publica en el Gist.
+  ///
+  /// Es lo que evita ir equipo por equipo cuando el túnel cambia: la app se
+  /// entera sola, y el usuario solo tiene que escribir el token.
+  Future<void> _buscarUrl({bool silencioso = false}) async {
+    if (!silencioso) setState(() => _buscandoUrl = true);
+    try {
+      final url = await ref.read(descubridorProvider).obtenerUrl(forzar: true);
+      if (!mounted) return;
+      if (url != null && url.isNotEmpty) {
+        setState(() {
+          _modo = _ModoConexion.proxy;
+          _proxyUrlCtrl.text = url;
+        });
+        _ok('URL encontrada: $url');
+      } else {
+        // Sin URL no hay nada que probar. Se ofrece escribirla a mano en vez
+        // de dejar un campo vacío que no dice qué hacer.
+        setState(() => _urlEditable = true);
+        _error(
+          'No se pudo encontrar la URL. Verificá que el túnel esté corriendo '
+          'en la PC servidor y que tenga GITHUB_TOKEN configurado. Mientras '
+          'tanto podés escribirla a mano.',
+        );
+      }
+    } catch (e) {
+      if (mounted) _error('No se pudo buscar la URL: $e');
+    } finally {
+      if (mounted && !silencioso) setState(() => _buscandoUrl = false);
+    }
+  }
+
+  /// Cambia entre proxy y TCP directo.
+  ///
+  /// Al pasar a proxy sin URL cargada (por ejemplo viniendo de un perfil TCP
+  /// directo) se dispara la búsqueda, porque el campo es de solo lectura y si
+  /// no, quedaría bloqueado sin forma de salir.
+  Future<void> _cambiarModo(_ModoConexion modo) async {
+    setState(() => _modo = modo);
+    if (modo == _ModoConexion.proxy &&
+        _proxyUrlCtrl.text.trim().isEmpty) {
+      await _buscarUrl();
+    }
+  }
+
+  /// Vuelve al modo automático: descarta lo escrito a mano y vuelve a buscar.
+  Future<void> _usarUrlAutomatica() async {
+    setState(() => _urlEditable = false);
+    _proxyUrlCtrl.clear();
+    await _buscarUrl();
   }
 
   DbConfig? _leerForm() {
     if (!(_formKey.currentState?.validate() ?? false)) return null;
+    if (_modo == _ModoConexion.proxy) {
+      return DbConfig(
+        host: '',
+        port: 5432,
+        database: '',
+        user: '',
+        password: '',
+        proxyUrl: _proxyUrlCtrl.text.trim(),
+        proxyToken: _proxyTokenCtrl.text,
+      );
+    }
     return DbConfig(
       host: _hostCtrl.text.trim(),
       port: int.tryParse(_puertoCtrl.text.trim()) ?? 5432,
@@ -142,6 +242,8 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
     }
     if (!mounted) return;
     ref.invalidate(postgresPoolProvider);
+    _proxyUrlCtrl.clear();
+    _proxyTokenCtrl.clear();
     _hostCtrl.clear();
     _dbCtrl.clear();
     _userCtrl.clear();
@@ -149,6 +251,7 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
     _puertoCtrl.text = '5432';
     setState(() {
       _ssl = false;
+      _modo = _ModoConexion.proxy;
       _resultado = 'Configuración borrada. Se usará la del binario.';
       _resultadoColor = Colors.orange;
     });
@@ -182,100 +285,58 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Conexión directa a PostgreSQL (Windows y Android).',
+          'Se aplica a Windows y Android. En web no aplica: la conexión ya pasa '
+          'por el proxy del servidor.',
           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        SegmentedButton<_ModoConexion>(
+          segments: const [
+            ButtonSegment(
+              value: _ModoConexion.proxy,
+              label: Text('Proxy HTTPS'),
+              icon: Icon(Icons.cloud_outlined),
+            ),
+            ButtonSegment(
+              value: _ModoConexion.directo,
+              label: Text('TCP directo'),
+              icon: Icon(Icons.lan_outlined),
+            ),
+          ],
+          selected: {_modo},
+          onSelectionChanged: (s) => _cambiarModo(s.first),
         ),
         const SizedBox(height: 4),
         Text(
-          'En web no aplica: la conexión pasa por el proxy del servidor.',
+          _modo == _ModoConexion.proxy
+              ? 'La app consulta por HTTPS al servidor. No necesita Tailscale '
+                  'ni abrir el puerto 5432 en este equipo.'
+              : 'La app abre una conexión directa a PostgreSQL. El equipo tiene '
+                  'que alcanzar el 5432 (Tailscale o red local).',
           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Form(
           key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _hostCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Host',
-                  hintText: '100.x.y.z (Tailscale) o localhost',
-                  border: OutlineInputBorder(),
+          child: _modo == _ModoConexion.proxy
+              ? DbFieldsProxy(
+                  urlCtrl: _proxyUrlCtrl,
+                  tokenCtrl: _proxyTokenCtrl,
+                  buscando: _buscandoUrl,
+                  urlEditable: _urlEditable,
+                  onBuscarUrl: () => _buscarUrl(),
+                  onEditarUrl: () => setState(() => _urlEditable = true),
+                  onUsarUrlAutomatica: () => _usarUrlAutomatica(),
+                )
+              : DbFieldsDirecto(
+                  hostCtrl: _hostCtrl,
+                  puertoCtrl: _puertoCtrl,
+                  dbCtrl: _dbCtrl,
+                  userCtrl: _userCtrl,
+                  passCtrl: _passCtrl,
+                  ssl: _ssl,
+                  onSslChanged: (v) => setState(() => _ssl = v),
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextFormField(
-                      controller: _dbCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Base de datos',
-                        hintText: 'control_entradas',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Requerido'
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _puertoCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Puerto',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) {
-                        final p = int.tryParse((v ?? '').trim());
-                        if (p == null || p < 1 || p > 65535) {
-                          return 'Inválido';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _userCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Usuario',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _ssl,
-                onChanged: (v) => setState(() => _ssl = v),
-                title: const Text('Usar SSL', style: TextStyle(fontSize: 14)),
-                subtitle: Text(
-                  'Con Tailscale activalo: el tráfico ya va cifrado.',
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                ),
-              ),
-            ],
-          ),
         ),
         const SizedBox(height: 16),
         Wrap(

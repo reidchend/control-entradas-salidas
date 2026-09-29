@@ -17,12 +17,21 @@ import 'sql_session.dart';
 class HttpSqlSession implements SqlSession {
   HttpSqlSession({
     String? baseUrl,
+    this.token,
     this.txId,
     http.Client? client,
   })  : _baseUrl = baseUrl ?? Uri.base.resolve('/proxy-sql').toString(),
         _client = client ?? http.Client();
 
   final String _baseUrl;
+
+  /// URL efectiva del proxy. Visible para tests: en web depende de
+  /// `Uri.base`, así que no se puede afirmar sin levantar la sesión.
+  String get baseUrlForTest => _baseUrl;
+
+  /// Token compartido que valida `tool/server.py`. Sin él el proxy responde
+  /// 401, porque ejecuta SQL arbitrario con las credenciales del servidor.
+  final String? token;
 
   /// Identificador de la transacción abierta (null = sesión raíz).
   final String? txId;
@@ -58,7 +67,8 @@ class HttpSqlSession implements SqlSession {
     if (beginTxId == null) {
       throw StateError('El proxy no devolvió txid');
     }
-    final tx = HttpSqlSession(baseUrl: _baseUrl, txId: beginTxId);
+    final tx = HttpSqlSession(
+      baseUrl: _baseUrl, token: token, txId: beginTxId);
     try {
       final result = await action(tx);
       await _request('commit', txid: beginTxId);
@@ -89,7 +99,11 @@ class HttpSqlSession implements SqlSession {
     final res = await _client
         .post(
           Uri.parse(_baseUrl),
-          headers: const {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null && token!.isNotEmpty)
+              'X-Proxy-Token': token!,
+          },
           body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 60));

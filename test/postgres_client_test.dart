@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:control_entradas_salidas/core/config/db_config.dart';
+import 'package:control_entradas_salidas/core/data/http_sql_session.dart';
 import 'package:control_entradas_salidas/core/network/postgres_client.dart';
 
 void main() {
@@ -95,6 +96,66 @@ void main() {
       expect(uri.host, '100.101.102.103');
       expect(uri.pathSegments.last, 'control_entradas');
       expect(uri.userInfo, contains('control_app'));
+    });
+
+    test('en modo proxy no devuelve URL de PostgreSQL', () async {
+      // La app no habla con el 5432: habla HTTPS con el proxy. Devolver una
+      // URL de PostgreSQL acá haría que `initializePostgres` abriera un pool
+      // nativo contra un host que no existe en el equipo del cliente.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyUrl: 'https://api.ejemplo.cl',
+          proxyToken: 'tok-abc',
+        ),
+      );
+
+      expect(await resolveDatabaseUrl(), isEmpty);
+    });
+  });
+
+  group('initializePostgres', () {
+    test('con proxy configurado devuelve una sesión HTTP con el token',
+        () async {
+      // Es la ruta que usan las apps Windows y Android detrás del túnel: no
+      // se abre ningún socket a PostgreSQL.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyUrl: 'https://api.ejemplo.cl',
+          proxyToken: 'tok-abc',
+        ),
+      );
+
+      final session = await initializePostgres();
+
+      expect(session, isA<HttpSqlSession>());
+      expect((session as HttpSqlSession).token, 'tok-abc');
+      expect(session.baseUrlForTest, 'https://api.ejemplo.cl/proxy-sql');
+    });
+
+    test('sin configurar nada avisa en vez de fallar al conectar', () async {
+      // Un binario compilado sin --dart-define y sin Ajustes guardados no tiene
+      // a qué conectarse. El error va tipado para que el login ofrezca
+      // "Configurar conexión" en vez de un fallo técnico.
+      await expectLater(
+        initializePostgres(),
+        throwsA(
+          isA<DbNotConfiguredError>().having(
+            (e) => e.detalle,
+            'detalle',
+            contains('Configuración'),
+          ),
+        ),
+      );
     });
   });
 }

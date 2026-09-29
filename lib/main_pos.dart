@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/logging/log_bridge.dart';
-import 'core/network/postgres_client.dart';
 import 'features/pos/presentation/pos_app.dart';
 
 /// Punto de entrada de la aplicación POS (independiente de la app de
@@ -16,9 +15,11 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       await LogBridge.instance.start();
 
-      // Configurar PostgreSQL pool (no-op si falta la URL).
-      await initializePostgres();
-
+      // No se inicializa el pool acá a propósito: sin base configurada
+      // `initializePostgres()` lanza, y hacerlo antes de `runApp` dejaría la
+      // ventana en blanco, sin login ni forma de configurar la conexión.
+      // `postgresPoolProvider` lo crea de forma perezosa en el primer uso, y
+      // la pantalla de login ofrece "Configurar conexión" cuando falta.
       runApp(
         const ProviderScope(
           child: PosApp(),

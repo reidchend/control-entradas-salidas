@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/postgres_guard.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/updater/auto_update_checker.dart';
+import '../../../features/configuracion/presentation/dialogs/db_config_dialog.dart';
+import '../../../features/configuracion/presentation/widgets/bd_no_disponible.dart';
 import '../../../features/whatsapp/data/whatsapp_providers.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
@@ -543,6 +546,7 @@ class _LoginViewState extends ConsumerState<_LoginView> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final usuarios = ref.watch(usuariosProvider);
+    final estadoBd = ref.watch(estadoBdProvider);
     final turnosActivos =
         ref.watch(turnosActivosProvider).valueOrNull ?? <int>{};
 
@@ -555,6 +559,15 @@ class _LoginViewState extends ConsumerState<_LoginView> {
           height: 30,
           fit: BoxFit.cover,
         ),
+        actions: [
+          // Siempre disponible: con la base caída o sin configurar es la
+          // única forma de llegar al panel de conexión sin pasar por el login.
+          IconButton(
+            tooltip: 'Configurar conexión',
+            onPressed: () => showDbConfigDialog(context),
+            icon: const Icon(Icons.settings_ethernet),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -587,9 +600,10 @@ class _LoginViewState extends ConsumerState<_LoginView> {
               ),
               const SizedBox(height: 24),
               usuarios.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
+                loading: () => estadoBd == EstadoBd.conectando
+                    ? const Center(child: CircularProgressIndicator())
+                    : const Center(child: BdNoDisponible()),
+                error: (e, _) => const Center(child: BdNoDisponible()),
                 data: (lista) => lista.isEmpty
                     ? _sinCajeros()
                     : Column(

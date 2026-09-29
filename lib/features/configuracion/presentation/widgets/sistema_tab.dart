@@ -13,8 +13,8 @@ import '../../data/configuracion_providers.dart'
         almacenesConfigProvider,
         usuarioDispositivoProvider;
 import '../../data/configuracion_repository.dart';
+import '../dialogs/db_config_dialog.dart';
 import 'almacenes_panel.dart';
-import 'db_config_panel.dart';
 
 /// Pestaña de Sistema (porta `usr/views/configuracion/sistema.py`).
 class SistemaTab extends ConsumerStatefulWidget {
@@ -286,36 +286,7 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
   /// En web se avisa que no aplica: la conexión pasa por el proxy
   /// `/proxy-sql` del servidor, no por un socket del navegador.
   Future<void> _abrirDbConfig() async {
-    if (kIsWeb) {
-      setState(() {
-        _testResult =
-            'En web la conexión la resuelve el proxy del servidor. '
-            'Esta configuración aplica a Windows y Android.';
-        _testResultColor = Colors.orange;
-      });
-      return;
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 640),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              const Expanded(child: DbConfigPanel()),
-            ],
-          ),
-        ),
-      ),
-    );
+    await showDbConfigDialog(context);
   }
 
   Future<void> _probarConexionLocal() async {

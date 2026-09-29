@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/data/postgres_guard.dart';
 import '../../../core/updater/auto_update_checker.dart';
+import '../../configuracion/presentation/dialogs/db_config_dialog.dart';
+import '../../configuracion/presentation/widgets/bd_no_disponible.dart';
 
 /// Pantalla de login / registro (porta `usr/views/login_view.py`).
 ///
@@ -136,6 +139,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Sin base configurada el registro de operador no puede funcionar, así
+    // que en vez de dejar escribir un PIN que nunca se va a validar, se ofrece
+    // la pantalla de conexión. Es la salida del círculo del primer arranque.
+    if (ref.watch(estadoBdProvider) == EstadoBd.noConfigurada) {
+      return const Scaffold(body: BdNoDisponible());
+    }
+
     // Modo según si el nombre ya está registrado (verificado en vivo).
     final esRegistro = !_existeNombre;
     final pinLabel = esRegistro ? 'PIN de 4 dígitos' : 'Ingresa tu PIN';
@@ -257,6 +267,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Text(esRegistro ? 'Registrar' : 'Desbloquear'),
+                  ),
+                  const SizedBox(height: 8),
+                  // Para cuando la base está cargada pero dejó de responder:
+                  // sin este botón el único escape sería reinstallar la app.
+                  TextButton.icon(
+                    onPressed: () => showDbConfigDialog(context),
+                    icon: const Icon(Icons.settings_ethernet, size: 18),
+                    label: const Text('Configurar conexión'),
+                    style: TextButton.styleFrom(
+                      foregroundColor:
+                          Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
