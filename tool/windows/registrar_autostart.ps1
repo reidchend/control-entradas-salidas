@@ -81,17 +81,24 @@ Write-Host ""
 
 $nombres = @()
 
+# server.py lee el puerto en argv[1] y el directorio web en argv[2], relativo
+# a la raiz del repo. Si se omite argv[2] usa build/web, asi que sin esto el
+# POS (8502) serviria el build de inventario.
+$webPorPuerto = @{ 8501 = 'build\web'; 8502 = 'build\pos' }
+
 foreach ($puerto in 8501, 8502) {
     $log = Join-Path $logDir "server$puerto.log"
+    $web = $webPorPuerto[$puerto]
     # Se envuelve en `cmd /c` porque schtasks desarma mal un /TR con comillas
     # sueltas, y de paso redirige stdout a un archivo: corriendo como SYSTEM
     # no hay consola donde ver la salida, y sin log un servicio caido es
     # indistinguible de uno sano.
-    $cmd = "cmd /c `"`"$python`" `"$server`" $puerto >> `"$log`" 2>&1`""
+    $cmd = "cmd /c `"`"$python`" `"$server`" $puerto `"$web`" >> `"$log`" 2>&1`""
     $nombre = "LycorisServidor$puerto"
     Registrar-Tarea -Nombre $nombre -Comando $cmd
     $nombres += $nombre
     Write-Host "    -> $nombre" -ForegroundColor Green
+    Write-Host "       puerto $puerto, web $web" -ForegroundColor Gray
     Write-Host "       log: $log" -ForegroundColor Gray
 }
 
