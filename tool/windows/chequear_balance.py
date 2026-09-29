@@ -39,12 +39,33 @@ def sin_comentarios(texto: str) -> str:
     return re.sub(r"#.*$", "", texto, flags=re.MULTILINE)
 
 
+def revisar_here_strings(texto: str) -> list[str]:
+    """Dentro de un here-string no hay procesado de escapes.
+
+    ``""`` no es un escape de comilla: llega literal a PostgreSQL. Dos bugs
+    reales salieron de acá, así que se avisa en vez de dejar pasar.
+    """
+    problemas: list[str] = []
+    patron = re.compile(r'@"(?P<d>.*?)"@|@\'(?P<s>.*?)\'@', re.DOTALL)
+    for m in patron.finditer(texto):
+        cuerpo = m.group("d") if m.group("d") is not None else m.group("s")
+        es_doble = m.group("d") is not None
+        if es_doble and '""' in cuerpo:
+            linea = texto[: m.start()].count("\n") + 1
+            problemas.append(
+                f"  here-string con \"\" en la línea {linea}: dentro de @\"...\"@ "
+                f"no es escape, llega literal. Usar comillas simples."
+            )
+    return problemas
+
+
 def revisar(ruta: Path) -> list[str]:
     crudo = ruta.read_text(encoding="utf-8")
+    problemas_here = revisar_here_strings(crudo)
     limpio = sin_comentarios(sin_cadenas(sin_here_strings(crudo)))
 
     pila: list[tuple[str, int]] = []
-    problemas: list[str] = []
+    problemas: list[str] = problemas_here
     linea = 1
     for ch in limpio:
         if ch == "\n":

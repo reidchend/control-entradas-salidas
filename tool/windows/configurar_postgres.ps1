@@ -243,13 +243,20 @@ $safeName = $DbName.Replace("'", "''")
 
 # El `$$` del bloque DO se escapa con backtick para que PowerShell no intente
 # interpolarlo; las variables sí deben interpolarse.
+#
+# OJO con las comillas dobles: dentro de un here-string @""@ NO hay procesado
+# de escapes, así que "" llega literal a SQL y PostgreSQL lo lee como un
+# identificador de longitud cero ("identificador delimitado tiene largo
+# cero"). Por eso el rol va con comillas simples, no con las dobles de
+# identificadores delimitados. Es seguro porque $safeUser y $safePass ya
+# vienen escapados arriba.
 $sql = @"
 DO `$`$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$safeUser') THEN
-    CREATE ROLE ""$safeUser"" LOGIN PASSWORD '$safePass';
+    CREATE ROLE '$safeUser' LOGIN PASSWORD '$safePass';
   ELSE
-    ALTER ROLE ""$safeUser"" WITH LOGIN PASSWORD '$safePass';
+    ALTER ROLE '$safeUser' WITH LOGIN PASSWORD '$safePass';
   END IF;
 END
 `$`$;
