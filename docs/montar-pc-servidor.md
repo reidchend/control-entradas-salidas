@@ -443,10 +443,14 @@ Para que en cada equipo haya que escribir **solo el token**, la URL del túnel
 se publica en el Gist y la app la lee al arrancar. Si después el túnel cambia
 de URL, alcanza con republicarla: no hay que ir equipo por equipo.
 
-Necesita `GITHUB_TOKEN` con permiso de escritura sobre el Gist. Es un token
-**classic** (los fine-grained no sirven para la API de Gists) con el scope
-`gist`. Si no lo tenés o venció, generalo en
-<https://github.com/settings/tokens> y guardalo en `whatsapp_bot\.env`:
+Necesita un token de GitHub con permiso de escritura sobre el Gist. Sirve
+cualquiera de los dos:
+
+- **Classic** con el scope `gist`.
+- **Fine-grained** con el permiso de cuenta "Gists" en **write**.
+
+Si no lo tenés o venció, generalo en <https://github.com/settings/tokens> y
+guardalo en `whatsapp_bot\.env`:
 
 ```
 GITHUB_TOKEN=ghp_...

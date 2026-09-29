@@ -70,8 +70,9 @@ function updateGist(archivo, contenido) {
           // se nota hasta que las apps dejan de encontrar la URL.
           console.error(`[GIST] Error ${res.statusCode}: el GITHUB_TOKEN no sirve.`);
           console.error('[GIST] Suele ser token vencido, revocado o mal copiado.');
-          console.error('[GIST] Genera uno nuevo tipo "classic" con permiso gist');
-          console.error(`[GIST] y ponelo en ${path.join(__dirname, '.env')}`);
+          console.error('[GIST] Necesita permiso de escritura sobre Gists (classic "gist"');
+          console.error('[GIST] o fine-grained "Gists: write"). Ponelo en');
+          console.error(`[GIST] ${path.join(__dirname, '.env')}`);
           resolve(false);
         } else {
           console.error(`[GIST] Error ${res.statusCode}: ${body}`);

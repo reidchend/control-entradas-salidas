@@ -86,7 +86,8 @@ if exist "..\whatsapp_bot\.env" (
 if "!GIST_OK!"=="0" (
     echo ERROR: falta GITHUB_TOKEN en ..\whatsapp_bot\.env
     echo   Sin el, la URL del tunel no se publica y las apps no la encuentran.
-    echo   Genera uno tipo "classic" con permiso gist en:
+    echo   Necesita permiso de escritura sobre Gists: classic con scope "gist",
+    echo   o fine-grained con "Gists: write". Generalo en:
     echo     https://github.com/settings/tokens
     exit /b 1
 )
