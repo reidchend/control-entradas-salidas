@@ -132,13 +132,64 @@ Tailscale** — que es el valor que se carga en la app.
 powershell -ExecutionPolicy Bypass -File registrar_autostart.ps1
 ```
 
-Crea las tareas `LycorisServidor8501` y `LycorisServidor8502` con
-`schtasks` (viene con Windows, no hace falta instalar NSSM).
+Crea las tareas `LycorisServidor8501`, `LycorisServidor8502` y
+`LycorisBotWhatsapp` con `schtasks` (viene con Windows, no hace falta instalar
+NSSM). La del bot solo se registra si `whatsapp_bot/` ya tiene su `.env` y su
+carpeta `auth`; si falta alguna, avisa y sigue con los servidores, porque la
+base de datos no depende del bot.
 
 > Tailscale no se registra acá porque necesita tu sesión y tu cuenta: se
 > instala a mano y queda como servicio de Windows que inicia con el equipo.
 > Verificá que quede en modo "always-on" en su cliente, o la base queda
 > inalcanzable cuando la PC se apaga.
+
+## El bot de WhatsApp, en la misma PC
+
+El bot corre en **esta misma máquina** (puerto 3000). No toca PostgreSQL: es
+un servicio HTTP que expone la API que consume la app, y publica la URL de
+su túnel en un Gist. Por eso puede convivir con la base sin agregado de carga.
+
+Para migrarlo a la PC nueva hay que copiar **cuatro cosas**:
+
+| Qué | De dónde | Por qué |
+|---|---|---|
+| `whatsapp_bot/auth/` | PC anterior | Sesión de WhatsApp. **Sin esto hay que escanear un QR de nuevo.** |
+| `whatsapp_bot/.env` | PC anterior | `GITHUB_TOKEN` con permiso de escritura en el Gist |
+| `whatsapp_bot/cloudflared.exe` | Descarga oficial | El binario del túnel; no está en el repo |
+| `config.json` | PC anterior | `groupId` del grupo de destino |
+
+En la PC nueva:
+
+```bat
+cd whatsapp_bot
+npm install --production
+iniciar_bot.bat
+```
+
+`iniciar_bot.bat` es el launcher apto para servicios. El histórico
+`start_bot.bat` no sirve para autostart por dos motivos: mata **todos** los
+procesos `node.exe` y `cloudflared.exe` de la máquina (y en una PC que corre
+varios servicios eso se lleva por delante cosas que no debería), y termina
+en `pause`.
+
+### La URL del túnel cambia en cada reinicio
+
+`start_tunnel.js` usa un *quick tunnel* de Cloudflare
+(`cloudflared tunnel --url`), que da un `https://algo.trycloudflare.com`
+**distinto cada vez que arranca**. El bot lo detecta y lo sube al Gist
+(`update_gist.js`), y la app lo lee desde ahí
+(`lib/features/whatsapp/data/whatsapp_repository.dart:12`).
+
+Consecuencias prácticas:
+
+- Después de cada reinicio hay que verificar que la URL nueva se publicó.
+  Si el PATCH al Gist falla, la app queda apuntando a una URL muerta.
+- `GITHUB_TOKEN` necesita scope de escritura sobre el Gist, o el paso
+  anterior falla en silencio.
+- Un quick tunnel es para pruebas, no para producción. Si esto va a estar
+  arriba en un local real, conviene un tunnel con dominio propio (un
+  `trycloudflare.com` aleatorio no es una URL estable para una app que la
+  tiene embebida en un Gist).
 
 ## Conectar las apps Windows y Android
 

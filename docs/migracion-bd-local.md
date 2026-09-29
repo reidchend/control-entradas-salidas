@@ -82,8 +82,14 @@ cambios.
 
 **Tailscale y no port forwarding.** Postgres queda escuchando en la red pero
 `pg_hba.conf` acepta unicamente el rango `100.64.0.0/10` que reparte
-Tailscale. Sin esto, abrir 5432 seria abrir la base de inventario a
-internet.
+Tailscale, y el firewall de Windows tiene una regla equivalente. Sin esto,
+abrir 5432 seria abrir la base de inventario a internet.
+
+**Una sola PC, no un servidor dedicado.** PostgreSQL, los dos servidores web
+y el bot de WhatsApp viven en la misma máquina Windows. El bot no toca la
+base, asi que no compite por recursos; y evita tener una segunda caja que
+mantener encendida. El punto debil es que todo cae si esa maquina se apaga,
+por eso el arranque automatico es obligatorio y no opcional.
 
 **Un solo servicio de BD, varias entradas.** El proxy y las apps nativas
 terminan en la misma base, con el mismo esquema. No hay replica ni
@@ -129,9 +135,12 @@ Detalle paso a paso en
 - [ ] `crear_estructura.bat` — entorno Python + tablas.
 - [ ] Instalar Tailscale, fijar la IP de la PC.
 - [ ] Clonar el repo y compilar la web.
+- [ ] Migrar el bot de WhatsApp a la misma PC: copiar `whatsapp_bot/auth/`
+      (sesion de WhatsApp), `.env` (`GITHUB_TOKEN`), `cloudflared.exe` y
+      `config.json`. Sin `auth/` hay que escanear un QR de nuevo.
 - [ ] `registrar_autostart.ps1` — arranque automatico con `schtasks`, con
-      salida redirigida a `tool/logs/server*.log` (corriendo como SYSTEM no
-      hay consola, y sin log un servicio caido es indistinguible de uno sano).
+      salida redirigida a `tool/logs/*.log` (corriendo como SYSTEM no hay
+      consola, y sin log un servicio caido es indistinguible de uno sano).
 
 ### Fase 3: probar con datos sinteticos
 

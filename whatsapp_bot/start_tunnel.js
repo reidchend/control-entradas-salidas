@@ -4,9 +4,15 @@ const { updateGist } = require('./update_gist');
 const CLOUDFLARED = process.env.CLOUDFLARED || require('path').join(__dirname, 'cloudflared.exe');
 const LOCAL_PORT = process.env.LOCAL_PORT || '3000';
 
+// Abrir el navegador tiene sentido cuando alguien lo lanza a mano, pero no
+// cuando arranca como servicio: corriendo como SYSTEM no hay sesion
+// interactiva y `start` falla. Por defecto queda apagado.
+const OPEN_BROWSER = process.env.OPEN_BROWSER === '1';
+
 let urlFound = false;
 
 function openBrowser(url) {
+  if (!OPEN_BROWSER) return;
   const cmd = process.platform === 'win32' ? 'start' : 'xdg-open';
   exec(`${cmd} "${url}"`);
   console.log(`[TUNNEL] Opening browser: ${url}`);

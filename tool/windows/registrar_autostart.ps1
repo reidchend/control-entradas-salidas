@@ -36,6 +36,8 @@ $RepoPath = (Resolve-Path $RepoPath).Path
 $python = Join-Path $RepoPath 'tool\venv\Scripts\python.exe'
 $server = Join-Path $RepoPath 'tool\server.py'
 $logDir = Join-Path $RepoPath 'tool\logs'
+$botDir = Join-Path $RepoPath 'whatsapp_bot'
+$botLauncher = Join-Path $botDir 'iniciar_bot.bat'
 
 foreach ($p in @($python, $server)) {
     if (-not (Test-Path $p)) {
@@ -43,6 +45,22 @@ foreach ($p in @($python, $server)) {
     }
 }
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+
+# El bot es opcional: la base de datos no depende de el, y en una PC nueva
+# todavia puede no estar migrado. Se avisa y se sigue.
+$botDisponible = $false
+if (Test-Path $botLauncher) {
+    if (-not (Test-Path (Join-Path $botDir '.env'))) {
+        Write-Host "AVISO: falta whatsapp_bot\.env (GITHUB_TOKEN). El bot no se registrara." -ForegroundColor Yellow
+    } elseif (-not (Test-Path (Join-Path $botDir 'auth'))) {
+        Write-Host "AVISO: falta whatsapp_bot\auth. El bot arranca pero habra que" -ForegroundColor Yellow
+        Write-Host "       escanear un QR de WhatsApp." -ForegroundColor Yellow
+    } else {
+        $botDisponible = $true
+    }
+} else {
+    Write-Host "AVISO: no se encontro whatsapp_bot\iniciar_bot.bat. Solo se registran los servidores." -ForegroundColor Yellow
+}
 
 # schtasks viene con Windows: evita depender de NSSM o de otro servicio.
 function Registrar-Tarea {
@@ -61,6 +79,8 @@ Write-Host "Repo: $RepoPath" -ForegroundColor Gray
 Write-Host "Usuario de ejecucion: $TaskUser" -ForegroundColor Gray
 Write-Host ""
 
+$nombres = @()
+
 foreach ($puerto in 8501, 8502) {
     $log = Join-Path $logDir "server$puerto.log"
     # Se envuelve en `cmd /c` porque schtasks desarma mal un /TR con comillas
@@ -70,8 +90,32 @@ foreach ($puerto in 8501, 8502) {
     $cmd = "cmd /c `"`"$python`" `"$server`" $puerto >> `"$log`" 2>&1`""
     $nombre = "LycorisServidor$puerto"
     Registrar-Tarea -Nombre $nombre -Comando $cmd
+    $nombres += $nombre
     Write-Host "    -> $nombre" -ForegroundColor Green
     Write-Host "       log: $log" -ForegroundColor Gray
+}
+
+if ($botDisponible) {
+    $botLog = Join-Path $logDir 'bot.log'
+    # El bot no depende de Postgres (publica su URL en un Gist), asi que no
+    # necesita esperar a la base. iniciar_bot.bat si espera a que haya red.
+    $cmd = "cmd /c `"`"$botLauncher`" >> `"$botLog`" 2>&1`""
+    $nombre = 'LycorisBotWhatsapp'
+    Registrar-Tarea -Nombre $nombre -Comando $cmd
+    $nombres += $nombre
+    Write-Host "    -> $nombre (bot + tunel)" -ForegroundColor Green
+    Write-Host "       log: $botLog" -ForegroundColor Gray
+}
+
+Write-Host ""
+Write-Host "Para probarlas sin reiniciar:" -ForegroundColor Cyan
+foreach ($n in $nombres) {
+    Write-Host "  schtasks /Run /TN $n" -ForegroundColor Gray
+}
+Write-Host ""
+Write-Host "Si algo falla, el detalle queda en:" -ForegroundColor Cyan
+foreach ($log in (Get-ChildItem $logDir -Filter *.log -ErrorAction SilentlyContinue)) {
+    Write-Host "  $($log.FullName)" -ForegroundColor Gray
 }
 
 Write-Host ""
