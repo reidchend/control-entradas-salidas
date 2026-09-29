@@ -14,16 +14,17 @@
 # POR QUE LAS REGLAS ESTAN RESTRINGIDAS A TAILSCALE Y NO A LA RED LOCAL
 # ---------------------------------------------------------------------
 # `tool/server.py` expone `/proxy-sql`, que ejecuta SQL arbitrario con las
-# credenciales del servidor y NO pide autenticacion. Quien alcance el puerto
-# 8501 o 8502 puede correr `DROP TABLE productos` desde un navegador sin
-# tener ninguna clave.
+# credenciales del servidor. Desde la version con token, `/proxy-sql` exige
+# `X-Proxy-Token` y responde 401 sin el, asi que ya no es un problema exponer
+# el puerto: lo que protege es que el token no viaja en ningun bundle publico.
 #
-# Por eso estas reglas solo aceptan trafico de 100.64.0.0/10 (Tailscale):
-# unicamente los equipos con la app instalada ylogueados a tu tailnet.
+# Las reglas siguen restringidas a Tailscale por una razon distinta: la app
+# web sirve el token de `/proxy-sql` embebido en su bundle, y no tiene sentido
+# publicarlo en la LAN. Unicamente los equipos con la app instalada y
+#logueados a tu tailnet llegan por aqui.
 #
-# Si genuinamente necesitas que el POS se use desde un navegador de la red
-# local, NO abras el puerto a la LAN sin resolver antes la autenticacion de
-# /proxy-sql. Ver la seccion de abajo.
+# Los equipos SIN Tailscale no necesitan estas reglas: se conectan por proxy
+# HTTPS contra el tunel de Cloudflare (ver docs/montar-pc-servidor.md 5.4).
 
 param(
     [string]$TrustedSubnet = '100.64.0.0/10',
@@ -77,6 +78,11 @@ Write-Host "La IP la imprime: tailscale ip -4" -ForegroundColor Gray
 
 Write-Host ""
 Write-Host "Sobre abrirlo a la red local" -ForegroundColor Yellow
-Write-Host "  /proxy-sql no tiene autenticacion. Exponer 8501/8502 a la LAN" -ForegroundColor Yellow
-Write-Host "  permitiria ejecutar SQL arbitrario a cualquiera de la red." -ForegroundColor Yellow
-Write-Host "  Antes de hacerlo, hay que agregar un token compartido al proxy." -ForegroundColor Yellow
+Write-Host "  /proxy-sql ejecuta SQL arbitrario. Solo se abre con token." -ForegroundColor Yellow
+Write-Host "  Verifica que .env.local tenga PROXY_SQL_TOKEN antes de exponerlo." -ForegroundColor Yellow
+Write-Host "  Sin ese valor el proxy responde 401 y no ejecuta nada." -ForegroundColor Yellow
+
+Write-Host ""
+Write-Host "Equipos sin Tailscale" -ForegroundColor Cyan
+Write-Host "  No necesitan esta regla: la app puede conectarse por proxy HTTPS" -ForegroundColor Gray
+Write-Host "  contra el tunel de Cloudflare (ver docs/montar-pc-servidor.md 5.4)." -ForegroundColor Gray

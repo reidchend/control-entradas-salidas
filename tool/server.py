@@ -20,6 +20,7 @@ La DATABASE_URL se toma de la variable de entorno o de .env.local.
 """
 import base64
 import datetime as _dt
+import hmac
 import http.server
 import json
 import os
@@ -53,6 +54,31 @@ BCV_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
+
+# --- Token del proxy SQL -------------------------------------------------
+#
+# /proxy-sql ejecuta SQL arbitrario con las credenciales del servidor. Con
+# el túnel de Cloudflare queda alcanzable desde internet, así que sin token
+# cualquiera que conozca la URL puede correr un DROP TABLE productos.
+#
+# Se lee de PROXY_SQL_TOKEN en el entorno o de PROXY_SQL_TOKEN= en
+# .env.local. Sin token el proxy responde 401 y NO ejecuta nada: es
+# preferible que falle a que quede abierto.
+def _read_token():
+    token = os.environ.get("PROXY_SQL_TOKEN")
+    if token:
+        return token.strip()
+    env_path = os.path.join(ROOT, ".env.local")
+    if os.path.exists(env_path):
+        with open(env_path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("PROXY_SQL_TOKEN="):
+                    return line.partition("=")[2].strip().strip("'").strip('"')
+    return None
+
+
+PROXY_SQL_TOKEN = _read_token()
 
 
 def fetch_bcv_html(timeout=15):
@@ -311,7 +337,27 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def _check_token(self):
+        """Valida el token compartido de /proxy-sql.
+
+        Devuelve (ok, motivo). El token se compara con hmac.compare_digest
+        para que el tiempo de respuesta no revele cuántos caracteres
+        acertados lleva.
+        """
+        if not PROXY_SQL_TOKEN:
+            return (False, "Proxy SQL sin token configurado. "
+                           "Define PROXY_SQL_TOKEN en .env.local.")
+        recibido = self.headers.get("X-Proxy-Token", "")
+        if not hmac.compare_digest(recibido, PROXY_SQL_TOKEN):
+            return (False, "Token invalido.")
+        return (True, "")
+
     def _handle_proxy_sql(self, body):
+        ok, motivo = self._check_token()
+        if not ok:
+            self._send_json(401, {"error": motivo})
+            return
+
         try:
             req = json.loads(body) or {}
         except json.JSONDecodeError as e:

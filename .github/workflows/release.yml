@@ -53,9 +53,7 @@ jobs:
           flutter pub get
           flutter build windows --release -t lib/main_pos.dart `
             --dart-define=APP_ID=pos `
-            --dart-define=APP_LABEL="Lycoris POS" `
-            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" `
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+            --dart-define=APP_LABEL="Lycoris POS"
       - name: Empaquetar zip
         shell: pwsh
         run: |
@@ -102,9 +100,7 @@ jobs:
           flutter pub get
           flutter build windows --release `
             --dart-define=APP_ID=inventario `
-            --dart-define=APP_LABEL="Control de Entradas y Salidas" `
-            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" `
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+            --dart-define=APP_LABEL="Control de Entradas y Salidas"
       - name: Empaquetar zip
         shell: pwsh
         run: |
@@ -158,9 +154,7 @@ jobs:
           flutter pub get
           flutter build apk --release \
             --dart-define=APP_ID=inventario \
-            --dart-define=APP_LABEL="Control de Entradas y Salidas" \
-            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+            --dart-define=APP_LABEL="Control de Entradas y Salidas"
       - name: Copiar con nombre estable
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk app-inventario-android.apk
