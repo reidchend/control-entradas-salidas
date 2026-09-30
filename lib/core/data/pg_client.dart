@@ -330,6 +330,8 @@ class PgQueryBuilder implements Future<dynamic> {
         }
         final sql = StringBuffer('UPDATE $_table SET ${sets.join(', ')}');
         _appendWhere(sql);
+        print('[PG_SQL] UPDATE: ${sql.toString()}');
+        print('[PG_PARAMS] ${_orderedParams()}');
         await _run(sql.toString());
         return null;
       case _PgWriteKind.delete:
