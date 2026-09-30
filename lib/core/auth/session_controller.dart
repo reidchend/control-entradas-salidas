@@ -21,19 +21,28 @@ class SessionController extends StateNotifier<SessionState> {
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
+    print('[SESSION] registrarOperador: nombre="$nombre", deviceId=$deviceId');
 
     if (await existeOperador(nombre)) {
+      print('[SESSION] registrarOperador: usuario ya existe, verificando PIN');
       return verificarPin(nombre: nombre, pin: pin);
     }
 
-    final result = await _db.insert('dispositivo_usuario', {
-      'nombre': nombre,
-      'pin_hash': pin,
-      'device_id': deviceId,
-      'configurado_en': DateTime.now().toIso8601String(),
-    });
-    state = SessionState.authenticated(nombre: nombre, pinHash: pin);
-    return result > 0;
+    try {
+      final result = await _db.insert('dispositivo_usuario', {
+        'nombre': nombre,
+        'pin_hash': pin,
+        'device_id': deviceId,
+        'configurado_en': DateTime.now().toIso8601String(),
+      });
+      print('[SESSION] registrarOperador: insert result=$result');
+      state = SessionState.authenticated(nombre: nombre, pinHash: pin);
+      return result > 0;
+    } catch (e, st) {
+      print('[SESSION] registrarOperador ERROR: $e');
+      print('[SESSION] registrarOperador STACK: $st');
+      return false;
+    }
   }
 
   /// Verifica nombre+PIN contra la tabla global. Si coincide, actualiza el
