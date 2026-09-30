@@ -287,6 +287,7 @@ def _exec_sql(conn, sql, params):
 
 def _exec_autocommit(sql, params):
     with _get_pool().connection(timeout=30) as conn:
+        conn.autocommit = True
         return _exec_sql(conn, sql, params)
 
 
