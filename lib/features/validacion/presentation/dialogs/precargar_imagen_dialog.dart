@@ -10,6 +10,7 @@ import '../../../../core/utils/web_utils.dart';
 import '../../data/ocr_service.dart';
 import '../../data/temporales_repository.dart';
 import '../../data/validacion_providers.dart';
+import '../widgets/temporal_thumbnail.dart';
 
 const _prefijos = {'Factura': 'F-', 'Nota de Entrega': 'NE-', 'Entrada': 'EV-'};
 
@@ -229,18 +230,7 @@ class _PrecargarImagenDialogState extends ConsumerState<_PrecargarImagenDialog> 
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    leading: t.imagen != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.memory(
-                              t.imagen!,
-                              width: 36,
-                              height: 36,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : const Icon(Icons.image_not_supported_outlined,
-                            size: 28),
+                    leading: TemporalThumbnail(temporal: t, size: 36),
                     title: Text(
                       t.nroFactura?.isNotEmpty == true
                           ? t.nroFactura!

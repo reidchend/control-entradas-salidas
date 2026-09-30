@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/modal_sizing.dart';
 import '../../data/temporales_repository.dart';
 import '../../data/validacion_providers.dart';
+import '../widgets/temporal_thumbnail.dart';
 
 /// Resultado de la selección en el diálogo de temporales.
 /// `temporal == null` significa que el usuario optó por pegar una imagen nueva
@@ -67,17 +68,7 @@ class _TemporalesDialogState extends ConsumerState<_TemporalesDialog> {
                   final t = widget.temporales[i];
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: t.imagen != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(
-                              t.imagen!,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : const Icon(Icons.image_not_supported_outlined),
+                    leading: TemporalThumbnail(temporal: t, size: 48),
                     title: Text(
                       t.nroFactura?.isNotEmpty == true
                           ? t.nroFactura!

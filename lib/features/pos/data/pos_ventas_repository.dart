@@ -123,6 +123,33 @@ class PosVentasRepository {
         .eq('estado', 'abierta')
         .order('updated_at', ascending: false);
 
+    final mesaIds = <int>[];
+    final habIds = <int>[];
+    for (final c in comandas) {
+      final mesaId = c['mesa_id'] as int?;
+      final habId = c['habitacion_id'] as int?;
+      if (mesaId != null) mesaIds.add(mesaId);
+      if (habId != null) habIds.add(habId);
+    }
+    // Resolver mesas/habitaciones en 2 queries en lote (evita 1 query por
+    // comanda; se ejecuta cada 5s con el polling de comandas).
+    final mesas = <int, Map<String, dynamic>>{};
+    if (mesaIds.isNotEmpty) {
+      final rows = await _db.client
+          .from('pos_mesas')
+          .select('id, nombre, numero')
+          .inFilter('id', mesaIds);
+      for (final m in rows) mesas[m['id'] as int] = m;
+    }
+    final habitaciones = <int, Map<String, dynamic>>{};
+    if (habIds.isNotEmpty) {
+      final rows = await _db.client
+          .from('pos_habitaciones')
+          .select('id, numero')
+          .inFilter('id', habIds);
+      for (final h in rows) habitaciones[h['id'] as int] = h;
+    }
+
     final result = <ComandaActiva>[];
     for (final c in comandas) {
       String etiqueta;
@@ -133,26 +160,13 @@ class PosVentasRepository {
       final cItemsJson = c['items_json'] as String?;
 
       if (mesaId != null) {
-        final m = await _db.client
-            .from('pos_mesas')
-            .select('nombre, numero')
-            .eq('id', mesaId)
-            .limit(1);
-        if (m.isNotEmpty) {
-          final mn = m.first['nombre'] as String?;
-          etiqueta =
-              (mn != null && mn.isNotEmpty) ? mn : 'Mesa ${m.first['numero']}';
-        } else {
-          etiqueta = 'Mesa $mesaId';
-        }
-      } else if (habId != null) {
-        final h = await _db.client
-            .from('pos_habitaciones')
-            .select('numero')
-            .eq('id', habId)
-            .limit(1);
+        final m = mesas[mesaId];
+        final nombre = m?['nombre'] as String?;
         etiqueta =
-            h.isNotEmpty ? 'Hab ${h.first['numero']}' : 'Habitacion $habId';
+            (nombre != null && nombre.isNotEmpty) ? nombre : 'Mesa ${m?['numero'] ?? mesaId}';
+      } else if (habId != null) {
+        etiqueta =
+            'Hab ${habitaciones[habId]?['numero'] ?? habId}';
       } else {
         etiqueta = 'Comanda #$cId';
       }

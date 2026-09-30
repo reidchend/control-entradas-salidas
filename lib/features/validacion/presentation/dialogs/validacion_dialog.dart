@@ -88,7 +88,16 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
   Future<void> _aplicarTemporal() async {
     final t = widget.temporal;
     if (t == null) return;
-    _imagenPegada = t.imagen;
+    // El poll de temporales ya no trae la imagen; se carga bajo demanda. Devolver
+    // el id si no se pudiera recuperar (la imagen se dejó para pegar manualmente).
+    if (t.id != null) {
+      try {
+        _imagenPegada =
+            await ref.read(temporalesRepoProvider).getImagenTemporal(t.id!);
+      } catch (_) {
+        _imagenPegada = null;
+      }
+    }
     if (t.tipoDocumento != null && _prefijos.containsKey(t.tipoDocumento)) {
       _tipoDocumento = t.tipoDocumento!;
     }

@@ -84,23 +84,28 @@ List<void Function()> initPollingSubscriptions(
   ];
 
   final timers = <Timer>[];
+  // Checkpoint por tabla: la última marca de tiempo en que se invalidó.
+  // Detectar cambios con `col >= checkpoint` evita invalidaciones continuas
+  // con actividad permanente (una ventana fija de interval*2 siempre disparaba
+  // aunque no hubiera cambios nuevos, recargando providers cada pocos segundos).
+  final ultimoVisto = <String, String>{};
   for (final b in bindings) {
     final timer = Timer.periodic(b.interval, (_) async {
       try {
-        // Verificar si hay cambios recientes (últimos interval*2), usando
-        // solo las columnas que existen en la tabla. Cada condición usa un
-        // placeholder distinto (`$1`, `$2`, ...) porque el proxy web (psycopg)
-        // no permite reutilizar `$1` en dos lugares del mismo query.
-        final cutoff = DateTime.now().subtract(b.interval * 2).toIso8601String();
+        final ahora = DateTime.now().toUtc().toIso8601String();
+        final since = ultimoVisto[b.table] ?? ahora;
+        // Cada condición usa un placeholder distinto (`$1`, `$2`, ...) porque
+        // el proxy web (psycopg) no permite reutilizar `$1` en dos lugares.
         final cond = [
           for (var i = 0; i < b.timestampCols.length; i++)
             '${b.timestampCols[i]} >= \$${i + 1}',
         ].join(' OR ');
         final result = await db.executeSql(
           'SELECT 1 FROM ${b.table} WHERE $cond LIMIT 1',
-          params: [for (final _ in b.timestampCols) cutoff],
+          params: [for (final _ in b.timestampCols) since],
         );
         if (result.isNotEmpty) {
+          ultimoVisto[b.table] = ahora;
           b.invalidate(ref);
         }
       } catch (_) {

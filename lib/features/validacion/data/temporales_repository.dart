@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -27,54 +26,24 @@ class TemporalData {
   });
 }
 
-/// Repositorio de temporales usando PostgreSQL directo + polling
-/// (reemplaza al Supabase Realtime). Las actualizaciones entre dispositivos
-/// se detectan por intervalos de tiempo; no hay suscripciones en vivo.
+/// Repositorio de temporales usando PostgreSQL directo. El polling lo posee el
+/// provider (cancela el timer cuando no hay listeners); aquí solo acceso a
+/// datos.
 class TemporalesRepository {
   TemporalesRepository(this._db);
   final PostgresService _db;
 
-  final _controller = StreamController<List<TemporalData>>.broadcast();
-  Timer? _timer;
+  final _imagenesCache = <int, Uint8List>{};
 
-  /// Inicia el polling periódico para detectar cambios en `pos_temporales`.
-  Stream<List<TemporalData>> watchTemporales() {
-    _startPolling();
-    return _controller.stream;
-  }
-
-  void _startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) async {
-      try {
-        await _refrescarSilencioso();
-      } catch (_) {
-        // Silenciar errores de polling
-      }
-    });
-    _refrescar();
-  }
-
-  Future<void> _refrescarSilencioso() async {
-    try {
-      await _refrescar();
-    } catch (_) {}
-  }
-
-  Future<void> _refrescar() async {
-    final items = await getTemporales();
-    if (!_controller.isClosed) {
-      _controller.add(items);
-    }
-  }
-
+  /// Lista de temporales SOLO con metadatos (sin `imagen_base64`), para que el
+  /// polling de 10s no transfiera ni decodifique el histórico completo.
   Future<List<TemporalData>> getTemporales() async {
-    final rows = await _db.client.from('pos_temporales').select().order('creado_en', ascending: false);
+    final rows = await _db.client
+        .from('pos_temporales')
+        .select('id, tipo_documento, nro_factura, proveedor, monto, fecha, creado_en')
+        .order('creado_en', ascending: false);
     return rows.map<TemporalData>((r) => TemporalData(
       id: r['id'] as int?,
-      imagen: (r['imagen_base64'] as String?) != null
-          ? base64Decode(r['imagen_base64'] as String)
-          : null,
       tipoDocumento: r['tipo_documento'] as String?,
       nroFactura: r['nro_factura'] as String?,
       proveedor: r['proveedor'] as String?,
@@ -82,6 +51,24 @@ class TemporalesRepository {
       fecha: _parseDate(r['fecha'] as String?),
       createdAt: DateTime.parse(r['creado_en'] as String),
     )).toList();
+  }
+
+  /// Imagen de un temporal bajo demanda (con cache en memoria). Se invoca al
+  /// renderizar cada miniatura o al "usar" un temporal.
+  Future<Uint8List?> getImagenTemporal(int id) async {
+    final cache = _imagenesCache[id];
+    if (cache != null) return cache;
+    final rows = await _db.client
+        .from('pos_temporales')
+        .select('imagen_base64')
+        .eq('id', id)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final b64 = rows.first['imagen_base64'] as String?;
+    if (b64 == null || b64.isEmpty) return null;
+    final bytes = base64Decode(b64);
+    _imagenesCache[id] = bytes;
+    return bytes;
   }
 
   DateTime? _parseDate(String? s) {
@@ -109,15 +96,12 @@ class TemporalesRepository {
   }
 
   Future<void> eliminar(int id) async {
+    _imagenesCache.remove(id);
     await _db.client.from('pos_temporales').delete().eq('id', id);
   }
 
   Future<void> limpiar() async {
+    _imagenesCache.clear();
     await _db.client.from('pos_temporales').delete().neq('id', 0);
-  }
-
-  void dispose() {
-    _timer?.cancel();
-    _controller.close();
   }
 }

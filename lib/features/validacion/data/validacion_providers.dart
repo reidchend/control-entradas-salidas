@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/postgres_providers.dart';
@@ -15,8 +17,30 @@ final temporalesRepoProvider = Provider<TemporalesRepository>((ref) {
   return TemporalesRepository(db!);
 });
 
-final temporalesProvider = StreamProvider<List<TemporalData>>((ref) {
-  return ref.watch(temporalesRepoProvider).watchTemporales();
+/// Polling de temporales viviendo en el provider: `autoDispose` cancela el
+/// timer cuando no hay listeners (pantallas/diálogos cerrados) en lugar de
+/// sondear la BD cada 10s durante toda la vida de la app.
+final temporalesProvider =
+    StreamProvider.autoDispose<List<TemporalData>>((ref) {
+  final repo = ref.watch(temporalesRepoProvider);
+  final controller = StreamController<List<TemporalData>>.broadcast();
+  Timer? timer;
+  Future<void> refrescar() async {
+    try {
+      final items = await repo.getTemporales();
+      if (!controller.isClosed) controller.add(items);
+    } catch (_) {
+      // Silenciar errores de polling
+    }
+  }
+
+  timer = Timer.periodic(const Duration(seconds: 10), (_) => refrescar());
+  refrescar();
+  ref.onDispose(() {
+    timer?.cancel();
+    controller.close();
+  });
+  return controller.stream;
 });
 
 final proveedoresProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
