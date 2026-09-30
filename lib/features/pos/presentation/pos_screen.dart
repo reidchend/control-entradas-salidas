@@ -241,41 +241,48 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       return;
     }
 
-    // 5. Cerrar la sesión local (turno ya cerrado en BD)
-    await ref.read(posSessionProvider.notifier).cerrarSesion();
+    // Los reportes se generan ANTES de soltar la sesión: estos métodos y
+    // `whatsappRepoProvider` viven en esta pantalla, que se desmonta al cerrar.
+    final reporteSimple = _generarReporteSimpleTexto(cierre);
+    final reporteDetallado = _generarReporteDetalladoTexto(cierre);
+    final fileName =
+        'cierre_${cierre.sesionId}_${DateTime.now().millisecondsSinceEpoch}.txt';
+    final waRepo = ref.read(whatsappRepoProvider);
     if (!mounted) return;
+
+    // 5. Cerrar la sesión local (turno ya cerrado en BD). Al ponerse en null,
+    //    PosScreen reconstruye a _LoginView y ESTA pantalla se desmonta, pero
+    //    el diálogo de carga vive en el navigator raíz y no se puede cerrar
+    //    con `context` desmontado. Se capturan navigator y messenger mientras
+    //    viven para cerrar el diálogo y avisar aunque esta pantalla ya no exista.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    await ref.read(posSessionProvider.notifier).cerrarSesion();
 
     // 6. Enviar reportes por WhatsApp (post-persistencia).
     //    Si falla, solo avisamos: el cierre ya quedó registrado y el turno cerrado.
-    final waRepo = ref.read(whatsappRepoProvider);
     if (waRepo == null) {
-      Navigator.pop(context); // cerrar loading
-      ScaffoldMessenger.of(context).showSnackBar(
+      navigator.pop(); // cerrar loading (el navigator sigue vivo)
+      messenger.showSnackBar(
         const SnackBar(content: Text('Cierre realizado. WhatsApp no configurado; sin envío')),
       );
       return;
     }
 
     try {
-      final reporteSimple = _generarReporteSimpleTexto(cierre);
-      final reporteDetallado = _generarReporteDetalladoTexto(cierre);
-      final fileName = 'cierre_${cierre.sesionId}_${DateTime.now().millisecondsSinceEpoch}.txt';
-
       await waRepo.enviarReporteSimple(reporteSimple);
       await waRepo.enviarReporteDetallado(
         fileName: fileName,
         content: reporteDetallado,
         caption: 'Cierre de turno - Detalle ingredientes',
       );
-      if (!mounted) return;
-      Navigator.pop(context); // cerrar loading
-      ScaffoldMessenger.of(context).showSnackBar(
+      navigator.pop(); // cerrar loading
+      messenger.showSnackBar(
         const SnackBar(content: Text('Cierre realizado; reportes enviados por WhatsApp ✅')),
       );
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // cerrar loading
-      ScaffoldMessenger.of(context).showSnackBar(
+      navigator.pop(); // cerrar loading
+      messenger.showSnackBar(
         SnackBar(content: Text('Cierre realizado, pero falló WhatsApp: $e')),
       );
     }
