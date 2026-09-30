@@ -114,6 +114,73 @@ jobs:
           path: app-inventario-windows.zip
 
   # ---------------------------------------------------------------------------
+  # Linux — POS (main_pos.dart) e inventario (main.dart)
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux POS & Inventario (tar.gz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Instalar dependencias del sistema (Linux desktop)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libsecret-1-dev libstdc++-12-dev
+      - name: Determinar version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Actualizar version en pubspec.yaml
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          sed -i "s/^version: .*/version: $VERSION+1/" pubspec.yaml
+          echo "Version actualizada a $VERSION"
+      - name: Build Linux POS
+        env:
+          WHATSAPP_BOT_TOKEN: ${{ secrets.WHATSAPP_BOT_TOKEN }}
+        run: |
+          flutter pub get
+          flutter build linux --release -t lib/main_pos.dart \
+            --dart-define=APP_ID=pos \
+            --dart-define=APP_LABEL="Lycoris POS" \
+            --dart-define=WHATSAPP_BOT_TOKEN=${WHATSAPP_BOT_TOKEN}
+          cd build/linux/x64/release
+          cp -r bundle lycoris-pos
+          mv lycoris-pos/control_entradas_salidas lycoris-pos/LycorisPOS
+          tar -czf ../../../../app-pos-linux.tar.gz -C lycoris-pos .
+      - name: Build Linux Inventario
+        env:
+          WHATSAPP_BOT_TOKEN: ${{ secrets.WHATSAPP_BOT_TOKEN }}
+        run: |
+          flutter build linux --release -t lib/main.dart \
+            --dart-define=APP_ID=inventario \
+            --dart-define=APP_LABEL="Control de Entradas y Salidas" \
+            --dart-define=WHATSAPP_BOT_TOKEN=${WHATSAPP_BOT_TOKEN}
+          cd build/linux/x64/release
+          cp -r bundle lycoris-inventario
+          mv lycoris-inventario/control_entradas_salidas lycoris-inventario/LycorisControl
+          tar -czf ../../../../app-inventario-linux.tar.gz -C lycoris-inventario .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-pos-linux
+          path: app-pos-linux.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-inventario-linux
+          path: app-inventario-linux.tar.gz
+
+  # ---------------------------------------------------------------------------
   # Android — inventario (main.dart) en APK
   # ---------------------------------------------------------------------------
   android:
@@ -167,11 +234,11 @@ jobs:
           path: app-inventario-android.apk
 
   # ---------------------------------------------------------------------------
-  # Release — junta los 3 assets en una GitHub Release
+  # Release — junta los 5 assets en una GitHub Release
   # ---------------------------------------------------------------------------
   release:
     name: Publicar GitHub Release
-    needs: [windows-pos, windows-inventario, android]
+    needs: [windows-pos, windows-inventario, linux, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -207,7 +274,9 @@ jobs:
           gh release create "v${{ steps.version.outputs.tag }}" \
             artifacts/app-pos-windows.zip \
             artifacts/app-inventario-windows.zip \
+            artifacts/app-pos-linux.tar.gz \
+            artifacts/app-inventario-linux.tar.gz \
             artifacts/app-inventario-android.apk \
             --title "Lycoris v${{ steps.version.outputs.tag }}" \
-            --notes "Build nativo Flutter. POS (Windows) + Inventario (Windows/Android)."
+            --notes "Build nativo Flutter. POS (Windows/Linux) + Inventario (Windows/Linux/Android)."
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'

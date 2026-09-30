@@ -295,6 +295,7 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 |---|---|---|
 | `windows-pos` | `LycorisPOS.exe` (icono azul) | `app-pos-windows.zip` |
 | `windows-inventario` | `LycorisControl.exe` (icono normal) | `app-inventario-windows.zip` |
+| `linux` | `LycorisPOS` + `LycorisControl` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz` |
 | `android` | APK inventario (icono normal) | `app-inventario-android.apk` |
 | `release` | Publica la release `vX.Y.Z` | — |
 
