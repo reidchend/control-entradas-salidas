@@ -235,11 +235,17 @@ class ValidacionRepository {
   Future<void> _vincularMovimientos(int facturaId, Set<int> ids) async {
     if (ids.isEmpty) return;
     print('[VALIDACION] facturaId=$facturaId, ids=$ids');
-    final result = await _db.client
-        .from('movimientos')
-        .update({'factura_id': facturaId})
-        .inFilter('id', ids.toList());
-    print('[VALIDACION] update result=$result');
+    try {
+      final result = await _db.client
+          .from('movimientos')
+          .update({'factura_id': facturaId})
+          .inFilter('id', ids.toList());
+      print('[VALIDACION] update result=$result');
+    } catch (e, st) {
+      print('[VALIDACION] ERROR en _vincularMovimientos: $e');
+      print('[VALIDACION] STACK: $st');
+      rethrow;
+    }
   }
 
   /// Elimina una entrada pendiente (movimiento 'entrada' sin validar) y

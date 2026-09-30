@@ -332,8 +332,15 @@ class PgQueryBuilder implements Future<dynamic> {
         _appendWhere(sql);
         print('[PG_SQL] UPDATE: ${sql.toString()}');
         print('[PG_PARAMS] ${_orderedParams()}');
-        await _run(sql.toString());
-        return null;
+        try {
+          final result = await _run(sql.toString());
+          print('[PG_RESULT] affectedRows=$result');
+          return null;
+        } catch (e, st) {
+          print('[PG_ERROR] UPDATE failed: $e');
+          print('[PG_ERROR_STACK] $st');
+          rethrow;
+        }
       case _PgWriteKind.delete:
         final sql = StringBuffer('DELETE FROM $_table');
         _appendWhere(sql);
