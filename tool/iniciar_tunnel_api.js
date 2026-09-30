@@ -17,7 +17,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { updateApiUrl, GIST_ID } = require('../whatsapp_bot/update_gist');
+const { updateApiUrl, buscarTokenGithub, GIST_ID } = require('../whatsapp_bot/update_gist');
 
 // Busca cloudflared en este orden:
 //   1. CLOUDFLARED del entorno (ruta explicita)
@@ -195,7 +195,11 @@ async function arrancar() {
   }
 }
 
-if (!process.env.GITHUB_TOKEN) {
+// La comprobacion tiene que pasar por la misma resolucion que usa el
+// publicador. Antes miraba solo process.env.GITHUB_TOKEN, asi que avisaba
+// "sin GITHUB_TOKEN" mientras leia el token del .env sin problema y la URL se
+// publicaba igual: un aviso falso que hacia dudar de un arranque que funciono.
+if (!buscarTokenGithub()) {
   // No se aborta: el túnel tiene que levantar igual, así sea por una prueba.
   // Pero sin esto el Gist nunca se actualiza y las apps quedan apuntando a la
   // URL vieja, así que hay que dejarlo bien claro.
