@@ -69,6 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _verificarNombreExistente() async {
     _debounceTimer?.cancel();
     final nombre = _nombreCtrl.text.trim();
+    print('[LOGIN_SCREEN] _verificarNombreExistente: nombre="$nombre", _existeNombre=$_existeNombre');
     if (nombre.isEmpty) {
       if (_existeNombre) {
         setState(() => _existeNombre = false);
@@ -79,10 +80,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       try {
         final session = ref.read(sessionProvider.notifier);
         final existe = await session.existeOperador(nombre);
+        print('[LOGIN_SCREEN] _verificarNombreExistente: existe=$existe para "$nombre"');
         if (mounted && existe != _existeNombre) {
           setState(() => _existeNombre = existe);
+          print('[LOGIN_SCREEN] _existeNombre actualizado a $_existeNombre');
         }
-      } catch (_) {
+      } catch (e) {
+        print('[LOGIN_SCREEN] _verificarNombreExistente ERROR: $e');
         // Sin conexión: mantener el estado actual; _submit volverá a decidir.
       }
     });
@@ -90,6 +94,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (_loading) return;
+    print('[LOGIN_SCREEN] _submit: _existeNombre=$_existeNombre');
     setState(() {
       _error = '';
       _loading = true;
@@ -98,9 +103,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final nombre = _nombreCtrl.text.trim();
       final session = ref.read(sessionProvider.notifier);
       final yaExiste = await session.existeOperador(nombre);
+      print('[LOGIN_SCREEN] _submit: yaExiste=$yaExiste para "$nombre" (estado _existeNombre=$_existeNombre)');
       bool ok = false;
       final esRegistro = !yaExiste;
-      if (esRegistro) {
         // Registro
         if (nombre.isEmpty) {
           setState(() => _error = 'Ingresa el nombre del operador');
