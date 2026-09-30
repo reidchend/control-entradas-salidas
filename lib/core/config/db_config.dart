@@ -62,6 +62,7 @@ class DbConfig {
     this.ssl = false,
     this.proxyUrl = '',
     this.proxyToken = '',
+    this.proxyUrlManual = false,
   });
 
   final String host;
@@ -87,8 +88,28 @@ class DbConfig {
   /// Sin esto el proxy responde 401.
   final String proxyToken;
 
+  /// El usuario escribió la URL a mano en vez de que la trajera el Gist.
+  ///
+  /// Mientras sea falso, la app relee la URL del Gist en cada arranque, que es
+  /// lo que hace que el túnel pueda cambiar sin tocar los equipos. Con el
+  /// túnel rápido la URL cambia cada vez que se reinicia la PC servidor, así
+  /// que aferrarse a la guardada deja la app apuntando a un túnel muerto.
+  ///
+  /// Es la salida para cuando el Gist no se puede usar (túnel propio, URL
+  /// estable, TestingLab): ahí la URL es estable y no hay nada que actualizar.
+  final bool proxyUrlManual;
+
   /// ¿Usa el proxy HTTP en vez del driver nativo?
-  bool get usesProxy => proxyUrl.trim().isNotEmpty;
+  ///
+  /// Basta con tener el token. La URL no hace falta: se descubre sola desde el
+  /// Gist al arrancar. Exigir la URL hacía que el flujo previsto (escribir solo
+  /// el token) no activara el modo proxy, y la app caía en el driver nativo.
+  ///
+  /// Es seguro confundir "tiene token" con "quiere proxy" porque [save]
+  /// reemplaza la configuración entera: al guardar en modo TCP directo el
+  /// token queda vacío, así que un perfil TCP nunca queda pegado en proxy.
+  bool get usesProxy =>
+      proxyToken.trim().isNotEmpty || proxyUrl.trim().isNotEmpty;
 
   // Claves de SharedPreferences (solo datos no sensibles).
   static const _kHost = 'db_config_host';
@@ -97,6 +118,7 @@ class DbConfig {
   static const _kUser = 'db_config_user';
   static const _kSsl = 'db_config_ssl';
   static const _kProxyUrl = 'db_config_proxy_url';
+  static const _kProxyUrlManual = 'db_config_proxy_url_manual';
 
   /// Claves en el almacen seguro.
   static const _kPassword = 'db_config_password';
@@ -115,16 +137,23 @@ class DbConfig {
     return 'postgresql://$u:$p@$host:$port/$database?sslmode=$sslmode';
   }
 
-  /// Endpoint de `/proxy-sql` a partir de [proxyUrl].
+  /// Endpoint de `/proxy-sql` a partir de una URL base.
   ///
-  /// Acepta `https://host`, `https://host/` y `https://host/anything`; siempre
+  /// Vive acá y no en la clase para que el resto del código pueda armarlo sin
+  /// tener que construir un [DbConfig] entero: la URL efectiva la resuelve el
+  /// descubridor, no viene guardada.
+  ///
+  /// Acepta `https://host`, `https://host/` y `https://host/loquesea`; siempre
   /// resuelve contra la raiz para no duplicar la ruta si el usuario copio la
   /// URL del navegador con un sufijo.
-  Uri get proxyEndpoint {
-    final base = proxyUrl.trim();
+  static Uri endpointDe(String baseUrl) {
+    final base = baseUrl.trim();
     final normalized = base.endsWith('/') ? base : '$base/';
     return Uri.parse(normalized).resolve('/proxy-sql');
   }
+
+  /// Endpoint de `/proxy-sql` a partir de [proxyUrl].
+  Uri get proxyEndpoint => endpointDe(proxyUrl);
 
   bool get isComplete {
     if (usesProxy) return true;
@@ -197,6 +226,7 @@ class DbConfig {
     bool? ssl,
     String? proxyUrl,
     String? proxyToken,
+    bool? proxyUrlManual,
   }) =>
       DbConfig(
         host: host ?? this.host,
@@ -207,25 +237,30 @@ class DbConfig {
         ssl: ssl ?? this.ssl,
         proxyUrl: proxyUrl ?? this.proxyUrl,
         proxyToken: proxyToken ?? this.proxyToken,
+        proxyUrlManual: proxyUrlManual ?? this.proxyUrlManual,
       );
 
   /// Lee la configuracion guardada. Devuelve `null` si el usuario nunca la
   /// setteo, para que el llamador use el `dart-define` como fallback.
   static Future<DbConfig?> load() async {
     final prefs = await SharedPreferences.getInstance();
+    final host = prefs.getString(_kHost) ?? '';
     final proxyUrl = prefs.getString(_kProxyUrl) ?? '';
-    final host = prefs.getString(_kHost);
-    // Con proxy no hay host: basta con que exista la URL.
-    if ((host == null || host.isEmpty) && proxyUrl.isEmpty) return null;
+    final proxyToken = await _readProxyToken();
+    // Con proxy basta el token: la URL se descubre sola del Gist y todavia no
+    // esta guardada. Antes el criterio era host o URL, asi que una config con
+    // solo token se daba por inexistente y el usuario perdia su configuracion.
+    if (host.isEmpty && proxyUrl.isEmpty && proxyToken.isEmpty) return null;
     return DbConfig(
-      host: host ?? '',
+      host: host,
       port: prefs.getInt(_kPort) ?? 5432,
       database: prefs.getString(_kDatabase) ?? '',
       user: prefs.getString(_kUser) ?? '',
       password: await _readPassword(),
       ssl: prefs.getBool(_kSsl) ?? false,
       proxyUrl: proxyUrl,
-      proxyToken: await _readProxyToken(),
+      proxyToken: proxyToken,
+      proxyUrlManual: prefs.getBool(_kProxyUrlManual) ?? false,
     );
   }
 
@@ -237,6 +272,7 @@ class DbConfig {
     await prefs.setString(_kUser, config.user);
     await prefs.setBool(_kSsl, config.ssl);
     await prefs.setString(_kProxyUrl, config.proxyUrl);
+    await prefs.setBool(_kProxyUrlManual, config.proxyUrlManual);
     await _writePassword(config.password);
     await _writeProxyToken(config.proxyToken);
   }
@@ -249,6 +285,7 @@ class DbConfig {
     await prefs.remove(_kUser);
     await prefs.remove(_kSsl);
     await prefs.remove(_kProxyUrl);
+    await prefs.remove(_kProxyUrlManual);
     await _deletePassword();
     await _deleteProxyToken();
   }

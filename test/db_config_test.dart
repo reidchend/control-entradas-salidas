@@ -17,6 +17,7 @@ DbConfig _config({
   bool ssl = false,
   String proxyUrl = '',
   String proxyToken = '',
+  bool proxyUrlManual = false,
 }) =>
     DbConfig(
       host: host,
@@ -27,6 +28,7 @@ DbConfig _config({
       ssl: ssl,
       proxyUrl: proxyUrl,
       proxyToken: proxyToken,
+      proxyUrlManual: proxyUrlManual,
     );
 
 void main() {
@@ -163,10 +165,65 @@ void main() {
   });
 
   group('modo proxy', () {
-    test('usesProxy solo cuando hay URL', () {
+    test('basta con el token para usar el proxy', () {
+      // Es el flujo que se pidió: en cada equipo se escribe solo el token. La
+      // URL la trae el Gist, así que exigirla guardada dejaba al usuario en
+      // modo TCP directo, que no tiene a qué conectarse.
       expect(_config().usesProxy, isFalse);
-      expect(_config(proxyUrl: '   ').usesProxy, isFalse);
+      expect(_config(proxyUrl: '   ', proxyToken: '  ').usesProxy, isFalse);
+      expect(_config(proxyToken: 'tok-abc').usesProxy, isTrue);
       expect(_config(proxyUrl: 'https://api.ejemplo.cl').usesProxy, isTrue);
+    });
+
+    test('isComplete con solo el token, sin URL ni host', () {
+      const soloToken = DbConfig(
+        host: '',
+        port: 5432,
+        database: '',
+        user: '',
+        password: '',
+        proxyToken: 'tok-abc',
+      );
+      expect(soloToken.isComplete, isTrue);
+    });
+
+    test('load conserva una config que tiene solo el token', () async {
+      // Antes load() devolvía null sin host ni URL, así que guardar el token y
+      // nada más borraba la configuración del usuario al reiniciar la app.
+      await DbConfig.save(
+        _config(host: '', database: '', user: '', proxyToken: 'tok-abc'),
+      );
+
+      final loaded = await DbConfig.load();
+      expect(loaded, isNotNull);
+      expect(loaded!.usesProxy, isTrue);
+      expect(loaded.proxyToken, 'tok-abc');
+    });
+
+    test('la URL manual se recuerda, para no pisarla con la del Gist', () async {
+      await DbConfig.save(
+        _config(
+          host: '',
+          database: '',
+          user: '',
+          proxyUrl: 'https://mi-tunel-propio.cl',
+          proxyToken: 'tok-abc',
+          proxyUrlManual: true,
+        ),
+      );
+
+      final loaded = await DbConfig.load();
+      expect(loaded!.proxyUrlManual, isTrue);
+      expect(loaded.proxyUrl, 'https://mi-tunel-propio.cl');
+    });
+
+    test('endpointDe normaliza como proxyEndpoint', () {
+      const base = 'https://api.ejemplo.cl';
+      final esperado = Uri.parse('https://api.ejemplo.cl/proxy-sql');
+      expect(DbConfig.endpointDe(base), esperado);
+      expect(DbConfig.endpointDe('$base/'), esperado);
+      expect(DbConfig.endpointDe('$base/inventario'), esperado);
+      expect(DbConfig.endpointDe('  $base  '), esperado);
     });
 
     test('proxyEndpoint resuelve /proxy-sql contra la raiz', () {

@@ -7,6 +7,8 @@ import '../config/db_config.dart';
 import '../data/http_sql_session.dart';
 import '../data/native_sql_session.dart';
 import '../data/sql_session.dart';
+import 'descubrimiento_servidor.dart';
+import 'proxy_url_resolver.dart';
 
 /// Inicializa la sesión SQL según la plataforma y la configuración.
 ///
@@ -23,7 +25,10 @@ import '../data/sql_session.dart';
 /// La connection string se resuelve en este orden:
 /// 1. Configuración guardada en Ajustes → Base de datos ([DbConfig]).
 /// 2. `--dart-define=DATABASE_URL` embebido al compilar.
-Future<SqlSession> initializePostgres() async {
+///
+/// [descubridor] existe para los tests: permite apuntar la consulta al Gist a
+/// un servidor local. En producción va nulo y se usa el Gist real.
+Future<SqlSession> initializePostgres({DescubridorServidor? descubridor}) async {
   if (kIsWeb) {
     // En web no hay donde guardar un secreto, así que el token viaja
     // embebido al compilar (AppConfig.proxyToken).
@@ -31,8 +36,23 @@ Future<SqlSession> initializePostgres() async {
   }
   final guardada = await DbConfig.load();
   if (guardada != null && guardada.isComplete && guardada.usesProxy) {
+    // La URL no sale de la config: se vuelve a preguntar al Gist, para que un
+    // túnel que cambio de URL no deje a la app hablando con un servidor que ya
+    // no existe. Solo la guardada si el Gist no responde.
+    final base = await resolverUrlProxy(
+      urlGuardada: guardada.proxyUrl,
+      urlManual: guardada.proxyUrlManual,
+      descubridor: descubridor,
+    );
+    if (base.isEmpty) {
+      throw const DbNotConfiguredError(
+        'No se pudo determinar la URL del servidor. Revisá que el túnel esté '
+        'corriendo en la PC servidor, o escribí la URL a mano en '
+        'Configuración → Base de datos.',
+      );
+    }
     return HttpSqlSession(
-      baseUrl: guardada.proxyEndpoint.toString(),
+      baseUrl: DbConfig.endpointDe(base).toString(),
       token: guardada.proxyToken,
     );
   }

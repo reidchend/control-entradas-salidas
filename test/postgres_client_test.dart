@@ -1,16 +1,59 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:control_entradas_salidas/core/config/db_config.dart';
 import 'package:control_entradas_salidas/core/data/http_sql_session.dart';
+import 'package:control_entradas_salidas/core/network/descubrimiento_servidor.dart';
 import 'package:control_entradas_salidas/core/network/postgres_client.dart';
 
 void main() {
-  setUp(() {
+  late HttpServer gist;
+
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
+    gist = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   });
+
+  tearDown(() => gist.close(force: true));
+
+  /// Gist local que publica [url], igual que el que escribe el túnel.
+  DescubridorServidor publicando(String url) {
+    unawaited(gist.forEach((request) async {
+      await request.drain<void>();
+      request.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'files': {
+            'api_url.json': {
+              'content': jsonEncode({'url': url, 'puerto': 8501, 'rapido': true}),
+            },
+          },
+        }));
+      await request.response.close();
+    }));
+    return DescubridorServidor(
+      endpoint: Uri.parse('http://${gist.address.host}:${gist.port}/gist'),
+    );
+  }
+
+  /// Gist local caído: no sirve, como cuando no hay internet.
+  DescubridorServidor caido() {
+    unawaited(gist.forEach((request) async {
+      await request.drain<void>();
+      request.response.statusCode = 404;
+      await request.response.close();
+    }));
+    return DescubridorServidor(
+      endpoint: Uri.parse('http://${gist.address.host}:${gist.port}/gist'),
+    );
+  }
 
   group('resolveDatabaseUrl', () {
     test('sin nada configurado devuelve vacia', () async {
@@ -122,7 +165,8 @@ void main() {
     test('con proxy configurado devuelve una sesión HTTP con el token',
         () async {
       // Es la ruta que usan las apps Windows y Android detrás del túnel: no
-      // se abre ningún socket a PostgreSQL.
+      // se abre ningún socket a PostgreSQL. La URL va como manual, que es el
+      // caso de quien tiene su propio túnel y no publica en el Gist.
       await DbConfig.save(
         const DbConfig(
           host: '',
@@ -132,6 +176,7 @@ void main() {
           password: '',
           proxyUrl: 'https://api.ejemplo.cl',
           proxyToken: 'tok-abc',
+          proxyUrlManual: true,
         ),
       );
 
@@ -140,6 +185,77 @@ void main() {
       expect(session, isA<HttpSqlSession>());
       expect((session as HttpSqlSession).token, 'tok-abc');
       expect(session.baseUrlForTest, 'https://api.ejemplo.cl/proxy-sql');
+    });
+
+    test('el Gist manda sobre una URL guardada que quedó vieja', () async {
+      // El túnel rápido cambia de URL cada vez que se reinicia la PC servidor.
+      // Si la app se aferra a la guardada, al segundo reinicio queda hablando
+      // con un túnel que ya no existe y el error es un fallo de red genérico.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyUrl: 'https://tunel-viejo.trycloudflare.com',
+          proxyToken: 'tok-abc',
+        ),
+      );
+
+      final session = await initializePostgres(
+        descubridor: publicando('https://tunel-nuevo.trycloudflare.com'),
+      );
+
+      expect((session as HttpSqlSession).baseUrlForTest,
+          'https://tunel-nuevo.trycloudflare.com/proxy-sql');
+    });
+
+    test('con solo el token ya usa el proxy, sin URL guardada', () async {
+      // Es el flujo que se pidió: en cada equipo se escribe únicamente el
+      // token. Antes, sin URL guardada, usesProxy daba falso y la app caía en
+      // el driver nativo, que no tiene a qué conectarse.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyToken: 'tok-solo',
+        ),
+      );
+
+      final session = await initializePostgres(
+        descubridor: publicando('https://solo-token.trycloudflare.com'),
+      );
+
+      expect(session, isA<HttpSqlSession>());
+      expect((session as HttpSqlSession).token, 'tok-solo');
+      expect(session.baseUrlForTest,
+          'https://solo-token.trycloudflare.com/proxy-sql');
+    });
+
+    test('sin Gist ni URL guardada avisa en vez de fallar al conectar',
+        () async {
+      // Con solo el token pero sin red no hay a qué conectarse. El error va
+      // tipado para que el login ofrezca "Configurar conexión" en vez de un
+      // fallo técnico.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyToken: 'tok-solo',
+        ),
+      );
+
+      await expectLater(
+        initializePostgres(descubridor: caido()),
+        throwsA(isA<DbNotConfiguredError>()),
+      );
     });
 
     test('sin configurar nada avisa en vez de fallar al conectar', () async {

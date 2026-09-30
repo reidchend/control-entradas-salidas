@@ -83,10 +83,9 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
         _userCtrl.text = config.user;
         _passCtrl.text = config.password;
         _ssl = config.ssl;
-        // La URL guardada manda; la del Gist solo se usa si falta, para no
-        // pisar una URL que el usuario haya cambiado a mano.
-        if (config.usesProxy && config.proxyUrl.isNotEmpty) {
+        if (config.usesProxy) {
           _modo = _ModoConexion.proxy;
+          _urlEditable = config.proxyUrlManual;
         } else if (config.host.isNotEmpty) {
           _modo = _ModoConexion.directo;
         }
@@ -109,10 +108,12 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
     }
     if (mounted) setState(() => _cargando = false);
 
-    // Si falta la URL, se busca sola. Es el primer arranque típico: el
-    // usuario instaló la app y todavía no escribió nada.
-    final faltaUrl = _proxyUrlCtrl.text.trim().isEmpty;
-    if (faltaUrl && _modo == _ModoConexion.proxy) {
+    // En modo proxy la URL se relee del Gist aunque haya una guardada. Con el
+    // túnel rápido la URL cambia en cada reinicio del servidor, asi que
+    // partir de la guardada era mostrar siempre una direccion que ya no
+    // existe. La unica excepcion es una URL escrita a mano, que el usuario
+    // fijo a proposito.
+    if (_modo == _ModoConexion.proxy && !_urlEditable) {
       await _buscarUrl(silencioso: true);
     }
   }
@@ -180,6 +181,10 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
         password: '',
         proxyUrl: _proxyUrlCtrl.text.trim(),
         proxyToken: _proxyTokenCtrl.text,
+        // Si el campo estaba en modo edición es porque el usuario escribió la
+        // URL (el automático no se abre solo). Se guarda como fija para que la
+        // app no la pise con la del Gist en el próximo arranque.
+        proxyUrlManual: _urlEditable,
       );
     }
     return DbConfig(
