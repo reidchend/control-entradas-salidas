@@ -286,14 +286,9 @@ def _exec_sql(conn, sql, params):
 
 
 def _exec_autocommit(sql, params):
-    with _get_pool().connection(timeout=30) as conn:
-        try:
-            rows, affected = _exec_sql(conn, sql, params)
-            conn.commit()
-            print(f'[COMMIT_OK] affected={affected}')
-        except Exception as e:
-            print(f'[COMMIT_ERROR] {e}')
-            raise
+    with _get_pool().connection(timeout=30, autocommit=True) as conn:
+        rows, affected = _exec_sql(conn, sql, params)
+        print(f'[COMMIT_OK] affected={affected}')
         return rows, affected
 
 
