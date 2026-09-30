@@ -217,9 +217,13 @@ máquina de desarrollo y copiás la carpeta.
 En la máquina de desarrollo (Linux), desde el repo:
 
 ```bash
-flutter build web --release -o build/web
+# El token del bot WhatsApp se inyecta en compilación; tiene que ser el MISMO
+# valor que quedó en whatsapp_bot\.env (ver sección 5.5 y .env.example).
+flutter build web --release -o build/web \
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
 
-flutter build web --release -t lib/main_pos.dart -o build/pos
+flutter build web --release -t lib/main_pos.dart -o build/pos \
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
 cp web_pos/favicon.png web_pos/manifest.json build/pos/
 cp -r web_pos/icons build/pos/
 cp web_pos/index.html build/pos/index.html

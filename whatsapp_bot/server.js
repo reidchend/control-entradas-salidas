@@ -10,7 +10,19 @@ const bot = require('./bot');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN || 'mi_token_secreto_123';
+
+// Token obligatorio para /send, /config, etc. Ya no existe un default de
+// respaldo: el que venía en el repo era público y cualquiera podía llamar
+// al bot. Micho el proceso si falta, para que el fallo sea visible en los
+// logs en vez de aceptar envíos con un token conocido.
+if (!process.env.WHATSAPP_BOT_TOKEN) {
+    console.error(
+        'ERROR: falta WHATSAPP_BOT_TOKEN. Generalo y agregalo al .env ' +
+        '(ver .env.example). El bot no arranca sin un token propio.'
+    );
+    process.exit(1);
+}
+const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN;
 
 // Middleware
 app.use(cors());
@@ -432,7 +444,7 @@ async function startServer() {
 ║  - GET  /config      → Ver configuración           ║
 ╚══════════════════════════════════════════════════╝
 `);
-        console.log('⚠️  Token configurado:', AUTH_TOKEN !== 'mi_token_secreto_123' ? 'Personalizado' : 'Default (cámbialo con WHATSAPP_BOT_TOKEN)');
+        console.log('✅  Token configurado (WHATSAPP_BOT_TOKEN).');
     });
 }
 

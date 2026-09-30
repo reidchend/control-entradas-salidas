@@ -259,12 +259,14 @@ Ver `supabase/schema.sql` para el esquema completo (idempotente).
 ### Web (desarrollo)
 
 ```bash
+# <TOKEN> = WHATSAPP_BOT_TOKEN (el mismo de whatsapp_bot/.env, ver .env.example)
 # Inventario (puerto 8501)
-flutter build web --release -o build/web
+flutter build web --release -o build/web --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
 tool/venv/bin/python tool/server.py 8501 build/web
 
 # POS (puerto 8502)
-flutter build web --release -t lib/main_pos.dart -o build/pos
+flutter build web --release -t lib/main_pos.dart -o build/pos \
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
 cp web_pos/favicon.png web_pos/manifest.json build/pos/
 cp -r web_pos/icons build/pos/
 cp web_pos/index.html build/pos/index.html

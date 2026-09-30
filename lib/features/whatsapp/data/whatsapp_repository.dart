@@ -7,8 +7,11 @@ import 'package:image/image.dart' as img;
 import '../../../core/data/postgres_service.dart';
 import '../../../core/models/mensaje_whatsapp.dart';
 
-const whatsappBotToken = 'mi_token_secreto_123';
-const String _fallbackBotUrl = 'https://lycoris-bot.shares.zrok.io';
+/// Token del bot para `x-auth-token`. Se inyecta en el build con
+/// `--dart-define=WHATSAPP_BOT_TOKEN=<token>` (ver docs/montar-pc-servidor.md).
+/// Sin define queda vacío: el bot rechaza el envío, el mensaje se encola y
+/// se reintenta; el binario nunca lleva el secreto del repo.
+const whatsappBotToken = String.fromEnvironment('WHATSAPP_BOT_TOKEN');
 const String _gistRawUrl = 'https://gist.githubusercontent.com/reidchend/5b37693a243d8d2235eea0647396b8d3/raw/bot_url.json';
 
 class WhatsappRepository {
@@ -43,15 +46,18 @@ class WhatsappRepository {
           .timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        if (data is Map && data.containsKey('url')) {
-          _cachedBotUrl = data['url'] as String;
-          return _cachedBotUrl!;
+        final raw = data is Map ? data['url'] : null;
+        if (raw is String && raw.isNotEmpty) {
+          _cachedBotUrl = raw;
+          return raw;
         }
       }
     } catch (_) {}
 
-    _cachedBotUrl = _fallbackBotUrl;
-    return _cachedBotUrl!;
+    // Sin URL válida en cache: devolver cadena vacía SIN cachearla, para que
+    // el próximo reenvío vuelva al Gist (el túnel puede haber cambiado de URL
+    // mientras tanto). El envío va al fallo y se encola.
+    return '';
   }
 
   void invalidateCache() {
@@ -350,6 +356,9 @@ class WhatsappRepository {
     if (success) {
       await updateEstado(msg.id, 'sent');
     } else {
+      // El fallo puede ser por URL obsoleta (túnel reiniciado): descartar la
+      // caché para que el próximo reintento vuelva a leer el Gist.
+      invalidateCache();
       final intentos = msg.intentos + 1;
       final estado = intentos >= msg.maxIntentos ? 'failed' : 'pending';
       await _db.updateById('whatsapp_queue', msg.id, {

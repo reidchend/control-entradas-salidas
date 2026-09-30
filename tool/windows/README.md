@@ -114,8 +114,9 @@ diferencia de comportamiento, pero conviene dejarlas sincronizadas.
 Una sola vez, o cada vez que cambie el código:
 
 ```bat
-flutter build web --release -o build\web
-flutter build web --release -t lib\main_pos.dart -o build\pos
+set TOKEN=<WHATSAPP_BOT_TOKEN, el mismo que whatsapp_bot\.env>
+flutter build web --release -o build\web --dart-define=WHATSAPP_BOT_TOKEN=%TOKEN%
+flutter build web --release -t lib\main_pos.dart -o build\pos --dart-define=WHATSAPP_BOT_TOKEN=%TOKEN%
 copy web_pos\index.html build\pos\index.html
 copy web_pos\manifest.json build\pos\
 copy web_pos\favicon.png build\pos\
