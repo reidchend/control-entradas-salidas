@@ -45,39 +45,59 @@ class SessionController extends StateNotifier<SessionState> {
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    final rows = await _db.executeSql(
-      'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
-      'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
-      params: [nombre],
-    );
-    if (rows.isEmpty) return false;
-    final u = rows.first;
-    if (u['pin_hash'] == pin) {
-      if (u['id'] != null) {
-        await _db.updateWhere(
-          'dispositivo_usuario',
-          {'id': u['id']},
-          {'device_id': deviceId},
-        );
-      }
-      state = SessionState.authenticated(
-        nombre: u['nombre'] as String,
-        pinHash: u['pin_hash'] as String,
+    final n = nombre.trim();
+    print('[SESSION] verificarPin: nombre="$n", pin="$pin", deviceId=$deviceId');
+    try {
+      final rows = await _db.executeSql(
+        'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
+        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
+        params: [n],
       );
-      return true;
+      print('[SESSION] verificarPin: rows=${rows.length} for "$n"');
+      if (rows.isEmpty) return false;
+      final u = rows.first;
+      print('[SESSION] verificarPin: found id=${u['id']}, nombre=${u['nombre']}, pin_hash=${u['pin_hash']}');
+      if (u['pin_hash'] == pin) {
+        if (u['id'] != null) {
+          await _db.updateWhere(
+            'dispositivo_usuario',
+            {'id': u['id']},
+            {'device_id': deviceId},
+          );
+        }
+        state = SessionState.authenticated(
+          nombre: u['nombre'] as String,
+          pinHash: u['pin_hash'] as String,
+        );
+        return true;
+      }
+      print('[SESSION] verificarPin: PIN mismatch, expected=${u['pin_hash']}, got=$pin');
+      return false;
+    } catch (e, st) {
+      print('[SESSION] verificarPin ERROR: $e');
+      print('[SESSION] verificarPin STACK: $st');
+      return false;
     }
-    return false;
   }
 
   /// ¿Existe un operador con este nombre en la BD? (case-insensitive).
-  Future<bool> existeOperador(String nombre) async {
+Future<bool> existeOperador(String nombre) async {
     if (_db == null) return false;
-    final rows = await _db.executeSql(
-      'SELECT 1 FROM dispositivo_usuario '
-      'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) LIMIT 1',
-      params: [nombre],
-    );
-    return rows.isNotEmpty;
+    final n = nombre.trim();
+    print('[SESSION] existeOperador: nombre="$n"');
+    try {
+      final rows = await _db.executeSql(
+        'SELECT 1 FROM dispositivo_usuario '
+        'WHERE LOWER(TRIM(nombre)) = LOWER($1) LIMIT 1',
+        params: [n],
+      );
+      print('[SESSION] existeOperador: rows=${rows.length} for "$n"');
+      return rows.isNotEmpty;
+    } catch (e, st) {
+      print('[SESSION] existeOperador ERROR: $e');
+      print('[SESSION] existeOperador STACK: $st');
+      return false;
+    }
   }
 
   /// Nombre del operador registrado con este device_id, si existe.
