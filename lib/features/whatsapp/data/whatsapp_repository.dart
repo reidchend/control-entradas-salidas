@@ -76,12 +76,13 @@ class WhatsappRepository {
   }
 
   Future<int> countPending() async {
-    final rows = await _db.client
-        .from('whatsapp_queue')
-        .select('id')
-        .eq('estado', 'pending')
-        .lt('intentos', 5);
-    return rows.length;
+    // COUNT(*) en BD en vez de traer todos los ids para contarlos en Dart.
+    final rows = await _db.executeSql(
+      'SELECT COUNT(*) AS n FROM whatsapp_queue WHERE estado = \$1 AND intentos < \$2',
+      params: ['pending', 5],
+    );
+    if (rows.isEmpty) return 0;
+    return (rows.first['n'] as num?)?.toInt() ?? 0;
   }
 
   Future<void> saveToQueue({
@@ -297,16 +298,38 @@ class WhatsappRepository {
     return false;
   }
 
+  bool _reintentando = false;
+
   Future<int> reintentarTodos({int limit = 20}) async {
-    final pendientes = await getMensajesEstados(
-      estados: const ['pending', 'failed'],
-      limit: limit,
-    );
-    var ok = 0;
-    for (final msg in pendientes) {
-      if (await _enviarDesdeCola(msg)) ok++;
+    // Guarda de vuelo: si una corrida tarda más que el intervalo del timer, no
+    // iniciar otra en paralelo (evita envíos duplicados).
+    if (_reintentando) return 0;
+    _reintentando = true;
+    try {
+      final pendientes = await getMensajesEstados(
+        estados: const ['pending', 'failed'],
+        limit: limit,
+      );
+      var ok = 0;
+      final exitosos = <int>[];
+      for (final msg in pendientes) {
+        if (await _enviarDesdeCola(msg, registrarLogro: false)) {
+          ok++;
+          exitosos.add(msg.id);
+        }
+      }
+      // Marcar los exitosos en una sola escritura.
+      if (exitosos.isNotEmpty) {
+        await _db.executeSql(
+          'UPDATE whatsapp_queue SET estado = \$1, updated_at = \$2 '
+          'WHERE id = ANY(\$3)',
+          params: ['sent', DateTime.now().toIso8601String(), exitosos],
+        );
+      }
+      return ok;
+    } finally {
+      _reintentando = false;
     }
-    return ok;
   }
 
   Future<bool> reintentarUno(int id) async {
@@ -319,7 +342,8 @@ class WhatsappRepository {
     return _enviarDesdeCola(MensajeWhatsapp.fromMap(rows.first));
   }
 
-  Future<bool> _enviarDesdeCola(MensajeWhatsapp msg) async {
+  Future<bool> _enviarDesdeCola(MensajeWhatsapp msg,
+      {bool registrarLogro = true}) async {
     if (msg.estado != 'pending' && msg.estado != 'failed') return false;
     await updateEstado(msg.id, 'sending');
     // Cada tipo va a su endpoint/grupo correcto:
@@ -354,7 +378,8 @@ class WhatsappRepository {
         success = await _enviarTextoDirecto(msg.mensaje ?? '');
     }
     if (success) {
-      await updateEstado(msg.id, 'sent');
+      // En `reintentarTodos` el logro se registra en lote al final.
+      if (registrarLogro) await updateEstado(msg.id, 'sent');
     } else {
       // El fallo puede ser por URL obsoleta (túnel reiniciado): descartar la
       // caché para que el próximo reintento vuelva a leer el Gist.

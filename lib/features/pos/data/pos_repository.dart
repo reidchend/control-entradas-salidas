@@ -160,37 +160,52 @@ class PosRepository {
     return rows.map((r) => r['usuario_id'] as int).toSet();
   }
 
-  Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>>
-      getSesiones({int limit = 50, int? beforeId}) async {
+Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>>
+    getSesiones({int limit = 50, int? beforeId}) async {
     var query = _db.client.from('pos_sesiones').select();
     if (beforeId != null) query = query.lt('id', beforeId);
     final sesiones = await query.order('id', ascending: false).limit(limit);
 
-    final ventRows = await _db.client
-        .from('pos_ventas')
-        .select('sesion_id, total')
-        .eq('estado', 'vigente');
+    final sids = <int>[for (final s in sesiones) s['id'] as int];
+    // Resumir ventas solo para las sesiones de la página (no escanear todas
+    // las pos_ventas en cada paginación).
     final resumenMap = <int, ({int ventas, double total})>{};
-    for (final v in ventRows) {
-      final sid = v['sesion_id'] as int;
-      final prev = resumenMap[sid] ?? (ventas: 0, total: 0.0);
-      resumenMap[sid] = (
-        ventas: prev.ventas + 1,
-        total: prev.total + (v['total'] as num? ?? 0).toDouble(),
-      );
+    if (sids.isNotEmpty) {
+      final ventRows = await _db.client
+          .from('pos_ventas')
+          .select('sesion_id, total')
+          .eq('estado', 'vigente')
+          .inFilter('sesion_id', sids);
+      for (final v in ventRows) {
+        final sid = v['sesion_id'] as int;
+        final prev = resumenMap[sid] ?? (ventas: 0, total: 0.0);
+        resumenMap[sid] = (
+          ventas: prev.ventas + 1,
+          total: prev.total + (v['total'] as num? ?? 0).toDouble(),
+        );
+      }
+    }
+
+    // Nombres de cajeros en una sola query.
+    final uids = {for (final s in sesiones) s['usuario_id'] as int};
+    final uidMap = <int, String>{};
+    if (uids.isNotEmpty) {
+      final urows = await _db.client
+          .from('pos_usuarios')
+          .select('id, nombre')
+          .inFilter('id', uids.toList());
+      for (final u in urows) {
+        final n = u['nombre'] as String?;
+        if (n != null) uidMap[u['id'] as int] = n;
+      }
     }
 
     final result = <({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>[];
     for (final s in sesiones) {
       final r = resumenMap[s['id'] as int] ?? (ventas: 0, total: 0.0);
-      final u = await _db.client
-          .from('pos_usuarios')
-          .select('nombre')
-          .eq('id', s['usuario_id'] as int)
-          .limit(1);
       result.add((
         sesion: PosSesion.fromMap(s),
-        usuarioNombre: u.isNotEmpty ? u.first['nombre'] as String? : null,
+        usuarioNombre: uidMap[s['usuario_id'] as int],
         ventas: r.ventas,
         totalVentas: r.total,
       ));

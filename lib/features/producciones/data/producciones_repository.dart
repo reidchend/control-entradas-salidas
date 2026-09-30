@@ -389,11 +389,12 @@ class ProduccionesRepository {
   }
 
   Future<List<String>> getAlmacenes() async {
-    final data = await _db.client.from('existencias').select('almacen');
-    final almacenes = {
-      for (final r in (data as List).cast<Map<String, dynamic>>())
-        if (r['almacen'] != null) r['almacen'] as String,
-    };
+    // DISTINCT en BD: antes se traía una fila por producto×almacén para
+    // deduplicar en Dart.
+    final rows = await _db.executeSql(
+      'SELECT DISTINCT almacen FROM existencias WHERE almacen IS NOT NULL',
+    );
+    final almacenes = {for (final r in rows) r['almacen'] as String};
     almacenes
       ..add('principal')
       ..add('restaurante');
