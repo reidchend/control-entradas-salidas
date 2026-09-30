@@ -9,8 +9,9 @@ graphify-out/
 .env
 .env.local
 *.env.*
-# ...pero el ejemplo si se versiona, para poder partir de el.
+# ...pero los ejemplos si se versionan, para poder partir de ellos.
 !.env.local.example
+!.env.example
 
 # Local databases (runtime, regeneradas al arrancar)
 *.db

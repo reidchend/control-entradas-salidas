@@ -19,6 +19,7 @@
 // Uso:  node tool\diagnostico_gist.js
 
 const https = require('https');
+const fs = require('fs');
 const {
   buscarTokenGithub,
   leerDelEnvFile,
@@ -27,6 +28,26 @@ const {
   GIST_ID,
   ARCHIVO_API,
 } = require('../whatsapp_bot/update_gist');
+
+/**
+ * Nombres de clave del `.env`, sin valores.
+ *
+ * Cuando falta el token, lo util no es decir "no esta": es decir que claves
+ * hay. Si el token quedo guardado con otro nombre, o el archivo esta a medio
+ * hacer, esto lo muestra de una y evita adivinar.
+ *
+ * @param {string} envPath ruta del .env
+ * @returns {{existe: boolean, claves: string[]}}
+ */
+function clavesDelEnv(envPath) {
+  if (!fs.existsSync(envPath)) return { existe: false, claves: [] };
+  const claves = [];
+  for (const linea of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const m = linea.match(/^\s*#?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (m && !claves.includes(m[1])) claves.push(m[1]);
+  }
+  return { existe: true, claves };
+}
 
 function pedir(opciones) {
   return new Promise((resolve) => {
@@ -79,7 +100,26 @@ async function main() {
     fuentes.push({ que: `archivo linea ${e.linea}`, linea: e.linea, token: e.token });
   }
   if (!fuentes.length) {
+    const { existe, claves } = clavesDelEnv(envPath);
     console.log(`  No hay GITHUB_TOKEN ni en el entorno ni en ${envPath}`);
+    console.log('');
+    if (!existe) {
+      console.log('  Ese archivo NO existe. Crearlo con:');
+      console.log(`    notepad ${envPath}`);
+      console.log('    GITHUB_TOKEN=ghp_tu_token_aqui');
+    } else {
+      console.log(`  El archivo existe y tiene ${claves.length} clave(s):`);
+      for (const c of claves) console.log(`    ${c}`);
+      if (!claves.includes('GITHUB_TOKEN')) {
+        console.log('');
+        console.log('  GITHUB_TOKEN no esta. El nombre tiene que ser exacto,');
+        console.log('  porque asi lo lee el bot y el lanzador del tunel.');
+      }
+    }
+    console.log('');
+    console.log('  El token es el mismo que ya usaba el bot para publicar su');
+    console.log('  propia URL: scope gist de escritura. Se genera en');
+    console.log('    https://github.com/settings/tokens');
     return;
   }
   console.log('\nTodos los valores encontrados:');
