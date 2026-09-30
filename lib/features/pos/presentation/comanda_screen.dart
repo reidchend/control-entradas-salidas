@@ -323,7 +323,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       cantidad: item.cantidad,
       nombre: item.nombre,
       precio: item.precio,
-      contornos: [for (final c in item.contornos) c.nombre],
+      contornos: [
+        for (final c in item.contornos)
+          c.cantidad > 1 ? '${c.cantidad}x ${c.nombre}' : c.nombre,
+      ],
     );
   }
 
@@ -682,7 +685,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     _listKey.currentState?.insertItem(_items.length - 1);
   }
 
-  void _agregarItemConContornos(int id, String nombre, double precio, List<PosPlato> contornos) {
+  void _agregarItemConContornos(
+      int id, String nombre, double precio, List<ContornoSeleccion> contornos) {
     for (final item in _items) {
       if (item.id == id && item.tipo == 'plato' && !item.tieneContornos) {
         setState(() => item.cantidad++);
@@ -696,7 +700,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         nombre: nombre,
         precio: precio,
         cantidad: 1,
-        contornos: [for (final c in contornos) (id: c.id, nombre: c.nombre)],
+        contornos: [
+          for (final c in contornos)
+            (id: c.plato.id, nombre: c.plato.nombre, cantidad: c.cantidad),
+        ],
       ));
     });
     _listKey.currentState?.insertItem(_items.length - 1);
@@ -931,7 +938,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                       const SizedBox(width: 2),
                       Expanded(
                         child: Text(
-                          c.nombre,
+                          c.cantidad > 1
+                              ? '${c.cantidad}x ${c.nombre}'
+                              : c.nombre,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

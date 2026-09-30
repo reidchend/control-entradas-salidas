@@ -615,8 +615,11 @@ class PosVentasRepository {
       final cids = <int>[
         ...?((item['contorno_ids'] as List?)?.cast<num>().map((n) => n.toInt())),
       ];
-      for (final cid in cids) {
-        await acumularIngredientes(cid, cant);
+      final cantidades = (item['contorno_cantidades'] as List?) ?? const [];
+      for (var i = 0; i < cids.length; i++) {
+        final porcion =
+            i < cantidades.length ? ((cantidades[i] as num?)?.toDouble() ?? 1) : 1;
+        await acumularIngredientes(cids[i], cant * porcion);
       }
     }
     return acumulado.values.toList();
@@ -721,14 +724,16 @@ class PosVentasRepository {
 
         // Contornos servidos con el plato (informativo, agrupado por contorno)
         final contornos = (item['contornos'] as List?)?.cast<String>() ?? const [];
+        final cantidades = (item['contorno_cantidades'] as List?) ?? const [];
         for (var i = 0; i < contornos.length; i++) {
           final cNombre = contornos[i];
-          final ckey = cNombre;
-          final cm = contornosAcum.putIfAbsent(ckey, () => {
+          final porcion =
+              i < cantidades.length ? ((cantidades[i] as num?)?.toDouble() ?? 1) : 1;
+          final cm = contornosAcum.putIfAbsent(cNombre, () => {
                 'nombre': cNombre,
                 'cantidad': 0.0,
               });
-          cm['cantidad'] = (cm['cantidad'] as double) + cant;
+          cm['cantidad'] = (cm['cantidad'] as double) + cant * porcion;
         }
       }
     }
@@ -846,7 +851,11 @@ class PosVentasRepository {
         final cids = <int>[
           ...?((item['contorno_ids'] as List?)?.cast<num>().map((n) => n.toInt())),
         ];
-        for (final cid in cids) {
+        final cantidades = (item['contorno_cantidades'] as List?) ?? const [];
+        for (var i = 0; i < cids.length; i++) {
+          final cid = cids[i];
+          final porcion =
+              i < cantidades.length ? ((cantidades[i] as num?)?.toDouble() ?? 1) : 1;
           final ing = await getPlatoIngredientes(cid);
           final contornoRows = await _db.client
               .from('platos')
@@ -857,7 +866,8 @@ class PosVentasRepository {
               ? contornoRows.first['nombre'] as String
               : 'Contorno #$cid';
           for (final i in ing) {
-            acumularIngrediente(i.productoId, i.nombre, i.cantidad * cant, contornoNombre);
+            acumularIngrediente(
+                i.productoId, i.nombre, i.cantidad * cant * porcion, contornoNombre);
           }
         }
       }

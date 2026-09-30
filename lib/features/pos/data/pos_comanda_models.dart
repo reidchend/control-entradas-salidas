@@ -15,7 +15,8 @@ typedef ComandaActiva = ({
 ///
 /// Se serializa a JSON para `pos_comandas.items_json` con el mismo formato de
 /// la app Flet: `id`, `tipo` (producto|plato|contorno), `nombre`, `precio`,
-/// `cantidad` y, si aplica, `contornos` (nombres) + `contorno_ids`.
+/// `cantidad` y, si aplica, `contornos` (nombres) + `contorno_ids` +
+/// `contorno_cantidades` (porciones por contorno, "doble tostón" = 2).
 class ComandaItem {
   ComandaItem({
     required this.id,
@@ -31,32 +32,45 @@ class ComandaItem {
   final String nombre;
   final double precio;
   int cantidad;
-  final List<({int? id, String nombre})> contornos;
+  final List<({int? id, String nombre, int cantidad})> contornos;
 
   bool get tieneContornos => contornos.isNotEmpty;
 
   double get subtotal => cantidad * precio;
 
   Map<String, dynamic> toJson() {
-    final ids = contornos.where((c) => c.id != null).map((c) => c.id).toList();
+    final ids = <int>[];
+    final nombres = <String>[];
+    final cantidades = <int>[];
+    for (final c in contornos) {
+      nombres.add(c.nombre);
+      if (c.id != null) ids.add(c.id!);
+      cantidades.add(c.cantidad);
+    }
     return {
       'id': id,
       'tipo': tipo,
       'nombre': nombre,
       'precio': precio,
       'cantidad': cantidad,
-      if (contornos.isNotEmpty)
-        'contornos': [for (final c in contornos) c.nombre],
+      if (contornos.isNotEmpty) 'contornos': nombres,
       if (ids.isNotEmpty) 'contorno_ids': ids,
+      if (contornos.isNotEmpty) 'contorno_cantidades': cantidades,
     };
   }
 
   factory ComandaItem.fromJson(Map<String, dynamic> j) {
     final ids = (j['contorno_ids'] as List?)?.cast<num>().map((n) => n.toInt()).toList();
     final nombres = (j['contornos'] as List?)?.cast<String>() ?? const [];
-    final contornos = <({int? id, String nombre})>[
+    final cantidades = (j['contorno_cantidades'] as List?) ?? const [];
+    final contornos = <({int? id, String nombre, int cantidad})>[
       for (var i = 0; i < nombres.length; i++)
-        (id: ids != null && i < ids.length ? ids[i] : null, nombre: nombres[i]),
+        (
+          id: ids != null && i < ids.length ? ids[i] : null,
+          nombre: nombres[i],
+          cantidad:
+              i < cantidades.length ? (cantidades[i] as num).toInt() : 1,
+        ),
     ];
     return ComandaItem(
       id: (j['id'] as num).toInt(),
