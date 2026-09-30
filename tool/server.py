@@ -229,7 +229,7 @@ def _get_pool():
             max_size=3,
             open=True,
             timeout=30,
-            kwargs={"prepare_threshold": None},
+            kwargs={"prepare_threshold": None, "autocommit": True},
         )
     return _POOL
 
@@ -287,7 +287,6 @@ def _exec_sql(conn, sql, params):
 
 def _exec_autocommit(sql, params):
     with _get_pool().connection(timeout=30) as conn:
-        conn.autocommit = True
         return _exec_sql(conn, sql, params)
 
 
