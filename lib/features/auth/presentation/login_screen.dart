@@ -106,6 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       print('[LOGIN_SCREEN] _submit: yaExiste=$yaExiste para "$nombre" (estado _existeNombre=$_existeNombre)');
       bool ok = false;
       final esRegistro = !yaExiste;
+      if (esRegistro) {
         // Registro
         if (nombre.isEmpty) {
           setState(() => _error = 'Ingresa el nombre del operador');
