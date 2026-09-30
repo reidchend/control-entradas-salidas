@@ -333,8 +333,8 @@ class PgQueryBuilder implements Future<dynamic> {
         print('[PG_SQL] UPDATE: ${sql.toString()}');
         print('[PG_PARAMS] ${_orderedParams()}');
         try {
-          final result = await _run(sql.toString());
-          print('[PG_RESULT] affectedRows=$result');
+          await _run(sql.toString());
+          print('[PG_RESULT] UPDATE executed');
           return null;
         } catch (e, st) {
           print('[PG_ERROR] UPDATE failed: $e');
