@@ -480,9 +480,22 @@ En la app, el paso 5.3 queda así:
 4. **Probar conexión** → "Conexión correcta".
 5. **Guardar**.
 
+Eso es todo lo que se hace en cada equipo, y alcanza aunque la PC servidor se
+reinicie: la app vuelve a leer el Gist en cada arranque, así que toma la URL
+vigente sin que nadie tenga que corregirla. La URL que se usó la última vez
+queda como respaldo para abrir la app sin internet.
+
 Si el Gist no responde, el campo URL se desbloquea solo y avisa qué revisar.
-Ahí se puede escribir la URL a mano, y con **Usar la URL automática** se
-vuelve al modo normal.
+Ahí se puede escribir la URL a mano, y esa elección queda guardada como fija
+—no se pisa con la del Gist— hasta que se vuelva al modo automático con
+**Usar la URL automática**.
+
+Para verificar el Gist sin abrir la app:
+
+```powershell
+cd C:\Lycoris\tool
+node diagnostico_gist.js
+```
 
 Si el Gist no responde pero la app ya conocía una URL de antes, usa esa y no
 molesta: no se queda sin conexión por un problema puntual de GitHub.
