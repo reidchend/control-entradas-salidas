@@ -286,8 +286,11 @@ def _exec_sql(conn, sql, params):
 
 
 def _exec_autocommit(sql, params):
+    print(f'[PROXY_AUTOCOMMIT] sql={sql[:120]} params={params}')
     with _get_pool().connection(timeout=30) as conn:
-        return _exec_sql(conn, sql, params)
+        rows, affected = _exec_sql(conn, sql, params)
+        print(f'[PROXY_AUTOCOMMIT] rows={len(rows)} affected={affected}')
+        return rows, affected
 
 
 def _end_tx(txid, commit):
