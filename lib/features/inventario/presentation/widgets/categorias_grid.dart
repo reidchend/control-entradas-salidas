@@ -7,7 +7,7 @@ import 'categoria_card.dart';
 
 /// GridView de categorías estilo Flet.
 /// Al hacer click en una categoría se navega a sus productos (manejado por la pantalla vía `onSelect`).
-class CategoriasGrid extends ConsumerWidget {
+class CategoriasGrid extends ConsumerStatefulWidget {
   const CategoriasGrid({
     super.key,
     required this.repo,
@@ -20,16 +20,30 @@ class CategoriasGrid extends ConsumerWidget {
   final ValueChanged<Categoria> onSelect;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CategoriasGrid> createState() => _CategoriasGridState();
+}
+
+class _CategoriasGridState extends ConsumerState<CategoriasGrid> {
+  late Future<List<Categoria>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    // Query única por instancia: evita refetch por cada tecla del buscador.
+    _future = widget.repo.getAllCategorias();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<List<Categoria>>(
-      future: repo.getAllCategorias(),
+      future: _future,
       builder: (context, snap) {
         var cats = snap.data ?? [];
         if (cats.isEmpty) {
           return const Center(child: Text('Sin categorías'));
         }
-        if (searchTerm.isNotEmpty) {
-          final q = searchTerm.toLowerCase();
+        if (widget.searchTerm.isNotEmpty) {
+          final q = widget.searchTerm.toLowerCase();
           cats = cats.where((c) => c.nombre.toLowerCase().contains(q)).toList();
         }
         if (cats.isEmpty) {
@@ -47,7 +61,7 @@ class CategoriasGrid extends ConsumerWidget {
           itemBuilder: (context, i) => CategoriaCard(
             nombre: cats[i].nombre,
             color: cats[i].color,
-            onTap: () => onSelect(cats[i]),
+            onTap: () => widget.onSelect(cats[i]),
           ),
         );
       },

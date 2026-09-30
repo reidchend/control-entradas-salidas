@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,11 +25,18 @@ class _BuscadorProductosDialogState
     extends ConsumerState<_BuscadorProductosDialog> {
   String _busqueda = '';
   List<Map<String, dynamic>> _resultados = [];
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _buscar();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 
   Future<void> _buscar() async {
@@ -55,7 +64,9 @@ class _BuscadorProductosDialogState
               ),
               onChanged: (v) {
                 _busqueda = v;
-                _buscar();
+                _debounce?.cancel();
+                _debounce =
+                    Timer(const Duration(milliseconds: 350), _buscar);
               },
             ),
             const SizedBox(height: 8),

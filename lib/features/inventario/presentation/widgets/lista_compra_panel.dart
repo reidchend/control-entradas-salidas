@@ -16,10 +16,19 @@ class ListaCompraPanel extends ConsumerStatefulWidget {
 }
 
 class _ListaCompraPanelState extends ConsumerState<ListaCompraPanel> {
+  late Future<List<ComprasListaItem>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    // Query única por instancia: evita refetch por cada tecla del buscador.
+    _future = widget.repo.getComprasListaConProductos();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<ComprasListaItem>>(
-      future: widget.repo.getComprasListaConProductos(),
+      future: _future,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

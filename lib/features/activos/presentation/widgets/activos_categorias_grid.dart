@@ -6,7 +6,7 @@ import '../../data/activos_repository.dart';
 import 'activos_categoria_card.dart';
 
 /// GridView de categorías de activos (estilo CategoriasGrid de Inventario).
-class ActivosCategoriasGrid extends ConsumerWidget {
+class ActivosCategoriasGrid extends ConsumerStatefulWidget {
   const ActivosCategoriasGrid({
     super.key,
     required this.repo,
@@ -19,10 +19,25 @@ class ActivosCategoriasGrid extends ConsumerWidget {
   final VoidCallback onCreate;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ActivosCategoriasGrid> createState() =>
+      _ActivosCategoriasGridState();
+}
+
+class _ActivosCategoriasGridState extends ConsumerState<ActivosCategoriasGrid> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    // Query única por instancia: evita refetch por cada tecla del buscador.
+    _future = widget.repo.getCategoriasConConteo();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Sin filtro: solo categorías activas con su conteo de activos.
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: repo.getCategoriasConConteo(),
+      future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
@@ -45,13 +60,14 @@ class ActivosCategoriasGrid extends ConsumerWidget {
           itemCount: items.length + 1,
           itemBuilder: (context, i) {
             if (i == 0) {
-              return _NuevaCategoriaCard(onCreate: onCreate);
+              return _NuevaCategoriaCard(onCreate: widget.onCreate);
             }
             final item = items[i - 1];
             return ActivosCategoriaCard(
               categoria: item['categoria'] as ActivosCategoria,
               conteo: item['conteo'] as int,
-              onTap: () => onSelect(item['categoria'] as ActivosCategoria),
+              onTap: (() => widget.onSelect(
+                  item['categoria'] as ActivosCategoria)),
             );
           },
         );

@@ -46,6 +46,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   static const int _pageSize = 50;
   final ScrollController _scrollCtrl = ScrollController();
   Timer? _pollTimer;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -59,14 +60,16 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       // Saltar el refresco si hay una carga incremental en vuelo para no
-      // pisar la lista que se está extendiendo.
-      if (mounted && !_cargandoMas) _reload();
+      // pisar la lista que se está extendiendo. Sin `reset` para conservar el
+      // scroll y la paginación acumulada (no volver a la página 1 cada 30s).
+      if (mounted && !_cargandoMas) _reload(reset: false);
     });
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _searchDebounce?.cancel();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -86,10 +89,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
 
   /// Recarga en background: conserva los datos actuales mientras consulta,
   /// de modo que no hay parpadeo al refrescar (poll periódico o filtros).
-  void _reload() {
+  void _reload({bool reset = true}) {
     final repo = ref.read(stockRepoProvider);
     if (repo == null) return;
-    _cargar(repo);
+    _cargar(repo, reset: reset);
   }
 
   Future<void> _cargar(StockRepository repo, {bool reset = true}) async {
@@ -272,8 +275,14 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             ),
             onChanged: (v) {
               _search = v;
-              _irAlInicio();
-              _reload();
+              // Debounce: la búsqueda dispara agregación + filtro en BD.
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+                if (mounted) {
+                  _irAlInicio();
+                  _reload();
+                }
+              });
             },
           );
           final cat = DropdownButtonFormField<String>(

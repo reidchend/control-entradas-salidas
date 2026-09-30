@@ -5,7 +5,7 @@ import '../../data/activos_repository.dart';
 
 /// GridView de valores de una dimensión de activos (ubicación, grupo, modelo,
 /// estado...) con su conteo de activos. Estilo igual al grid de categorías.
-class ActivosValoresGrid extends ConsumerWidget {
+class ActivosValoresGrid extends ConsumerStatefulWidget {
   const ActivosValoresGrid({
     super.key,
     required this.repo,
@@ -26,9 +26,23 @@ class ActivosValoresGrid extends ConsumerWidget {
   final VoidCallback? onCrear;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ActivosValoresGrid> createState() => _ActivosValoresGridState();
+}
+
+class _ActivosValoresGridState extends ConsumerState<ActivosValoresGrid> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    // Query única por instancia: evita refetch por cada tecla del buscador.
+    _future = widget.repo.getValoresConConteo(widget.columna);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: repo.getValoresConConteo(columna),
+      future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
@@ -38,7 +52,7 @@ class ActivosValoresGrid extends ConsumerWidget {
         }
         final items = snap.data ?? const <Map<String, dynamic>>[];
 
-        final crear = onCrear;
+        final crear = widget.onCrear;
         return GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -51,7 +65,7 @@ class ActivosValoresGrid extends ConsumerWidget {
           itemBuilder: (context, i) {
             if (crear != null && i == 0) {
               return _NuevoValorCard(
-                label: 'Nueva $singular',
+                label: 'Nueva ${widget.singular}',
                 onCreate: crear,
               );
             }
@@ -60,9 +74,9 @@ class ActivosValoresGrid extends ConsumerWidget {
             return _ValorCard(
               valor: valor,
               conteo: (item['n'] as num?)?.toInt() ?? 0,
-              icono: icono,
-              color: color,
-              onTap: () => onSelect(valor),
+              icono: widget.icono,
+              color: widget.color,
+              onTap: () => widget.onSelect(valor),
             );
           },
         );
