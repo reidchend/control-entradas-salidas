@@ -28,17 +28,10 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
   final _searchCtrl = TextEditingController();
   final Set<int> _selected = {};
   String _search = '';
-  Future<List<EntradaPendiente>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _loadEntradas();
-  }
-
-  Future<List<EntradaPendiente>> _loadEntradas() {
-    final repo = ref.read(validacionRepoProvider)!;
-    return repo.getEntradasPendientes(search: _search);
   }
 
   @override
@@ -83,10 +76,9 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
     }
     if (!mounted) return;
 
-    setState(() {
-      _selected.clear();
-      _future = _loadEntradas();
-    });
+    // Invalidar provider de pendientes para refrescar la lista.
+    ref.invalidate(entradasPendientesProvider(_search));
+    setState(() => _selected.clear());
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -122,10 +114,9 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
 
     await repo.eliminarEntrada(entrada);
     if (mounted) {
-      setState(() {
-        _selected.remove(entrada.id);
-        _future = _loadEntradas();
-      });
+      // Invalidar provider de pendientes para refrescar la lista.
+      ref.invalidate(entradasPendientesProvider(_search));
+      setState(() => _selected.remove(entrada.id));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entrada eliminada')),
       );
@@ -136,18 +127,18 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
   Widget build(BuildContext context) {
     final repo = ref.watch(validacionRepoProvider)!;
     final scheme = Theme.of(context).colorScheme;
+    final entradasAsync = ref.watch(entradasPendientesProvider(_search));
 
     return Column(
       children: [
         _buildHeader(repo, scheme),
         Expanded(
-          child: FutureBuilder<List<EntradaPendiente>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final entradas = snap.data ?? [];
+          child: entradasAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(
+              child: Text('Error: $e', style: TextStyle(color: scheme.error)),
+            ),
+            data: (entradas) {
               if (entradas.isEmpty) {
                 return const ValidacionEmptyState();
               }
@@ -197,10 +188,7 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
                     fillColor: scheme.surfaceContainerHighest,
                   ),
                   onChanged: (v) {
-                    setState(() {
-                      _search = v;
-                      _future = _loadEntradas();
-                    });
+                    setState(() => _search = v);
                   },
                 ),
               ),
@@ -239,6 +227,6 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
               ],
             ],
           ),
-        );
+    );
   }
 }

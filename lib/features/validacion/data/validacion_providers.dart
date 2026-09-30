@@ -46,3 +46,11 @@ final temporalesProvider =
 final proveedoresProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return ref.watch(validacionRepoProvider)!.getProveedores();
 });
+
+/// Entradas pendientes de validar (movimientos 'entrada' sin factura_id).
+/// Se invalida tras validar o eliminar para que la lista se refresque.
+final entradasPendientesProvider = FutureProvider.autoDispose
+    .family<List<EntradaPendiente>, String>((ref, search) async {
+  final repo = ref.watch(validacionRepoProvider)!;
+  return repo.getEntradasPendientes(search: search);
+});
