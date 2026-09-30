@@ -121,6 +121,12 @@ configura en el dispositivo; el repo no lleva claves.
 - [x] `sistema_tab.dart` — tarjeta "Base de datos" que abre el panel.
 - [x] `supabase/schema_activos.sql` — DDL de `activos_categorias`,
       `activos_tipos` y `activos`, que no estaba en `schema.sql`.
+- [x] `supabase/migrations/20260826000000_add_pos_sesiones_whatsapp_queue.sql`
+      — **reconstruida** desde el código de la app. `pos_sesiones` (turnos de
+      caja del POS) y `whatsapp_queue` (cola del bot) también se habían creado
+      directo en la base, sin commitear; la definición se dedujo de los
+      repositorios Dart y se validó contra un PostgreSQL 18 limpio. La FK de
+      `pos_cierres.sesion_id` ahora puede resolverse.
 
 ### Fase 2: preparar la PC Windows
 
@@ -132,7 +138,9 @@ Detalle paso a paso en
       `pg_hba.conf` restringida a Tailscale y **la regla de firewall**. Los
       tres filtros hacen falta: sin la de firewall el síntoma es
       "connection refused" con Postgres levantado.
-- [ ] `crear_estructura.bat` — entorno Python + tablas.
+- [ ] `crear_estructura.bat` — entorno Python + tablas (aplica
+      `schema.sql`, `schema_activos.sql` y las migraciones de `POS`/WhatsApp
+      en el orden validado).
 - [ ] Instalar Tailscale, fijar la IP de la PC.
 - [ ] Clonar el repo y compilar la web.
 - [ ] Migrar el bot de WhatsApp a la misma PC: copiar `whatsapp_bot/auth/`
@@ -226,3 +234,15 @@ La URL de Neon estuvo hardcodeada en `app_config.dart` en commits
 publicados. Aunque ya no este en el working tree, sigue en el historial y
 por lo tanto en el repo publico. Hay que **revocar y rotar** esa clave en
 Neon; no basta con borrar la linea.
+
+Ademas quedaron expuestas en la conversacion de despliegue del 2026-09-29:
+
+1. `PROXY_SQL_TOKEN` (el token que abre `/proxy-sql`) — fue pegado en el
+   chat en claro. Rotarlo cambiandolo en `C:\Lycoris\.env.local` y en la
+   configuracion de cada equipo (paso 5.3 de `montar-pc-servidor.md`).
+2. La contrasena del owner de Neon (`neondb_owner`, patada en el chat).
+   Regenerarla en la consola de Neon apenas la cuota entre (30/09) antes de
+   hacer el `pg_dump`.
+
+Regla para adelante: los tokens y contrasenas no se copian en el chat; se
+rotan al primer contacto con internet.

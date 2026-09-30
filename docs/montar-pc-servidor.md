@@ -390,7 +390,8 @@ tool\iniciar_api.bat
 
 Un `.bat` levanta el servidor en 8501, espera a que responda, levanta el túnel
 y publica la URL. Si `cloudflared` se cae, el launcher lo vuelve a levantar
-solo y republica la URL nueva.
+solo y republica la URL nueva. (El cuidador del túnel es
+`tool\iniciar_tunnel_api.js`, que el `.bat` invoca al final.)
 
 Conviene tenerlo como tarea de arranque, así sigue arriba solo:
 
@@ -455,6 +456,10 @@ guardalo en `whatsapp_bot\.env`:
 ```
 GITHUB_TOKEN=ghp_...
 ```
+
+El repo trae `whatsapp_bot\.env.example` como plantilla: copiala a
+`whatsapp_bot\.env` y completá el token. La plantilla también documenta la
+`GEMINI_API_KEY` del bot, comentada.
 
 Ese archivo es el mismo que usa el bot, y `tool\iniciar_api.bat` lo lee de
 ahí, así que no hay que exportar la variable en cada arranque. Si el token

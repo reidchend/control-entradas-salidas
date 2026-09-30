@@ -13,9 +13,31 @@ import sys
 
 import psycopg
 
+# Orden validado contra un PostgreSQL 18 limpio (2026-09-29): la base
+# resultante cubre las 37 tablas que la app consulta.
+#
+# `20260922000000_activos_tipos.sql` se excluye a propósito: no es un
+# bootstrap sino la transformación de la antigua tabla `activos` plana
+# (con `cantidad`) a unidades individuales. `schema_activos.sql` ya deja
+# esa estructura final, así que aplicarla aquí solo fallaría en backfills
+# que dependen de columnas que ya no existen.
 ARCHIVOS = [
     ("supabase/schema.sql", "esquema base"),
     ("supabase/schema_activos.sql", "categorías, tipos y unidades de activos"),
+    ("supabase/migrations/20250101000000_add_dispositivo_usuario.sql",
+     "tabla dispositivo_usuario (identificación del equipo)"),
+    ("supabase/migrations/20250102000000_add_device_id.sql",
+     "columna device_id en dispositivo_usuario"),
+    ("supabase/migrations/20250103000000_add_pos_temporales_rls.sql",
+     "política RLS de pos_temporales (inertes sin rol supabase)"),
+    ("supabase/migrations/20260826000000_add_pos_sesiones_whatsapp_queue.sql",
+     "turnos de caja del POS y cola de WhatsApp"),
+    ("supabase/migrations/20260827000000_add_pos_cierres.sql",
+     "cierres de caja históricos"),
+    ("supabase/migrations/20260901000000_add_stock_fecha_checkpoint.sql",
+     "columnas extra en stock_checkpoint y movimientos_archivo"),
+    ("supabase/migrations/20260901120000_add_almacenes.sql",
+     "catálogo de almacenes"),
 ]
 
 
@@ -62,7 +84,16 @@ def main() -> int:
         tablas = [r[0] for r in cur.fetchall()]
 
     print(f"Estructura creada OK. {len(tablas)} tablas en public.")
-    esperadas = ("activos", "activos_tipos", "activos_categorias", "productos")
+    esperadas = (
+        "activos",
+        "activos_tipos",
+        "activos_categorias",
+        "productos",
+        "pos_sesiones",
+        "whatsapp_queue",
+        "pos_cierres",
+        "almacenes",
+    )
     faltantes = [t for t in esperadas if t not in tablas]
     if faltantes:
         print(f"AVISO: faltan tablas esperadas: {', '.join(faltantes)}")

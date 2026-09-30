@@ -79,9 +79,14 @@ Prepara `tool\venv` con `psycopg` y aplica, en orden:
 
 1. `supabase/schema.sql` — el esquema general.
 2. `supabase/schema_activos.sql` — categorías, tipos y unidades de activos.
+3. `supabase/migrations/*.sql` — tablas y columnas que se fueron agregando
+   después (turnos de caja del POS, cola de WhatsApp, cierres, almacenes...).
 
 El orden importa: `schema_activos.sql` reutiliza `set_pos_updated_at()` que
-define `schema.sql`.
+define `schema.sql`. La única migración que se saltea es
+`20260922000000_activos_tipos.sql`: es la transformación de la tabla
+`activos` *plana* a unidades individuales, y `schema_activos.sql` ya deja esa
+estructura final (aplicarla en un bootstrap fallaría en el backfill).
 
 Después editá `.env.local` para que apunte a la base local. Se crea desde el
 ejemplo versionado:
