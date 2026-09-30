@@ -97,7 +97,7 @@ Future<bool> existeOperador(String nombre) async {
     try {
       final rows = await _db.executeSql(
         'SELECT 1 FROM dispositivo_usuario '
-        'WHERE LOWER(TRIM(nombre)) = LOWER($1) LIMIT 1',
+        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) LIMIT 1',
         params: [n],
       );
       print('[SESSION] existeOperador: rows=${rows.length} for "$n"');

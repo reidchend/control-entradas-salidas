@@ -41,11 +41,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  void dispose() {
     _nombreCtrl.dispose();
     _pinCtrl.dispose();
     _confirmCtrl.dispose();
