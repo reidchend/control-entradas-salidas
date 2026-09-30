@@ -286,15 +286,15 @@ def _exec_sql(conn, sql, params):
 
 
 def _exec_autocommit(sql, params):
-    pool = _get_pool()
-    conn = pool.getconn()
+    # Conexión directa sin pool para writes: evita problemas de transacciones del pool
+    conn = _connect_db()
+    conn.autocommit = True
     try:
-        conn.autocommit = True
         rows, affected = _exec_sql(conn, sql, params)
         print(f'[COMMIT_OK] affected={affected}')
         return rows, affected
     finally:
-        pool.putconn(conn)
+        conn.close()
 
 
 def _end_tx(txid, commit):
