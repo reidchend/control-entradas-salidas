@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,11 +30,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String _error = '';
   bool _loading = false;
   bool _existeNombre = false;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     Future(() => _autodetectarOperador());
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -63,6 +72,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Determina si el nombre ingresado ya es un operador registrado.
   Future<void> _verificarNombreExistente() async {
+    _debounceTimer?.cancel();
     final nombre = _nombreCtrl.text.trim();
     if (nombre.isEmpty) {
       if (_existeNombre) {
@@ -70,15 +80,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       return;
     }
-    try {
-      final session = ref.read(sessionProvider.notifier);
-      final existe = await session.existeOperador(nombre);
-      if (mounted && existe != _existeNombre) {
-        setState(() => _existeNombre = existe);
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final session = ref.read(sessionProvider.notifier);
+        final existe = await session.existeOperador(nombre);
+        if (mounted && existe != _existeNombre) {
+          setState(() => _existeNombre = existe);
+        }
+      } catch (_) {
+        // Sin conexión: mantener el estado actual; _submit volverá a decidir.
       }
-    } catch (_) {
-      // Sin conexión: mantener el estado actual; _submit volverá a decidir.
-    }
+    });
   }
 
   Future<void> _submit() async {
