@@ -412,22 +412,29 @@ class PosVentasRepository {
   Future<void> eliminarVentaYMovimientos(int ventaId) async {
     final movs = await _db.client
         .from('movimientos')
-        .select('id, producto_id, cantidad, almacen')
+        .select('id, producto_id, cantidad, cantidad_anterior, almacen')
         .eq('venta_id', ventaId);
     for (final m in movs) {
       final productoId = m['producto_id'] as int;
       final almacen = (m['almacen'] as String?) ?? 'principal';
-      final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;
+      // Restaurar el stock al valor PREVIO a la venta (`cantidad_anterior`).
+      // Antes se escribía la cantidad vendida, corrompiendo el saldo: el stock
+      // quedaba con el valor de la última venta y la venta siguiente leía ese
+      // "inicial" erróneo (pérdida silenciosa de existencias).
+      final cantidad = (m['cantidad'] as num?)?.toDouble() ?? 0;
+      final anterior = (m['cantidad_anterior'] as num?)?.toDouble();
       final exRows = await _db.client
           .from('existencias')
-          .select('id')
+          .select('id, cantidad')
           .eq('producto_id', productoId)
           .eq('almacen', almacen)
           .limit(1);
       if (exRows.isNotEmpty) {
-        await _db.updateById(
-            'existencias', exRows.first['id'] as int, {
-          'cantidad': cant,
+        // anterior nulo (datos sin el campo): devolver el stock sumando la venta.
+        final restaurado = anterior ??
+            (((exRows.first['cantidad'] as num?)?.toDouble() ?? 0) + cantidad);
+        await _db.updateById('existencias', exRows.first['id'] as int, {
+          'cantidad': restaurado,
         });
       }
     }
