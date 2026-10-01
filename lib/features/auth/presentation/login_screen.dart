@@ -149,7 +149,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Sin base configurada el registro de operador no puede funcionar, así
     // que en vez de dejar escribir un PIN que nunca se va a validar, se ofrece
     // la pantalla de conexión. Es la salida del círculo del primer arranque.
-    if (ref.watch(estadoBdProvider) == EstadoBd.noConfigurada) {
+    //
+    // También se corta cuando la base sí está configurada pero el servidor no
+    // responde. Antes el login se mostraba igual y el fallo aparecía recién al
+    // enviar el PIN, como "Error: ..." sin decir que el problema era el
+    // servidor. Con el chequeo de salud se sabe antes y se dice qué hacer.
+    final estadoBd = ref.watch(estadoBdProvider);
+    if (estadoBd == EstadoBd.noConfigurada || estadoBd == EstadoBd.error) {
       return const Scaffold(body: BdNoDisponible());
     }
 

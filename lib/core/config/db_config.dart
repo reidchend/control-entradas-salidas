@@ -33,6 +33,22 @@ class DbNotConfiguredError implements Exception {
   String toString() => detalle;
 }
 
+/// La base está configurada pero el servidor no responde.
+///
+/// Distinto de [DbNotConfiguredError]: acá no falta nada por completar, hay que
+/// esperar a que la PC servidor vuelva (o revisar el túnel y el token). La UI
+/// lo trata mostrando "Reintentar" en vez de un error técnico.
+class DbNoDisponibleError implements Exception {
+  const DbNoDisponibleError([
+    this.detalle = 'El servidor de base de datos no respondió.',
+  ]);
+
+  final String detalle;
+
+  @override
+  String toString() => detalle;
+}
+
 /// Configuracion de conexion a PostgreSQL editable en runtime.
 ///
 /// Permite cambiar host, puerto, usuario y base sin recompilar la app.

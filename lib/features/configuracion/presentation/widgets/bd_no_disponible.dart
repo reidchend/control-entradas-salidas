@@ -31,11 +31,16 @@ class _BdNoDisponibleState extends ConsumerState<BdNoDisponible> {
 
   Future<void> _reintentar() async {
     setState(() => _reintentando = true);
-    // Reconstruye el pool desde cero: si la base estaba caída, la sesión
-    // anterior quedó en error y no se reintenta sola.
+    // Invalida el pool, que es dependencia del provider verificado: se rehacen
+    // la sesión y el chequeo de salud. Refrescar la URL viene incluido, porque
+    // `postgresPoolProvider` arranca con `forzarProxy: true`; si el túnel rotó,
+    // el reintento toma la URL nueva sin que haya que tocar nada.
     ref.invalidate(postgresPoolProvider);
     try {
-      await ref.read(postgresPoolProvider.future);
+      // Se espera al verificado y no al pool: si no, el indicador dejaría de
+      // girar antes de que el servidor haya contestado, que es justo lo que el
+      // usuario está esperando ver.
+      await ref.read(sesionVerificadaProvider.future);
     } catch (_) {
       // El estado real lo muestra el provider; acá solo hay que dejar de
       // girar el indicador.

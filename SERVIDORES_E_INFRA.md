@@ -23,6 +23,32 @@ guardar secretos).
 **Punto clave:** El túnel no habla directamente con PostgreSQL, habla con
 `tool/server.py` (puerto 8123 por defecto).
 
+### 1.1. Qué significa "conectada" en la app
+
+`postgresPoolProvider` solo **construye** el objeto de sesión. Ni
+`Pool.withUrl` ni `HttpSqlSession` abren una conexión al construirse, así que
+una app con la base apagada se reportaba como conectada y el fallo aparecía
+recién en la primera query, como un error técnico sin contexto.
+
+Por eso hay un provider aparte, `sesionVerificadaProvider`, que hace un
+`SELECT 1` con un timeout de 8 s. `estadoBdProvider` lo lee, y así:
+
+| Estado | Significa |
+|---|---|
+| `conectando` | Se está abriendo o comprobando |
+| `lista` | El servidor **respondió** |
+| `error` | Configurado, pero el servidor no contesta (`DbNoDisponibleError`) |
+| `noConfigurada` | Falta completar la configuración (`DbNotConfiguredError`) |
+
+El login corta a la pantalla de conexión también en `error`, no solo en
+`noConfigurada`: antes se dejaba escribir el PIN y el fallo salía al enviarlo.
+El botón "Reintentar" invalida el pool, lo que arrastra al provider verificado
+(refresca URL, sesión y chequeo).
+
+Va deliberadamente **fuera** de `initializePostgres`: los repositorios no deben
+esperar al chequeo para trabajar, y meterlo en la construcción rompe el seam que
+los tests usan para apuntar a un proxy local.
+
 ---
 
 ## 2. Proxy SQL (`tool/server.py`)

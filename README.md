@@ -448,7 +448,7 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 flutter test
 ```
 
-Tests actuales (106 en 16 archivos, contados con `Select-String` sobre
+Tests actuales (109 en 16 archivos, contados con `Select-String` sobre
 `test/*_test.dart`):
 
 | Archivo | Casos | Que cubre |
@@ -461,7 +461,7 @@ Tests actuales (106 en 16 archivos, contados con `Select-String` sobre
 | `ticket_escpos_test.dart` | 6 | Bytes ESC/POS |
 | `cache_service_test.dart` | 5 | TTL de `CacheService` con SharedPreferences |
 | `db_config_panel_test.dart` | 5 | Panel de configuracion de BD |
-| `postgres_guard_test.dart` | 4 | Repos con DB no configurada |
+| `postgres_guard_test.dart` | 7 | Estado de la BD: configurada, comprobada, caida, reintento |
 | `pos_catalogo_test.dart` | 3 | Catalogo del POS |
 | `pos_tasa_bcv_test.dart` | 3 | Tasa del BCV con cache |
 | `pos_login_bootstrap_test.dart` | 2 | Bootstrap de login |
