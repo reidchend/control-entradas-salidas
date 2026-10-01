@@ -163,43 +163,76 @@ del proxy SQL.
 
 ### Componentes
 
-- `whatsapp_bot/index.js` (Node.js): servidor HTTP/REST que recibe pedidos de envío (`POST /send`, etc.), habla con WhatsApp Web (Baileys), guarda estado en `auth/` y reintenta colas.
-- `whatsapp_bot/config.json`: configuración (grupos, puertos, timeouts). Contiene campos como `groupId`, `reportGroupId`, rutas, etc. **No contiene secretos** (el token va por header).
-- `auth/`: credenciales/sesión de WhatsApp Web (generadas al primer login). **No commitear**.
+- `whatsapp_bot/server.js`: **entrypoint** (`npm start` corre esto). Es el
+  servidor Express que recibe los pedidos de envío, y monta además el panel web
+  del bot. Escucha en `process.env.PORT` o **3000**.
+- `whatsapp_bot/bot.js`: la lógica de WhatsApp (Baileys). `server.js` la importa.
+  Acá viven el envío, la reintentar de cola y la lectura de `config.json`.
+- `whatsapp_bot/panel_bot.html`: el panel que se sirve en `/panel` y `/qr`.
+- `whatsapp_bot/config.json`: solo `groupId` y `reportGroupId`. **No contiene
+  secretos** (el token va por header). Sí se versiona.
+- `whatsapp_bot/start_bot.bat` / `iniciar_bot.bat`: arranque en Windows.
+- `auth/`: sesión autenticada de WhatsApp Web, creada al pasar el QR. Es lo que
+  evita tener que escanear el QR de nuevo. **No commitear** (ya está en
+  `.gitignore`): subirla filtra la sesión de la cuenta.
 - `node_modules/`: dependencias. **No commitear**.
-- `cloudflared.exe` (opcional): túnel específico para el bot (o comparte con el API). **Binario, no commitear**.
+- `cloudflared.exe`: binario del túnel del bot. **No commitear**.
+
+Endpoints que expone `server.js`:
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/` | Estado del bot |
+| GET | `/panel`, `/qr` | Panel web y QR de vinculación |
+| GET | `/config` | Lee la config (la app la consulta al arrancar) |
+| GET | `/groups` | Grupos disponibles |
+| POST | `/send` | Mensaje de texto |
+| POST | `/send-image` | Imagen |
+| POST | `/send-document` | Documento |
+| POST | `/send-report` | Reporte al grupo de reportes |
+| POST | `/send-to` | Envío a un destino explícito |
+| POST | `/set-group`, `/set-report-group` | Fija los grupos |
 
 ### Autenticación entre app y bot
 
-El bot valida `x-auth-token` (header). Ese token se inyecta en la app con
-`--dart-define=WHATSAPP_BOT_TOKEN=<token>` y en el bot desde variables de
-entorno o configuración. Nunca va hardcodeado en el repo.
+El bot valida `x-auth-token` (header, o `?token=` en la query). El valor sale de
+`process.env.WHATSAPP_BOT_TOKEN` en el bot, y en la app se inyecta al compilar
+con `--dart-define=WHATSAPP_BOT_TOKEN=<token>`. Si no coinciden, responde 401.
+Nunca va hardcodeado en el repo.
 
 ### Descubrimiento de URL del bot
 
-Igual que el proxy: la app lee la URL del bot desde el **mismo Gist** (`bot_url.json`) → clave `url` (o según lo que publique el túnel del bot). `WhatsappRepository` consulta ese Gist para obtener la base del bot (`_gistRawUrl`).
+La app lee la URL del bot del Gist, pero por un camino distinto al del proxy:
+`WhatsappRepository` pega directo al `raw` de `bot_url.json`
+(`gist.githubusercontent.com/<owner>/<id>/raw/bot_url.json`), sin pasar por la API
+de GitHub ni por `SharedPreferences`.
 
 ### Flujo de envío
 
 1. App (Inventario/POS) llama a `WhatsappRepository.enviarMensajeTexto()` / `_enviarReporte()` / `_enviarImagenDirecto()`
-2. Construye JSON y hace `POST <bot_url>/send` con header `x-auth-token`
-3. Bot recibe, valida token, envía por WhatsApp (Baileys) y responde `{ok, ...}`
-4. Si falla, el repositorio devuelve `false` y **no loguea a stdout** (usa `debugPrint`, que no aparece en release). Los reintentos corren con `_retryTimer` (1 min).
+2. Construye JSON y hace `POST <bot_url>/send` (o `/send-image`, `/send-report`) con header `x-auth-token`
+3. Bot recibe, valida el token, envía por WhatsApp (Baileys) y responde `{ok, ...}`
+4. Si falla, el repositorio devuelve `false` y **no loguea a stdout**: usa `debugPrint`, que no aparece en release. Los reintentos corren con `_retryTimer` (1 min).
 
 ### Arranque (PC servidor)
 
 ```cmd
 cd C:\Lycoris\whatsapp_bot
-node index.js
+node server.js
 ```
 
-Y opcionalmente el túnel para el bot:
+O `start_bot.bat`, que además hace `npm install`, carga `.env` y levanta el
+túnel en un paso.
+
+El túnel del bot:
 
 ```cmd
-cloudflared.exe tunnel --url http://localhost:PUERTO_DEL_BOT
+start_tunnel.js
 ```
 
-Actualizar el Gist con esa URL pública.
+Ese script levanta `cloudflared` y publica la URL resultante en el Gist
+(`bot_url.json`), que es lo que la app lee. El proxy SQL tiene su propio
+equivalente, `tool/iniciar_tunnel_api.js`, que publica `api_url.json`.
 
 ---
 
@@ -252,7 +285,7 @@ En el workflow de GitHub se inyectan desde `secrets.*`.
 |---|---|---|---|
 | PostgreSQL | 5432 | `postgres.exe` | Local, sólo localhost (ideal) |
 | Proxy SQL (`server.py`) | 8123 | `python.exe` | Punto de entrada del túnel |
-| Bot WhatsApp | (config en `index.js`) | `node.exe` | REST para envíos |
+| Bot WhatsApp | 3000 (`$PORT`) | `node.exe` | `server.js`; REST para envíos y panel web |
 | Cloudflared | dinámico (salida HTTPS) | `cloudflared.exe` | Reenvía al proxy/bot |
 
 **Checklist de arranque típico (PC servidor):**

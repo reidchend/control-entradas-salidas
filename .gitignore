@@ -85,3 +85,17 @@ android/key.properties
 neon-dataapi-keys/
 neon-dataapi-keys/private.pem
 neon-dataapi-keys/app_token.txt
+
+# Artefactos locales que NO son codigo fuente.
+# `neon.dump` es un dump de la base de produccion: pesado y con datos reales.
+neon.dump
+pg_hba_*.txt
+
+# Bot de WhatsApp: dependencias, sesion autenticada y binarios.
+# `whatsapp_bot/auth/` guarda las credenciales de WhatsApp Web (Baileys):
+# es lo que evita tener que pasar el QR de nuevo, y sube al repo es filtrar la
+# sesion de la cuenta.
+/whatsapp_bot/node_modules/
+/whatsapp_bot/auth/
+/whatsapp_bot/cloudflared.exe
+# config.json SI se versiona (tiene grupos y puertos, no secretos).
