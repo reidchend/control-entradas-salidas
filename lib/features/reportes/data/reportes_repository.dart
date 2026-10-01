@@ -310,16 +310,23 @@ class ReportesRepository {
     };
   }
 
-  /// Buscar productos para autocomplete
+  /// Buscar productos para autocomplete.
+  ///
+  /// El mismo valor va en dos columnas, pero no se puede repetir el `$1`: el
+  /// proxy (`convert_placeholders` en tool/server.py) convierte cada aparición
+  /// de `$n` en un `%s`, así que un placeholder repetido deja más `%s` que
+  /// parámetros y psycopg rechaza la consulta. Por eso el patrón viaja dos
+  /// veces, con su propio número.
   Future<List<Map<String, dynamic>>> buscarProductos(String query, {int limit = 20}) async {
+    final patron = '%$query%';
     final rows = await _db.executeSql('''
       SELECT id, nombre, codigo, unidad_medida, es_pesable, stock_minimo
       FROM productos
       WHERE activo = true
-        AND (nombre ILIKE \$1 OR codigo ILIKE \$1)
+        AND (nombre ILIKE \$1 OR codigo ILIKE \$2)
       ORDER BY nombre
-      LIMIT \$2
-    ''', params: ['%$query%', limit]);
+      LIMIT \$3
+    ''', params: [patron, patron, limit]);
     return rows;
   }
 }

@@ -286,29 +286,17 @@ def _exec_sql(conn, sql, params):
 
 
 def _exec_autocommit(sql, params):
-    # Conexión directa sin pool para writes: evita problemas de transacciones del pool
+    # Conexión directa sin pool para writes: evita problemas de transacciones del
+    # pool. Se diferencia de `_exec_sql` solo en que autocommit está activo, así
+    # que cada statement se confirma solo y no hace falta `commit()`.
+    #
+    # Delega en `_exec_sql` para no duplicar la lectura de `cur.description`:
+    # esta función antes devolvía `rows: []` siempre, así que todo SELECT fuera
+    # de `runTx` llegaba a la app sin resultados.
     conn = _connect_db()
     conn.autocommit = True
     try:
-        print(f'[DIRECT_DB] conn={id(conn)} sql={sql[:150]} params={params}')
-        with conn.cursor() as cur:
-            translated = convert_placeholders(sql)
-            cur.execute(translated, params or [])
-            affected = cur.rowcount if cur.rowcount is not None else 0
-            print(f'[DIRECT_DB] affected={affected} rowcount={cur.rowcount}')
-            # Verificar inmediatamente
-            if 'UPDATE' in sql.upper() and 'WHERE' in sql.upper():
-                import re
-                m = re.search(r'WHERE\s+(\w+)\s+IN\s*\([^)]+\)', sql, re.IGNORECASE)
-                if m:
-                    col = m.group(1)
-                    check_sql = f"SELECT {col} FROM movimientos WHERE {col} IN ({','.join(['%s']*len(params[1:])) if len(params)>1 else '%s'})"
-                    check_params = params[1:] if len(params) > 1 else params
-                    cur.execute(check_sql, check_params)
-                    rows = cur.fetchall()
-                    print(f'[DIRECT_DB] VERIFICACIÓN post-UPDATE: {rows}')
-        print(f'[COMMIT_OK] affected={affected}')
-        return [], affected
+        return _exec_sql(conn, sql, params)
     finally:
         conn.close()
 

@@ -330,17 +330,8 @@ class PgQueryBuilder implements Future<dynamic> {
         }
         final sql = StringBuffer('UPDATE $_table SET ${sets.join(', ')}');
         _appendWhere(sql);
-        print('[PG_SQL] UPDATE: ${sql.toString()}');
-        print('[PG_PARAMS] ${_orderedParams()}');
-        try {
-          await _run(sql.toString());
-          print('[PG_RESULT] UPDATE executed');
-          return null;
-        } catch (e, st) {
-          print('[PG_ERROR] UPDATE failed: $e');
-          print('[PG_ERROR_STACK] $st');
-          rethrow;
-        }
+        await _run(sql.toString());
+        return null;
       case _PgWriteKind.delete:
         final sql = StringBuffer('DELETE FROM $_table');
         _appendWhere(sql);
@@ -390,18 +381,55 @@ class PgQueryBuilder implements Future<dynamic> {
   }
 
   Future<List<Map<String, dynamic>>> _query(String sql) async {
-    final result = await _session.execute(sql, parameters: _orderedParams());
+    final b = _bindPlan(sql);
+    final result = await _session.execute(b.sql, parameters: b.params);
     return result.rows;
   }
 
   Future<void> _run(String sql) async {
-    await _session.execute(sql, parameters: _orderedParams());
+    final b = _bindPlan(sql);
+    await _session.execute(b.sql, parameters: b.params);
   }
 
-  /// Parámetros en orden de su placeholder `$1..$N`.
-  List<Object?> _orderedParams() {
-    return [for (var i = 1; i <= _paramSeq; i++) _bindings[i]];
+  /// Renumera los placeholders segun su orden de aparicion en [sql] y devuelve
+  /// los parametros en ese mismo orden.
+  ///
+  /// Hace falta porque los numeros se asignan en el orden en que se registran,
+  /// que no es el orden en que aparecen en el SQL: en un `UPDATE` los filtros
+  /// del WHERE se construyen antes que los SET, asi que el placeholder del SET
+  /// queda con el numero mas alto y aparece primero en el texto
+  /// (`SET col = $3 WHERE id IN ($1, $2)`). `package:postgres` y `psycopg`
+  /// resuelven los placeholders por posicion en el texto, no por numero, asi
+  /// que los parametros tenian que ir en ese orden o cada valor caia en la
+  /// columna equivocada.
+  ///
+  /// Cada aparicion recibe un numero propio, incluso si repite el original. Un
+  /// `$n` repetido solo lo tolera `package:postgres`; via proxy
+  /// `convert_placeholders` lo traduce a varios `%s` y psycopg recibe mas
+  /// marcadores que parametros, que es un error en tiempo de ejecucion.
+  ({String sql, List<Object?> params}) _bindPlan(String sql) {
+    final matches = _placeholderRe.allMatches(sql);
+    if (matches.isEmpty) return (sql: sql, params: const []);
+
+    // El marcador i-esimo del SQL se renumera como $i y se empareja con el
+    // parametro i-esimo de la lista, que es como los leen ambos drivers.
+    final buffer = StringBuffer();
+    final params = <Object?>[];
+    var anterior = 0;
+    var siguiente = 1;
+    for (final m in matches) {
+      buffer
+        ..write(sql.substring(anterior, m.start))
+        ..write('\$$siguiente');
+      params.add(_bindings[int.parse(m.group(1)!)]);
+      siguiente++;
+      anterior = m.end;
+    }
+    buffer.write(sql.substring(anterior));
+    return (sql: buffer.toString(), params: params);
   }
+
+  static final _placeholderRe = RegExp(r'\$(\d+)');
 
   // -------------------------------------------------------------------
   // INTERFAZ FUTURE
