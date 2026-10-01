@@ -24,8 +24,9 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 - **Requisiciones**: formulario, cards, visualizacion y auditoria.
 - **Validacion de facturas**: validacion de entradas con OCR y registro de pagos.
 - **Historial de facturas**: facturas y estados de pago.
+- **Activos**: categorias, tipos con unidades de medida y bienes inventariados.
 - **Reportes**: ventas, movimientos, estadisticas y cierres de caja (corte de inventario).
-- **Configuracion**: categorias, periodos, productos, proveedores y sistema.
+- **Configuracion**: categorias, periodos, productos, proveedores, almacenes y sistema.
 - **WhatsApp**: bandeja de mensajes con cola y envio via bot.
 - **Calculadora**: dialog invocable con F1/atajo en campos de cantidad y precio.
 
@@ -43,15 +44,20 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 
 | Necesidad | Paquete |
 |---|---|
-| Supabase (Postgres REST + Realtime) | `supabase_flutter ^2.8` |
+| PostgreSQL (driver nativo `dart:io`) | `postgres ^3.4` |
 | Estado | `flutter_riverpod ^2.5` |
-| Cache local (stale-while-revalidate) | `shared_preferences ^2.2` |
-| Almacenamiento seguro (credenciales/tokens) | `flutter_secure_storage ^9` |
+| Cache local de catalogos | `shared_preferences ^2.2` |
+| Almacenamiento seguro (password/token) | `flutter_secure_storage ^9` |
 | Exportacion Excel | `excel ^4` |
 | HTTP | `http ^1.2` |
 | Impresion termica (Windows) | `windows_printer ^0.2` |
 | Version de la app (updater) | `package_info_plus ^9` |
 | UUID por dispositivo | `uuid ^4.4` |
+| Imagenes (adjuntos de WhatsApp) | `image ^4.3` |
+
+> **No hay dependencias de Supabase.** La app habla PostgreSQL directo; el
+> proveedor anterior (Neon) quedo decommissionado. Ver
+> [`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
 
 Ver `pubspec.yaml` (version actual: **2.0.1**).
 
@@ -59,44 +65,102 @@ Ver `pubspec.yaml` (version actual: **2.0.1**).
 
 ## Arquitectura
 
-**Directo a Supabase**: toda consulta y escritura va directamente a Supabase via REST. No hay base de datos local ni capa de sincronizacion.
+**PostgreSQL directo**, sin capa de sincronizacion. Todo pasa por una abstraccion
+de sesion (`SqlSession`) con dos implementaciones elegidas en runtime.
 
 ```
 lib/
 ├── main.dart / main_pos.dart        # entry points (inventario / POS)
 ├── core/
 │   ├── auth/                        # login, PIN, sesion, device_id
-│   ├── config/                      # app_config.dart (URL/key Supabase, appId, repo releases)
+│   ├── config/
+│   │   ├── app_config.dart          # dart-defines, Gist, repo de releases
+│   │   └── db_config.dart           # conexion editable desde la app
 │   ├── data/
-│   │   ├── supabase_service.dart    # servicio CRUD generico (con conversion bool→int)
-│   │   ├── supabase_providers.dart  # providers de Supabase, cache, realtime
+│   │   ├── sql_session.dart         # abstraccion: execute() + runTx()
+│   │   ├── native_sql_session.dart  # package:postgres (Windows/Android, TCP)
+│   │   ├── http_sql_session.dart    # POST /proxy-sql (web y modo proxy)
+│   │   ├── postgres_service.dart    # CRUD generico (bool<->int por information_schema)
+│   │   ├── pg_client.dart           # fachada .from().select().eq() estilo PostgREST
+│   │   ├── postgres_guard.dart      # Provider<Repo?> para DB no configurada
 │   │   ├── cache_service.dart       # cache local con SharedPreferences + TTL
-│   │   └── realtime_service.dart    # suscripciones Realtime generico
+│   │   └── polling_providers.dart   # sincronizacion entre dispositivos
 │   ├── models/                      # modelos de dominio (Producto, Categoria, etc.)
-│   ├── network/                     # cliente Supabase, HTTP
+│   ├── network/                     # postgres_client.dart, descubrimiento_servidor.dart
 │   ├── router/  theme/  state/  logging/  utils/
 │   └── updater/                     # actualizacion remota Windows/Android
-├── features/                        # auth, calculadora, configuracion, historial,
-│                                    # inventario, pos, producciones, reportes,
-│                                    # requisiciones, stock, validacion, whatsapp
+├── features/                        # activos, auth, calculadora, configuracion,
+│                                    # historial, inventario, pos, producciones,
+│                                    # reportes, requisiciones, stock, validacion,
+│                                    # whatsapp
 │   └── <feature>/
 │       ├── data/                    # repository + providers
 │       └── presentation/            # screens, widgets, dialogs
 └── widgets/
 ```
 
+### Como se conecta la app
+
+`SqlSession` tiene dos implementaciones y la eleccion se hace en
+`core/network/postgres_client.dart`, segun la plataforma y lo que haya
+configurado el usuario en **Ajustes → Base de datos**:
+
+| Plataforma | Implementacion | Camino a PostgreSQL |
+|---|---|---|
+| Web | `HttpSqlSession` | `POST /proxy-sql` → `tool/server.py` → PostgreSQL |
+| Windows/Android, modo proxy | `HttpSqlSession` | HTTPS contra `tool/server.py` (tunel Cloudflare) |
+| Windows/Android, modo TCP | `NativeSqlSession` | `package:postgres` directo al 5432 |
+
+El modo proxy existe porque el driver nativo usa sockets de `dart:io`, que no
+existen en el navegador: en web no hay alternativa. En Windows y Android es
+ opcional: el TCP directo evita el viaje HTTP por consulta, a costa de obligar
+a que el equipo llegue a la base por una red privada (Tailscale).
+
+**El usuario solo escribe el token.** La URL del servidor se descubre al
+arrancar leyendo `api_url.json` de un Gist de GitHub
+(`core/network/descubrimiento_servidor.dart`), que publica
+`tool/iniciar_tunnel_api.js` cada vez que arranca el tunel. Si el tunel rota de
+URL, las apps toman la nueva al proximo arranque sin tocar ningun equipo. La URL
+se cachea 12 h como fallback para cuando no hay red.
+
+### Configuracion de la conexion
+
+La credencial no viaja en el binario. `DbConfig` la guarda en el dispositivo:
+
+- host, puerto, base, usuario, ssl → `SharedPreferences`
+- **password y token del proxy** → `flutter_secure_storage` (DPAPI en Windows,
+  keychain en Android). A proposito NO caen de vuelta a `SharedPreferences`
+  si el almacen seguro falla: guardar la clave en texto plano para "que
+  funcione" es peor que fallar con un mensaje.
+
+Precedencia de la URL: configuracion guardada → `--dart-define=DATABASE_URL` →
+sin configurar (la app muestra la pantalla de conexion).
+
 ### Modelo de datos
 
-- **Supabase** es la unica fuente de verdad (PostgreSQL).
-- Los repos consultan Supabase directamente via `supabase_flutter`.
-- **Modelos de dominio** en `lib/core/models/` desacoplan la UI de Supabase.
+- **PostgreSQL** es la unica fuente de verdad.
+- Los repos consultan la base a traves de `PostgresService` o del `PgClient` raw.
+- **Modelos de dominio** en `lib/core/models/` desacoplan la UI del SQL.
 - Los repos convierten `Map<String, dynamic>` a modelos de dominio.
 
-### Conversion bool→int
+### Conversion bool↔int
 
-Las columnas `integer` de Supabase que representan booleanos (`activo`, `es_pesable`, `es_contorno`, etc.) requieren `0`/`1` en vez de `true`/`false`.
+El driver nativo devuelve `int` (0/1) en columnas que PostgreSQL tiene como
+`boolean`, y al revés. No hay una regla fija por tabla: el tipo real se consulta
+a `information_schema`.
 
-**Regla**: `SupabaseService._encodeMap()` aplica conversion automatica en todos los metodos de escritura (`insert`, `insertBatch`, `updateById`, `updateWhere`, `upsert`, `upsertById`). Los filtros `.eq()` directos al cliente deben usar `1`/`0` explicitamente.
+**Regla**: `PostgresService` cachea por tabla las columnas `boolean` y normaliza
+automaticamente en las lecturas (`fetchAll`, `count`, `fetchByField`, ...) y en
+todos los metodos de escritura (`insert`, `insertBatch`, `upsertBatch`,
+`updateById`, `updateWhere`, `upsert`, `upsertById`). Al escribir, un `bool`
+sobre una columna `integer` se convierte a `1`/`0`; al leer, un `1`/`0` sobre
+una columna `boolean` vuelve a `bool`.
+
+`PgClient` (la fachada `.from()...`) **no** normaliza: sus filtros van
+directos al SQL, asi que ahi hay que pasar el valor del tipo correcto. Para los
+modelos de dominio estan los helpers `toBool()` / `toInt()` de
+`lib/core/utils/supabase_cast.dart` (el nombre del archivo quedo de la epoca de
+Supabase; el contenido es independiente del backend).
 
 ### Exactitud de decimales
 
@@ -121,37 +185,56 @@ Al cerrar una sesion se inserta una fila en `pos_cierres` (historica, inmutable)
 
 ### Auth por dispositivo
 
-Cada dispositivo genera un UUID unico (`DeviceIdService`) almacenado en `SharedPreferences`. El PIN se asocia al `device_id` en la tabla `dispositivo_usuario`. Un solo usuario por dispositivo.
+El operador se identifica por **nombre + PIN**, no por `device_id`: el PIN se
+compara contra `dispositivo_usuario.pin_hash` (case-insensitive sobre el nombre)
+y alloguear se **re-vincula** el `device_id` del operador al dispositivo actual.
+Asi una reinstalacion no obliga a registrar un usuario nuevo.
 
-### Cache local (stale-while-revalidate)
+Cada dispositivo tiene un UUID propio (`DeviceIdService`) en
+`SharedPreferences`, que permite ademas precargar el nombre al abrir la app
+(`nombrePorDeviceId`).
 
-Los catalogos (categorias, productos, proveedores, periodos, settings) se cachean localmente con **SharedPreferences**:
+### Cache local de catalogos
 
-1. Primera carga: consulta Supabase → guarda en cache con timestamp.
-2. Siguientes cargas: sirve desde cache si no expiro (TTL 5 min).
-3. Si expiro: sirve cache stale → refresca en background.
-4. Sin red: muestra datos cacheados (con "ultima actualizacion").
-5. Al escribir (create/update/delete): invalida cache de esa tabla.
+Los catalogos (categorias, productos, proveedores, periodos, settings de POS) se
+cachean en **SharedPreferences** con timestamp y TTL de 5 min:
+
+1. Primera carga: consulta la base → guarda en cache con `cachedAt`.
+2. Mientras no expire el TTL: se sirve del cache, sin tocar la base.
+3. Al expirar: `CacheService.get()` devuelve `null` y el repositorio va directo
+   a la base.
+4. Al escribir (create/update/delete): se borra la clave del catalogo afectado.
+
+> **Pendiente**: `CacheService` tiene `getStale()` para servir el dato viejo y
+> refrescar en background (*stale-while-revalidate*), pero **ningun repositorio
+> lo llama todavia**. Hoy el comportamiento ante cache expirado es ir a la base
+> de forma directa. Sin red con cache expirado, la pantalla queda sin datos.
 
 **Tablas con cache**: categorias, productos, proveedores, periodos, pos_settings.
-**Tablas sin cache** (Realtime): existencias, movimientos, ventas, comandas, whatsapp_queue.
+**Tablas sin cache**: existencias, movimientos, ventas, comandas, whatsapp_queue.
 
-### Supabase Realtime
+### Sincronizacion entre dispositivos (polling)
 
-Suscripciones WebSocket en tiempo real para sync entre dispositivos:
+PostgreSQL directo no tiene Realtime, asi que la sincronizacion se hace por
+**polling periodico** desde `core/data/polling_providers.dart`, inicializado una
+vez desde `AppShell`:
 
-| Tabla | Ubicacion | Efecto |
-|-------|-----------|--------|
-| `pos_sesiones` | AppShell centralizado | Invalida turno activo |
-| `pos_comandas` | AppShell centralizado | Invalida comandas/mesas |
-| `pos_venta_detalle` | AppShell centralizado | Invalida ventas |
-| `categorias` | AppShell centralizado | Invalida config categorias |
-| `productos` | AppShell centralizado | Invalida config productos |
-| `proveedores` | AppShell centralizado | Invalida config proveedores |
-| `facturas` | AppShell centralizado | Invalida historial facturas |
-| `existencias` | StockScreen interno | Reload automatico |
-| `movimientos` | StockScreen interno | Reload automatico |
-| `whatsapp_queue` | BandejaScreen interno | Refresh automatico |
+| Tabla | Intervalo | Providers que invalida |
+|-------|-----------|------------------------|
+| `pos_comandas` | 5 s | comandas, mesas, habitaciones |
+| `pos_sesiones` | 10 s | turno activo |
+| `pos_ventas` | 10 s | ventas, ventas de hoy |
+| `facturas` | 15 s | historial de facturas |
+| `categorias` | 30 s | categorias de configuracion |
+| `productos` | 30 s | productos de configuracion |
+| `proveedores` | 30 s | proveedores de configuracion |
+
+Cada tick corre `SELECT 1 FROM <tabla> WHERE updated_at >= <checkpoint> LIMIT 1`
+y solo invalida si hay algo nuevo. El checkpoint evita recargar providers cada
+5 segundos con una ventana de tiempo fija, que es lo que pasaba antes.
+
+Algunas pantallas tienen su propio polling ademas del central:
+`StockScreen` (30 s), `ValidacionScreen` (10 s) y `BandejaScreen` (15 s).
 
 ---
 
@@ -188,11 +271,12 @@ En web no hay que hacer nada: el navegador va siempre contra
 
 ### Tabla requerida: `dispositivo_usuario`
 
-Ejecutar en el SQL Editor:
+No esta en `schema.sql`: se crea aplicando las migraciones a mano, en este
+orden.
 
-```sql
-supabase/migrations/20250101000000_add_dispositivo_usuario.sql
-supabase/migrations/20250102000000_add_device_id.sql
+```powershell
+psql -U postgres -d control_entradas -f supabase\migrations\20250101000000_add_dispositivo_usuario.sql
+psql -U postgres -d control_entradas -f supabase\migrations\20250102000000_add_device_id.sql
 ```
 
 O copiar y pegar:
@@ -205,14 +289,15 @@ CREATE TABLE IF NOT EXISTS dispositivo_usuario (
   device_id     TEXT UNIQUE,
   configurado_en TIMESTAMPTZ DEFAULT now()
 );
-
-ALTER TABLE dispositivo_usuario ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "dispositivo_usuario_all" ON dispositivo_usuario
-  FOR ALL USING (true) WITH CHECK (true);
 ```
 
-### Todas las tablas de Supabase
+> Las migraciones activan RLS con una policy `USING (true)`. Eso venia de la
+> epoca de Supabase/PostgREST, donde el acceso pasaba por la API. Ahora la app
+> se conecta directo a PostgreSQL como dueño de la tabla, y el dueño **no** esta
+> sujeto a RLS: la policy no agrega ni quita nada. Se puede dejar como esta o
+> quitar; no es lo que protege los datos hoy.
+
+### Mapa de tablas
 
 | Tabla | Usada por |
 |-------|-----------|
@@ -249,6 +334,14 @@ CREATE POLICY "dispositivo_usuario_all" ON dispositivo_usuario
 | `compras_lista` | Inventario (lista de compra) |
 | `whatsapp_queue` | WhatsApp |
 | `stock_checkpoint` | Stock (toma de inventario) |
+| `almacenes` | Stock, Requisiciones, Producciones, POS (catalogo de almacenes) |
+| `activos` | Activos |
+| `activos_categorias` | Activos |
+| `activos_tipos` | Activos |
+
+Las cuatro ultimas no estan en `schema.sql`: `almacenes` viene de la
+migracion `20260901120000_add_almacenes.sql` y las de activos de
+`supabase/schema_activos.sql`.
 
 Ver `supabase/schema.sql` para el esquema completo (idempotente).
 
@@ -259,19 +352,28 @@ Ver `supabase/schema.sql` para el esquema completo (idempotente).
 ### Web (desarrollo)
 
 ```bash
-# <TOKEN> = WHATSAPP_BOT_TOKEN (el mismo de whatsapp_bot/.env, ver .env.example)
+# <TOKEN>    = WHATSAPP_BOT_TOKEN (el mismo de whatsapp_bot/.env, ver .env.example)
+# <PROXY>    = PROXY_SQL_TOKEN (el mismo de .env.local; sin el, /proxy-sql responde 401)
+
 # Inventario (puerto 8501)
-flutter build web --release -o build/web --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
+flutter build web --release -o build/web \
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN> \
+    --dart-define=PROXY_SQL_TOKEN=<PROXY>
 tool/venv/bin/python tool/server.py 8501 build/web
 
 # POS (puerto 8502)
 flutter build web --release -t lib/main_pos.dart -o build/pos \
-    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN>
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN> \
+    --dart-define=PROXY_SQL_TOKEN=<PROXY>
 cp web_pos/favicon.png web_pos/manifest.json build/pos/
 cp -r web_pos/icons build/pos/
 cp web_pos/index.html build/pos/index.html
 tool/venv/bin/python tool/server.py 8502 build/pos
 ```
+
+El `PROXY_SQL_TOKEN` **va embebido en web** porque el navegador no tiene
+almacen seguro para guardar un secreto. Es el precio de que el proxy.execute SQL
+con las credenciales del servidor: sin token, responde 401 y no ejecuta nada.
 
 `tool/server.py` expone `/proxy-bcv` (tasa del BCV con cache y *stale-while-revalidate*), `/proxy-sql` (acceso a PostgreSQL desde Flutter web) y recibe los logs de Flutter web (`POST /log`).
 
@@ -301,9 +403,16 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 
 **Como generar una release**:
 1. Push a `main`.
-2. Agregar los secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` en *Settings → Secrets and variables → Actions*.
+2. Agregar los secrets en *Settings → Secrets and variables → Actions*:
+   - `WHATSAPP_BOT_TOKEN` — lo usan los 4 jobs de build.
+   - `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — solo para el APK de Android.
 3. *Actions → "Build & Release nativa" → Run workflow* con la version deseada (ej. `2.0.1`).
 4. Descargar los binarios desde la pagina de la release.
+
+> Los builds nativos **no** llevan `DATABASE_URL` ni `PROXY_SQL_TOKEN`: la app
+> nativa lee la conexion del almacen seguro del equipo, asi que las credenciales
+> no se distribuyen dentro del binario. El token del proxy se configura desde
+> Ajustes → Base de datos.
 
 > El workflow tambien dispara con un tag `v*` pusheado.
 
@@ -313,16 +422,21 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 
 | Define | Default | Descripcion |
 |---|---|---|
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | constantes compiladas | Credenciales de Supabase |
+| `PROXY_SQL_TOKEN` | — | **Obligatorio en web.** Token que valida `/proxy-sql` en el header `X-Proxy-Token`. Sin el, el proxy responde 401 |
+| `GIST_ID` | `5b37693a...` | Gist donde se publica la URL del tunel (`api_url.json`) |
+| `GIST_TOKEN` | — | Solo si el Gist es privado. El default es publico y se lee sin autenticar |
+| `DATABASE_URL` | — | Connection string de PostgreSQL. Solo como fallback: la config del dispositivo tiene prioridad |
 | `APP_ID` | `inventario` | `pos` o `inventario` — define icono, binario y asset del updater |
 | `APP_LABEL` | segun `APP_ID` | Nombre mostrado en dialogos y titulos |
+| `WHATSAPP_BOT_TOKEN` | — | Token del bot de WhatsApp (`whatsapp_bot/.env`, ver `.env.example`) |
+| `UPDATE_URL` | GitHub `version.json` | URL del manifiesto de actualizaciones |
 | `UPDATE_REPO` | `reidchend/control-entradas-salidas` | Repo de releases para el updater |
-| `DATABASE_URL` | — | Solo si se necesita forzar la BD al compilar. Las apps Windows/Android pueden configurar la conexion desde la app (Ajustes → Sistema), que tiene prioridad sobre este valor |
+| `WEB_PORT` | `8502` | Legacy, ya no se usa |
 
-> **La base ya no es Supabase.** La app usa PostgreSQL. En web el
-> `DATABASE_URL` lo resuelve el proxy `/proxy-sql` de `tool/server.py`; en
-> Windows y Android se configura en el dispositivo, y por eso no hay
-> credenciales en el repositorio. Ver
+> **Las credenciales no viajan en el repositorio.** En web el token viene
+> embebido (`PROXY_SQL_TOKEN`) porque el navegador no tiene almacen seguro; en
+> Windows y Android se configura en el dispositivo desde Ajustes → Base de
+> datos, y por eso `DATABASE_URL` es solo un fallback. Ver
 > [`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
 
 ---
@@ -333,12 +447,29 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 flutter test
 ```
 
-Tests actuales (28):
-- Modelos de dominio: Producto, Categoria, Existencia, Movimiento, MensajeWhatsapp
-- TemporalesRepository (in-memory)
-- CacheService (SharedPreferences)
-- POS: login, catalogo, comanda, ventas, tasa BCV, ticket ESC/POS
-- Widget: AppShell boots
+Tests actuales (94 en 15 archivos):
+
+| Archivo | Casos | Que cubre |
+|---|---|---|
+| `db_config_test.dart` | 31 | Precedencia de la URL, persistencia, secure storage |
+| `postgres_client_test.dart` | 12 | `initializePostgres`, normalizacion de URL, seleccion de sesion |
+| `descubrimiento_servidor_test.dart` | 11 | Lectura del Gist, cache 12 h, contenido invalido |
+| `stock_whatsapp_models_test.dart` | 8 | Modelos: Producto, Categoria, Existencia, Movimiento, MensajeWhatsapp |
+| `ticket_escpos_test.dart` | 6 | Bytes ESC/POS |
+| `cache_service_test.dart` | 5 | TTL de `CacheService` con SharedPreferences |
+| `db_config_panel_test.dart` | 5 | Panel de configuracion de BD |
+| `postgres_guard_test.dart` | 4 | Repos con DB no configurada |
+| `pos_catalogo_test.dart` | 3 | Catalogo del POS |
+| `pos_tasa_bcv_test.dart` | 3 | Tasa del BCV con cache |
+| `pos_login_bootstrap_test.dart` | 2 | Bootstrap de login |
+| `pos_login_test.dart` | 1 | Login por PIN |
+| `pos_comanda_test.dart` | 1 | Comanda |
+| `pos_ventas_test.dart` | 1 | Ventas |
+| `widget_test.dart` | 1 | AppShell arranca |
+
+> **Cobertura acotada**: son tests unitarios de repositorios y modelos, con
+> dobles en memoria. No hay cobertura del SQL que genera `PgClient` ni de
+> `tool/server.py`, que son las dos capas donde mas bugs han aparecido.
 
 > Ejecutar con `LD_LIBRARY_PATH=/tmp/opencode/libs` si hay problemas con SQLite en Linux.
 
@@ -346,32 +477,66 @@ Tests actuales (28):
 
 ## Historial de migraciones
 
-### Migracion Drift → Supabase (completada)
+### Migracion Drift → Supabase → PostgreSQL (completada)
+
+Fases 1-10: de Drift a Supabase (2026-08), y despues de Supabase a PostgreSQL
+directo (2026-09), cuando Neon se quedo sin cuota de compute. Los archivos
+conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
+`supabase/`), pero el backend es PostgreSQL.
 
 - **Fase 0**: Modelos de dominio (12+ archivos en `lib/core/models/`)
-- **Fase 1**: Servicio base Supabase (`supabase_service.dart` + providers)
+- **Fase 1**: Servicio base CRUD (`postgres_service.dart` + `pg_client.dart`)
 - **Fase 2**: Repositorios migrados (10 features)
 - **Fase 3**: Limpieza Drift — eliminados `lib/core/db/`, `lib/core/sync/`, dependencias drift/sqlite3
-- **Fase 4**: Supabase Realtime — suscripciones WebSocket para sync entre dispositivos
-- **Fase 5**: Cache local — stale-while-revalidate con SharedPreferences
-- **Fase 6**: Null-safe providers — `Provider<Repo?>` con `supabase_guard.dart`
+- **Fase 4**: Sincronizacion entre dispositivos (WebSocket en Supabase, hoy polling)
+- **Fase 5**: Cache local con SharedPreferences
+- **Fase 6**: Null-safe providers — `Provider<Repo?>` con `postgres_guard.dart`
 - **Fase 7**: Auth por dispositivo — `DeviceIdService` con UUID + `device_id` en `dispositivo_usuario`
-- **Fase 8**: Fix bool→int — conversion automatica en `SupabaseService._encodeMap()` + filtros directos
+- **Fase 8**: Fix bool↔int — conversion automatica por tipo real de columna
 - **Fase 9**: Fix N+1 queries — batch queries en historial, requisiciones y facturas
 - **Fase 10**: Fix error handling — try/catch en comanda_screen, validacion_screen, bandeja_screen
+- **Fase 11**: Neon → PostgreSQL local — `SqlSession` con implementaciones nativa y HTTP, proxy `/proxy-sql`, descubrimiento por Gist, conexion configurable desde la app
 
 ### Migraciones recientes
 
+- `20260922000000_activos_tipos.sql` — tipos de activo con unidades de medida.
+- `20260901120000_add_almacenes.sql` — catalogo de almacenes (antes eran strings libres).
+- `20260901000000_add_stock_fecha_checkpoint.sql` — `stock_checkpoint.fecha_checkpoint` y columnas `venta_id`/`venta_sync_uuid` en `movimientos_archivo`.
 - `20260827000000_add_pos_cierres.sql` — tabla historica `pos_cierres` para el corte de caja/inventario al cerrar turno.
-- `20260901000000_add_stock_fecha_checkpoint.sql` — `stock_checkpoint.fecha_checkpoint` (fecha del snapshot) y columnas `venta_id`/`venta_sync_uuid` en `movimientos_archivo` (espejo de movimientos).
+- `20260826000000_add_pos_sesiones_whatsapp_queue.sql` — turnos de caja y cola de WhatsApp.
 
 ---
 
 ## Documentacion
 
 - `lib/` — codigo organizado por feature (core, features/...), siguiendo la estructura modular de `AGENTS.md`.
-- `supabase/schema.sql` — esquema base (idempotente).
+- `supabase/schema.sql` — esquema base (idempotente). El directorio quedo con el nombre de la epoca de Supabase.
 - `supabase/schema_activos.sql` — categorias, tipos y unidades de activos.
-- `supabase/migrations/` — migraciones SQL.
+- `supabase/migrations/` — migraciones SQL, en orden por timestamp.
 - `docs/migracion-bd-local.md` — transicion de Neon a PostgreSQL local.
+- `docs/montar-pc-servidor.md` — montaje paso a paso de la PC servidor.
 - `tool/windows/` — scripts para preparar la PC servidor.
+- `INSTRUCCIONES_AGENTE_SERVIDOR.md` — estado del servidor y diagnostico.
+- `tool/smoke_sql.py` — smoke test de la ruta SQL (app → proxy → PostgreSQL),
+  corre sin Flutter.
+
+### Deuda tecnica conocida
+
+- **34 referencias a Supabase en el codigo**: mensajes de error
+  (`'Supabase no configurado'`), el boton *"Verificar Supabase"* en
+  `sistema_tab.dart` (que ademas esta duplicado con *"Probar Conexion Local"*:
+  ambos llaman `testLocalConnection()`), y el nombre `supabase_cast.dart`.
+- **`syncIntervalSeconds`** en `app_config.dart` y `webPort`: constantes sin
+  ningun call site, remanentes de la epoca de Supabase.
+- **Cache sin stale-while-revalidate**: `getStale()` existe sin usarse.
+- **`device_id` sin indice UNIQUE**: la migracion
+  `20250102000000_add_device_id.sql` lo declara, pero en la base solo existe
+  el PRIMARY KEY, asi que hay 5 filas con el mismo `device_id`. No se puede
+  aplicar tal cual porque `SessionController.verificarPin` reescribe ese campo
+  al iniciar sesion y el login fallaria con `23505`.
+- **`LogBridge` a medio construir**: `push()` acumula en una lista que nunca se
+  envia y `flush()` esta vacio, asi que los logs de la app web nunca llegan a
+  la terminal. Por eso los `print()` de debug no ayudaban a diagnosticar.
+- **`tool/e2e_proxy_test.py` no se ejecuta**: necesita `dart` y
+  `E2E_DATABASE_URL`. Para verificar la ruta SQL sin Flutter esta
+  `tool/smoke_sql.py`.
