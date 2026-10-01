@@ -21,10 +21,8 @@ class SessionController extends StateNotifier<SessionState> {
   }) async {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
-    print('[SESSION] registrarOperador: nombre="$nombre", deviceId=$deviceId');
 
     if (await existeOperador(nombre)) {
-      print('[SESSION] registrarOperador: usuario ya existe, verificando PIN');
       return verificarPin(nombre: nombre, pin: pin);
     }
 
@@ -35,12 +33,9 @@ class SessionController extends StateNotifier<SessionState> {
         'device_id': deviceId,
         'configurado_en': DateTime.now().toIso8601String(),
       });
-      print('[SESSION] registrarOperador: insert result=$result');
       state = SessionState.authenticated(nombre: nombre, pinHash: pin);
       return result > 0;
-    } catch (e, st) {
-      print('[SESSION] registrarOperador ERROR: $e');
-      print('[SESSION] registrarOperador STACK: $st');
+    } catch (_) {
       return false;
     }
   }
@@ -55,17 +50,14 @@ class SessionController extends StateNotifier<SessionState> {
     if (_db == null) return false;
     final deviceId = await DeviceIdService.instance.id;
     final n = nombre.trim();
-    print('[SESSION] verificarPin: nombre="$n", pin="$pin", deviceId=$deviceId');
     try {
       final rows = await _db.executeSql(
         'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
         'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
         params: [n],
       );
-      print('[SESSION] verificarPin: rows=${rows.length} for "$n"');
       if (rows.isEmpty) return false;
       final u = rows.first;
-      print('[SESSION] verificarPin: found id=${u['id']}, nombre=${u['nombre']}, pin_hash=${u['pin_hash']}');
       if (u['pin_hash'] == pin) {
         if (u['id'] != null) {
           await _db.updateWhere(
@@ -80,11 +72,8 @@ class SessionController extends StateNotifier<SessionState> {
         );
         return true;
       }
-      print('[SESSION] verificarPin: PIN mismatch, expected=${u['pin_hash']}, got=$pin');
       return false;
-    } catch (e, st) {
-      print('[SESSION] verificarPin ERROR: $e');
-      print('[SESSION] verificarPin STACK: $st');
+    } catch (_) {
       return false;
     }
   }
@@ -93,18 +82,14 @@ class SessionController extends StateNotifier<SessionState> {
 Future<bool> existeOperador(String nombre) async {
     if (_db == null) return false;
     final n = nombre.trim();
-    print('[SESSION] existeOperador: nombre="$n"');
     try {
       final rows = await _db.executeSql(
         'SELECT 1 FROM dispositivo_usuario '
         'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) LIMIT 1',
         params: [n],
       );
-      print('[SESSION] existeOperador: rows=${rows.length} for "$n"');
       return rows.isNotEmpty;
-    } catch (e, st) {
-      print('[SESSION] existeOperador ERROR: $e');
-      print('[SESSION] existeOperador STACK: $st');
+    } catch (_) {
       return false;
     }
   }

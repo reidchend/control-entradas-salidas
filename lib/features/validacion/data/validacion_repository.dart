@@ -165,7 +165,6 @@ class ValidacionRepository {
     List<PagoData> pagos = const [],
     String usuario = 'Sistema',
   }) async {
-    print('[VALIDACION] selectedEntradas=$selectedEntradas');
     if (proveedor != 'Varios' && proveedor.isNotEmpty) {
       var prov = await buscarProveedor(rif: rif, nombre: proveedor);
       prov ??= await crearProveedor(nombre: proveedor, rif: rif);
@@ -234,18 +233,10 @@ class ValidacionRepository {
 
   Future<void> _vincularMovimientos(int facturaId, Set<int> ids) async {
     if (ids.isEmpty) return;
-    print('[VALIDACION] facturaId=$facturaId, ids=$ids');
-    try {
-      final result = await _db.client
-          .from('movimientos')
-          .update({'factura_id': facturaId})
-          .inFilter('id', ids.toList());
-      print('[VALIDACION] update result=$result');
-    } catch (e, st) {
-      print('[VALIDACION] ERROR en _vincularMovimientos: $e');
-      print('[VALIDACION] STACK: $st');
-      rethrow;
-    }
+    await _db.client
+        .from('movimientos')
+        .update({'factura_id': facturaId})
+        .inFilter('id', ids.toList());
   }
 
   /// Elimina una entrada pendiente (movimiento 'entrada' sin validar) y

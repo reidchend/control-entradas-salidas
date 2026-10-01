@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
@@ -26,7 +27,7 @@ class WhatsappRepository {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       reintentarTodos(limit: 20).catchError((e) {
-        print('[WA] retry timer error: $e');
+        debugPrint('[WA] retry timer error: $e');
         return 0;
       });
     });
@@ -161,7 +162,7 @@ class WhatsappRepository {
           .timeout(const Duration(seconds: 30));
       return resp.statusCode == 200;
     } catch (e) {
-      print('[WA] send texto error: $e');
+      debugPrint('[WA] send texto error: $e');
       return false;
     }
   }
@@ -219,7 +220,7 @@ class WhatsappRepository {
           .timeout(const Duration(seconds: 30));
       return resp.statusCode == 200;
     } catch (e) {
-      print('[WA] send report error: $e');
+      debugPrint('[WA] send report error: $e');
       return false;
     }
   }
@@ -244,7 +245,7 @@ class WhatsappRepository {
           .timeout(const Duration(seconds: 30));
       return resp.statusCode == 200;
     } catch (e) {
-      print('[WA] send document error: $e');
+      debugPrint('[WA] send document error: $e');
       return false;
     }
   }
