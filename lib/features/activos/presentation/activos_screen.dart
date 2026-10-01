@@ -7,10 +7,10 @@ import '../data/activos_categoria.dart';
 import '../data/activos_filtro.dart';
 import '../data/activos_providers.dart';
 import '../data/activos_repository.dart';
+import 'activo_form_screen.dart';
 import 'dialogs/activos_categoria_dialog.dart';
 import 'dialogs/activos_excel_dialog.dart';
 import 'dialogs/tipo_dialog.dart';
-import 'dialogs/unidad_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
 import 'widgets/activos_valores_grid.dart';
@@ -353,7 +353,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     final categorias = await repo.getCategorias();
     final ubicaciones = await repo.getUbicaciones();
     if (!mounted) return;
-    final nuevo = await showUnidadDialog(
+    final nuevo = await showActivoFormScreen(
       context,
       tipos: tipos,
       categorias: categorias,
@@ -407,7 +407,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       final categorias = await repo.getCategorias();
       final ubicaciones = await repo.getUbicaciones();
       if (!mounted) return;
-      final nuevo = await showUnidadDialog(
+      final nuevo = await showActivoFormScreen(
         context,
         tipos: tipos,
         categorias: categorias,
