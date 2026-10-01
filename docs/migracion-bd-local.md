@@ -1,5 +1,7 @@
 # Migracion de base de datos: Neon → PostgreSQL local
 
+> **NOTA (30/09/2026):** La migración de BD está completada. Los problemas actuales son de **aplicación** (login y validación). Ver `INSTRUCCIONES_AGENTE_SERVIDOR.md` en la raíz del repo para diagnóstico actual.
+
 Estado: **en curso**. Fases 1 y 2 listas en codigo, la parte de Windows esta
 pendiente de ejecutar en la PC.
 
