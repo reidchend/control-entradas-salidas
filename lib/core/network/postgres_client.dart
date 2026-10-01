@@ -28,7 +28,16 @@ import 'proxy_url_resolver.dart';
 ///
 /// [descubridor] existe para los tests: permite apuntar la consulta al Gist a
 /// un servidor local. En producción va nulo y se usa el Gist real.
-Future<SqlSession> initializePostgres({DescubridorServidor? descubridor}) async {
+///
+/// [forzarProxy] ignora la caché de la URL publicada y la vuelve a pedir. Con el
+/// túnel rápido la URL cambia en cada reinicio de la PC servidor, así que quien
+/// llama en un arranque (ver [postgresPoolProvider]) la fuerza: sin esto la app
+/// podía quedarse apuntando a un túnel muerto hasta que el usuario entrara a
+/// Ajustes → Base de datos a guardar la configuración a mano.
+Future<SqlSession> initializePostgres({
+  DescubridorServidor? descubridor,
+  bool forzarProxy = false,
+}) async {
   if (kIsWeb) {
     // En web no hay donde guardar un secreto, así que el token viaja
     // embebido al compilar (AppConfig.proxyToken).
@@ -43,6 +52,7 @@ Future<SqlSession> initializePostgres({DescubridorServidor? descubridor}) async 
       urlGuardada: guardada.proxyUrl,
       urlManual: guardada.proxyUrlManual,
       descubridor: descubridor,
+      forzar: forzarProxy,
     );
     if (base.isEmpty) {
       throw const DbNotConfiguredError(
@@ -109,5 +119,14 @@ String _normalizeUrl(String url) {
 
 /// Sesión SQL de la plataforma (null si no fue inicializado).
 final postgresPoolProvider = FutureProvider<SqlSession>((ref) async {
-  return initializePostgres();
+  // `forzarProxy: true` porque este provider se construye una sola vez por
+  // arranque, o cuando algo lo invalida a propósito (guardar configuración,
+  // tocar "Reintentar"). Ese es justo el momento de preguntarle al Gist de
+  // nuevo: es lo que hace que la app tome sola la URL del túnel actual en vez
+  // de exigir entrar a Ajustes → Base de datos y guardar a mano.
+  //
+  // Si el Gist no responde, [DescubridorServidor] cae a su caché y
+  // [resolverUrlProxy] a la URL guardada, así que forzar nunca deja a la app
+  // sin conexión por culpa de esa consulta.
+  return initializePostgres(forzarProxy: true);
 });

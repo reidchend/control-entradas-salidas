@@ -39,9 +39,12 @@ class DescubridorServidor {
 
   /// Cuánto se confía en la URL cacheada antes de volver a preguntar.
   ///
-  /// Corto a propósito: si el túnel rotates, interesa enterarse en la
-  /// siguiente apertura, no en tres días.
-  static const _validezCache = Duration(hours: 12);
+  /// Corto a propósito: con el túnel rápido la URL cambia en cada reinicio de
+  /// la PC servidor, así que interesa enterarse al poco de abrir la app y no
+  /// horas después. Cada arranque ya la pide igual (ver `forzarProxy` en
+  /// `postgres_client.dart`), así que este plazo solo governa las consultas
+  /// dentro de una sesión que ya está abierta.
+  static const _validezCache = Duration(minutes: 10);
 
   /// URL del servidor, o `null` si no se pudo determinar.
   ///

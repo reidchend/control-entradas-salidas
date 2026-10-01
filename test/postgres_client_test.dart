@@ -14,30 +14,48 @@ import 'package:control_entradas_salidas/core/network/postgres_client.dart';
 void main() {
   late HttpServer gist;
 
+  /// URL que el Gist local publica. Cambiable entre llamadas para simular un
+  /// túnel que se reinició y empezó a publicar otra dirección.
+  var urlPublicada = '';
+
+  /// El listener del servidor se registra una sola vez: el stream de
+  /// [HttpServer] es de suscripción única, así que registrarlo dos veces tira.
+  var _gistServido = false;
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     gist = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    urlPublicada = '';
+    _gistServido = false;
   });
 
   tearDown(() => gist.close(force: true));
 
   /// Gist local que publica [url], igual que el que escribe el túnel.
+  ///
+  /// Se puede volver a llamar con otra URL para simular que el túnel cambió:
+  /// el handler queda registrado y pasa a servir la nueva.
   DescubridorServidor publicando(String url) {
-    unawaited(gist.forEach((request) async {
-      await request.drain<void>();
-      request.response
-        ..statusCode = 200
-        ..headers.contentType = ContentType.json
-        ..write(jsonEncode({
-          'files': {
-            'api_url.json': {
-              'content': jsonEncode({'url': url, 'puerto': 8501, 'rapido': true}),
+    urlPublicada = url;
+    if (!_gistServido) {
+      _gistServido = true;
+      unawaited(gist.forEach((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'files': {
+              'api_url.json': {
+                'content':
+                    jsonEncode({'url': urlPublicada, 'puerto': 8501, 'rapido': true}),
+              },
             },
-          },
-        }));
-      await request.response.close();
-    }));
+          }));
+        await request.response.close();
+      }));
+    }
     return DescubridorServidor(
       endpoint: Uri.parse('http://${gist.address.host}:${gist.port}/gist'),
     );
@@ -234,6 +252,65 @@ void main() {
       expect((session as HttpSqlSession).token, 'tok-solo');
       expect(session.baseUrlForTest,
           'https://solo-token.trycloudflare.com/proxy-sql');
+    });
+
+    test('con forzarProxy toma la URL nueva aunque la caché siga vigente',
+        () async {
+      // La ruta real de la app (postgresPoolProvider) fuerza en cada arranque,
+      // porque el túnel rápido cambia de URL en cada reinicio de la PC
+      // servidor. Sin esto la app se aferraba a la caché y el usuario tenía que
+      // entrar a Ajustes → Base de datos y guardar la configuración a mano para
+      // que tomara la nueva.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyUrl: 'https://tunel-viejo.trycloudflare.com',
+          proxyToken: 'tok-abc',
+        ),
+      );
+
+      // Primera sesión: deja la URL cacheada.
+      await initializePostgres(
+        descubridor: publicando('https://tunel-anterior.trycloudflare.com'),
+      );
+
+      // El túnel se reinició y publicó otra URL. La caché sigue "vigente".
+      final session = await initializePostgres(
+        descubridor: publicando('https://tunel-nuevo.trycloudflare.com'),
+        forzarProxy: true,
+      );
+
+      expect((session as HttpSqlSession).baseUrlForTest,
+          'https://tunel-nuevo.trycloudflare.com/proxy-sql');
+    });
+
+    test('forzarProxy con el Gist caido no deja a la app sin conexión',
+        () async {
+      // Forzar nunca debe ser la causa de que la app quede sin URL: si el Gist
+      // no contesta se cae a la caché y, en último caso, a la guardada.
+      await DbConfig.save(
+        const DbConfig(
+          host: '',
+          port: 5432,
+          database: '',
+          user: '',
+          password: '',
+          proxyUrl: 'https://tunel-guardada.trycloudflare.com',
+          proxyToken: 'tok-abc',
+        ),
+      );
+
+      final session = await initializePostgres(
+        descubridor: caido(),
+        forzarProxy: true,
+      );
+
+      expect((session as HttpSqlSession).baseUrlForTest,
+          'https://tunel-guardada.trycloudflare.com/proxy-sql');
     });
 
     test('sin Gist ni URL guardada avisa en vez de fallar al conectar',

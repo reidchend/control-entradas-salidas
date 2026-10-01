@@ -120,8 +120,9 @@ a que el equipo llegue a la base por una red privada (Tailscale).
 arrancar leyendo `api_url.json` de un Gist de GitHub
 (`core/network/descubrimiento_servidor.dart`), que publica
 `tool/iniciar_tunnel_api.js` cada vez que arranca el tunel. Si el tunel rota de
-URL, las apps toman la nueva al proximo arranque sin tocar ningun equipo. La URL
-se cachea 12 h como fallback para cuando no hay red.
+URL, las apps toman la nueva al proximo arranque sin tocar ningun equipo: cada
+arranque fuerza la consulta al Gist en vez de confiar en la cache. La respuesta
+se cachea 10 min como fallback para cuando no hay red.
 
 ### Configuracion de la conexion
 
@@ -447,13 +448,15 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 flutter test
 ```
 
-Tests actuales (94 en 15 archivos):
+Tests actuales (106 en 16 archivos, contados con `Select-String` sobre
+`test/*_test.dart`):
 
 | Archivo | Casos | Que cubre |
 |---|---|---|
 | `db_config_test.dart` | 31 | Precedencia de la URL, persistencia, secure storage |
-| `postgres_client_test.dart` | 12 | `initializePostgres`, normalizacion de URL, seleccion de sesion |
-| `descubrimiento_servidor_test.dart` | 11 | Lectura del Gist, cache 12 h, contenido invalido |
+| `postgres_client_test.dart` | 14 | `initializePostgres`, `forzarProxy`, normalizacion de URL, seleccion de sesion |
+| `descubrimiento_servidor_test.dart` | 11 | Lectura del Gist, cache 10 min, contenido invalido |
+| `pg_client_bind_test.dart` | 10 | Orden de los placeholders que genera `PgClient` al armar el SQL |
 | `stock_whatsapp_models_test.dart` | 8 | Modelos: Producto, Categoria, Existencia, Movimiento, MensajeWhatsapp |
 | `ticket_escpos_test.dart` | 6 | Bytes ESC/POS |
 | `cache_service_test.dart` | 5 | TTL de `CacheService` con SharedPreferences |
@@ -462,14 +465,27 @@ Tests actuales (94 en 15 archivos):
 | `pos_catalogo_test.dart` | 3 | Catalogo del POS |
 | `pos_tasa_bcv_test.dart` | 3 | Tasa del BCV con cache |
 | `pos_login_bootstrap_test.dart` | 2 | Bootstrap de login |
-| `pos_login_test.dart` | 1 | Login por PIN |
 | `pos_comanda_test.dart` | 1 | Comanda |
+| `pos_login_test.dart` | 1 | Login por PIN |
 | `pos_ventas_test.dart` | 1 | Ventas |
 | `widget_test.dart` | 1 | AppShell arranca |
 
-> **Cobertura acotada**: son tests unitarios de repositorios y modelos, con
-> dobles en memoria. No hay cobertura del SQL que genera `PgClient` ni de
-> `tool/server.py`, que son las dos capas donde mas bugs han aparecido.
+Los 16 usan `flutter_test`, asi que **no corren sin el SDK de Flutter**. Para
+poder verificar la logica en una maquina que solo tiene Dart, hay un package
+aparte en `tool/`:
+
+```bash
+cd tool && dart pub get && dart test
+```
+
+Ahi corren 21 casos (`tool/test/`): la replica ejecutable de `_bindPlan` y la de
+la vigencia de la cache del Gist. Ambas leen la constante real del codigo de la
+app, asi que siguen siendo validas si le cambian el valor.
+
+> **Cobertura acotada**: ademas de lo de arriba, `tool/smoke_sql.py` prueba el
+> proxy de punta a punta contra PostgreSQL real (orden de parametros en
+> UPDATE, placeholder repetido, y un lint del SQL crudo de `lib/`). Ese es el
+> camino donde mas bugs han aparecido, y queda fuera de `flutter test`.
 
 > Ejecutar con `LD_LIBRARY_PATH=/tmp/opencode/libs` si hay problemas con SQLite en Linux.
 

@@ -113,22 +113,44 @@ se guarda en el Gist (manual o automatizado según el setup del servidor).
 Para evitar hardcodear la URL del túnel, la app consulta un **Gist JSON** con la
 URL pública actual.
 
-Archivo consultado (por defecto en código): Gist ID `5b37693a243d8d2235eea0647396b8d3`, raw `bot_url.json` (reutilizado para ambos: URL del bot WhatsApp y URL del proxy según contexto).
+Mismo Gist para los dos túneles, pero archivo y endpoint distintos:
 
-Estructura esperada (mínima):
+| Consumidor | Archivo en el Gist | Cómo lo lee |
+|---|---|---|
+| Proxy SQL (BD) | `api_url.json` | `GET https://api.github.com/gists/<GIST_ID>` (API, no `raw`) |
+| Bot de WhatsApp | `bot_url.json` | `GET https://gist.githubusercontent.com/<owner>/<id>/raw/bot_url.json` |
+
+El `GIST_ID` del proxy sale de `--dart-define=GIST_ID=...` al compilar; si el
+Gist es privado, `GIST_TOKEN` manda la cabecera de solo lectura.
+
+Estructura de `api_url.json` (mínima):
 
 ```json
 {
-  "url": "https://abcd-efgh-1234.trycloudflare.com/"
+  "url": "https://abcd-efgh-1234.trycloudflare.com/",
+  "actualizado": "2026-09-29T21:06:36.032Z",
+  "puerto": 8501,
+  "rapido": true
 }
 ```
 
-La app hace un `GET` al raw del Gist (sin auth) cada cierto tiempo y cachea
-durante **12 horas** (`_CACHE_TTL = Duration(hours: 12)`). Si falla, usa la
-última URL guardada en `SharedPreferences` (`_CACHE_KEY = 'proxy_url_cache'`).
+Solo importa `url`, y tiene que empezar con `https://`: por HTTP plano la
+conexión no viaja cifrada y Android 9+ la bloquea. Si el Gist publica algo que
+no es una URL válida, la app lo avisa en vez de reintentar, porque eso sí
+necesita que alguien lo arregle.
 
-Esto permite rotar el túnel (Cloudflare `trycloudflare.com` suele cambiar la URL
-al reiniciar) sin recompilar la app: basta con actualizar el Gist.
+La respuesta se guarda en `SharedPreferences` (`api_url_cache` y
+`api_url_cache_ts`) y se vuelve a usar durante **10 minutos**
+(`_validezCache`). Además, **cada arranque fuerza la consulta**
+(`forzarProxy: true` en `postgresPoolProvider`): abrir la app ya toma la URL
+vigente sin tocar nada. Si el Gist no contesta se cae a esa caché y, en último
+caso, a la URL guardada en la configuración, así que forzar nunca deja a la app
+sin conexión por culpa de esa consulta.
+
+Antes, con una vigencia de 12 horas y sin forzar en el arranque, la app se
+quedaba apuntando a un túnel muerto y el usuario tenía que entrar a
+Configuración → Base de datos y guardar la configuración a mano para
+despertarla.
 
 **Ubicación en código:** `lib/core/network/descubrimiento_servidor.dart`
 
