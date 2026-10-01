@@ -1,0 +1,10 @@
+# Package separado a proposito: el del proyecto raiz depende del SDK de Flutter
+# (lutter pub get y no dart pub get), asi que dart test no puede resolver
+# sus dependencias en una maquina que solo tiene Dart.
+#
+#   cd tool && dart pub get && dart test
+name: lycoris_herramientas
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dev_dependencies:
+  test: ^1.25.0

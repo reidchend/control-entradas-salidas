@@ -22,6 +22,11 @@ graphify-out/
 # Python venv del proxy SQL (tool/server.py)
 /tool/venv/
 
+# Dart: paquete separado de tool/ para correr `dart test` sin Flutter.
+# El pubspec.yaml si se versiona; el lock y el cache, no.
+/tool/.dart_tool/
+/tool/pubspec.lock
+
 # Miscellaneous
 *.class
 *.pyc
