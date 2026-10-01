@@ -491,21 +491,33 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
   Future<List<PosPlato>> getContornosActivos() =>
       getPlatos(soloActivos: true, esContorno: true);
 
+  /// Categorías de inventario habilitadas para el POS.
+  ///
+  /// `categorias.activo` y `categorias.visible_en_pos` son **boolean** en
+  /// PostgreSQL, a diferencia de `pos_categorias.activo` / `platos.activo`, que
+  /// son `integer`. Filtrarlos con `.eq(campo, 1)` hace que PostgreSQL rechace
+  /// la consulta con `el operador no existe: boolean = smallint`, y como acá no
+  /// hay try/catch, el error sube hasta `_cargarCategorias` y deja el catálogo
+  /// entero vacío. Por eso van `true`/`false` y no `1`/`0`.
   Future<List<Categoria>> getCategoriasPos() async {
     final rows = await _db.client
         .from('categorias')
         .select()
-        .eq('activo', 1)
-        .eq('visible_en_pos', 1)
+        .eq('activo', true)
+        .eq('visible_en_pos', true)
         .order('nombre') as List<Map<String, dynamic>>;
     return rows.map(Categoria.fromMap).toList();
   }
 
+  /// Productos de venta del POS.
+  ///
+  /// `productos.activo` también es boolean: mismo cuidado que en
+  /// [getCategoriasPos].
   Future<List<Producto>> getProductosPos({int? categoriaId}) async {
     var query = _db.client
         .from('productos')
         .select()
-        .eq('activo', 1)
+        .eq('activo', true)
         .eq('tipo', 'Productos para la venta');
     if (categoriaId != null) query = query.eq('categoria_id', categoriaId);
     final rows = await query.order('nombre') as List<Map<String, dynamic>>;

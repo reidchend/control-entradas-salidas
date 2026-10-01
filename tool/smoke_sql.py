@@ -13,6 +13,14 @@ aparecieron:
    `$n` en un `%s`, asi que un `$1` repetido deja mas `%s` que parametros y
    psycopg revienta la consulta.
 5. La consulta real de `buscarProductos`, que repetia `$1` en dos `ILIKE`.
+6. Las consultas del catalogo del POS. `categorias.activo`,
+   `categorias.visible_en_pos` y `productos.activo` son **boolean** en
+   PostgreSQL, pero el repositorio los filtraba con `.eq(campo, 1)`, que
+   produce `boolean = smallint`. Como `_cargarCategorias` no tiene try/catch,
+   el error dejaba el catalogo entero vacio al abrir una mesa o habitacion.
+7. Lint estatico: ningun filtro `.eq()` compara una columna **boolean** con un
+   numero. Sale de `information_schema`, asi que no hay lista de columnas que se
+   pueda quedar vieja en silencio.
 
 Replica el algoritmo de `_bindPlan` de lib/core/data/pg_client.dart para no
 necesitar el SDK de Flutter, que no esta instalado en esta maquina.
@@ -260,6 +268,59 @@ def prueba_buscar_productos(conn, token):
     )
 
 
+def prueba_catalogo_pos(token):
+    """Las consultas de `getCategoriasPos` y `getProductosPos`.
+
+    Se mandan las dos formas a proposito: la que usa numeros tiene que fallar y
+    la que usa boolean tiene que responder. Asi queda documentado en el test por
+    que el valor importa, y no solo que "anda".
+    """
+    casos = [
+        (
+            "categorias del POS",
+            "SELECT id, nombre FROM categorias WHERE activo = $1 AND visible_en_pos = $2 ORDER BY nombre",
+            [True, True],
+        ),
+        (
+            "productos de venta del POS",
+            "SELECT id, nombre FROM productos WHERE activo = $1 AND tipo = $2 ORDER BY nombre",
+            [True, "Productos para la venta"],
+        ),
+        (
+            "subcategorias de platos",
+            "SELECT id, nombre FROM platos_categorias WHERE activo = $1 AND categoria_padre_id = $2 ORDER BY nombre",
+            [1, 5],
+        ),
+    ]
+
+    detalles, todo_ok = [], True
+    for etiqueta, sql, params in casos:
+        status, res = proxy(token, sql, params)
+        filas = res.get("rows") or []
+        ok = status == 200
+        todo_ok &= ok
+        detalles.append(f"{etiqueta}: status={status} filas={len(filas)}")
+
+    # La forma con numeros tiene que ser la que falla, si no el chequeo de arriba
+    # no probaria nada (pasaria igual con cualquier valor).
+    status_malo, res_malo = proxy(
+        token,
+        "SELECT id FROM categorias WHERE activo = $1 AND visible_en_pos = $2",
+        [1, 1],
+    )
+    error_malo = (res_malo.get("error") or "").replace("\n", " ")[:90]
+    details_ok = status_malo != 200
+    detalles.append(
+        f"con 1 en vez de true: status={status_malo} error={error_malo or '-'}"
+    )
+
+    return reportar(
+        "el catalogo del POS filtra booleanos con true/false, no con 1/0",
+        todo_ok and details_ok,
+        "\n".join(detalles),
+    )
+
+
 def prueba_limpieza(conn):
     with conn.cursor() as cur:
         cur.execute(
@@ -347,6 +408,128 @@ def prueba_placeholders_en_dart():
     )
 
 
+# ------------------------------------------- lint de booleanos con numeros
+#
+# En PostgreSQL `boolean = integer` no existe: da error 42883. El driver de
+# Dart manda el valor tal cual, asi que `.eq('activo', 1)` contra una columna
+# boolean revienta la consulta en tiempo de ejecucion, no al compilar.
+#
+# Que la columna sea boolean o integer se decide mirando `information_schema`,
+# no una lista escrita a mano: las tablas `pos_*` y `platos*` tienen `activo`
+# integer y `categorias`/`productos` lo tienen boolean, asi que la misma
+# llamada `.eq('activo', 1)` es correcta en una y incorrecta en otra.
+
+# `X.eq('col', 1)` / `.eq('col', 0)`. El segundo grupo acepta tambien `1.0`.
+EQ_NUMERICO_RE = re.compile(
+    r"""\.\s*(?:eq|neq|lt|gt|lte|gte|inFilter|notInFilter)\s*\(\s*['"](\w+)['"]\s*,\s*(\d+(?:\.\d+)?)\b"""
+)
+
+# Asignacion que guarda el builder: `var query = _db.client.from('x').select();`
+DESDE_RE = re.compile(r"""from\(\s*['"](\w+)['"]\s*\)""")
+
+# Un `;` o una llave abre/cierra un ambito: corta la busqueda hacia atras.
+LIMITE_RE = re.compile(r"[;{}]")
+
+# `q = _db.client.from('x')...` -> `q` es el builder de la tabla `x`.
+VARIABLE_RE = re.compile(
+    r"""([A-Za-z_]\w*)\s*=\s*[^;]*?from\(\s*['"](\w+)['"]\s*\)"""
+)
+
+# El identificador del que cuelga la llamada: el final de `... q.eq` o `... .eq`.
+COLGANDO_RE = re.compile(r"([A-Za-z_]\w*)\s*\.?\s*$")
+
+
+def columnas_booleanas(conn):
+    """`{tabla: {columnas}}` de todas las columnas boolean del schema public."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND data_type = 'boolean'"
+        )
+        tablas = {}
+        for tabla, columna in cur.fetchall():
+            tablas.setdefault(tabla, set()).add(columna)
+    return tablas
+
+
+def indexar_builders(texto):
+    """`{variable: tabla}` para las asignaciones `q = ...from('x')`."""
+    return {m.group(1): m.group(2) for m in VARIABLE_RE.finditer(texto)}
+
+
+def resolver_tabla(texto, hasta, variables):
+    """De que tabla es el builder que se esta usando en la posicion [hasta].
+
+    Hay dos formas en el codigo y las dos aparecen:
+
+        _db.client.from('x').select().eq('activo', true)   # cadena
+        var q = _db.client.from('x').select();
+        q = q.eq('activo', 1);                            # variable
+
+    Se resuelve mirando hacia atras hasta el ultimo `;`, `{` o `}`:
+
+    - Si en ese tramo hay un `from('x')`, esa es la tabla (forma de cadena).
+    - Si no, se toma el identificador del que cuelga la llamada y se busca en el
+      mapa de variables (forma con variable).
+    """
+    limites = [m.start() for m in LIMITE_RE.finditer(texto, 0, hasta)]
+    inicio = (limites[-1] + 1) if limites else 0
+    tramo = texto[inicio:hasta]
+
+    for m in DESDE_RE.finditer(texto, inicio, hasta):
+        return m.group(1)
+
+    colgando = COLGANDO_RE.search(tramo)
+    if colgando:
+        return variables.get(colgando.group(1))
+    return None
+
+
+def prueba_booleanos_en_dart(conn):
+    """Ningun `.eq()` numérico sobre una columna boolean."""
+    tablas = columnas_booleanas(conn)
+    if not tablas:
+        return reportar(
+            "columnas boolean detectadas", False, "information_schema no devolvio ninguna"
+        )
+
+    malos, revisados = [], 0
+    for carpeta, _, nombres in os.walk(os.path.join(RAIZ, "lib")):
+        for nombre in nombres:
+            if not nombre.endswith(".dart"):
+                continue
+            ruta = os.path.join(carpeta, nombre)
+            with open(ruta, encoding="utf-8") as fh:
+                texto = fh.read()
+
+            variables = indexar_builders(texto)
+            for m in EQ_NUMERICO_RE.finditer(texto):
+                columna, valor = m.group(1), m.group(2)
+                tabla = resolver_tabla(texto, m.start(), variables)
+                if tabla is None:
+                    continue
+                if columna not in tablas.get(tabla, ()):
+                    continue
+                revisados += 1
+                linea = texto[:m.start()].count("\n") + 1
+                malos.append(
+                    f"{os.path.relpath(ruta, RAIZ)}:{linea} -> "
+                    f"{tabla}.{columna} = {valor} (boolean, usar true/false)"
+                )
+
+    total = sum(len(c) for c in tablas.values())
+    detalle = (
+        f"columnas boolean en el esquema: {total} en {len(tablas)} tablas; "
+        f"filtros numericos sobre ellas revisados: {revisados}"
+    )
+    if malos:
+        detalle += "\n" + "\n".join(malos)
+        detalle += "\nPostgreSQL rechaza `boolean = integer` (42883)."
+    return reportar(
+        "ningun filtro numerico compara una columna boolean", not malos, detalle
+    )
+
+
 def main():
     env = leer_env_local()
     token = env.get("PROXY_SQL_TOKEN")
@@ -365,9 +548,11 @@ def main():
         prueba_orden_update(conn, token)
         prueba_placeholder_repetido(conn, token)
         prueba_buscar_productos(conn, token)
+        prueba_catalogo_pos(token)
         with conn.cursor() as cur:
             cur.execute(f"DROP TABLE IF EXISTS {TABLA_PRUEBA}")
         prueba_limpieza(conn)
+        prueba_booleanos_en_dart(conn)
     finally:
         conn.close()
 
