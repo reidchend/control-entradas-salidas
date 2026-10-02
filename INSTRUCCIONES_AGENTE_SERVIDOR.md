@@ -40,16 +40,46 @@ por orden de aparición.
 recibía dos `%s` con un valor y devolvía 500. El autocomplete de productos en
 Reportes no funcionaba por proxy.
 
+### Cuarto bug: el mismo, en otra parte
+
+`ActivosRepository.existeCategoria` repetía `$2`:
+
+```sql
+WHERE LOWER(nombre) = LOWER($1) AND ($2::int IS NULL OR id <> $2)
+```
+
+Mismo 500 (`the query has 3 placeholders but 2 parameters were passed`). Aquí
+lo grave es **dónde** se llamaba: la comprobación de duplicados estaba fuera
+del `try/catch` de `activos_categorias_grid.dart`, así que la excepción se comía
+el `return`, el diálogo se cerraba y **el renombrado de categoría no pasaba
+nada** sin error visible. Ahora usa `$2` y `$3`.
+
+> **Por qué no lo detectó el lint**: el lint de placeholders repetidos existía,
+> pero `PLACEHOLDER_RE` captura el `$` incluido y hacía
+> `sorted(malos, key=int)` sobre `'$2'`, que revienta con `ValueError`. O sea,
+> en vez de reportar el bug **murió** con un error propio, y como el crash
+> abortaba `main()` antes del resumen, no se leía como un fallo del lint.
+> Arreglado (`key=lambda x: int(x[1:])`) y verificado que ahora falla si se
+> reintroduce el `$2` repetido.
+>
+> **Regla**: nunca repetir `$N` en un `executeSql`/`executeCommand`. La
+> consulta directa contra la base sí lo tolera (por eso las sondas que pegan
+> contra PostgreSQL no lo ven), pero por proxy siempre falla.
+
 ### Pendiente: `UNIQUE` de `device_id`
 
 La migración `20250102000000_add_device_id.sql` declara
 `device_id TEXT UNIQUE`, pero en la base **solo existe el PRIMARY KEY**.
-Hay 5 filas con el mismo `device_id` (`ids 4, 16, 17, 18, 19`).
 
-No se aplicó el índice a propósito: `SessionController.verificarPin`
-reescribe el `device_id` del operador al que inicia sesión, así que con el
-`UNIQUE` puesto el login fallaría con `23505` en cuanto el dispositivo destino
-ya exista. Hay que deduplicar y hacer ese update tolerante al conflicto.
+No se aplica, y ahora por una razón distinta a la original: el modelo es de
+**una fila por `(operador, dispositivo)`**, así que un operador en tres equipos
+son tres filas; y cambiar de usuario en el mismo equipo (*Usar otro*) deja dos
+filas con el mismo `device_id`. Con el `UNIQUE` puesto el login fallaría con
+`23505`. Si alguna vez se quiere, el índice va por `(nombre, device_id)`.
+
+Las filas repetidas que ya existen (5 con `acc2a6f6…`) son de la época en que
+`verificarPin` pisaba el `device_id` de una sola fila. Hoy esa lógica ya no
+genera basura: inserta solo si no hay fila para ese `(nombre, device_id)`.
 
 ---
 
@@ -78,11 +108,18 @@ tool\venv\Scripts\python.exe tool\smoke_sql.py
 ```
 
 Verifica conectividad, rechazo de token inválido, orden de parámetros en
-`UPDATE`, el caso del placeholder repetido, `buscarProductos`, que no queden
-tablas de prueba, y un lint que recorre `lib/` avisando si algún SQL crudo
-repite un `$n`.
+`UPDATE`, el caso del placeholder repetido, `buscarProductos`, el catálogo del
+POS (que los booleanos vayan como `true`/`false` y no como `1`/`0`), que no
+queden tablas de prueba, el flujo de un operador en varios dispositivos sin que
+uno desvincule a los otros, y tres lints que recorren `lib/`: `.eq()` numérico
+sobre una columna boolean, listeners con la firma equivocada para
+`addListener`, y SQL crudo que repite un `$n`.
 
-Sale con código 1 si algo falla.
+Sale con código 1 si algo falla. Son 12 pruebas.
+
+> Cuando se agrega un lint o una prueba nueva, **verificar que falla** con el
+> bug reintroducido a propósito. Un lint que nunca se vio rojo no se sabe si
+> sirve: el de placeholders repetidos llevaba tiempo roto sin enterarse.
 
 ---
 
@@ -120,13 +157,22 @@ proxy es el único que habla con PostgreSQL. Verificar con
 ### 4. Probar login
 - Usuario: `Reidchend` (con mayúscula)
 - PIN: `1234`
-- Esperar ~300ms después de terminar de escribir el nombre (debounce)
-- Verificar que cambie a modo "Login" (botón "Desbloquear")
+- Al abrir la app el nombre **debería venir puesto y fijo** (autodetección por
+  `device_id`), con un botón *Usar otro* al lado. Si aparece el campo de texto
+  vacío, la autodetección no corrió: mira si `estadoBdProvider` llegó a `lista`.
+- Solo hace falta el PIN.
+- Para probar el flujo manual, tocar *Usar otro*: ahí sí se espera ~300 ms
+  después de terminar de escribir el nombre (debounce) y debería cambiar a modo
+  "Login" (botón "Desbloquear").
 
 ### 5. Verificar en BD
 ```cmd
-"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas -c "SELECT id, factura_id FROM movimientos WHERE tipo='entrada' ORDER BY id DESC LIMIT 5;"
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas -c "SELECT id, nombre, device_id, configurado_en FROM dispositivo_usuario ORDER BY id;"
 ```
+
+Un operador en varios dispositivos tiene **una fila por dispositivo**, todas con
+el mismo `nombre` y distinto `device_id`. Si dos filas del mismo `device_id`
+tienen operadores distintos, es lo normal: se cambió de usuario en ese equipo.
 
 ---
 
@@ -134,11 +180,14 @@ proxy es el único que habla con PostgreSQL. Verificar con
 
 | Archivo | Cambio |
 |---------|--------|
+| `lib/core/auth/session_controller.dart` | Base por callback (no capturada al construirse) y `verificarPin` en dos pasos: valida el PIN y asocia **este** dispositivo, sin pisar los demás |
+| `lib/features/auth/presentation/login_screen.dart` | Autodetección cuando la BD responde; el nombre queda fijo con *Usar otro* |
+| `lib/features/activos/data/activos_repository.dart` | `existeCategoria` sin `$2` repetido (el renombrado fallaba con 500) |
+| `tool/smoke_sql.py` | Prueba de multi-dispositivo, lint de placeholders arreglado, lints de booleanos y de listeners |
 | `tool/server.py` | `_exec_autocommit` delega en `_exec_sql` (devuelve filas); fuera el bloque de verificación post-UPDATE |
 | `lib/core/data/pg_client.dart` | `_bindPlan()` renumera placeholders por orden de aparición |
 | `lib/features/reportes/data/reportes_repository.dart` | `buscarProducts` sin `$1` repetido |
 | `test/pg_client_bind_test.dart` | Regresión del orden de parámetros |
-| `tool/smoke_sql.py` | Smoke test end-to-end + lint de placeholders |
 
 ---
 

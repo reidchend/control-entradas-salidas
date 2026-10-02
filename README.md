@@ -31,7 +31,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 - **Calculadora**: dialog invocable con F1/atajo en campos de cantidad y precio.
 
 ### POS (`lib/features/pos/`)
-- Login con PIN por dispositivo (`device_id` unico por dispositivo).
+- Login con PIN: el operador es nombre + PIN y cada dispositivo queda asociado a el.
 - Mesas, habitaciones, comandas activas, ventas y cierre de turnos/cajas.
 - **Cierre de turno**: genera `pos_cierres` con reporte simple (agregado por linea/plato desde `pos_ventas.items_json`) y reporte detallado (desglose por ingrediente/producto consumido). Los platos se agrupan por nombre base y los contornos se reportan aparte como informativos.
 - Tasa del dia del **BCV** (proxy con *stale-while-revalidate*).
@@ -186,14 +186,46 @@ Al cerrar una sesion se inserta una fila en `pos_cierres` (historica, inmutable)
 
 ### Auth por dispositivo
 
-El operador se identifica por **nombre + PIN**, no por `device_id`: el PIN se
-compara contra `dispositivo_usuario.pin_hash` (case-insensitive sobre el nombre)
-y alloguear se **re-vincula** el `device_id` del operador al dispositivo actual.
-Asi una reinstalacion no obliga a registrar un usuario nuevo.
+El operador se identifica por **nombre + PIN** (case-insensitive sobre el nombre),
+no por `device_id`: el PIN se compara contra `dispositivo_usuario.pin_hash`.
 
-Cada dispositivo tiene un UUID propio (`DeviceIdService`) en
-`SharedPreferences`, que permite ademas precargar el nombre al abrir la app
-(`nombrePorDeviceId`).
+**Un operador puede estar en varios dispositivos a la vez.** La tabla guarda una
+fila por `(operador, dispositivo)`, con lo que un solo usuario en el telefono, la
+tablet y el notebook son tres filas que comparten `nombre`:
+
+```
+fila 1: (Juan, device_id del telefono)
+fila 2: (Juan, device_id de la tablet)
+fila 3: (Juan, device_id del notebook)
+```
+
+`verificarPin` separa las dos cosas que hace:
+
+1. **Valida el PIN** contra cualquier fila con ese nombre.
+2. **Asocia este dispositivo**: si ya hay una fila `(nombre, device_id)` la
+   refresca; si no, inserta una nueva. Las filas de los demas dispositivos no se
+   tocan, asi que entrar desde un equipo nuevo no desvincula los anteriores.
+
+> Antes el paso 2 pisaba el `device_id` de la fila que encuentre por nombre, con
+> lo que una sola fila podia estar en un solo dispositivo: entrar desde la tablet
+> desvinculaba el telefono. Y como `DeviceIdService` genera el UUID en
+> `SharedPreferences`, reinstalar la app se llevaba el enlace puesto.
+
+**Autodetección**: cada dispositivo tiene un UUID propio (`DeviceIdService`).
+Al abrir la app, `nombrePorDeviceId` busca el operador de ese `device_id` y el
+login muestra el nombre fijo, dejando pedir solo el PIN (con un boton *Usar
+otro* por si hay que cambiar). Corre cuando `estadoBdProvider` llega a `lista`
+—el chequeo de salud respondio—, no al montar la pantalla: el pool de
+PostgreSQL resuelve despues de preguntar al Gist y abrir el tunel, y preguntar
+antes devolvia `null` sin consultar.
+
+`configurado_en` paso a significar **ultima vinculacion**, no alta: es lo que
+desempata cuando el mismo `device_id` quedo en varias filas. `verificarPin` lo
+refresca en cada entrada.
+
+> **Costo del modelo**: cada reinstalacion deja la fila anterior atras. Son
+> filas inertes —`nombrePorDeviceId` no las ve porque ese `device_id` ya no
+> existe en ningun lado— pero se acumulan y hay que borrarlas a mano.
 
 ### Cache local de catalogos
 
@@ -283,11 +315,13 @@ psql -U postgres -d control_entradas -f supabase\migrations\20250102000000_add_d
 O copiar y pegar:
 
 ```sql
+-- Como esta realmente en la base. Ojo: NO hay UNIQUE en `device_id`, y el
+-- multi-dispositivo depende de eso (ver "Auth por dispositivo").
 CREATE TABLE IF NOT EXISTS dispositivo_usuario (
   id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   nombre        TEXT NOT NULL,
-  pin_hash      TEXT NOT NULL,
-  device_id     TEXT UNIQUE,
+  pin_hash      TEXT,                    -- nullable en la base real
+  device_id     TEXT NOT NULL,           -- sin UNIQUE
   configurado_en TIMESTAMPTZ DEFAULT now()
 );
 ```
@@ -482,10 +516,14 @@ Ahi corren 21 casos (`tool/test/`): la replica ejecutable de `_bindPlan` y la de
 la vigencia de la cache del Gist. Ambas leen la constante real del codigo de la
 app, asi que siguen siendo validas si le cambian el valor.
 
-> **Cobertura acotada**: ademas de lo de arriba, `tool/smoke_sql.py` prueba el
-> proxy de punta a punta contra PostgreSQL real (orden de parametros en
-> UPDATE, placeholder repetido, y un lint del SQL crudo de `lib/`). Ese es el
-> camino donde mas bugs han aparecido, y queda fuera de `flutter test`.
+> **Cobertura acotada**: ademas de lo de arriba, `tool/smoke_sql.py` corre 12
+> pruebas contra PostgreSQL real (orden de parametros en `UPDATE`, placeholder
+> repetido, `buscarProductos`, catalogo del POS con booleanos, y lints que
+> recorren `lib/` buscando `.eq()` numerico sobre una columna boolean, listeners
+> con la firma equivocada y SQL crudo que repite un `$n`). Ademas replica el
+> flujo de un operador en varios dispositivos y comprueba que registrar en uno no
+> desvincula los otros. Ese es el camino donde mas bugs han aparecido, y queda
+> fuera de `flutter test`.
 
 > Ejecutar con `LD_LIBRARY_PATH=/tmp/opencode/libs` si hay problemas con SQLite en Linux.
 
@@ -547,9 +585,17 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 - **Cache sin stale-while-revalidate**: `getStale()` existe sin usarse.
 - **`device_id` sin indice UNIQUE**: la migracion
   `20250102000000_add_device_id.sql` lo declara, pero en la base solo existe
-  el PRIMARY KEY, asi que hay 5 filas con el mismo `device_id`. No se puede
-  aplicar tal cual porque `SessionController.verificarPin` reescribe ese campo
-  al iniciar sesion y el login fallaria con `23505`.
+  el PRIMARY KEY. **No se puede aplicar**: el modelo de multi-dispositivo
+  permite N filas por operador, y ademas cambiar de usuario en el mismo
+  equipo (*Usar otro*) deja dos filas con el mismo `device_id`. Con el
+  `UNIQUE` puesto, el login fallaria con `23505`. Si alguna vez se quiere,
+  el indice tendria que ir por `(nombre, device_id)`, no por `device_id`.
+- **`pin_hash` guarda el PIN en texto plano**: la columna se llama asi pero
+  no hashea nada; `verificarPin` compara con `==`. Cualquiera con acceso de
+  lectura a la tabla tiene los PIN de todos los operadores.
+- **Filas huerfanas de `dispositivo_usuario`**: cada reinstalacion genera un
+  `device_id` nuevo y deja la fila anterior sin borrar. Son inertes (15 filas
+  hoy, varias repetidas) pero hay que limpiarlas a mano.
 - **`LogBridge` a medio construir**: `push()` acumula en una lista que nunca se
   envia y `flush()` esta vacio, asi que los logs de la app web nunca llegan a
   la terminal. Por eso los `print()` de debug no ayudaban a diagnosticar.
