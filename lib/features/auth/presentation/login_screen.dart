@@ -30,13 +30,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String _error = '';
   bool _loading = false;
   bool _existeNombre = false;
-  Timer? _debounceTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    Future(() => _autodetectarOperador());
-  }
+  /// El dispositivo ya tiene un operador: el nombre se muestra fijo y solo se
+  /// pide el PIN. Se puede soltar con "Usar otro operador".
+  bool _autodetectado = false;
+  bool _buscandoOperador = false;
+  bool _yaBusco = false;
+  Timer? _debounceTimer;
 
   @override
   void dispose() {
@@ -47,22 +47,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  // Si este dispositivo ya tiene un operador registrado (misma device_id),
-  // precarga el nombre para que el login sea solo el PIN. Si el dispositivo
-  // es nuevo (reinstalación), sigue el flujo de registro por nombre.
+  /// Autodetecta el operador de este dispositivo para que el login sea solo el
+  /// PIN.
+  ///
+  /// Se dispara cuando [estadoBdProvider] llega a `lista`, y no en `initState`:
+  /// el pool resuelve recién después de preguntar al Gist y abrir el túnel, así
+  /// que al montar la pantalla todavía no hay base y la consulta se iba sin
+  /// hacer. Antes el operador no se detectaba nunca y había que escribir el
+  /// nombre a mano en cada arranque.
   Future<void> _autodetectarOperador() async {
+    if (_yaBusco) return;
+    _yaBusco = true;
+    setState(() => _buscandoOperador = true);
     try {
       final session = ref.read(sessionProvider.notifier);
       final nombre = await session.nombrePorDeviceId();
-      if (mounted && nombre != null && nombre.isNotEmpty) {
+      if (!mounted) return;
+      if (nombre != null && nombre.isNotEmpty) {
         _nombreCtrl.text = nombre;
-        if (!_existeNombre) {
-          setState(() => _existeNombre = true);
-        }
+        setState(() {
+          _existeNombre = true;
+          _autodetectado = true;
+        });
       }
     } catch (_) {
       // Sin conexión: el usuario podrá escribir el nombre manualmente.
+    } finally {
+      if (mounted) setState(() => _buscandoOperador = false);
     }
+  }
+
+  /// Vuelve al flujo normal, con el nombre editable.
+  void _usarOtroOperador() {
+    _nombreCtrl.clear();
+    _pinCtrl.clear();
+    setState(() {
+      _autodetectado = false;
+      _existeNombre = false;
+      _error = '';
+    });
   }
 
   // Determina si el nombre ingresado ya es un operador registrado.
@@ -97,6 +120,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final nombre = _nombreCtrl.text.trim();
       final session = ref.read(sessionProvider.notifier);
+
+      // Sin base no se puede decidir si el nombre existe, y decidir mal manda
+      // al alta: se terminaría intentando registrar un operador que ya existe.
+      // La pantalla deja pasar el botón mientras `conectando`, así que esto se
+      // comprueba igual.
+      if (ref.read(estadoBdProvider) != EstadoBd.lista) {
+        setState(() => _error =
+            'Todavía se está conectando con el servidor. Probá en un momento.');
+        return;
+      }
+
       final yaExiste = await session.existeOperador(nombre);
       bool ok = false;
       final esRegistro = !yaExiste;
@@ -159,6 +193,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return const Scaffold(body: BdNoDisponible());
     }
 
+    // Recién con el servidor confirmado se puede preguntar quién es el operador
+    // de este dispositivo. `lista` significa que el chequeo de salud respondió.
+    if (estadoBd == EstadoBd.lista && !_yaBusco) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _autodetectarOperador();
+      });
+    }
+
     // Modo según si el nombre ya está registrado (verificado en vivo).
     final esRegistro = !_existeNombre;
     final pinLabel = esRegistro ? 'PIN de 4 dígitos' : 'Ingresa tu PIN';
@@ -190,18 +232,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (_buscandoOperador) ...[
+                    const SizedBox(height: 16),
+                    const Center(child: CircularProgressIndicator()),
+                  ],
                   const SizedBox(height: 24),
-                  TextField(
-                    controller: _nombreCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre del operador',
-                      prefixIcon: Icon(Icons.person_outline),
+                  if (_autodetectado)
+                    // El dispositivo ya sabe quién es: el nombre se muestra
+                    // fijo para que el operador solo tenga que poner el PIN.
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Operador de este dispositivo',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _nombreCtrl.text,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loading ? null : _usarOtroOperador,
+                            child: const Text('Usar otro'),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    TextField(
+                      controller: _nombreCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre del operador',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: (_) => _verificarNombreExistente(),
+                      onSubmitted: (_) =>
+                          FocusScope.of(context).nextFocus(),
                     ),
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (_) => _verificarNombreExistente(),
-                    onSubmitted: (_) =>
-                        FocusScope.of(context).nextFocus(),
-                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _pinCtrl,
