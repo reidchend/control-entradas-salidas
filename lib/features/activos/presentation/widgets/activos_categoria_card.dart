@@ -9,11 +9,15 @@ class ActivosCategoriaCard extends StatelessWidget {
     required this.categoria,
     required this.conteo,
     required this.onTap,
+    this.onEdit,
+    this.onDelete,
   });
 
   final ActivosCategoria categoria;
   final int conteo;
   final VoidCallback onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -63,15 +67,48 @@ class ActivosCategoriaCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                categoria.nombre,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Text(
+                      categoria.nombre,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (onEdit != null || onDelete != null)
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      iconSize: 20,
+                      color: Colors.white,
+                      icon: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .18),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.more_vert, color: Colors.white),
+                      ),
+                      onSelected: (v) {
+                        if (v == 'editar') onEdit?.call();
+                        if (v == 'eliminar') onDelete?.call();
+                      },
+                      itemBuilder: (_) => [
+                        if (onEdit != null)
+                          const PopupMenuItem(
+                              value: 'editar', child: Text('Editar')),
+                        if (onDelete != null)
+                          const PopupMenuItem(
+                              value: 'eliminar', child: Text('Eliminar')),
+                      ],
+                    ),
+                ],
               ),
             ],
           ),

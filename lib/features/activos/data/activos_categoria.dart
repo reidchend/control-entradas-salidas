@@ -23,6 +23,9 @@ class ActivosCategoria {
   Map<String, dynamic> toMap() => {
         'nombre': nombre,
         'color': color,
-        'activo': activo ? 1 : 0,
+        // Boolean, no 1/0: la columna es boolean en PostgreSQL. `PostgresService`
+        // lo normaliza igual, pero escribir el tipo real evita que el próximo
+        // método que use este map rompa al mandarlo directo.
+        'activo': activo,
       };
 }

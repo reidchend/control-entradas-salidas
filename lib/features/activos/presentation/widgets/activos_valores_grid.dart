@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/activos_repository.dart';
+import '../dialogs/confirmar_dialog.dart';
+import '../dialogs/renombrar_valor_dialog.dart';
 
 /// GridView de valores de una dimensión de activos (ubicación, grupo, modelo,
 /// estado...) con su conteo de activos. Estilo igual al grid de categorías.
@@ -15,6 +17,8 @@ class ActivosValoresGrid extends ConsumerStatefulWidget {
     required this.color,
     required this.onSelect,
     this.onCrear,
+    this.onRenombrar,
+    this.onQuitar,
   });
 
   final ActivosRepository repo;
@@ -25,18 +29,90 @@ class ActivosValoresGrid extends ConsumerStatefulWidget {
   final ValueChanged<String> onSelect;
   final VoidCallback? onCrear;
 
+  /// Se avisa a la pantalla qué valor cambió para que no quede seleccionado un
+  /// nombre que ya no existe.
+  final void Function(String antes, String despues)? onRenombrar;
+  final ValueChanged<String>? onQuitar;
+
   @override
   ConsumerState<ActivosValoresGrid> createState() => _ActivosValoresGridState();
 }
 
 class _ActivosValoresGridState extends ConsumerState<ActivosValoresGrid> {
   late Future<List<Map<String, dynamic>>> _future;
+  bool _trabajando = false;
 
   @override
   void initState() {
     super.initState();
     // Query única por instancia: evita refetch por cada tecla del buscador.
     _future = widget.repo.getValoresConConteo(widget.columna);
+  }
+
+  /// Vuelve a consultar la lista, para que un renombrado o un valor quitado se
+  /// vean sin volver a entrar a la pantalla.
+  void _recargar() {
+    setState(() {
+      _future = widget.repo.getValoresConConteo(widget.columna);
+    });
+  }
+
+  void _error(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
+  }
+
+  Future<void> _renombrar(
+    List<Map<String, dynamic>> items,
+    String valor,
+    int conteo,
+  ) async {
+    final nuevo = await showRenombrarValorDialog(
+      context,
+      singular: widget.singular,
+      valor: valor,
+      afectados: conteo,
+      existentes: [for (final it in items) it['valor'] as String? ?? ''],
+    );
+    if (nuevo == null || !mounted) return;
+    setState(() => _trabajando = true);
+    try {
+      await widget.repo.renombrarValor(widget.columna, valor, nuevo);
+      widget.onRenombrar?.call(valor, nuevo);
+      if (mounted) _recargar();
+    } catch (e) {
+      _error('Error al renombrar: $e');
+    } finally {
+      if (mounted) setState(() => _trabajando = false);
+    }
+  }
+
+  Future<void> _quitar(String valor, int conteo) async {
+    // `conteo` viene de `getValoresConConteo`, que cuenta las unidades activas
+    // que usan el valor (también para grupo/modelo, donde el valor vive en el
+    // tipo). Por eso el texto habla siempre de unidades.
+    final unidades = conteo == 1 ? '1 unidad' : '$conteo unidades';
+    final ok = await showConfirmarDialog(
+      context,
+      titulo: 'Quitar ${widget.singular}',
+      mensaje: '¿Quitar "$valor"?\n'
+          'Las $unidades que lo tienen no se borran, solo quedan sin '
+          '${widget.singular}.',
+      accion: 'Quitar',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _trabajando = true);
+    try {
+      await widget.repo.quitarValor(widget.columna, valor);
+      widget.onQuitar?.call(valor);
+      if (mounted) _recargar();
+    } catch (e) {
+      _error('Error al quitar valor: $e');
+    } finally {
+      if (mounted) setState(() => _trabajando = false);
+    }
   }
 
   @override
@@ -52,7 +128,7 @@ class _ActivosValoresGridState extends ConsumerState<ActivosValoresGrid> {
         }
         final items = snap.data ?? const <Map<String, dynamic>>[];
 
-        final crear = widget.onCrear;
+        final crear = _trabajando ? null : widget.onCrear;
         return GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -71,12 +147,21 @@ class _ActivosValoresGridState extends ConsumerState<ActivosValoresGrid> {
             }
             final item = items[i - (crear != null ? 1 : 0)];
             final valor = (item['valor'] as String?) ?? '';
+            final conteo = (item['n'] as num?)?.toInt() ?? 0;
+            // La pantalla pasa `onCrear` solo en las dimensiones editables
+            // (ubicación, grupo, modelo). Estados no la pasa, y sin este filtro
+            // su menú dejaría al usuario renombrando algo que el repositorio
+            // rechaza con `ArgumentError`.
+            final puedeEditar = crear != null && !_trabajando;
             return _ValorCard(
               valor: valor,
-              conteo: (item['n'] as num?)?.toInt() ?? 0,
+              conteo: conteo,
               icono: widget.icono,
               color: widget.color,
               onTap: () => widget.onSelect(valor),
+              onRenombrar:
+                  puedeEditar ? () => _renombrar(items, valor, conteo) : null,
+              onQuitar: puedeEditar ? () => _quitar(valor, conteo) : null,
             );
           },
         );
@@ -132,6 +217,8 @@ class _ValorCard extends StatelessWidget {
     required this.icono,
     required this.color,
     required this.onTap,
+    this.onRenombrar,
+    this.onQuitar,
   });
 
   final String valor;
@@ -139,6 +226,8 @@ class _ValorCard extends StatelessWidget {
   final IconData icono;
   final Color color;
   final VoidCallback onTap;
+  final VoidCallback? onRenombrar;
+  final VoidCallback? onQuitar;
 
   @override
   Widget build(BuildContext context) {
@@ -181,20 +270,72 @@ class _ValorCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                valor,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Text(
+                      valor,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (onRenombrar != null || onQuitar != null)
+                    _MenuValor(
+                      onRenombrar: onRenombrar,
+                      onQuitar: onQuitar,
+                    ),
+                ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Menú de mantenimiento de un valor de dimensión.
+///
+/// Va en las cards igual que en `TipoCard`: renombrar corrige un valor guardado
+/// mal y quitar lo saca del catálogo sin borrar las unidades que lo tenían.
+class _MenuValor extends StatelessWidget {
+  const _MenuValor({this.onRenombrar, this.onQuitar});
+
+  final VoidCallback? onRenombrar;
+  final VoidCallback? onQuitar;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      padding: EdgeInsets.zero,
+      iconSize: 20,
+      color: Colors.white,
+      // La card es un gradiente saturado: el icono necesita su propio fondo para
+      // que se vea el menú al abrirlo.
+      icon: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: .18),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.more_vert, color: Colors.white),
+      ),
+      onSelected: (v) {
+        if (v == 'renombrar') onRenombrar?.call();
+        if (v == 'quitar') onQuitar?.call();
+      },
+      itemBuilder: (_) => [
+        if (onRenombrar != null)
+          const PopupMenuItem(value: 'renombrar', child: Text('Renombrar')),
+        if (onQuitar != null)
+          const PopupMenuItem(value: 'quitar', child: Text('Quitar valor')),
+      ],
     );
   }
 }

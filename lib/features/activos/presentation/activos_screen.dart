@@ -264,6 +264,8 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   }
 
   Widget _buildGrid(ActivosRepository repo, ColorScheme colors) {
+    // Sin key con `_tick`: cada grid se recarga solo tras su propio cambio, y
+    // poner la key acá dispararía una segunda consulta idéntica.
     if (_dim == 'categoria') {
       return ActivosCategoriasGrid(
         repo: repo,
@@ -276,6 +278,14 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
           _searchCtrl.clear();
         }),
         onCreate: () => _crearCategoria(repo),
+        // El grid solo se ve en la raíz, así que acá `_categoria` es siempre
+        // null: los avisos son para que el encabezado y el filtro no se queden
+        // apuntando a algo que ya no está.
+        onEditado: () => setState(() => _tick++),
+        onEliminado: (_) => setState(() {
+          _categoria = null;
+          _tick++;
+        }),
       );
     }
     final d = _dims[_dim]!;
@@ -292,6 +302,16 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         _searchCtrl.clear();
       }),
       onCrear: d.editable ? () => _crearValor(repo, d.columna, d.singular) : null,
+      onRenombrar: (antes, despues) => setState(() {
+        // Si el valor renombrado era el que estaba abierto, el filtro viejo ya
+        // no matchea nada y la pantalla quedaría vacía sin avisar.
+        if (_valor == antes) _valor = despues;
+        _tick++;
+      }),
+      onQuitar: (valor) => setState(() {
+        if (_valor == valor) _valor = null;
+        _tick++;
+      }),
     );
   }
 

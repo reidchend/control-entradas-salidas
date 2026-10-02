@@ -80,6 +80,25 @@ class ActivosRepository {
     await _db.deleteById('activos_categorias', id);
   }
 
+  /// ¿Existe otra categoría con ese nombre?
+  ///
+  /// `activos_categorias.nombre` es UNIQUE, pero la base no distingue mayúsculas,
+  /// así que `Sillas` y `sillas` pueden convivir. La comparación ignora
+  /// mayúsculas a propósito: la pregunta es "¿queda otra con este nombre?", y
+  /// responder que no por una diferencia de capitalización deja justo el
+  /// duplicado que se quería evitar. [ignorarId] deja pasar la propia categoría
+  /// cuando lo que se está es renombrando.
+  Future<bool> existeCategoria(String nombre, {int? ignorarId}) async {
+    final filas = await _db.executeSql(
+      'SELECT 1 FROM activos_categorias '
+      'WHERE LOWER(nombre) = LOWER(\$1) '
+      'AND (\$2::int IS NULL OR id <> \$2) '
+      'LIMIT 1',
+      params: [nombre, ignorarId],
+    );
+    return filas.isNotEmpty;
+  }
+
   // ---------------------------------------------------------------------
   // Tipos (catálogo)
   // ---------------------------------------------------------------------
@@ -195,6 +214,47 @@ class ActivosRepository {
   Future<List<String>> getGrupos() => _distintosTipos('grupo');
 
   Future<List<String>> getModelos() => _distintosTipos('modelo');
+
+  /// Renombra un valor de dimensión en todas las filas que lo usan.
+  ///
+  /// Si [hasta] ya existe, las dos filas quedan con el mismo valor: eso es justo
+  /// lo que hace útil para corregir `hab01` contra `Hab01`.
+  Future<void> renombrarValor(String columna, String desde, String hasta) {
+    return _db.updateWhere(
+      _tablaDeValor(columna),
+      {columna: desde},
+      {columna: hasta},
+    );
+  }
+
+  /// Le saca el valor a todas las filas que lo usan.
+  ///
+  /// Deja la columna en NULL, no borra la fila: quitar la ubicación de 10
+  /// unidades no debería borrar 10 unidades del inventario. Para borrar
+  /// unidades están los métodos de cada una.
+  Future<void> quitarValor(String columna, String valor) {
+    return _db.updateWhere(
+      _tablaDeValor(columna),
+      {columna: valor},
+      {columna: null},
+    );
+  }
+
+  /// En qué tabla vive cada dimensión.
+  ///
+  /// El nombre de la columna va interpolado en el SQL (los placeholders no
+  /// cubren identificadores), así que el `switch` es la lista cerrada que evita
+  /// que un valor raro llegue a la consulta.
+  String _tablaDeValor(String columna) {
+    switch (columna) {
+      case 'ubicacion':
+        return 'activos';
+      case 'grupo':
+      case 'modelo':
+        return 'activos_tipos';
+    }
+    throw ArgumentError('Dimensión sin valores editables: $columna');
+  }
 
   Future<List<String>> getUbicaciones() async {
     try {
