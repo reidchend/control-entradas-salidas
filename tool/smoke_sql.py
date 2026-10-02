@@ -530,6 +530,64 @@ def prueba_booleanos_en_dart(conn):
     )
 
 
+# ------------------------------ lint de listeners con la firma equivocada
+#
+# `Listenable.addListener` recibe un `VoidCallback`, o sea `void Function()`.
+# Pasar un metodo que declara parametros es un error de tipos que el frontend
+# de Dart si ve, pero que se escapa de toda revision que no tenga Flutter
+# resuelto: sin el SDK, `VoidCallback` es un simbolo desconocido y el
+# analizador no puede concluir nada sobre la asignacion. Por eso se chequea
+# aca, leyendo la firma directamente del fuente.
+
+# `ctrl.addListener(_miMetodo)` / `..removeListener(_miMetodo)`, solo el
+# identificador: los call sites con closure (`addListener(() => ...)`) ya
+# cumplen la firma por construccion.
+LISTENER_RE = re.compile(r"\.\s*(?:add|remove)Listener\(\s*(_[A-Za-z0-9_]*)\s*\)")
+
+# Declaracion del metodo: `void _alEditarTipo(String texto) {`
+DECLARACION_RE = re.compile(
+    r"^[ \t]*(?:void|Future(?:<[^>]*>)?|bool|int|String|dynamic)\s+"
+    r"([A-Za-z_]\w*)\s*\(([^)]*)\)",
+    re.M,
+)
+
+
+def prueba_listeners_en_dart():
+    """Ningun `addListener` recibe un metodo que declara parametros."""
+    malos, revisados = [], 0
+    for carpeta, _, nombres in os.walk(os.path.join(RAIZ, "lib")):
+        for nombre in nombres:
+            if not nombre.endswith(".dart"):
+                continue
+            ruta = os.path.join(carpeta, nombre)
+            with open(ruta, encoding="utf-8") as fh:
+                texto = fh.read()
+
+            firmas = {m.group(1): m.group(2).strip()
+                      for m in DECLARACION_RE.finditer(texto)}
+            for m in LISTENER_RE.finditer(texto):
+                metodo = m.group(1)
+                if metodo not in firmas:
+                    # Heredado de otra clase (p.ej. de un State): no se puede
+                    # leer la firma desde este archivo, se deja pasar.
+                    continue
+                revisados += 1
+                if firmas[metodo]:
+                    linea = texto[:m.start()].count("\n") + 1
+                    malos.append(
+                        f"{os.path.relpath(ruta, RAIZ)}:{linea} -> "
+                        f"{metodo}({firmas[metodo]}) a un VoidCallback"
+                    )
+
+    detalle = f"listeners con firma propia revisados: {revisados}"
+    if malos:
+        detalle += "\n" + "\n".join(malos)
+        detalle += "\naddListener espera void Function(): quitar los parametros"
+    return reportar(
+        "ningun listener declara parametros", not malos, detalle
+    )
+
+
 def main():
     env = leer_env_local()
     token = env.get("PROXY_SQL_TOKEN")
@@ -553,6 +611,7 @@ def main():
             cur.execute(f"DROP TABLE IF EXISTS {TABLA_PRUEBA}")
         prueba_limpieza(conn)
         prueba_booleanos_en_dart(conn)
+        prueba_listeners_en_dart()
     finally:
         conn.close()
 

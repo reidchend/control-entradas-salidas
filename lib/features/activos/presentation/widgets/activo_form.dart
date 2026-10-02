@@ -153,9 +153,13 @@ class _ActivoFormState extends State<ActivoForm> {
     return t == null ? '' : textoTipo(t);
   }
 
-  void _alEditarTipo(String texto) {
+  /// Se dispara cada vez que cambia el texto del campo de tipo.
+  ///
+  /// `TextEditingController.addListener` entrega un `VoidCallback` (sin
+  /// argumentos), así que el texto se lee del controller en vez de recibirse.
+  void _alEditarTipo() {
     final sel = _tipoSeleccionado;
-    final cambio = sel != null && texto != textoTipo(sel);
+    final cambio = sel != null && _tipoCtrl.text != textoTipo(sel);
     if (cambio) {
       _selected = null;
       _nuevo = null;
