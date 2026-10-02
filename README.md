@@ -10,6 +10,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 |---|---|---|---|
 | **Inventario** | `lib/main.dart` | Inventario, stock, producciones, requisiciones, validacion de facturas, historial, reportes, WhatsApp, configuracion | Windows (`LycorisControl.exe`) + Android (APK) |
 | **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, cierres, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) |
+| **Hosteleria** | `lib/main_hosteleria.dart` | Huespedes y reservas/estancias sobre las habitaciones del POS (`pos_habitaciones`) | Windows (`LycorisHostel.exe`) + web |
 
 **Arquitectura**: 3 plataformas desde un solo codigo base — **web** (desarrollo/uso en navegador) y **nativos** (Windows/Android) con actualizacion remota via GitHub Releases.
 
@@ -70,7 +71,7 @@ de sesion (`SqlSession`) con dos implementaciones elegidas en runtime.
 
 ```
 lib/
-├── main.dart / main_pos.dart        # entry points (inventario / POS)
+├── main.dart / main_pos.dart / main_hosteleria.dart  # entry points (inventario / POS / Hosteleria)
 ├── core/
 │   ├── auth/                        # login, PIN, sesion, device_id
 │   ├── config/
@@ -404,6 +405,15 @@ cp web_pos/favicon.png web_pos/manifest.json build/pos/
 cp -r web_pos/icons build/pos/
 cp web_pos/index.html build/pos/index.html
 tool/venv/bin/python tool/server.py 8502 build/pos
+
+# Hostelería (puerto 8503)
+flutter build web --release -t lib/main_hosteleria.dart -o build/hosteleria \
+    --dart-define=WHATSAPP_BOT_TOKEN=<TOKEN> \
+    --dart-define=PROXY_SQL_TOKEN=<PROXY>
+cp web_hosteleria/favicon.png web_hosteleria/manifest.json build/hosteleria/
+cp -r web_hosteleria/icons build/hosteleria/
+cp web_hosteleria/index.html build/hosteleria/index.html
+tool/venv/bin/python tool/server.py 8503 build/hosteleria
 ```
 
 El `PROXY_SQL_TOKEN` **va embebido en web** porque el navegador no tiene
@@ -432,6 +442,7 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 |---|---|---|
 | `windows-pos` | `LycorisPOS.exe` (icono azul) | `app-pos-windows.zip` |
 | `windows-inventario` | `LycorisControl.exe` (icono normal) | `app-inventario-windows.zip` |
+| `windows-hosteleria` | `LycorisHostel.exe` (icono dorado) | `app-hosteleria-windows.zip` |
 | `linux` | `LycorisPOS` + `LycorisControl` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz` |
 | `android` | APK inventario (icono normal) | `app-inventario-android.apk` |
 | `release` | Publica la release `vX.Y.Z` | — |
@@ -439,7 +450,7 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 **Como generar una release**:
 1. Push a `main`.
 2. Agregar los secrets en *Settings → Secrets and variables → Actions*:
-   - `WHATSAPP_BOT_TOKEN` — lo usan los 4 jobs de build.
+   - `WHATSAPP_BOT_TOKEN` — lo usan los 5 jobs de build.
    - `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — solo para el APK de Android.
 3. *Actions → "Build & Release nativa" → Run workflow* con la version deseada (ej. `2.0.1`).
 4. Descargar los binarios desde la pagina de la release.
@@ -553,6 +564,7 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 
 ### Migraciones recientes
 
+- `20261002000000_hosteleria.sql` — tablas propias del modulo Hosteleria (`hosteleria_huespedes`, `hosteleria_reservas`), vinculadas a `pos_habitaciones`.
 - `20260922000000_activos_tipos.sql` — tipos de activo con unidades de medida.
 - `20260901120000_add_almacenes.sql` — catalogo de almacenes (antes eran strings libres).
 - `20260901000000_add_stock_fecha_checkpoint.sql` — `stock_checkpoint.fecha_checkpoint` y columnas `venta_id`/`venta_sync_uuid` en `movimientos_archivo`.

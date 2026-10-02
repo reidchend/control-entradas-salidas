@@ -113,6 +113,54 @@ jobs:
           name: app-inventario-windows
           path: app-inventario-windows.zip
 
+  windows-hosteleria:
+    name: Windows Hostelería (zip)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Determinar version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Actualizar version en pubspec.yaml
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.tag }}"
+          (Get-Content pubspec.yaml) -replace 'version: .+', "version: $version+1" | Set-Content pubspec.yaml
+          Write-Host "Version actualizada a $version"
+      - name: Build Windows Hostelería
+        env:
+          LYCORIS_BINARY_NAME: LycorisHostel
+        run: |
+          Copy-Item windows\runner\resources\app_icon_hosteleria.ico `
+            windows\runner\resources\app_icon.ico -Force
+          flutter pub get
+          flutter build windows --release -t lib/main_hosteleria.dart `
+            --dart-define=APP_ID=hosteleria `
+            --dart-define=APP_LABEL="Lycoris Hostelería" `
+            --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
+      - name: Empaquetar zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* `
+            -DestinationPath app-hosteleria-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-hosteleria-windows
+          path: app-hosteleria-windows.zip
+
   # ---------------------------------------------------------------------------
   # Linux — POS (main_pos.dart) e inventario (main.dart)
   # ---------------------------------------------------------------------------
@@ -238,7 +286,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Publicar GitHub Release
-    needs: [windows-pos, windows-inventario, linux, android]
+    needs: [windows-pos, windows-inventario, windows-hosteleria, linux, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -274,9 +322,10 @@ jobs:
           gh release create "v${{ steps.version.outputs.tag }}" \
             artifacts/app-pos-windows.zip \
             artifacts/app-inventario-windows.zip \
+            artifacts/app-hosteleria-windows.zip \
             artifacts/app-pos-linux.tar.gz \
             artifacts/app-inventario-linux.tar.gz \
             artifacts/app-inventario-android.apk \
             --title "Lycoris v${{ steps.version.outputs.tag }}" \
-            --notes "Build nativo Flutter. POS (Windows/Linux) + Inventario (Windows/Linux/Android)."
+            --notes "Build nativo Flutter. POS (Windows/Linux) + Inventario (Windows/Linux/Android) + Hostelería (Windows)."
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'

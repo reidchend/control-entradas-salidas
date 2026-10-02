@@ -210,5 +210,30 @@ tienen operadores distintos, es lo normal: se cambió de usuario en ese equipo.
 
 ---
 
+## Módulo nuevo: Lycoris Hosteleria (pendiente de aplicar migración)
+
+Se agregó un módulo independiente (`lib/main_hosteleria.dart`) para huéspedes
+y reservas. Reutiliza las habitaciones de `pos_habitaciones` (las del POS).
+
+**Falta aplicar la migración en la BD del servidor** antes de usar el módulo:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -f supabase\migrations\20261002000000_hosteleria.sql
+```
+
+Crea `hosteleria_huespedes` y `hosteleria_reservas` (con FK a
+`pos_habitaciones`). Verificar:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -c "SELECT count(*) FROM hosteleria_huespedes; SELECT count(*) FROM hosteleria_reservas;"
+```
+
+El módulo no necesita cambios en `tool/server.py` ni en el túnel: usa el mismo
+`PostgresService` que la app de inventario.
+
+---
+
 ## Contacto
 Si algo no está claro, revisa `graphify-out/` o pregunta al usuario.
