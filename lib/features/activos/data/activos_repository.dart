@@ -89,12 +89,18 @@ class ActivosRepository {
   /// duplicado que se quería evitar. [ignorarId] deja pasar la propia categoría
   /// cuando lo que se está es renombrando.
   Future<bool> existeCategoria(String nombre, {int? ignorarId}) async {
+    // `ignorarId` va dos veces como `$2` y `$3`, no repetido: el proxy traduce
+    // `$N` a `%s` una vez por aparición, así que un `$2` repetido llega al
+    // servidor como tres placeholders con dos parámetros y PostgreSQL responde
+    // "the query has 3 placeholders but 2 parameters were passed". La consulta
+    // directa desde Dart sí toleraría el `$2` repetido, por eso el bug no se
+    // veía en las pruebas contra la base.
     final filas = await _db.executeSql(
       'SELECT 1 FROM activos_categorias '
       'WHERE LOWER(nombre) = LOWER(\$1) '
-      'AND (\$2::int IS NULL OR id <> \$2) '
+      'AND (\$2::int IS NULL OR id <> \$3) '
       'LIMIT 1',
-      params: [nombre, ignorarId],
+      params: [nombre, ignorarId, ignorarId],
     );
     return filas.isNotEmpty;
   }

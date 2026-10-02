@@ -59,13 +59,26 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
-  /// Verifica nombre+PIN contra la tabla global. Si coincide, actualiza el
-  /// device_id de ese operador al dispositivo actual (para que una
-  /// reinstalación no vuelva a crear un registro duplicado).
+  /// Verifica nombre+PIN y deja **este dispositivo** asociado a ese operador.
   ///
-  /// También refresca `configurado_en`: es lo que usa [nombrePorDeviceId] para
-  /// saber con qué operador entró este dispositivo la última vez, así que ese
-  /// campo pasó a ser "última vinculación" y no "alta".
+  /// Son dos pasos separados a propósito:
+  ///
+  /// 1. El PIN se valida contra cualquier fila con ese nombre. Si el nombre no
+  ///    existe, o el PIN no coincide, no hay sesión.
+  /// 2. Recién ahí se resuelve la asociación con el dispositivo: si ya hay una
+  ///    fila `(nombre, device_id)` se refresca, y si no se inserta una nueva.
+  ///
+  /// El paso 2 antes no existía: se buscaba la fila por nombre y se le pisaba el
+  /// `device_id` con el del dispositivo actual. Con eso, entrar desde la tablet
+  /// **desvinculaba el teléfono**, porque una sola fila guarda un solo
+  /// `device_id`. Y como `DeviceIdService` genera el UUID en SharedPreferences,
+  /// reinstalar la app generaba otro, así que el enlace se iba con cada
+  /// instalación. Ahora un operador puede estar en tantos dispositivos como
+  /// haga falta: cada uno tiene su fila y la autodetección los respeta a todos.
+  ///
+  /// El precio es que cada reinstalación deja la fila anterior atrás. Son filas
+  /// inertes (no las devuelve [nombrePorDeviceId] porque su `device_id` ya no
+  /// existe en ningún lado) y se pueden borrar a mano.
   Future<bool> verificarPin({
     required String nombre,
     required String pin,
@@ -75,6 +88,7 @@ class SessionController extends StateNotifier<SessionState> {
     final deviceId = await DeviceIdService.instance.id;
     final n = nombre.trim();
     try {
+      // 1. Validar el PIN contra el operador.
       final rows = await db.executeSql(
         'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
         'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
@@ -82,31 +96,47 @@ class SessionController extends StateNotifier<SessionState> {
       );
       if (rows.isEmpty) return false;
       final u = rows.first;
-      if (u['pin_hash'] == pin) {
-        if (u['id'] != null) {
-          await db.updateWhere(
-            'dispositivo_usuario',
-            {'id': u['id']},
-            {
-              'device_id': deviceId,
-              'configurado_en': DateTime.now().toIso8601String(),
-            },
-          );
-        }
-        state = SessionState.authenticated(
-          nombre: u['nombre'] as String,
-          pinHash: u['pin_hash'] as String,
+      if (u['pin_hash'] != pin) return false;
+
+      // 2. Asociar ESTE dispositivo, sin tocar las filas de los demás.
+      final propias = await db.executeSql(
+        'SELECT id FROM dispositivo_usuario '
+        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) AND device_id = \$2 '
+        'ORDER BY id LIMIT 1',
+        params: [n, deviceId],
+      );
+      // `configurado_en` es "última vinculación", no "alta": es lo que usa
+      // [nombrePorDeviceId] para desempatar cuando el mismo device_id quedó en
+      // varias filas.
+      if (propias.isEmpty) {
+        await db.insert('dispositivo_usuario', {
+          'nombre': u['nombre'],
+          'pin_hash': pin,
+          'device_id': deviceId,
+          'configurado_en': DateTime.now().toIso8601String(),
+        });
+      } else if (propias.first['id'] != null) {
+        await db.updateWhere(
+          'dispositivo_usuario',
+          {'id': propias.first['id']},
+          {'configurado_en': DateTime.now().toIso8601String()},
         );
-        return true;
       }
-      return false;
+      state = SessionState.authenticated(
+        nombre: u['nombre'] as String,
+        pinHash: u['pin_hash'] as String,
+      );
+      return true;
     } catch (_) {
       return false;
     }
   }
 
   /// ¿Existe un operador con este nombre en la BD? (case-insensitive).
-Future<bool> existeOperador(String nombre) async {
+  ///
+  /// Da `true` también si el operador está en otro dispositivo: entrar con
+  /// nombre+PIN desde uno nuevo debe crear la asociación, no fallar.
+  Future<bool> existeOperador(String nombre) async {
     final db = _db;
     if (db == null) return false;
     final n = nombre.trim();

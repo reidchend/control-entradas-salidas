@@ -37,6 +37,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
 try:
     import psycopg
@@ -390,13 +391,17 @@ def prueba_placeholders_en_dart():
                         continue
                     revisados += 1
                     numeros = PLACEHOLDER_RE.findall(sql)
-                    malos = sorted({x for x in numeros if numeros.count(x) > 1},
-                                   key=int)
+                    # `PLACEHOLDER_RE` captura el `$` incluido, así que hay que
+                    # sacar el prefijo antes de ordenar: `int('$2')` revienta.
+                    malos = sorted(
+                        {x for x in numeros if numeros.count(x) > 1},
+                        key=lambda x: int(x[1:]),
+                    )
                     if malos:
                         linea = texto[:m.start()].count("\n") + 1
                         repetidos.append(
                             f"{os.path.relpath(ruta, RAIZ)}:{linea} -> "
-                            f"${', $'.join(malos)}"
+                            f"{', '.join(malos)}"
                         )
 
     detalle = f"SQL crudo revisados: {revisados}"
@@ -588,6 +593,162 @@ def prueba_listeners_en_dart():
     )
 
 
+# ------------------- un operador puede estar en varios dispositivos
+#
+# `dispositivo_usuario` guarda un `device_id` por fila, asi que "un operador en
+# N dispositivos" se representa con N filas que comparten `nombre`. Lo que no
+# puede pasar es que registrar en un dispositivo pise el `device_id` de otro:
+# antes `verificarPin` buscaba la fila por nombre y le escribia el device_id
+# del dispositivo actual, con lo cual entrar desde la tablet desvinculaba el
+# telefono.
+#
+# Se reproduce la logica de `SessionController.verificarPin` contra la base
+# real, dentro de una transaccion que se descarta al final.
+
+DEV_TELEFONO = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
+DEV_TABLET = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
+DEV_NOTEBOOK = "cccccccc-3333-4333-8333-cccccccccccc"
+USUARIO_PRUEBA = "ZZ Smoke Multidispositivo"
+PIN_PRUEBA = "4821"
+
+
+def _ahora():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _nombre_por_device(conn, device_id):
+    cur = conn.execute(
+        "SELECT nombre FROM dispositivo_usuario WHERE device_id = %s "
+        "ORDER BY configurado_en DESC, id DESC LIMIT 1",
+        (device_id,),
+    )
+    fila = cur.fetchone()
+    return fila[0] if fila else None
+
+
+def _filas_de(conn, nombre):
+    return conn.execute(
+        "SELECT device_id FROM dispositivo_usuario "
+        "WHERE LOWER(TRIM(nombre)) = LOWER(%s)",
+        (nombre,),
+    ).fetchall()
+
+
+def _verificar_pin(conn, nombre, pin, device_id):
+    """Espejo de `SessionController.verificarPin`."""
+    u = conn.execute(
+        "SELECT id, nombre, pin_hash FROM dispositivo_usuario "
+        "WHERE LOWER(TRIM(nombre)) = LOWER(%s) ORDER BY id LIMIT 1",
+        (nombre,),
+    ).fetchone()
+    if u is None or u[2] != pin:
+        return False
+
+    propias = conn.execute(
+        "SELECT id FROM dispositivo_usuario "
+        "WHERE LOWER(TRIM(nombre)) = LOWER(%s) AND device_id = %s "
+        "ORDER BY id LIMIT 1",
+        (nombre, device_id),
+    ).fetchone()
+    if propias is None:
+        conn.execute(
+            "INSERT INTO dispositivo_usuario "
+            "(nombre, pin_hash, device_id, configurado_en) VALUES (%s,%s,%s,%s)",
+            (u[1], pin, device_id, _ahora()),
+        )
+    else:
+        conn.execute(
+            "UPDATE dispositivo_usuario SET configurado_en = %s WHERE id = %s",
+            (_ahora(), propias[0]),
+        )
+    return True
+
+
+def prueba_multidispositivo(conn):
+    """Registrar en un dispositivo no borra la asociacion de los demas."""
+    conn.autocommit = False
+    problemas = []
+    try:
+        conn.execute(
+            "INSERT INTO dispositivo_usuario "
+            "(nombre, pin_hash, device_id, configurado_en) VALUES (%s,%s,%s,%s)",
+            (USUARIO_PRUEBA, PIN_PRUEBA, DEV_TELEFONO, _ahora()),
+        )
+
+        def exigir(condicion, mensaje):
+            if not condicion:
+                problemas.append(mensaje)
+
+        # El telefono ya quedo asociado al registrarse.
+        exigir(
+            _nombre_por_device(conn, DEV_TELEFONO) == USUARIO_PRUEBA,
+            "el telefono no autodetecta recien registrado",
+        )
+
+        # Entrar desde la tablet es el caso que antes desvinculaba el telefono.
+        exigir(
+            _verificar_pin(conn, USUARIO_PRUEBA, PIN_PRUEBA, DEV_TABLET),
+            "el PIN no valida desde la tablet",
+        )
+        exigir(
+            _nombre_por_device(conn, DEV_TELEFONO) == USUARIO_PRUEBA,
+            "entrar desde la tablet DESVINCULO el telefono",
+        )
+        exigir(
+            _nombre_por_device(conn, DEV_TABLET) == USUARIO_PRUEBA,
+            "la tablet no quedo asociada",
+        )
+
+        # Un tercer dispositivo tampoco molesta a los dos primeros.
+        _verificar_pin(conn, USUARIO_PRUEBA, PIN_PRUEBA, DEV_NOTEBOOK)
+        for etiqueta, dev in (
+            ("telefono", DEV_TELEFONO),
+            ("tablet", DEV_TABLET),
+            ("notebook", DEV_NOTEBOOK),
+        ):
+            exigir(
+                _nombre_por_device(conn, dev) == USUARIO_PRUEBA,
+                f"el {etiqueta} perdio su usuario",
+            )
+
+        # Reentrar en un dispositivo ya vinculado actualiza, no duplica.
+        antes = len(_filas_de(conn, USUARIO_PRUEBA))
+        _verificar_pin(conn, USUARIO_PRUEBA, PIN_PRUEBA, DEV_TELEFONO)
+        exigir(
+            len(_filas_de(conn, USUARIO_PRUEBA)) == antes,
+            "reentrar duplico la fila en vez de actualizarla",
+        )
+
+        # El PIN sigue siendo la unica credencial.
+        exigir(
+            not _verificar_pin(conn, USUARIO_PRUEBA, "9999", DEV_TABLET),
+            "acepto un PIN incorrecto",
+        )
+        exigir(
+            not _verificar_pin(conn, "ZZ Smoke Nadie", PIN_PRUEBA, DEV_TELEFONO),
+            "acepto un nombre inexistente",
+        )
+    finally:
+        conn.rollback()
+        conn.autocommit = True
+
+    filas = len(_filas_de(conn, USUARIO_PRUEBA))
+    limpio = filas == 0
+    detalle = (
+        f"3 dispositivos asociados a un mismo operador; "
+        f"filas del usuario tras el rollback: {filas}"
+    )
+    if not limpio:
+        detalle += " (el rollback no limpio la prueba)"
+    if problemas:
+        detalle += "; " + "; ".join(problemas)
+    return reportar(
+        "un operador se asocia a varios dispositivos sin pisarse",
+        not problemas and limpio,
+        detalle,
+    )
+
+
 def main():
     env = leer_env_local()
     token = env.get("PROXY_SQL_TOKEN")
@@ -612,6 +773,7 @@ def main():
         prueba_limpieza(conn)
         prueba_booleanos_en_dart(conn)
         prueba_listeners_en_dart()
+        prueba_multidispositivo(conn)
     finally:
         conn.close()
 
