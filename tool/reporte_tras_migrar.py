@@ -46,7 +46,8 @@ def main():
             print(f"  {estado:16} {n}")
         print()
 
-        print("=== 3. usuarios: los 14 ===")
+        total_usuarios = c.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0]
+        print(f"=== 3. usuarios: los {total_usuarios} ===")
         for r in c.execute(
             "SELECT id, nombre, nivel, activo, "
             "CASE WHEN pin_hash IS NULL OR pin_hash='' THEN 'sin PIN' "
@@ -84,6 +85,18 @@ def main():
             "  WHERE LOWER(TRIM(u.nombre)) = LOWER(TRIM(d.nombre)))"
         ).fetchone()[0]
         print(f"  filas de la vieja sin equivalente en la nueva: {sin_match}")
+        if huerf or sin_match:
+            print("  (esperado: las filas cuyo nombre se fusiono o se borro. La tabla")
+            print("   vieja ya no la lee la app; queda solo como registro.)")
+            for r in c.execute(
+                "SELECT DISTINCT d.nombre FROM dispositivo_usuario d "
+                "WHERE NOT EXISTS (SELECT 1 FROM usuarios u "
+                "  WHERE LOWER(TRIM(u.nombre)) = LOWER(TRIM(d.nombre)))"
+            ).fetchall():
+                n = c.execute(
+                    "SELECT COUNT(*) FROM dispositivo_usuario WHERE nombre=%s", (r[0],)
+                ).fetchone()[0]
+                print(f"    {r[0]!r}  ({n} fila(s) en la tabla vieja)")
         print()
 
         print("=== 6. hosteleria: todo vacio todavia ===")
