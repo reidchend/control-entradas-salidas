@@ -140,7 +140,7 @@ class PosRepository {
     if (rows.isEmpty) return null;
     final s = rows.first;
     final u = await _db.client
-        .from('pos_usuarios')
+        .from('usuarios')
         .select('nombre')
         .eq('id', s['usuario_id'] as int)
         .limit(1);
@@ -191,7 +191,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     final uidMap = <int, String>{};
     if (uids.isNotEmpty) {
       final urows = await _db.client
-          .from('pos_usuarios')
+          .from('usuarios')
           .select('id, nombre')
           .inFilter('id', uids.toList());
       for (final u in urows) {
@@ -213,34 +213,48 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     return result;
   }
 
-  // Usuarios (PIN)
+  // Usuarios (directorio central, módulo POS)
 
   Future<List<PosUsuario>> getUsuarios({bool soloActivos = true}) async {
-    var query = _db.client.from('pos_usuarios').select();
-    if (soloActivos) query = query.eq('activo', 1);
-    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
+    final rows = await _db.executeSql(
+      'SELECT u.*, COALESCE(array_agg(m.modulo) '
+      "FILTER (WHERE m.modulo IS NOT NULL), '{}') AS modulos "
+      'FROM usuarios u '
+      'JOIN usuario_modulos m ON m.usuario_id = u.id '
+      "WHERE m.modulo = 'pos'${soloActivos ? ' AND u.activo = 1' : ''} "
+      'GROUP BY u.id ORDER BY u.nombre',
+    );
     return rows.map(PosUsuario.fromMap).toList();
   }
 
   Future<PosUsuario?> getUsuario(int usuarioId) async {
-    final rows = await _db.client
-        .from('pos_usuarios')
-        .select()
-        .eq('id', usuarioId)
-        .limit(1);
+    final rows = await _db.executeSql(
+      'SELECT * FROM usuarios WHERE id = \$1 LIMIT 1',
+      params: [usuarioId],
+    );
     return rows.isEmpty ? null : PosUsuario.fromMap(rows.first);
   }
 
   Future<int> crearUsuario(String nombre,
       {String? pin, bool esAdmin = false, bool esDesarrollador = false}) async {
-    return await _db.insert('pos_usuarios', {
+    final nivel = esDesarrollador
+        ? NivelUsuario.desarrollador
+        : esAdmin
+            ? NivelUsuario.admin
+            : NivelUsuario.basico;
+    final id = await _db.insert('usuarios', {
       'nombre': nombre.trim(),
       'pin_hash': pin != null && pin.trim().isNotEmpty ? _pinHash(pin) : null,
-      'es_admin': esAdmin ? 1 : 0,
-      'es_desarrollador': esDesarrollador ? 1 : 0,
+      'nivel': nivel.db,
       'activo': 1,
       'creado_en': DateTime.now().toIso8601String(),
     });
+    await _db.executeCommand(
+      "INSERT INTO usuario_modulos (usuario_id, modulo) VALUES (\$1, 'pos') "
+      'ON CONFLICT DO NOTHING',
+      params: [id],
+    );
+    return id;
   }
 
   Future<void> actualizarUsuario(
@@ -251,36 +265,35 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     bool? esDesarrollador,
     bool? activo,
   }) async {
-    final rows = await _db.client
-        .from('pos_usuarios')
-        .select()
-        .eq('id', usuarioId)
-        .limit(1);
-    if (rows.isEmpty) return;
-    final actual = rows.first;
-    await _db.updateById('pos_usuarios', usuarioId, {
+    NivelUsuario? nivel;
+    if (esDesarrollador != null || esAdmin != null) {
+      if (esDesarrollador == true) {
+        nivel = NivelUsuario.desarrollador;
+      } else if (esAdmin == true) {
+        nivel = NivelUsuario.admin;
+      } else {
+        nivel = NivelUsuario.basico;
+      }
+    }
+    final data = <String, dynamic>{
       if (nombre != null) 'nombre': nombre.trim(),
-      'pin_hash': pin == null
-          ? actual['pin_hash']
-          : pin.isEmpty
-              ? null
-              : _pinHash(pin),
-      if (esAdmin != null) 'es_admin': esAdmin ? 1 : 0,
-      if (esDesarrollador != null) 'es_desarrollador': esDesarrollador ? 1 : 0,
+      if (pin != null) 'pin_hash': pin.isEmpty ? null : _pinHash(pin),
+      if (nivel != null) 'nivel': nivel.db,
       if (activo != null) 'activo': activo ? 1 : 0,
-    });
+    };
+    if (data.isEmpty) return;
+    await _db.updateById('usuarios', usuarioId, data);
   }
 
   Future<void> eliminarUsuario(int usuarioId) async {
-    await _db.deleteById('pos_usuarios', usuarioId);
+    await _db.deleteById('usuarios', usuarioId);
   }
 
   Future<bool> verificarPin(int usuarioId, String pin) async {
-    final rows = await _db.client
-        .from('pos_usuarios')
-        .select('pin_hash')
-        .eq('id', usuarioId)
-        .limit(1);
+    final rows = await _db.executeSql(
+      'SELECT pin_hash FROM usuarios WHERE id = \$1 LIMIT 1',
+      params: [usuarioId],
+    );
     if (rows.isEmpty) return false;
     final hash = rows.first['pin_hash'] as String?;
     if (hash == null || hash.isEmpty) return false;
@@ -338,52 +351,95 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
 
   // Habitaciones
 
-  Future<List<PosHabitacion>> getHabitaciones({bool soloActivos = false}) async {
-    var query = _db.client.from('pos_habitaciones').select();
-    if (soloActivos) query = query.eq('activo', 1);
-    final rows = await query.order('numero') as List<Map<String, dynamic>>;
-    return rows.map(PosHabitacion.fromMap).toList();
+  static const String _selectHabitacion = '''
+    SELECT h.id, h.numero, h.piso, h.tipo, h.tipo_id, h.activo, h.creado_en,
+           h.updated_at,
+           COALESCE(t.nombre, h.tipo) AS tipo_display,
+           t.capacidad AS capacidad
+      FROM habitaciones h
+      LEFT JOIN tipos_habitacion t ON t.id = h.tipo_id
+  ''';
+
+  Future<List<Habitacion>> getHabitaciones({bool soloActivos = false}) async {
+    final rows = await _db.executeSql(
+      '$_selectHabitacion${soloActivos ? ' WHERE h.activo = 1' : ''} '
+      'ORDER BY h.numero',
+    );
+    return rows.map(Habitacion.fromMap).toList();
   }
 
-  Future<PosHabitacion?> getHabitacionById(int habId) async {
-    final rows = await _db.client
-        .from('pos_habitaciones')
-        .select()
-        .eq('id', habId)
-        .limit(1);
-    return rows.isEmpty ? null : PosHabitacion.fromMap(rows.first);
+  Future<Habitacion?> getHabitacionById(int habId) async {
+    final rows = await _db.executeSql(
+      '$_selectHabitacion WHERE h.id = \$1 LIMIT 1',
+      params: [habId],
+    );
+    return rows.isEmpty ? null : Habitacion.fromMap(rows.first);
   }
 
   Future<int> crearHabitacion(String numero,
-      {String? piso, String? tipo}) async {
-    return await _db.insert('pos_habitaciones', {
+      {String? piso, String? tipo, int? tipoId}) async {
+    return await _db.insert('habitaciones', {
       'numero': numero.trim(),
       'piso': piso?.trim(),
       'tipo': tipo?.trim(),
+      'tipo_id': tipoId,
       'activo': 1,
       'creado_en': DateTime.now().toIso8601String(),
     });
   }
 
   Future<void> actualizarHabitacion(int habId,
-      {String? numero, String? piso, String? tipo, bool? activo}) async {
+      {String? numero, String? piso, String? tipo, int? tipoId, bool? activo}) async {
     final rows = await _db.client
-        .from('pos_habitaciones')
+        .from('habitaciones')
         .select()
         .eq('id', habId)
         .limit(1);
     if (rows.isEmpty) return;
     final actual = rows.first;
-    await _db.updateById('pos_habitaciones', habId, {
+    await _db.updateById('habitaciones', habId, {
       'numero': numero?.trim() ?? actual['numero'],
       'piso': piso?.trim() ?? actual['piso'],
-      'tipo': tipo?.trim() ?? actual['tipo'],
-      if (activo != null) 'activo': activo,
+      'tipo': tipo != null ? tipo.trim() : actual['tipo'],
+      if (tipoId != null) 'tipo_id': tipoId,
+      if (activo != null) 'activo': activo ? 1 : 0,
     });
   }
 
   Future<void> eliminarHabitacion(int habId) async {
-    await _db.deleteById('pos_habitaciones', habId);
+    await _db.deleteById('habitaciones', habId);
+  }
+
+  // Tipos de habitación (catálogo con capacidad)
+
+  Future<List<TipoHabitacion>> getTiposHabitacion(
+      {bool soloActivos = false}) async {
+    var query = _db.client.from('tipos_habitacion').select();
+    if (soloActivos) query = query.eq('activo', 1);
+    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
+    return rows.map(TipoHabitacion.fromMap).toList();
+  }
+
+  Future<int> crearTipoHabitacion(String nombre, {int capacidad = 1}) async {
+    return await _db.insert('tipos_habitacion', {
+      'nombre': nombre.trim(),
+      'capacidad': capacidad < 1 ? 1 : capacidad,
+      'activo': 1,
+      'creado_en': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> actualizarTipoHabitacion(int id,
+      {String? nombre, int? capacidad, bool? activo}) async {
+    await _db.updateById('tipos_habitacion', id, {
+      if (nombre != null) 'nombre': nombre.trim(),
+      if (capacidad != null) 'capacidad': capacidad < 1 ? 1 : capacidad,
+      if (activo != null) 'activo': activo ? 1 : 0,
+    });
+  }
+
+  Future<void> eliminarTipoHabitacion(int id) async {
+    await _db.deleteById('tipos_habitacion', id);
   }
 
   // Categorias POS
@@ -680,7 +736,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     final s = sRows.first;
 
     final uRows = await _db.client
-        .from('pos_usuarios')
+        .from('usuarios')
         .select('nombre')
         .eq('id', s['usuario_id'] as int)
         .limit(1);

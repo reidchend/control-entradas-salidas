@@ -3,22 +3,22 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/session_controller.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../auth/presentation/login_screen.dart';
+import '../data/hostel_session.dart';
 import 'hosteleria_screen.dart';
+import 'widgets/hostel_login_view.dart';
 
 /// Aplicación Lycoris Hosteleria — punto de entrada `lib/main_hosteleria.dart`.
 ///
 /// Misma base de datos que el POS (PostgreSQL compartido): reutiliza las
-/// habitaciones de `pos_habitaciones` y agrega gestión propia de huéspedes y
-/// reservas. Usa el mismo login de operadores que la app de inventario.
+/// habitaciones de `habitaciones` y agrega gestión propia de huéspedes y
+/// reservas. Usa login propio de recepcionistas (grid + PIN, sin caja).
 class HosteleriaApp extends ConsumerWidget {
   const HosteleriaApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
+    final sesion = ref.watch(hostelSessionProvider);
     final appTheme = buildAppTheme(mode: ThemeMode.light);
 
     return MaterialApp(
@@ -41,9 +41,9 @@ class HosteleriaApp extends ConsumerWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: session is Authenticated
+      home: sesion != null
           ? const HosteleriaScreen()
-          : const LoginScreen(),
+          : const HostelLoginView(),
     );
   }
 }

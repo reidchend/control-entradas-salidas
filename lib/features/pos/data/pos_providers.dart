@@ -32,8 +32,13 @@ final mesasProvider = FutureProvider<List<PosMesa>>((ref) {
   return ref.watch(posRepoProvider)!.getMesas(soloActivos: true);
 });
 
-final habitacionesProvider = FutureProvider<List<PosHabitacion>>((ref) {
+final habitacionesProvider = FutureProvider<List<Habitacion>>((ref) {
   return ref.watch(posRepoProvider)!.getHabitaciones(soloActivos: true);
+});
+
+/// Tipos de habitación (catálogo con capacidad) para configurar habitaciones.
+final tiposHabitacionProvider = FutureProvider<List<TipoHabitacion>>((ref) {
+  return ref.watch(posRepoProvider)!.getTiposHabitacion(soloActivos: true);
 });
 
 final usuariosProvider = FutureProvider<List<PosUsuario>>((ref) {

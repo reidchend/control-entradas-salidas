@@ -31,7 +31,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
 
   final PosSesionActiva sesion;
   final PosMesa? mesa;
-  final PosHabitacion? habitacion;
+  final Habitacion? habitacion;
   final VoidCallback onBack;
   final VoidCallback onLogout;
 

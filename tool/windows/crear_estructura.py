@@ -38,6 +38,14 @@ ARCHIVOS = [
      "columnas extra en stock_checkpoint y movimientos_archivo"),
     ("supabase/migrations/20260901120000_add_almacenes.sql",
      "catálogo de almacenes"),
+    ("supabase/migrations/20261002000000_hosteleria.sql",
+     "módulo Hostelería: huéspedes y reservas"),
+    ("supabase/migrations/20261002010000_usuarios_centrales.sql",
+     "usuarios centralizados (usuarios, usuario_modulos, usuario_dispositivos)"),
+    ("supabase/migrations/20261002020000_hosteleria_checkin.sql",
+     "check-in de Hostelería: tipos de habitación, acompañantes y vehículos"),
+    ("supabase/migrations/20261002030000_habitaciones_estados_op.sql",
+     "estados de habitación (aseo/mantenimiento) y modalidad por horas (OP)"),
 ]
 
 

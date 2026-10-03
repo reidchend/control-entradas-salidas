@@ -80,7 +80,7 @@ class _PosRouter extends ConsumerStatefulWidget {
 class _PosRouterState extends ConsumerState<_PosRouter> {
   _PosStage _stage = _PosStage.home;
   PosMesa? _mesa;
-  PosHabitacion? _habitacion;
+  Habitacion? _habitacion;
 
   /// true si la sesión tiene turno de caja abierto o es usuario
   /// desarrollador (sesionId == 0, pruebas sin turno).
@@ -131,7 +131,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  void _abrirHabitacion(PosHabitacion h) {
+  void _abrirHabitacion(Habitacion h) {
     if (!_tieneTurno) {
       _bloquearSinTurno();
       return;

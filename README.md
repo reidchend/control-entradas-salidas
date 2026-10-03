@@ -10,7 +10,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 |---|---|---|---|
 | **Inventario** | `lib/main.dart` | Inventario, stock, producciones, requisiciones, validacion de facturas, historial, reportes, WhatsApp, configuracion | Windows (`LycorisControl.exe`) + Android (APK) |
 | **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, cierres, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) |
-| **Hosteleria** | `lib/main_hosteleria.dart` | Huespedes y reservas/estancias sobre las habitaciones del POS (`pos_habitaciones`) | Windows (`LycorisHostel.exe`) + web |
+| **Hosteleria** | `lib/main_hosteleria.dart` | Huespedes, reservas/estancias, check-in/out, estados de habitacion (aseo/mantenimiento), modalidad por horas (OP) y vistas actual/semana/mes | Windows (`LycorisHostel.exe`) + web |
 
 **Arquitectura**: 3 plataformas desde un solo codigo base — **web** (desarrollo/uso en navegador) y **nativos** (Windows/Android) con actualizacion remota via GitHub Releases.
 
@@ -357,16 +357,19 @@ CREATE TABLE IF NOT EXISTS dispositivo_usuario (
 | `plato_ingredientes` | POS |
 | `plato_contornos` | POS |
 | `pos_settings` | Configuracion, POS |
-| `pos_usuarios` | POS |
+| `usuarios` | Inventario, POS, Hostelería (directorio central) |
+| `usuario_modulos` | Inventario, POS, Hostelería (acceso por módulo) |
+| `usuario_dispositivos` | Inventario (auto-login por equipo) |
 | `pos_sesiones` | POS (turnos/cajas) |
 | `pos_cierres` | Reportes (corte de caja/inventario) |
 | `pos_temporales` | POS (ventas temporales pre-cierre) |
 | `pos_mesas` | POS |
-| `pos_habitaciones` | POS |
+| `habitaciones` | Hostelería, POS (comandas; estados libre/aseo/mantenimiento) |
+| `tipos_habitacion` | Hostelería, POS (capacidad de personas) |
 | `pos_categorias` | POS |
 | `pos_comandas` | POS |
 | `pos_ventas` | POS |
-| `dispositivo_usuario` | Auth (login PIN por dispositivo) |
+| `dispositivo_usuario` | (obsoleta) migrada a `usuario_dispositivos` |
 | `compras_lista` | Inventario (lista de compra) |
 | `whatsapp_queue` | WhatsApp |
 | `stock_checkpoint` | Stock (toma de inventario) |
@@ -374,6 +377,10 @@ CREATE TABLE IF NOT EXISTS dispositivo_usuario (
 | `activos` | Activos |
 | `activos_categorias` | Activos |
 | `activos_tipos` | Activos |
+| `hosteleria_huespedes` | Hostelería (datos completos del huésped) |
+| `hosteleria_reservas` | Hostelería (estancias + hora entrada/salida) |
+| `hosteleria_reserva_personas` | Hostelería (titular + acompañantes por estancia) |
+| `hosteleria_vehiculos` | Hostelería (vehículos por estancia) |
 
 Las cuatro ultimas no estan en `schema.sql`: `almacenes` viene de la
 migracion `20260901120000_add_almacenes.sql` y las de activos de
@@ -564,7 +571,10 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 
 ### Migraciones recientes
 
-- `20261002000000_hosteleria.sql` — tablas propias del modulo Hosteleria (`hosteleria_huespedes`, `hosteleria_reservas`), vinculadas a `pos_habitaciones`.
+- `20261002030000_habitaciones_estados_op.sql` — renombra `pos_habitaciones`→`habitaciones` y `pos_tipos_habitacion`→`tipos_habitacion`; agrega estado operativo (`libre`/`aseo`/`mantenimiento` + notas) y modalidad Operativa OP (`modalidad`, `bloque_horas`, `hora_limite`) en `hosteleria_reservas`.
+- `20261002020000_hosteleria_checkin.sql` — check-in de Hostelería: tipos de habitación con capacidad (`pos_tipos_habitacion` + `pos_habitaciones.tipo_id`, renombrados luego), datos completos del huésped, `hosteleria_reserva_personas`, `hosteleria_vehiculos` y horas de entrada/salida.
+- `20261002010000_usuarios_centrales.sql` — directorio central de usuarios (`usuarios`, `usuario_modulos`, `usuario_dispositivos`).
+- `20261002000000_hosteleria.sql` — tablas propias del modulo Hosteleria (`hosteleria_huespedes`, `hosteleria_reservas`), vinculadas a `habitaciones`.
 - `20260922000000_activos_tipos.sql` — tipos de activo con unidades de medida.
 - `20260901120000_add_almacenes.sql` — catalogo de almacenes (antes eran strings libres).
 - `20260901000000_add_stock_fecha_checkpoint.sql` — `stock_checkpoint.fecha_checkpoint` y columnas `venta_id`/`venta_sync_uuid` en `movimientos_archivo`.

@@ -9,7 +9,7 @@ import 'features/hosteleria/presentation/hosteleria_app.dart';
 /// Punto de entrada de Lycoris Hosteleria (independiente de inventario y POS).
 ///
 /// Comparte la base de datos remota (PostgreSQL) con el POS; reutiliza las
-/// habitaciones de `pos_habitaciones` y agrega sus tablas propias
+/// habitaciones de `habitaciones` y agrega sus tablas propias
 /// (`hosteleria_huespedes`, `hosteleria_reservas`).
 /// Build: `flutter build web --release -t lib/main_hosteleria.dart`.
 void main() {

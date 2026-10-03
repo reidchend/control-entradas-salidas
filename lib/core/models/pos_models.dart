@@ -1,51 +1,11 @@
-class PosUsuario {
-  const PosUsuario({
-    required this.id,
-    required this.nombre,
-    this.pinHash,
-    this.esAdmin = false,
-    this.esDesarrollador = false,
-    this.activo = true,
-    this.creadoEn,
-    this.updatedAt,
-  });
+import 'usuario.dart';
 
-  final int id;
-  final String nombre;
-  final String? pinHash;
-  final bool esAdmin;
-  final bool esDesarrollador;
-  final bool activo;
-  final String? creadoEn;
-  final DateTime? updatedAt;
+export 'usuario.dart';
+export 'habitacion_models.dart';
 
-  factory PosUsuario.fromMap(Map<String, dynamic> m) => PosUsuario(
-        id: m['id'] as int,
-        nombre: m['nombre'] as String,
-        pinHash: m['pin_hash'] as String?,
-        esAdmin: (m['es_admin'] as int?) == 1,
-        esDesarrollador: (m['es_desarrollador'] as int?) == 1,
-        activo: (m['activo'] as int?) == 1,
-        creadoEn: m['creado_en'] as String?,
-        updatedAt: _parseDt(m['updated_at']),
-      );
+/// Alias histórico: el usuario del POS es el usuario central (`usuarios`).
+typedef PosUsuario = Usuario;
 
-  Map<String, dynamic> toMap() => {
-        if (id > 0) 'id': id,
-        'nombre': nombre,
-        'pin_hash': pinHash,
-        'es_admin': esAdmin ? 1 : 0,
-        'es_desarrollador': esDesarrollador ? 1 : 0,
-        'activo': activo ? 1 : 0,
-        'creado_en': creadoEn,
-      };
-
-  static DateTime? _parseDt(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    return DateTime.tryParse(v.toString());
-  }
-}
 
 class PosMesa {
   const PosMesa({
@@ -92,50 +52,6 @@ class PosMesa {
   }
 }
 
-class PosHabitacion {
-  const PosHabitacion({
-    required this.id,
-    required this.numero,
-    this.piso,
-    this.tipo,
-    this.activo = true,
-    this.creadoEn,
-    this.updatedAt,
-  });
-
-  final int id;
-  final String numero;
-  final String? piso;
-  final String? tipo;
-  final bool activo;
-  final String? creadoEn;
-  final DateTime? updatedAt;
-
-  factory PosHabitacion.fromMap(Map<String, dynamic> m) => PosHabitacion(
-        id: m['id'] as int,
-        numero: m['numero'] as String,
-        piso: m['piso'] as String?,
-        tipo: m['tipo'] as String?,
-        activo: (m['activo'] as int?) == 1,
-        creadoEn: m['creado_en'] as String?,
-        updatedAt: _parseDt(m['updated_at']),
-      );
-
-  Map<String, dynamic> toMap() => {
-        if (id > 0) 'id': id,
-        'numero': numero,
-        'piso': piso,
-        'tipo': tipo,
-        'activo': activo ? 1 : 0,
-        'creado_en': creadoEn,
-      };
-
-  static DateTime? _parseDt(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    return DateTime.tryParse(v.toString());
-  }
-}
 
 class PosSesion {
   const PosSesion({

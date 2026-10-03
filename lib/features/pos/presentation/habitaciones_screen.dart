@@ -20,7 +20,7 @@ class HabitacionesScreen extends ConsumerWidget {
   });
 
   final PosSesionActiva sesion;
-  final ValueChanged<PosHabitacion> onOpenHabitacion;
+  final ValueChanged<Habitacion> onOpenHabitacion;
   final VoidCallback onBack;
   final VoidCallback onLogout;
 

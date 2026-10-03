@@ -51,8 +51,8 @@ class ReportesRepository {
         u.nombre AS cajero_nombre
       FROM pos_ventas v
       LEFT JOIN pos_mesas m ON m.id = v.mesa_id
-      LEFT JOIN pos_habitaciones h ON h.id = v.habitacion_id
-      LEFT JOIN pos_usuarios u ON u.id = v.usuario_id
+      LEFT JOIN habitaciones h ON h.id = v.habitacion_id
+      LEFT JOIN usuarios u ON u.id = v.usuario_id
       WHERE v.created_at >= \$1 AND v.created_at <= \$2
       ${cajero != null && cajero != 'Todos' ? 'AND u.nombre = \$${3}' : ''}
       ${formaPago != null && formaPago != 'Todas' ? 'AND v.forma_pago = \$${3 + (cajero != null && cajero != 'Todos' ? 1 : 0)}' : ''}
@@ -236,9 +236,9 @@ class ReportesRepository {
         (item->>'cantidad')::numeric * COALESCE((item->>'precio')::numeric, 0) AS subtotal
       FROM pos_ventas v
       CROSS JOIN LATERAL json_array_elements(v.items_json::json) item
-      LEFT JOIN pos_usuarios u ON u.id = v.usuario_id
+      LEFT JOIN usuarios u ON u.id = v.usuario_id
       LEFT JOIN pos_mesas m ON m.id = v.mesa_id
-      LEFT JOIN pos_habitaciones h ON h.id = v.habitacion_id
+      LEFT JOIN habitaciones h ON h.id = v.habitacion_id
       WHERE v.created_at >= \$1 AND v.created_at <= \$2
         AND COALESCE(item->>'producto_id', item->>'id') = \$3
       ORDER BY v.created_at DESC

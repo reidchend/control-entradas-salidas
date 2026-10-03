@@ -167,7 +167,7 @@ proxy es el único que habla con PostgreSQL. Verificar con
 
 ### 5. Verificar en BD
 ```cmd
-"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas -c "SELECT id, nombre, device_id, configurado_en FROM dispositivo_usuario ORDER BY id;"
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas -c "SELECT d.id, u.nombre, d.device_id, d.configurado_en FROM usuario_dispositivos d JOIN usuarios u ON u.id = d.usuario_id ORDER BY d.id;"
 ```
 
 Un operador en varios dispositivos tiene **una fila por dispositivo**, todas con
@@ -213,7 +213,7 @@ tienen operadores distintos, es lo normal: se cambió de usuario en ese equipo.
 ## Módulo nuevo: Lycoris Hosteleria (pendiente de aplicar migración)
 
 Se agregó un módulo independiente (`lib/main_hosteleria.dart`) para huéspedes
-y reservas. Reutiliza las habitaciones de `pos_habitaciones` (las del POS).
+y reservas. Reutiliza las habitaciones `habitaciones` (misma tabla que usa el POS).
 
 **Falta aplicar la migración en la BD del servidor** antes de usar el módulo:
 
@@ -223,7 +223,7 @@ y reservas. Reutiliza las habitaciones de `pos_habitaciones` (las del POS).
 ```
 
 Crea `hosteleria_huespedes` y `hosteleria_reservas` (con FK a
-`pos_habitaciones`). Verificar:
+`habitaciones`). Verificar:
 
 ```cmd
 "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
@@ -232,6 +232,94 @@ Crea `hosteleria_huespedes` y `hosteleria_reservas` (con FK a
 
 El módulo no necesita cambios en `tool/server.py` ni en el túnel: usa el mismo
 `PostgresService` que la app de inventario.
+
+### Check-in con datos completos (migración adicional)
+
+Aplicar **después** de las migraciones de Hostelería y de usuarios:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -f supabase\migrations\20261002020000_hosteleria_checkin.sql
+```
+
+Crea `pos_tipos_habitacion` (catalogo con `capacidad` de personas) y enlaza
+`pos_habitaciones.tipo_id`; agrega al huésped apellido, documento, nacimiento,
+estado civil, nacionalidad, profesion, procedencia y destino; crea
+`hosteleria_reserva_personas` (titular + acompanantes) y `hosteleria_vehiculos`
+(varios por estancia); y agrega `hora_entrada`/`hora_salida` a
+`hosteleria_reservas`. (La migracion de estados renombra despues
+`pos_tipos_habitacion`→`tipos_habitacion` y `pos_habitaciones`→`habitaciones`.)
+Verificar:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -c "SELECT count(*) FROM pos_tipos_habitacion; SELECT count(*) FROM hosteleria_reserva_personas; SELECT count(*) FROM hosteleria_vehiculos;"
+```
+
+Flujo: reserva (habitacion no ocupada) o check-in directo, con datos completos
+del titular, acompanantes limitados por la capacidad del tipo y vehiculos; el
+check-in registra `hora_entrada` y el check-out `hora_salida`.
+
+### Estados de habitacion y modalidad por horas OP (migracion adicional)
+
+Aplicar **al final**, despues de la migracion de check-in (depende de
+`tipos_habitacion`):
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -f supabase\migrations\20261002030000_habitaciones_estados_op.sql
+```
+
+Renombra `pos_habitaciones`→`habitaciones` y `pos_tipos_habitacion`→
+`tipos_habitacion` (conserva ids/FKs); agrega `habitaciones.estado`
+(`libre`/`aseo`/`mantenimiento`), `estado_notas` y `estado_actualizado_en`; y
+agrega a `hosteleria_reservas` `modalidad` (`noche`/`horas`), `bloque_horas` y
+`hora_limite`. Verificar:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -c "SELECT estado, count(*) FROM habitaciones GROUP BY estado; SELECT modalidad, count(*) FROM hosteleria_reservas GROUP BY modalidad;"
+```
+
+Flujo: al hacer check-out la habitacion pasa automaticamente a `aseo`; "Marcar
+limpia" la devuelve a `libre`; en `mantenimiento` no es vendible. La modalidad
+"Operativa OP" (por horas, 3 h por defecto) se elige al reservar/hacer check-in
+y guarda `hora_limite` para avisar con cuenta atras.
+
+---
+
+## Usuarios centralizados (pendiente de aplicar migración)
+
+Los 3 módulos (inventario, POS y hostelería) ahora comparten un **directorio
+central de usuarios**: `usuarios` + `usuario_modulos` + `usuario_dispositivos`.
+Se unificaron `pos_usuarios` (PIN sha256) y `dispositivo_usuario` (PIN texto
+plano del inventario, que queda obsoleta).
+
+**Falta aplicar la migración en la BD del servidor** (después de la de
+Hostelería):
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -f supabase\migrations\20261002010000_usuarios_centrales.sql
+```
+
+Renombra `pos_usuarios` -> `usuarios` (conserva ids, las FK de
+`pos_sesiones`/`pos_cierres`/`pos_ventas` siguen válidas), agrega `nivel`
+(`basico`/`admin`/`desarrollador`), crea las tablas nuevas y migra los
+operadores de inventario con su PIN a sha256. Verificar:
+
+```cmd
+"C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d control_entradas ^
+  -c "SELECT u.id, u.nombre, u.nivel, array_agg(m.modulo) FROM usuarios u LEFT JOIN usuario_modulos m ON m.usuario_id = u.id GROUP BY u.id ORDER BY u.id;"
+```
+
+Login por módulo:
+- POS: grid + PIN, abre turno/caja (sin cambios de flujo).
+- Inventario: auto-login por `usuario_dispositivos`; mantiene el alta inicial.
+- Hostelería: grid + PIN, **sin** turno/caja.
+
+La administración de usuarios (asignar módulos/roles desde la app) queda
+pendiente para una segunda pasada; por ahora se gestiona vía BD/POS.
 
 ---
 

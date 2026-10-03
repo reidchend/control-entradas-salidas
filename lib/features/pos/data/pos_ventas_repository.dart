@@ -144,7 +144,7 @@ class PosVentasRepository {
     final habitaciones = <int, Map<String, dynamic>>{};
     if (habIds.isNotEmpty) {
       final rows = await _db.client
-          .from('pos_habitaciones')
+          .from('habitaciones')
           .select('id, numero')
           .inFilter('id', habIds);
       for (final h in rows) habitaciones[h['id'] as int] = h;

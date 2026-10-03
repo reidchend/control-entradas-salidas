@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
 
-/// Grid de habitaciones con estado ocupada/reservada/disponible.
-class HabitacionGrid extends StatelessWidget {
+/// Grid de habitaciones con estado ocupada/reservada/aseo/mantenimiento.
+class HabitacionGrid extends StatefulWidget {
   const HabitacionGrid({
     super.key,
     required this.habitaciones,
@@ -12,9 +14,31 @@ class HabitacionGrid extends StatelessWidget {
     required this.onTap,
   });
 
-  final List<PosHabitacion> habitaciones;
+  final List<Habitacion> habitaciones;
   final Map<int, HostelReserva> reservasPorHabitacion;
-  final ValueChanged<PosHabitacion> onTap;
+  final ValueChanged<Habitacion> onTap;
+
+  @override
+  State<HabitacionGrid> createState() => _HabitacionGridState();
+}
+
+class _HabitacionGridState extends State<HabitacionGrid> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => mounted ? setState(() {}) : null,
+    );
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,11 +49,11 @@ class HabitacionGrid extends StatelessWidget {
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
       children: [
-        for (final hab in habitaciones)
+        for (final hab in widget.habitaciones)
           _HabitacionTile(
             habitacion: hab,
-            reserva: reservasPorHabitacion[hab.id],
-            onTap: () => onTap(hab),
+            reserva: widget.reservasPorHabitacion[hab.id],
+            onTap: () => widget.onTap(hab),
           ),
       ],
     );
@@ -43,7 +67,7 @@ class _HabitacionTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final PosHabitacion habitacion;
+  final Habitacion habitacion;
   final HostelReserva? reserva;
   final VoidCallback onTap;
 
@@ -53,11 +77,18 @@ class _HabitacionTile extends StatelessWidget {
         reserva != null && reserva!.estado == HostelReservaEstado.reservada;
     final ocupada = reserva != null &&
         reserva!.estado == HostelReservaEstado.ocupada;
-    final color = ocupada
-        ? Theme.of(context).colorScheme.error
+    final scheme = Theme.of(context).colorScheme;
+    final (label, color) = ocupada
+        ? ('Ocupada', scheme.error)
         : reservada
-            ? Theme.of(context).colorScheme.tertiary
-            : Theme.of(context).colorScheme.primary;
+            ? ('Reservada', scheme.tertiary)
+            : switch (habitacion.estado) {
+                EstadoHabitacion.aseo => ('Aseo', Colors.orange),
+                EstadoHabitacion.mantenimiento =>
+                  ('Mantenimiento', Colors.blueGrey),
+                _ => ('Disponible', scheme.primary),
+              };
+    final restantes = ocupada ? reserva!.minutosRestantes() : null;
     final info = [habitacion.piso, habitacion.tipo]
         .whereType<String>()
         .join(' · ');
@@ -91,13 +122,20 @@ class _HabitacionTile extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                ocupada
-                    ? 'Ocupada'
-                    : reservada
-                        ? 'Reservada'
-                        : 'Disponible',
+                label,
                 style: TextStyle(fontSize: 12, color: color),
               ),
+              if (restantes != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  restantes < 0 ? 'OP vencida' : 'OP · $restantes min',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: restantes < 0 ? scheme.error : Colors.orange,
+                  ),
+                ),
+              ],
               if (info.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(info.toUpperCase(),

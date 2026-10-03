@@ -1,10 +1,14 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'device_id_service.dart';
+import 'usuarios_repository.dart';
 import '../data/postgres_providers.dart';
 import '../data/postgres_service.dart';
 
-/// Sesión del operador.
+/// Sesión del operador de inventario.
 ///
 /// El notifier **no** guarda el `PostgresService` sino una forma de pedirlo en
 /// el momento de usarlo. Antes capturaba el valor de `postgresServiceProvider`
@@ -31,29 +35,38 @@ class SessionController extends StateNotifier<SessionState> {
   /// no hay configuración.
   PostgresService? get _db => _resolverDb();
 
+  UsuariosRepository? get _repo {
+    final db = _db;
+    return db == null ? null : UsuariosRepository(db);
+  }
+
+  static String _pinHash(String pin) =>
+      sha256.convert(utf8.encode(pin.trim())).toString();
+
   /// Registra o re-vincula un operador por nombre+PIN (independiente del
   /// device_id), devolviendo el resultado de la operación.
   Future<bool> registrarOperador({
     required String nombre,
     required String pin,
   }) async {
-    final db = _db;
-    if (db == null) return false;
-    final deviceId = await DeviceIdService.instance.id;
+    final repo = _repo;
+    if (repo == null) return false;
+    final n = nombre.trim();
 
-    if (await existeOperador(nombre)) {
-      return verificarPin(nombre: nombre, pin: pin);
+    if (await repo.porNombre(n) != null) {
+      return verificarPin(nombre: n, pin: pin);
     }
 
     try {
-      final result = await db.insert('dispositivo_usuario', {
-        'nombre': nombre,
-        'pin_hash': pin,
-        'device_id': deviceId,
-        'configurado_en': DateTime.now().toIso8601String(),
-      });
-      state = SessionState.authenticated(nombre: nombre, pinHash: pin);
-      return result > 0;
+      final id = await repo.crear(
+        nombre: n,
+        pin: pin,
+        modulos: {UsuariosRepository.moduloInventario},
+      );
+      final deviceId = await DeviceIdService.instance.id;
+      await repo.vincularDispositivo(id, deviceId);
+      state = SessionState.authenticated(nombre: n, pinHash: _pinHash(pin));
+      return true;
     } catch (_) {
       return false;
     }
@@ -61,70 +74,27 @@ class SessionController extends StateNotifier<SessionState> {
 
   /// Verifica nombre+PIN y deja **este dispositivo** asociado a ese operador.
   ///
-  /// Son dos pasos separados a propósito:
-  ///
-  /// 1. El PIN se valida contra cualquier fila con ese nombre. Si el nombre no
-  ///    existe, o el PIN no coincide, no hay sesión.
-  /// 2. Recién ahí se resuelve la asociación con el dispositivo: si ya hay una
-  ///    fila `(nombre, device_id)` se refresca, y si no se inserta una nueva.
-  ///
-  /// El paso 2 antes no existía: se buscaba la fila por nombre y se le pisaba el
-  /// `device_id` con el del dispositivo actual. Con eso, entrar desde la tablet
-  /// **desvinculaba el teléfono**, porque una sola fila guarda un solo
-  /// `device_id`. Y como `DeviceIdService` genera el UUID en SharedPreferences,
-  /// reinstalar la app generaba otro, así que el enlace se iba con cada
-  /// instalación. Ahora un operador puede estar en tantos dispositivos como
-  /// haga falta: cada uno tiene su fila y la autodetección los respeta a todos.
-  ///
-  /// El precio es que cada reinstalación deja la fila anterior atrás. Son filas
-  /// inertes (no las devuelve [nombrePorDeviceId] porque su `device_id` ya no
-  /// existe en ningún lado) y se pueden borrar a mano.
+  /// El PIN se valida (sha256) contra el usuario del directorio central con
+  /// acceso al módulo inventario; luego se asocia el dispositivo actual en
+  /// `usuario_dispositivos` sin tocar las filas de otros equipos.
   Future<bool> verificarPin({
     required String nombre,
     required String pin,
   }) async {
-    final db = _db;
-    if (db == null) return false;
-    final deviceId = await DeviceIdService.instance.id;
+    final repo = _repo;
+    if (repo == null) return false;
     final n = nombre.trim();
     try {
-      // 1. Validar el PIN contra el operador.
-      final rows = await db.executeSql(
-        'SELECT id, nombre, pin_hash FROM dispositivo_usuario '
-        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) ORDER BY id LIMIT 1',
-        params: [n],
-      );
-      if (rows.isEmpty) return false;
-      final u = rows.first;
-      if (u['pin_hash'] != pin) return false;
+      final u = await repo.porNombre(n);
+      if (u == null || !u.activo) return false;
+      if (!u.enModulo(UsuariosRepository.moduloInventario)) return false;
+      if (!await repo.verificarPin(u, pin)) return false;
 
-      // 2. Asociar ESTE dispositivo, sin tocar las filas de los demás.
-      final propias = await db.executeSql(
-        'SELECT id FROM dispositivo_usuario '
-        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) AND device_id = \$2 '
-        'ORDER BY id LIMIT 1',
-        params: [n, deviceId],
-      );
-      // `configurado_en` es "última vinculación", no "alta": es lo que usa
-      // [nombrePorDeviceId] para desempatar cuando el mismo device_id quedó en
-      // varias filas.
-      if (propias.isEmpty) {
-        await db.insert('dispositivo_usuario', {
-          'nombre': u['nombre'],
-          'pin_hash': pin,
-          'device_id': deviceId,
-          'configurado_en': DateTime.now().toIso8601String(),
-        });
-      } else if (propias.first['id'] != null) {
-        await db.updateWhere(
-          'dispositivo_usuario',
-          {'id': propias.first['id']},
-          {'configurado_en': DateTime.now().toIso8601String()},
-        );
-      }
+      final deviceId = await DeviceIdService.instance.id;
+      await repo.vincularDispositivo(u.id, deviceId);
       state = SessionState.authenticated(
-        nombre: u['nombre'] as String,
-        pinHash: u['pin_hash'] as String,
+        nombre: u.nombre,
+        pinHash: u.pinHash ?? _pinHash(pin),
       );
       return true;
     } catch (_) {
@@ -132,45 +102,32 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
-  /// ¿Existe un operador con este nombre en la BD? (case-insensitive).
+  /// ¿Existe un operador con este nombre con acceso al módulo inventario?
   ///
   /// Da `true` también si el operador está en otro dispositivo: entrar con
   /// nombre+PIN desde uno nuevo debe crear la asociación, no fallar.
   Future<bool> existeOperador(String nombre) async {
-    final db = _db;
-    if (db == null) return false;
-    final n = nombre.trim();
+    final repo = _repo;
+    if (repo == null) return false;
     try {
-      final rows = await db.executeSql(
-        'SELECT 1 FROM dispositivo_usuario '
-        'WHERE LOWER(TRIM(nombre)) = LOWER(\$1) LIMIT 1',
-        params: [n],
+      return await repo.existeEnModulo(
+        nombre.trim(),
+        UsuariosRepository.moduloInventario,
       );
-      return rows.isNotEmpty;
     } catch (_) {
       return false;
     }
   }
 
-  /// Nombre del operador registrado con este device_id, si existe.
+  /// Nombre del operador vinculado con este device_id, si existe.
   ///
   /// Permite autodetectar el usuario al abrir la app sin reescribirlo.
-  ///
-  /// Un mismo device_id puede quedar en varias filas (cada reinstalación que
-  /// re-vincula el operador deja la anterior atrás), así que se ordena por
-  /// `configurado_en` y no por `id`: gana el operador con el que este
-  /// dispositivo entró más recientemente, no el más viejo.
   Future<String?> nombrePorDeviceId() async {
-    final db = _db;
-    if (db == null) return null;
+    final repo = _repo;
+    if (repo == null) return null;
     final deviceId = await DeviceIdService.instance.id;
-    final rows = await db.executeSql(
-      'SELECT nombre FROM dispositivo_usuario '
-      'WHERE device_id = \$1 ORDER BY configurado_en DESC, id DESC LIMIT 1',
-      params: [deviceId],
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['nombre'] as String?;
+    final u = await repo.porDeviceId(deviceId);
+    return u?.nombre;
   }
 
   void cerrarSesion() {

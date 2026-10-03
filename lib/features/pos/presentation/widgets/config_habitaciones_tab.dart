@@ -17,7 +17,7 @@ class ConfigHabitacionesTab extends ConsumerStatefulWidget {
 
 class _ConfigHabitacionesTabState
     extends ConsumerState<ConfigHabitacionesTab> {
-  List<PosHabitacion> _habs = [];
+  List<Habitacion> _habs = [];
   bool _cargando = true;
 
   @override
@@ -42,14 +42,14 @@ class _ConfigHabitacionesTabState
     }
   }
 
-  Future<void> _editarHabitacion(PosHabitacion h) async {
+  Future<void> _editarHabitacion(Habitacion h) async {
     if (await showHabitacionConfigDialog(context, habitacion: h)) {
       ref.invalidate(habitacionesProvider);
       await _cargar();
     }
   }
 
-  Future<void> _eliminarHabitacion(PosHabitacion h) async {
+  Future<void> _eliminarHabitacion(Habitacion h) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -123,7 +123,7 @@ class _HabitacionConfigCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  final PosHabitacion habitacion;
+  final Habitacion habitacion;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 

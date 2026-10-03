@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import '../../../core/auth/device_id_service.dart';
 import '../../../core/data/cache_service.dart';
 import '../../../core/data/postgres_service.dart';
@@ -465,11 +469,14 @@ class ConfiguracionRepository {
 
   Future<Map<String, dynamic>?> getUsuarioDispositivo() async {
     final deviceId = await DeviceIdService.instance.id;
-    final rows = await _db.client
-        .from('dispositivo_usuario')
-        .select('id, nombre, pin_hash, configurado_en')
-        .eq('device_id', deviceId)
-        .limit(1);
+    final rows = await _db.executeSql(
+      'SELECT u.id, u.nombre, u.pin_hash, d.configurado_en '
+      'FROM usuario_dispositivos d '
+      'JOIN usuarios u ON u.id = d.usuario_id '
+      'WHERE d.device_id = \$1 '
+      'ORDER BY d.configurado_en DESC NULLS LAST, d.id DESC LIMIT 1',
+      params: [deviceId],
+    );
     if (rows.isEmpty) return null;
     final u = rows.first;
     return {
@@ -481,21 +488,22 @@ class ConfiguracionRepository {
   }
 
   Future<int> crearUsuarioDispositivo(Map<String, dynamic> data) {
-    return _db.insert('dispositivo_usuario', data);
+    return _db.insert('usuario_dispositivos', data);
   }
 
   Future<void> eliminarUsuarioDispositivo() async {
     final deviceId = await DeviceIdService.instance.id;
-    await _db.client
-        .from('dispositivo_usuario')
-        .delete()
-        .eq('device_id', deviceId);
+    await _db.executeCommand(
+      'DELETE FROM usuario_dispositivos WHERE device_id = \$1',
+      params: [deviceId],
+    );
   }
 
   Future<bool> verificarPin(String pin) async {
     final user = await getUsuarioDispositivo();
-    if (user == null || user['pinHash'] == null) return true;
-    return user['pinHash'] == pin;
+    final hash = user?['pinHash'] as String?;
+    if (user == null || hash == null || hash.isEmpty) return true;
+    return hash == sha256.convert(utf8.encode(pin.trim())).toString();
   }
 
   // ---------------------------------------------------------------------------

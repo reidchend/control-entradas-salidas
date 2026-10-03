@@ -288,38 +288,72 @@ CREATE TRIGGER trg_pos_mesas_updated_at
     BEFORE INSERT OR UPDATE ON pos_mesas
     FOR EACH ROW EXECUTE FUNCTION set_pos_updated_at();
 
-CREATE TABLE IF NOT EXISTS pos_habitaciones (
+CREATE TABLE IF NOT EXISTS habitaciones (
     id         SERIAL PRIMARY KEY,
     numero     TEXT NOT NULL,
     piso       TEXT,
     tipo       TEXT,
+    estado     TEXT NOT NULL DEFAULT 'libre'
+                   CHECK (estado IN ('libre', 'aseo', 'mantenimiento')),
+    estado_notas TEXT,
+    estado_actualizado_en TIMESTAMPTZ,
     activo     INTEGER DEFAULT 1,
     creado_en  TEXT NOT NULL,
     updated_at TIMESTAMPTZ
 );
-CREATE TRIGGER trg_pos_habitaciones_updated_at
-    BEFORE INSERT OR UPDATE ON pos_habitaciones
+CREATE TRIGGER trg_habitaciones_updated_at
+    BEFORE INSERT OR UPDATE ON habitaciones
     FOR EACH ROW EXECUTE FUNCTION set_pos_updated_at();
 
-CREATE TABLE IF NOT EXISTS pos_usuarios (
-    id               SERIAL PRIMARY KEY,
-    nombre           TEXT NOT NULL,
-    pin_hash         TEXT,
-    es_admin         INTEGER DEFAULT 0,
-    es_desarrollador INTEGER DEFAULT 0,
-    activo           INTEGER DEFAULT 1,
-    creado_en        TEXT NOT NULL,
-    updated_at       TIMESTAMPTZ
+-- Directorio central de usuarios (compartido por inventario, POS y hostelería).
+-- `nivel`: basico | admin | desarrollador (acceso global).
+CREATE TABLE IF NOT EXISTS usuarios (
+    id         SERIAL PRIMARY KEY,
+    nombre     TEXT NOT NULL,
+    pin_hash   TEXT,
+    nivel      TEXT NOT NULL DEFAULT 'basico',
+    activo     INTEGER DEFAULT 1,
+    creado_en  TEXT NOT NULL,
+    updated_at TIMESTAMPTZ
 );
-CREATE TRIGGER trg_pos_usuarios_updated_at
-    BEFORE INSERT OR UPDATE ON pos_usuarios
+CREATE TRIGGER trg_usuarios_updated_at
+    BEFORE INSERT OR UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION set_pos_updated_at();
 
--- Usuario de desarrollo: inicia sesión SIN aperturar turno/caja. Se sincroniza
--- a los dispositivos y puede desactivarse desde Configuración → Cajeros.
-INSERT INTO pos_usuarios (nombre, es_admin, es_desarrollador, activo, creado_en)
-SELECT 'Desarrollador', 1, 1, 1, now()::text
-WHERE NOT EXISTS (SELECT 1 FROM pos_usuarios WHERE nombre = 'Desarrollador');
+-- A qué módulos entra cada usuario.
+CREATE TABLE IF NOT EXISTS usuario_modulos (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    modulo     TEXT NOT NULL
+        CHECK (modulo IN ('inventario', 'pos', 'hosteleria')),
+    PRIMARY KEY (usuario_id, modulo)
+);
+CREATE INDEX IF NOT EXISTS idx_usuario_modulos_modulo
+    ON usuario_modulos (modulo);
+
+-- Equipos vinculados para auto-login (inventario).
+CREATE TABLE IF NOT EXISTS usuario_dispositivos (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    usuario_id     INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    device_id      TEXT,
+    configurado_en TIMESTAMPTZ DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_usuario_dispositivos_usuario_device
+    ON usuario_dispositivos (usuario_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_usuario_dispositivos_device
+    ON usuario_dispositivos (device_id);
+
+-- Usuario de desarrollo: acceso global a los 3 módulos y (a futuro) operaciones
+-- que no persisten. Puede desactivarse desde Configuración → Cajeros.
+INSERT INTO usuarios (nombre, nivel, activo, creado_en)
+SELECT 'Desarrollador', 'desarrollador', 1, now()::text
+WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE nombre = 'Desarrollador');
+
+INSERT INTO usuario_modulos (usuario_id, modulo)
+SELECT id, m
+FROM usuarios
+CROSS JOIN (VALUES ('inventario'), ('pos'), ('hosteleria')) AS t(m)
+WHERE nivel = 'desarrollador'
+ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS pos_settings (
     key   TEXT PRIMARY KEY,

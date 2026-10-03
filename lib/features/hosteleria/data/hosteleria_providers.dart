@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/usuarios_providers.dart';
+import '../../../core/auth/usuarios_repository.dart';
 import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
@@ -12,6 +14,15 @@ final hosteleriaRepoProvider = Provider<HosteleriaRepository?>((ref) {
   return HosteleriaRepository(db);
 });
 
+/// Recepcionistas con acceso al módulo Hostelería (login de la app).
+final hostelUsuariosProvider =
+    FutureProvider.autoDispose<List<Usuario>>((ref) async {
+  final repo = ref.watch(usuariosRepoProvider);
+  if (repo == null) return const [];
+  return repo.listarPorModulo(UsuariosRepository.moduloHosteleria);
+});
+
+
 /// Estado combinado del módulo: habitaciones + reserva activa por habitación.
 class HostelEstado {
   const HostelEstado({
@@ -19,7 +30,7 @@ class HostelEstado {
     required this.reservasActivas,
   });
 
-  final List<PosHabitacion> habitaciones;
+  final List<Habitacion> habitaciones;
   final List<HostelReserva> reservasActivas;
 
   Map<int, HostelReserva> get reservasPorHabitacion => {

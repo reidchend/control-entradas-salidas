@@ -6,10 +6,12 @@ class HostelTopBar extends StatelessWidget {
     super.key,
     required this.nombreOperador,
     required this.onSync,
+    required this.onLogout,
   });
 
   final String nombreOperador;
   final VoidCallback onSync;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,11 @@ class HostelTopBar extends StatelessWidget {
             icon: const Icon(Icons.sync),
             tooltip: 'Sincronizar',
             onPressed: onSync,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Cerrar sesión',
+            onPressed: onLogout,
           ),
         ],
       ),

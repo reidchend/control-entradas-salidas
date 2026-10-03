@@ -16,7 +16,7 @@ class HabitacionCard extends StatelessWidget {
     this.onTap,
   });
 
-  final PosHabitacion habitacion;
+  final Habitacion habitacion;
   final bool ocupada;
   final VoidCallback? onTap;
 
