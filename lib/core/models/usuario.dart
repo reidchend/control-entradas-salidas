@@ -15,6 +15,12 @@ enum NivelUsuario {
       };
 
   String get db => name;
+
+  String get label => switch (this) {
+        NivelUsuario.basico => 'Básico',
+        NivelUsuario.admin => 'Admin',
+        NivelUsuario.desarrollador => 'Desarrollador',
+      };
 }
 
 /// Usuario del directorio central (`usuarios`), compartido por inventario,
@@ -83,3 +89,21 @@ class Usuario {
     return DateTime.tryParse(v.toString());
   }
 }
+
+/// Equipo vinculado a un usuario (`usuario_dispositivos`) para el auto-login.
+class DispositivoVinculado {
+  const DispositivoVinculado({
+    required this.deviceId,
+    this.configuradoEn,
+  });
+
+  final String deviceId;
+  final DateTime? configuradoEn;
+
+  factory DispositivoVinculado.fromMap(Map<String, dynamic> m) =>
+      DispositivoVinculado(
+        deviceId: m['device_id'] as String,
+        configuradoEn: Usuario._parseDt(m['configurado_en']),
+      );
+}
+

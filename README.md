@@ -18,7 +18,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 
 ## Funcionalidades
 
-### Inventario (`lib/features/`)
+### Módulo administrativo (`lib/features/`, app id `inventario`)
 - **Inventario**: categorias, productos (con stock), movimientos y lista de compra.
 - **Stock / Toma de inventario**: conteo y checkpoint por periodos, con recálculo de existencias sobre todos los movimientos (ver `recalcularExistencias`).
 - **Producciones**: recetas, editor de recetas, pendientes e historial.
@@ -27,7 +27,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 - **Historial de facturas**: facturas y estados de pago.
 - **Activos**: categorias, tipos con unidades de medida y bienes inventariados.
 - **Reportes**: ventas, movimientos, estadisticas y cierres de caja (corte de inventario).
-- **Configuracion**: categorias, periodos, productos, proveedores, almacenes y sistema.
+- **Configuracion**: categorias, periodos, productos, proveedores, almacenes, sistema y **usuarios** (CRUD del directorio central, asignacion de modulos/equipos y activacion; solo nivel admin/desarrollador).
 - **WhatsApp**: bandeja de mensajes con cola y envio via bot.
 - **Calculadora**: dialog invocable con F1/atajo en campos de cantidad y precio.
 
@@ -573,7 +573,7 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 
 - `20261002030000_habitaciones_estados_op.sql` — renombra `pos_habitaciones`→`habitaciones` y `pos_tipos_habitacion`→`tipos_habitacion`; agrega estado operativo (`libre`/`aseo`/`mantenimiento` + notas) y modalidad Operativa OP (`modalidad`, `bloque_horas`, `hora_limite`) en `hosteleria_reservas`.
 - `20261002020000_hosteleria_checkin.sql` — check-in de Hostelería: tipos de habitación con capacidad (`pos_tipos_habitacion` + `pos_habitaciones.tipo_id`, renombrados luego), datos completos del huésped, `hosteleria_reserva_personas`, `hosteleria_vehiculos` y horas de entrada/salida.
-- `20261002010000_usuarios_centrales.sql` — directorio central de usuarios (`usuarios`, `usuario_modulos`, `usuario_dispositivos`).
+- `20261002010000_usuarios_centrales.sql` — directorio central de usuarios (`usuarios`, `usuario_modulos`, `usuario_dispositivos`). Todo operador que se registra en el módulo administrativo queda como `admin`; desde Configuración → Usuarios se crea/edita el resto del directorio y se ajustan niveles.
 - `20261002000000_hosteleria.sql` — tablas propias del modulo Hosteleria (`hosteleria_huespedes`, `hosteleria_reservas`), vinculadas a `habitaciones`.
 - `20260922000000_activos_tipos.sql` — tipos de activo con unidades de medida.
 - `20260901120000_add_almacenes.sql` — catalogo de almacenes (antes eran strings libres).

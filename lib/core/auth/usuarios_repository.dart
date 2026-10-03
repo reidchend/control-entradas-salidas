@@ -16,6 +16,14 @@ class UsuariosRepository {
   static const String moduloPos = 'pos';
   static const String moduloHosteleria = 'hosteleria';
 
+  /// Etiquetas legibles de cada módulo para la administración de usuarios.
+  /// El id `inventario` se muestra como "Administrativo".
+  static const Map<String, String> etiquetasModulo = {
+    moduloInventario: 'Administrativo',
+    moduloPos: 'POS',
+    moduloHosteleria: 'Hostelería',
+  };
+
   static String _pinHash(String pin) =>
       sha256.convert(utf8.encode(pin.trim())).toString();
 
@@ -47,6 +55,38 @@ class UsuariosRepository {
       params: [id],
     );
     return rows.isEmpty ? null : Usuario.fromMap(rows.first);
+  }
+
+  /// Todos los usuarios del directorio (para la administración).
+  Future<List<Usuario>> listarTodos({bool soloActivos = false}) async {
+    final rows = await _db.executeSql(
+      '$_selectUsuario'
+      '${soloActivos ? ' WHERE u.activo = 1' : ''}'
+      ' GROUP BY u.id ORDER BY u.nombre',
+    );
+    return rows.map(Usuario.fromMap).toList();
+  }
+
+  /// Elimina definitivamente un usuario (cascada a módulos y dispositivos).
+  Future<void> eliminar(int id) => _db.deleteById('usuarios', id);
+
+  /// Equipos vinculados a un usuario (para ver/desvincular).
+  Future<List<DispositivoVinculado>> dispositivosDe(int usuarioId) async {
+    final rows = await _db.executeSql(
+      'SELECT device_id, configurado_en FROM usuario_dispositivos'
+      ' WHERE usuario_id = \$1 ORDER BY configurado_en DESC NULLS LAST',
+      params: [usuarioId],
+    );
+    return rows.map(DispositivoVinculado.fromMap).toList();
+  }
+
+  /// Desvincula un equipo concreto del usuario.
+  Future<void> desvincularDeUsuario(int usuarioId, String deviceId) async {
+    await _db.executeCommand(
+      'DELETE FROM usuario_dispositivos'
+      ' WHERE usuario_id = \$1 AND device_id = \$2',
+      params: [usuarioId, deviceId],
+    );
   }
 
   Future<Usuario?> porNombre(String nombre) async {

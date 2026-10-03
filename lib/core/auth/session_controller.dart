@@ -7,6 +7,7 @@ import 'device_id_service.dart';
 import 'usuarios_repository.dart';
 import '../data/postgres_providers.dart';
 import '../data/postgres_service.dart';
+import '../models/usuario.dart';
 
 /// Sesión del operador de inventario.
 ///
@@ -58,14 +59,22 @@ class SessionController extends StateNotifier<SessionState> {
     }
 
     try {
+      // Todo operador que se registra en el módulo administrativo es admin
+      // (puede administrar el resto del directorio desde Configuración →
+      // Usuarios). Los niveles se ajustan luego desde esa pestaña.
       final id = await repo.crear(
         nombre: n,
         pin: pin,
+        nivel: NivelUsuario.admin,
         modulos: {UsuariosRepository.moduloInventario},
       );
       final deviceId = await DeviceIdService.instance.id;
       await repo.vincularDispositivo(id, deviceId);
-      state = SessionState.authenticated(nombre: n, pinHash: _pinHash(pin));
+      state = SessionState.authenticated(
+        nombre: n,
+        pinHash: _pinHash(pin),
+        nivel: NivelUsuario.admin,
+      );
       return true;
     } catch (_) {
       return false;
@@ -95,6 +104,7 @@ class SessionController extends StateNotifier<SessionState> {
       state = SessionState.authenticated(
         nombre: u.nombre,
         pinHash: u.pinHash ?? _pinHash(pin),
+        nivel: u.nivel,
       );
       return true;
     } catch (_) {
@@ -140,6 +150,7 @@ sealed class SessionState {
   const factory SessionState.authenticated({
     required String nombre,
     required String pinHash,
+    NivelUsuario nivel,
   }) = Authenticated;
   const factory SessionState.unauthenticated() = Unauthenticated;
 }
@@ -147,7 +158,16 @@ sealed class SessionState {
 class Authenticated implements SessionState {
   final String nombre;
   final String pinHash;
-  const Authenticated({required this.nombre, required this.pinHash});
+  final NivelUsuario nivel;
+  const Authenticated({
+    required this.nombre,
+    required this.pinHash,
+    this.nivel = NivelUsuario.basico,
+  });
+
+  /// Puede administrar usuarios (ver/editar el directorio central).
+  bool get esAdmin =>
+      nivel == NivelUsuario.admin || nivel == NivelUsuario.desarrollador;
 }
 
 class Unauthenticated implements SessionState {
