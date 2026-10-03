@@ -52,47 +52,80 @@ class Chequeos:
         self.fallos = []
         self.ok = 0
 
+    def _cualquiera(self, nombres):
+        """Primer nombre de la lista que exista como tabla, o None.
+
+        Necesario porque la migracion 4 renombra pos_habitaciones y
+        pos_tipos_habitacion: un chequeo de la migracion 1 o 3 escrito con
+        el nombre viejo daria falso negativo al correr 'estado' con las 4 ya
+        aplicadas.
+        """
+        r = self.c.execute(
+            "SELECT name FROM unnest(%s::text[]) AS name "
+            "WHERE to_regclass('public.' || name) IS NOT NULL LIMIT 1",
+            (list(nombres),),
+        ).fetchone()
+        return r[0] if r else None
+
     def tabla(self, nombre, debe_existir=True):
-        r = self.c.execute("SELECT to_regclass(%s)", (f"public.{nombre}",)).fetchone()[0]
+        nombres = [nombre] if isinstance(nombre, str) else list(nombre)
+        r = self._cualquiera(nombres)
         bien = bool(r) == debe_existir
+        etiqueta = " o ".join(nombres)
         if bien:
             self.ok += 1
             estado = r if r else "-"
-            print(f"  [OK   ] {nombre:32} {estado}")
+            print(f"  [OK   ] {etiqueta:32} {estado}")
         else:
-            self.fallos.append(f"{nombre} {'deberia existir' if debe_existir else 'no deberia existir'}")
-            print(f"  [FALLA] {nombre:32} {'EXISTE (no deberia)' if r else 'FALTA'}")
+            self.fallos.append(f"{etiqueta} {'deberia existir' if debe_existir else 'no deberia existir'}")
+            print(f"  [FALLA] {etiqueta:32} {'EXISTE (no deberia)' if r else 'FALTA'}")
         return bool(r)
 
     def columna(self, tabla, col, tipo_esperado=None):
+        # `tabla` puede ser una lista de nombres equivalentes (ver _cualquiera).
+        tablas = [tabla] if isinstance(tabla, str) else list(tabla)
+        real = self._cualquiera(tablas)
+        if real is None:
+            self.fallos.append(f"{' o '.join(tablas)} no existe, no se puede leer {col}")
+            print(f"  [FALLA] {' o '.join(tablas)}.{col:20} NO EXISTE LA TABLA")
+            return
         r = self.c.execute(
             "SELECT data_type FROM information_schema.columns "
             "WHERE table_schema='public' AND table_name=%s AND column_name=%s",
-            (tabla, col),
+            (real, col),
         ).fetchone()
         if r is None:
-            self.fallos.append(f"{tabla}.{col} falta")
-            print(f"  [FALLA] {tabla}.{col:26} FALTA")
+            self.fallos.append(f"{real}.{col} falta")
+            print(f"  [FALLA] {real}.{col:26} FALTA")
             return
         if tipo_esperado and r[0] != tipo_esperado:
-            self.fallos.append(f"{tabla}.{col} es {r[0]}, se esperaba {tipo_esperado}")
-            print(f"  [FALLA] {tabla}.{col:26} es {r[0]}, se esperaba {tipo_esperado}")
+            self.fallos.append(f"{real}.{col} es {r[0]}, se esperaba {tipo_esperado}")
+            print(f"  [FALLA] {real}.{col:26} es {r[0]}, se esperaba {tipo_esperado}")
         else:
             self.ok += 1
-            print(f"  [OK   ] {tabla}.{col:26} {r[0]}")
+            print(f"  [OK   ] {real}.{col:26} {r[0]}")
 
     def trigger(self, nombre, tabla):
+        """`tabla` puede ser una lista: el trigger se busca en cualquiera.
+
+        Hace falta porque la migracion 4 renombra pos_habitaciones y
+        pos_tipos_habitacion, y el trigger conserva su nombre viejo pero
+        queda sobre la tabla nueva. Asi el chequeo sirve durante la secuencia
+        y despues de terminarla.
+        """
+        tablas = [tabla] if isinstance(tabla, str) else list(tabla)
         r = self.c.execute(
-            "SELECT COUNT(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
-            "WHERE t.tgname=%s AND c.relname=%s AND NOT t.tgisinternal",
-            (nombre, tabla),
-        ).fetchone()[0]
-        if r:
+            "SELECT c.relname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+            "WHERE t.tgname=%s AND c.relname = ANY(%s) AND NOT t.tgisinternal",
+            (nombre, tablas),
+        ).fetchone()
+        real = r[0] if r else None
+        if real:
             self.ok += 1
-            print(f"  [OK   ] trigger {nombre} sobre {tabla}")
+            print(f"  [OK   ] trigger {nombre} sobre {real}")
         else:
-            self.fallos.append(f"falta el trigger {nombre} sobre {tabla}")
-            print(f"  [FALLA] falta el trigger {nombre} sobre {tabla}")
+            self.fallos.append(f"falta el trigger {nombre} sobre {' o '.join(tablas)}")
+            print(f"  [FALLA] falta el trigger {nombre} sobre {' o '.join(tablas)}")
 
     def indice(self, nombre):
         r = self.c.execute(
@@ -123,6 +156,11 @@ class Chequeos:
             print(f"  [FALLA] {etiqueta:32} {n} filas (se esperaba {rango})")
 
     def fk_apunta(self, etiqueta, fk_tabla, fk_col, esperado):
+        """`esperado` puede ser una lista: vale cualquiera de esos nombres.
+
+        Una FK sigue al RENAME de la tabla a la que apunta, asi que el mismo
+        chequeo tiene que servir antes y despues de la migracion 4.
+        """
         r = self.c.execute(
             "SELECT c.relname FROM pg_constraint con "
             "JOIN pg_class c ON c.oid=con.confrelid "
@@ -131,12 +169,14 @@ class Chequeos:
             (fk_tabla, fk_col),
         ).fetchone()
         real = r[0] if r else None
-        if real == esperado:
+        aceptados = [esperado] if isinstance(esperado, str) else list(esperado)
+        if real in aceptados:
             self.ok += 1
             print(f"  [OK   ] {etiqueta:32} {fk_tabla}.{fk_col} -> {real}")
         else:
-            self.fallos.append(f"{fk_tabla}.{fk_col} apunta a {real}, se esperaba {esperado}")
-            print(f"  [FALLA] {etiqueta:32} {fk_tabla}.{fk_col} -> {real}, esperaba {esperado}")
+            lista = " o ".join(aceptados)
+            self.fallos.append(f"{fk_tabla}.{fk_col} apunta a {real}, se esperaba {lista}")
+            print(f"  [FALLA] {etiqueta:32} {fk_tabla}.{fk_col} -> {real}, esperaba {lista}")
 
 
 def verificar_1(ch):
@@ -154,7 +194,8 @@ def verificar_1(ch):
     ch.indice("idx_hosteleria_reservas_habitacion")
     ch.indice("idx_hosteleria_reservas_estado")
     print("  -- FK --")
-    ch.fk_apunta("reservas -> habitacion", "hosteleria_reservas", "habitacion_id", "pos_habitaciones")
+    ch.fk_apunta("reservas -> habitacion", "hosteleria_reservas", "habitacion_id",
+                 ["pos_habitaciones", "habitaciones"])
     ch.fk_apunta("reservas -> huesped", "hosteleria_reservas", "huesped_id", "hosteleria_huespedes")
 
 
@@ -215,12 +256,16 @@ def verificar_2(ch):
 
 
 def verificar_3(ch):
+    # La 4 renombra estas dos, asi que se aceptan los dos nombres: el chequeo
+    # tiene que servir durante la secuencia y con las 4 ya aplicadas.
+    tipos = ["pos_tipos_habitacion", "tipos_habitacion"]
+    habs = ["pos_habitaciones", "habitaciones"]
     print("  -- catalogo de tipos --")
-    ch.tabla("pos_tipos_habitacion")
-    ch.columna("pos_tipos_habitacion", "capacidad")
-    ch.columna("pos_tipos_habitacion", "nombre")
-    ch.trigger("trg_pos_tipos_habitacion_updated_at", "pos_tipos_habitacion")
-    ch.columna("pos_habitaciones", "tipo_id")
+    ch.tabla(tipos)
+    ch.columna(tipos, "capacidad")
+    ch.columna(tipos, "nombre")
+    ch.trigger("trg_pos_tipos_habitacion_updated_at", tipos)
+    ch.columna(habs, "tipo_id")
     print("  -- huespedes ampliados --")
     for col in ("apellido", "tipo_documento", "numero_documento", "fecha_nacimiento",
                 "estado_civil", "nacionalidad", "profesion", "procedencia", "destino"):
@@ -234,7 +279,8 @@ def verificar_3(ch):
     ch.indice("idx_hosteleria_reserva_personas_reserva")
     ch.indice("idx_hosteleria_vehiculos_reserva")
     print("  -- FK --")
-    ch.fk_apunta("reservas -> habitacion", "hosteleria_reservas", "habitacion_id", "pos_habitaciones")
+    ch.fk_apunta("reservas -> habitacion", "hosteleria_reservas", "habitacion_id",
+                 ["pos_habitaciones", "habitaciones"])
     ch.fk_apunta("reservas -> huesped", "hosteleria_reservas", "huesped_id", "hosteleria_huespedes")
 
 
