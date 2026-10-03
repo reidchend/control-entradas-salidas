@@ -91,6 +91,15 @@ neon-dataapi-keys/app_token.txt
 neon.dump
 pg_hba_*.txt
 
+# Herramientas de migracion: secretos y respaldos con datos reales.
+# `tool/.pgpass_tmp` guarda la contrasena del rol postgres en texto plano: es
+# lo que permite aplicar las migraciones que hacen RENAME (exigen ser dueno de
+# la tabla). Nunca al repo.
+tool/.pgpass_tmp
+# `tool/respaldos/` son dumps de las tablas de produccion: nombres de
+# operadores, PINs hasheados y device_ids. No se versionan.
+tool/respaldos/
+
 # Bot de WhatsApp: dependencias, sesion autenticada y binarios.
 # `whatsapp_bot/auth/` guarda las credenciales de WhatsApp Web (Baileys):
 # es lo que evita tener que pasar el QR de nuevo, y sube al repo es filtrar la
