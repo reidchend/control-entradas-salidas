@@ -167,14 +167,52 @@ class WhatsappRepository {
     }
   }
 
-  Future<bool> _enviarImagenDirecto({
+  /// Saca un mensaje de error útil de una respuesta que no fue 200.
+  ///
+  /// El body es la única fuente de la causa: sin esto, un 413 del servidor (body
+  /// demasiado grande) y un token inválido terminaban igual de invisibles.
+  static String _errorDeRespuesta(http.Response resp) {
+    var detalle = '';
+    try {
+      final body = resp.body;
+      if (body.isNotEmpty) {
+        // Plan B por defecto: el cuerpo crudo. El bot responde JSON en los
+        // endpoints y HTML en el handler global, y a veces el JSON viene sin
+        // la clave "error"; en ambos casos el cuerpo sigue siendo la única
+        // pista, así que nunca se descarta.
+        detalle = body.trim();
+        try {
+          final j = jsonDecode(body);
+          if (j is Map && j['error'] != null) detalle = j['error'].toString();
+        } catch (_) {
+          // No es JSON: se conserva el cuerpo crudo.
+        }
+      }
+    } catch (_) {
+      // body ilegible: nos quedamos solo con el status.
+    }
+    detalle = detalle.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (detalle.length > 200) detalle = '${detalle.substring(0, 200)}…';
+    return detalle.isEmpty
+        ? 'HTTP ${resp.statusCode}'
+        : 'HTTP ${resp.statusCode}: $detalle';
+  }
+
+  /// Bytes del body JSON que semandaría, para diagnóstico.
+  static int _bytesDePayload(String b64, String caption) =>
+      utf8.encode(jsonEncode({'imageBase64': b64, 'caption': caption})).length;
+
+  Future<({bool ok, String? error})> _enviarImagenDirecto({
     String? imagenBase64,
     String caption = '',
   }) async {
     final b64 = imagenBase64;
-    if (b64 == null || b64.isEmpty) return false;
+    if (b64 == null || b64.isEmpty) {
+      return (ok: false, error: 'Sin imagen para enviar');
+    }
     try {
       final url = await botUrl;
+      final bytes = _bytesDePayload(b64, caption);
       final resp = await http
           .post(
             Uri.parse('$url/send-image'),
@@ -182,9 +220,13 @@ class WhatsappRepository {
             body: jsonEncode({'imageBase64': b64, 'caption': caption}),
           )
           .timeout(const Duration(seconds: 30));
-      return resp.statusCode == 200;
-    } catch (_) {
-      return false;
+      if (resp.statusCode == 200) return (ok: true, error: null);
+      final err = _errorDeRespuesta(resp);
+      debugPrint('[WA] send imagen HTTP ${resp.statusCode} (payload $bytes bytes): $err');
+      return (ok: false, error: err);
+    } catch (e) {
+      debugPrint('[WA] send imagen error: $e');
+      return (ok: false, error: 'Error de conexion');
     }
   }
 
@@ -287,9 +329,9 @@ class WhatsappRepository {
   }) async {
     if (imagenBase64 != null && imagenBase64.isNotEmpty) {
       final jpeg = _ensureJpegBase64(imagenBase64);
-      if (await _enviarImagenDirecto(imagenBase64: jpeg, caption: caption)) {
-        return true;
-      }
+      final r = await _enviarImagenDirecto(imagenBase64: jpeg, caption: caption);
+      if (r.ok) return true;
+      debugPrint('[WA] imagen no enviada directo, se encola: ${r.error}');
     }
     await saveToQueue(
       tipo: imagenBase64 != null ? 'image' : 'text',
@@ -352,14 +394,19 @@ class WhatsappRepository {
     // - report_simple / report_detail → grupo de reportes/cierres
     // - resto → texto del grupo principal
     final bool success;
+    // El motivo real del fallo, para que la bandeja no muestre siempre
+    // "Error de conexion" cuando en realidad es un 413 o un token rechazado.
+    String? motivo;
     switch (msg.tipo) {
       case 'image':
-        success = await _enviarImagenDirecto(
+        final r = await _enviarImagenDirecto(
           imagenBase64: msg.imagenBase64 != null
               ? _ensureJpegBase64(msg.imagenBase64!)
               : null,
           caption: msg.mensaje ?? '',
         );
+        success = r.ok;
+        motivo = r.error;
       case 'report_simple':
         success = await _enviarReporteDirecto(msg.mensaje ?? '');
       case 'report_detail':
@@ -390,7 +437,7 @@ class WhatsappRepository {
       await _db.updateById('whatsapp_queue', msg.id, {
         'intentos': intentos,
         'estado': estado,
-        'ultimo_error': 'Error de conexion',
+        'ultimo_error': motivo ?? 'Error de conexion',
         'updated_at': DateTime.now().toIso8601String(),
       });
     }

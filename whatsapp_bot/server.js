@@ -26,7 +26,14 @@ const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+// Límite del cuerpo JSON. Sin `limit`, body-parser corta en 102400 bytes (100kb),
+// y una imagen llega como base64: se infla ~33% contra el archivo original. Con
+// el default, cualquier foto o captura de más de ~76 KB daba 413 y la app
+// Flutter no lo veía (por debajo solo comparaba `statusCode == 200`).
+// 25mb cubre de sobra una imagen de 16 MB en base64, que es el máximo que
+// acepta WhatsApp.
+app.use(express.json({ limit: '25mb' }));
 
 // Header anti-interstitial ngrok
 app.use((req, res, next) => {
@@ -410,6 +417,30 @@ app.get('/config', async (req, res) => {
         report_group_name: reportGroup ? reportGroup.name : null,
         whatsapp_connected: bot.isConnected()
     });
+});
+
+// Handler de errores de alcance general. Tiene que ir DESPUÉS de las rutas:
+// Express lo busca entre los handlers registrados después del punto del fallo.
+//
+// Sin esto, un error de body-parser (por ejemplo 413 por body demasiado grande)
+// salía como una página HTML vacía y sin logear: los `console.error` que hay en
+// los endpoints viven dentro de su propio try/catch, que nunca se ejecutaba
+// porque el body se rechazaba antes de entrar a la ruta. Por eso un 413 se
+// veía desde la app como un simple "no se envió", sin causa.
+app.use((err, req, res, next) => {
+    const status = err.status || err.statusCode || 500;
+    if (status === 413) {
+        console.error(
+            `❌ 413 body demasiado grande en ${req.method} ${req.originalUrl}: ` +
+            `recibidos ${req.headers['content-length'] || '?'} bytes, ` +
+            `limite ${err.limit || '?'}. Si es una imagen, suele ser que el ` +
+            `cliente manda un base64 sin comprimir.`
+        );
+    } else {
+        console.error(`❌ Error no manejado en ${req.method} ${req.originalUrl}:`, err.message);
+    }
+    if (res.headersSent) return next(err);
+    res.status(status).json({ error: err.message || 'Error interno' });
 });
 
 // Iniciar servidor y conectar a WhatsApp
