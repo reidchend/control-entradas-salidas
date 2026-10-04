@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/data/postgres_guard.dart';
 import '../../../../core/models/usuario.dart';
+import '../../../../core/updater/auto_update_checker.dart';
 import '../../../configuracion/presentation/dialogs/db_config_dialog.dart';
 import '../../../configuracion/presentation/widgets/bd_no_disponible.dart';
 import '../../../pos/presentation/widgets/usuario_card.dart';
@@ -49,58 +50,67 @@ class _HostelLoginViewState extends ConsumerState<HostelLoginView> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: Stack(
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: ListView(
+                padding: const EdgeInsets.all(20),
                 children: [
-                  Icon(Icons.hotel_outlined, size: 40, color: scheme.primary),
-                  const SizedBox(width: 10),
-                  Text('Lycoris Hosteleria',
-                      style: Theme.of(context).textTheme.headlineSmall),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.hotel_outlined,
+                          size: 40, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Text('Lycoris Hosteleria',
+                          style: Theme.of(context).textTheme.headlineSmall),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Text(
+                      'Seleccione el recepcionista',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  usuarios.when(
+                    loading: () => estadoBd == EstadoBd.conectando
+                        ? const Center(child: CircularProgressIndicator())
+                        : const Center(child: BdNoDisponible()),
+                    error: (e, _) => const Center(child: BdNoDisponible()),
+                    data: (lista) => lista.isEmpty
+                        ? _sinRecepcionistas(scheme)
+                        : Column(
+                            children: [
+                              for (final u in lista) ...[
+                                UsuarioCard(
+                                  usuario: u,
+                                  selected: u.id == _selectedId,
+                                  onTap: () {
+                                    setState(() => _selectedId = u.id);
+                                    _login(u);
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                            ],
+                          ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  'Seleccione el recepcionista',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ),
-              const SizedBox(height: 24),
-              usuarios.when(
-                loading: () => estadoBd == EstadoBd.conectando
-                    ? const Center(child: CircularProgressIndicator())
-                    : const Center(child: BdNoDisponible()),
-                error: (e, _) => const Center(child: BdNoDisponible()),
-                data: (lista) => lista.isEmpty
-                    ? _sinRecepcionistas(scheme)
-                    : Column(
-                        children: [
-                          for (final u in lista) ...[
-                            UsuarioCard(
-                              usuario: u,
-                              selected: u.id == _selectedId,
-                              onTap: () {
-                                setState(() => _selectedId = u.id);
-                                _login(u);
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ],
-                      ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const Align(
+            alignment: Alignment.topRight,
+            child: AutoUpdateChecker(),
+          ),
+        ],
       ),
     );
   }

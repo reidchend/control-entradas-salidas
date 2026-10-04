@@ -8,6 +8,7 @@ import '../data/hostel_timeline_providers.dart';
 import '../data/hosteleria_providers.dart';
 import 'dialogs/habitacion_detalle_dialog.dart';
 import 'dialogs/nueva_reserva_dialog.dart';
+import 'hosteleria_config_screen.dart';
 import 'widgets/habitacion_grid.dart';
 import 'widgets/habitaciones_timeline.dart';
 import 'widgets/hostel_rango_nav.dart';
@@ -68,6 +69,13 @@ class HosteleriaScreen extends ConsumerWidget {
             },
             onLogout: () =>
                 ref.read(hostelSessionProvider.notifier).cerrarSesion(),
+            onConfig: (sesion?.esAdmin ?? false)
+                ? () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const HosteleriaConfigScreen(),
+                      ),
+                    )
+                : null,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -91,8 +99,7 @@ class HosteleriaScreen extends ConsumerWidget {
           ),
           Expanded(
             child: habs.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (estado) {
                 final lista = estado.habitaciones;
@@ -109,7 +116,8 @@ class HosteleriaScreen extends ConsumerWidget {
     );
   }
 
-  Widget _vistaActual(BuildContext context, WidgetRef ref, HostelEstado estado) {
+  Widget _vistaActual(
+      BuildContext context, WidgetRef ref, HostelEstado estado) {
     final reservaDe = estado.reservasPorHabitacion;
     return Column(
       children: [
@@ -153,8 +161,8 @@ class HosteleriaScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _nuevaReserva(
-      BuildContext context, WidgetRef ref, List<Habitacion> habitaciones) async {
+  Future<void> _nuevaReserva(BuildContext context, WidgetRef ref,
+      List<Habitacion> habitaciones) async {
     final repo = ref.read(hosteleriaRepoProvider);
     if (repo == null) return;
     final ok = await showNuevaReservaDialog(

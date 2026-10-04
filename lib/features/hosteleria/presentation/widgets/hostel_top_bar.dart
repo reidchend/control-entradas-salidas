@@ -12,11 +12,15 @@ class HostelTopBar extends ConsumerWidget {
     required this.nombreOperador,
     required this.onSync,
     required this.onLogout,
+    this.onConfig,
   });
 
   final String nombreOperador;
   final VoidCallback onSync;
   final VoidCallback onLogout;
+
+  /// Si no es nulo, muestra el botón de Configuración (solo administradores).
+  final VoidCallback? onConfig;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -85,6 +89,13 @@ class HostelTopBar extends ConsumerWidget {
             onPressed: () =>
                 ref.read(themeControllerProvider.notifier).toggle(),
           ),
+          if (onConfig != null)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              color: appColor(context, 'header_subtitle'),
+              tooltip: 'Configuración',
+              onPressed: onConfig,
+            ),
           IconButton(
             icon: const Icon(Icons.logout),
             color: appColor(context, 'header_subtitle'),
