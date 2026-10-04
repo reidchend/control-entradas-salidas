@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../data/hosteleria_repository.dart';
 import 'checkin_reserva_dialog.dart';
 
@@ -152,7 +153,7 @@ class _HabitacionDetalleDialogState extends State<HabitacionDetalleDialog> {
     final (label, color, icon) = switch (hab.estado) {
       EstadoHabitacion.aseo => (
           'Aseo (pendiente de limpieza)',
-          Colors.orange,
+          appColor(context, 'warning'),
           Icons.cleaning_services_outlined,
         ),
       EstadoHabitacion.mantenimiento => (
@@ -160,7 +161,11 @@ class _HabitacionDetalleDialogState extends State<HabitacionDetalleDialog> {
           scheme.error,
           Icons.build_outlined,
         ),
-      _ => ('Disponible', Colors.green, Icons.check_circle_outline),
+      _ => (
+          'Disponible',
+          appColor(context, 'success'),
+          Icons.check_circle_outline,
+        ),
     };
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -215,7 +220,7 @@ class _HabitacionDetalleDialogState extends State<HabitacionDetalleDialog> {
                 ? 'Límite ${h(r.horaLimite!)} · VENCIDA (${-restantes} min)'
                 : 'Límite ${h(r.horaLimite!)} · $restantes min restantes',
             style: TextStyle(
-              color: vencida ? scheme.error : Colors.orange,
+              color: vencida ? scheme.error : appColor(context, 'warning'),
               fontWeight: FontWeight.w600,
             ),
           ),

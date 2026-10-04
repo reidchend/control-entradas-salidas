@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/state/theme_controller.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/hostel_session.dart';
 import 'hosteleria_screen.dart';
@@ -19,14 +20,15 @@ class HosteleriaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sesion = ref.watch(hostelSessionProvider);
-    final appTheme = buildAppTheme(mode: ThemeMode.light);
+    final themeMode = ref.watch(themeControllerProvider);
+    final appTheme = buildAppTheme(mode: themeMode);
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Lycoris Hosteleria',
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
-      themeMode: ThemeMode.light,
+      themeMode: themeMode,
       builder: (context, child) {
         final ancho = MediaQuery.sizeOf(context).width;
         final esEscritorio = ancho >= 600;

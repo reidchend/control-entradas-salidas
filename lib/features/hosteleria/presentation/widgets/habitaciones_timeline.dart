@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/fecha_utils.dart';
 
 /// Línea de tiempo de habitaciones para un rango de fechas (semana o mes).
@@ -69,14 +70,14 @@ class HabitacionesTimeline extends StatelessWidget {
           for (var i = 0; i < _dias; i++)
             SizedBox(
               width: anchoDia,
-              child: _headerCelda(desde.add(Duration(days: i)), hoy),
+              child: _headerCelda(context, desde.add(Duration(days: i)), hoy),
             ),
         ],
       ),
     );
   }
 
-  Widget _headerCelda(DateTime fecha, DateTime hoy) {
+  Widget _headerCelda(BuildContext context, DateTime fecha, DateTime hoy) {
     final esHoy = mismoDia(fecha, hoy);
     return Center(
       child: Column(
@@ -88,7 +89,7 @@ class HabitacionesTimeline extends StatelessWidget {
             '${fecha.day}',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: esHoy ? Colors.orange : null,
+              color: esHoy ? appColor(context, 'warning') : null,
             ),
           ),
         ],
@@ -201,11 +202,15 @@ class HabitacionesTimeline extends StatelessWidget {
     };
   }
 
-  Color _onColor(BuildContext context, HostelReserva r) =>
-      r.estado == HostelReservaEstado.ocupada ||
-              r.estado == HostelReservaEstado.reservada
-          ? Colors.white
-          : Theme.of(context).colorScheme.onSurface;
+  Color _onColor(BuildContext context, HostelReserva r) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (r.estado) {
+      HostelReservaEstado.ocupada => scheme.onError,
+      HostelReservaEstado.reservada => scheme.onTertiary,
+      HostelReservaEstado.finalizada => scheme.onSurface,
+      HostelReservaEstado.cancelada => scheme.onSurface,
+    };
+  }
 
   Widget _leyenda(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;

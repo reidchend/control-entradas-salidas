@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Grid de habitaciones con estado ocupada/reservada/aseo/mantenimiento.
 class HabitacionGrid extends StatefulWidget {
@@ -83,9 +84,10 @@ class _HabitacionTile extends StatelessWidget {
         : reservada
             ? ('Reservada', scheme.tertiary)
             : switch (habitacion.estado) {
-                EstadoHabitacion.aseo => ('Aseo', Colors.orange),
+                EstadoHabitacion.aseo =>
+                  ('Aseo', appColor(context, 'warning')),
                 EstadoHabitacion.mantenimiento =>
-                  ('Mantenimiento', Colors.blueGrey),
+                  ('Mantenimiento', appColor(context, 'info')),
                 _ => ('Disponible', scheme.primary),
               };
     final restantes = ocupada ? reserva!.minutosRestantes() : null;
@@ -94,10 +96,13 @@ class _HabitacionTile extends StatelessWidget {
         .join(' · ');
 
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
+      color: scheme.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -107,9 +112,10 @@ class _HabitacionTile extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    width: 9,
+                    height: 9,
+                    decoration:
+                        BoxDecoration(color: color, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -120,28 +126,45 @@ class _HabitacionTile extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, color: color),
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
               ),
               if (restantes != null) ...[
-                const SizedBox(height: 2),
+                const SizedBox(height: 6),
                 Text(
                   restantes < 0 ? 'OP vencida' : 'OP · $restantes min',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: restantes < 0 ? scheme.error : Colors.orange,
+                    color: restantes < 0
+                        ? scheme.error
+                        : appColor(context, 'warning'),
                   ),
                 ),
               ],
               if (info.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(info.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11)),
+                Text(
+                  info.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                ),
               ],
             ],
           ),

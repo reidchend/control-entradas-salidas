@@ -351,3 +351,13 @@ class AppThemeData {
   ThemeData dark() => buildAppTheme(mode: ThemeMode.dark).theme;
   ThemeData light() => buildAppTheme(mode: ThemeMode.light).theme;
 }
+
+/// Color de la paleta extendida ([AppColors]) según el brillo del tema actual.
+/// Útil para `success`/`warning`/`info`/`error` que no tienen equivalente
+/// directo en el [ColorScheme]. Equivale a `AppThemeData.color` pero para
+/// widgets que no tienen el [AppThemeData] a mano.
+Color appColor(BuildContext context, String key) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final hex = AppColors.of(isDark)[key]!;
+  return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+}
