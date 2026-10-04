@@ -359,6 +359,25 @@ class RequisicionesRepository {
         return;
       }
 
+      // La mercadería se movió cuando se creó la requisición, no cuando se
+      // totalizó. Si el operador tarda días en totalizar, el traslado tiene que
+      // seguir apareciendo en el historial del día en que lo pidió.
+      //
+      // `fecha_movimiento` queda en now() a propósito: es el cursor con el que
+      // el recálculo de stock elige el último movimiento de cada
+      // producto/almacén y confía en su `cantidad_nueva`, y esa cadena solo es
+      // válida en orden de inserción. La fecha de negocio va en
+      // `fecha_traslado`, que las vistas pintan y ordenan con
+      // COALESCE(fecha_traslado, fecha_movimiento).
+      //
+      // Cuándo se totalizó no se pierde: queda en requisiciones.fecha_procesamiento.
+      // Si la requisición no tuviera fecha de creación (no debería pasar), se
+      // cae a now() y el historial queda como antes, en vez de romper.
+      final fechaTraslado = (req.fechaCreacion ?? DateTime.now())
+          .toUtc()
+          .toIso8601String();
+      final ahora = DateTime.now().toUtc().toIso8601String();
+
       for (final d in pendientes) {
         if (d.productoId == null) continue;
 
@@ -380,7 +399,8 @@ class RequisicionesRepository {
           'registrado_por': usuario,
           'observaciones': 'Traslado req ${req.numero} → ${req.destino}',
           'almacen': req.origen,
-          'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
+          'fecha_movimiento': ahora,
+          'fecha_traslado': fechaTraslado,
         });
 
         await tx.insert('movimientos', {
@@ -394,7 +414,8 @@ class RequisicionesRepository {
           'registrado_por': usuario,
           'observaciones': 'Traslado req ${req.numero} ← ${req.origen}',
           'almacen': req.destino,
-          'fecha_movimiento': DateTime.now().toUtc().toIso8601String(),
+          'fecha_movimiento': ahora,
+          'fecha_traslado': fechaTraslado,
         });
 
         await _upsertExistenciaEn(tx, d.productoId!, req.origen, cantOrigenNueva);

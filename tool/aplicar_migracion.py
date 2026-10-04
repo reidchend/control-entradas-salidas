@@ -24,6 +24,7 @@ MIGRACIONES = [
     (2, "20261002010000_usuarios_centrales.sql"),
     (3, "20261002020000_hosteleria_checkin.sql"),
     (4, "20261002030000_habitaciones_estados_op.sql"),
+    (5, "20261004090000_movimientos_fecha_traslado.sql"),
 ]
 
 
@@ -317,7 +318,133 @@ def verificar_4(ch):
         print("  [FALLA] falta habitaciones_estado_check")
 
 
-VERIFICADORES = {1: verificar_1, 2: verificar_2, 3: verificar_3, 4: verificar_4}
+def verificar_5(ch):
+    """Migracion 5: `fecha_traslado`, la fecha de negocio del traslado.
+
+    Lo importante NO es solo que la columna exista, sino que el recálculo de
+    stock siga dando lo mismo. El recalculo (configuracion_repository.dart:266)
+    toma por cada producto/almacen el movimiento mas reciente por
+    `fecha_movimiento` y se cree su `cantidad_nueva`; como la migracion no toca
+    `fecha_movimiento`, ese resultado no puede cambiar. Eso se comprueba contra
+    la tabla `existencias`, que es la verdad de campo.
+    """
+    print("  -- la columna existe en las dos tablas --")
+    # El archivado copia la fila completa con upsertById, asi que sin la
+    # columna en movimientos_archivo, archivarMovimientos() falla.
+    ch.columna("movimientos", "fecha_traslado", "timestamp with time zone")
+    ch.columna("movimientos_archivo", "fecha_traslado", "timestamp with time zone")
+
+    # Los chequeos de datos leen la columna. Si todavia no existe, abortarian
+    # con UndefinedColumn y el verificador no listaria el resto de los fallos,
+    # que es justo cuando mas falta verlos.
+    existe = ch.c.execute(
+        "SELECT COUNT(*) FROM information_schema.columns "
+        " WHERE table_name='movimientos' AND column_name='fecha_traslado'"
+    ).fetchone()[0]
+    if not existe:
+        print("  (la columna todavia no existe: se saltan los chequeos de datos)")
+        return
+
+    print("  -- el relleno termino --")
+    # Ningun traslado puede quedar con la fecha de negocio sin rellenar si su
+    # requisicion cambio de dia calendario. Sin esto, el historial sigue
+    # mostrando el dia equivocado para esas requisiciones.
+    r = ch.c.execute(
+        "SELECT COUNT(*) FROM movimientos m "
+        "  JOIN requisiciones r ON r.id = m.requisicion_id "
+        " WHERE r.fecha_creacion IS NOT NULL "
+        "   AND m.fecha_movimiento::date <> r.fecha_creacion::date "
+        "   AND m.fecha_traslado IS NULL"
+    ).fetchone()[0]
+    if r:
+        ch.fallos.append(
+            f"{r} movimientos con el traslado en otro dia siguen sin fecha_traslado"
+        )
+        print(f"  [FALLA] {r} movimientos en otro dia sin fecha_traslado")
+    else:
+        ch.ok += 1
+        print("  [OK   ] ningun traslado en otro dia quedo sin fecha_traslado")
+
+    # Al reves: nada puede tener fecha_traslado distinta de la de su requisicion.
+    r = ch.c.execute(
+        "SELECT COUNT(*) FROM movimientos m "
+        "  JOIN requisiciones r ON r.id = m.requisicion_id "
+        " WHERE m.fecha_traslado IS NOT NULL "
+        "   AND m.fecha_traslado IS DISTINCT FROM r.fecha_creacion"
+    ).fetchone()[0]
+    if r:
+        ch.fallos.append(f"{r} movimientos con fecha_traslado que no es la de su requisicion")
+        print(f"  [FALLA] {r} con fecha_traslado distinta de su requisicion")
+    else:
+        ch.ok += 1
+        print("  [OK   ] fecha_traslado coincide con fecha_creacion de su requisicion")
+
+    # Solo los traslados llevan fecha de negocio. Ventas, ajustes y produccion
+    # ocurren cuando se registran, asi que deben seguir en NULL.
+    r = ch.c.execute(
+        "SELECT COUNT(*) FROM movimientos "
+        " WHERE fecha_traslado IS NOT NULL AND tipo NOT IN ('tr_salida','tr_entrada')"
+    ).fetchone()[0]
+    if r:
+        ch.fallos.append(f"{r} movimientos que no son traslados tienen fecha_traslado")
+        print(f"  [FALLA] {r} no-traslados con fecha_traslado")
+    else:
+        ch.ok += 1
+        print("  [OK   ] solo los traslados llevan fecha_traslado")
+
+    print("  -- el historial de un traslado conocido queda en su dia real --")
+    # El caso que reporto el usuario: el traslado tiene que verse en el dia en
+    # que se creo la requisicion, no en el dia en que se totalizo.
+    r = ch.c.execute(
+        "SELECT COUNT(*) FROM movimientos m "
+        "  JOIN requisiciones r ON r.id = m.requisicion_id "
+        " WHERE COALESCE(m.fecha_traslado, m.fecha_movimiento)::date "
+        "       <> r.fecha_creacion::date"
+    ).fetchone()[0]
+    if r:
+        ch.fallos.append(f"{r} movimientos se verian en un dia distinto al de su requisicion")
+        print(f"  [FALLA] {r} movimientos se verian en el dia equivocado")
+    else:
+        ch.ok += 1
+        print("  [OK   ] ningun traslado se ve en un dia distinto al de su requisicion")
+
+    print("  -- el recalculo de stock no cambia (esto es lo critico) --")
+    # El recalculo ordena por fecha_movimiento, que la migracion no toca, y se
+    # queda con la cantidad_nueva del ultimo. Si eso sigue coincidiendo con
+    # existencias en todas las claves, el stock no se altera.
+    ch.filas(
+        "claves (producto, almacen)",
+        "SELECT COUNT(*) FROM (SELECT producto_id, almacen FROM existencias) t",
+        1,
+    )
+    desalineadas = ch.c.execute(
+        "SELECT COUNT(*) FROM existencias e "
+        " WHERE ABS(e.cantidad - ("
+        "   SELECT m.cantidad_nueva FROM movimientos m "
+        "    WHERE m.producto_id = e.producto_id AND m.almacen = e.almacen "
+        "    ORDER BY m.fecha_movimiento DESC, m.id DESC LIMIT 1"
+        " )) > 1e-6"
+    ).fetchone()[0]
+    if desalineadas:
+        ch.fallos.append(
+            f"{desalineadas} claves de existencias no coinciden con el recalculo por "
+            f"fecha_movimiento: el stock se moveria"
+        )
+        print(f"  [FALLA] {desalineadas} claves desalineadas con el recalculo")
+    else:
+        ch.ok += 1
+        print("  [OK   ] existencias coincide con el recalculo en todas las claves")
+
+    ch.filas(
+        "movimientos con fecha_traslado",
+        "SELECT COUNT(*) FROM movimientos WHERE fecha_traslado IS NOT NULL",
+        1,
+    )
+
+
+VERIFICADORES = {
+    1: verificar_1, 2: verificar_2, 3: verificar_3, 4: verificar_4, 5: verificar_5,
+}
 
 
 def aplicar(numero, url):
@@ -418,7 +545,7 @@ def main():
 
     if args[0] == "verificar":
         if len(args) < 2:
-            print("usar: verificar <1|2|3|4>")
+            print("usar: verificar <1|2|3|4|5>")
             return 2
         return 0 if solo_verificar(int(args[1]), url) else 1
 
@@ -429,7 +556,7 @@ def main():
                 print(f"=== Se detiene en la migracion {n}. La base queda como estaba antes de ella. ===")
                 return 1
         print()
-        print("=== Las 4 migraciones aplicadas y verificadas. ===")
+        print(f"=== Las {len(MIGRACIONES)} migraciones aplicadas y verificadas. ===")
         return 0
 
     try:

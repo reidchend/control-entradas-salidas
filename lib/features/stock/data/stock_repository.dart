@@ -231,7 +231,11 @@ class StockRepository {
     final rows = await _db.fetchAll(
       'movimientos',
       filters: {'producto_id': productoId},
-      orderBy: 'fecha_movimiento',
+      // Se ordena por la misma fecha que se muestra (COALESCE de
+      // fecha_traslado y fecha_movimiento), no solo por fecha_movimiento. Con
+      // solo fecha_movimiento, un traslado de una requisición totalizada tarde
+      // se listing al final y rompe la secuencia del historial.
+      orderBy: 'COALESCE(fecha_traslado, fecha_movimiento)',
       ascending: false,
       limit: limit,
     );

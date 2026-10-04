@@ -101,6 +101,61 @@ PRUEBAS = [
         "ORDER BY d.configurado_en DESC NULLS LAST, d.id DESC LIMIT 1",
         ("acc2a6f6-18d2-479d-b926-dca36971d675",),
     ),
+    # --- motivoNoSePuedeBorrar: el pre-chequeo que agregado al eliminar() ---
+    # Estas dos llevan un 4to elemento: un predicado que tiene que cumplirse. Sin
+    # el, la consulta se ejecuta pero no comprueba nada y el test pasa siempre.
+    # Los usuarios se eligen con subconsulta y no con un id fijo, para que el
+    # test siga siendo valido si cambian los usuarios de la base.
+    (
+        "admin: motivoNoSePuedeBorrar de uno QUE tiene cierres -> >0",
+        "SELECT u.id, COUNT(pc.id) AS cierres "
+        "FROM usuarios u JOIN pos_cierres pc ON pc.usuario_id = u.id "
+        "GROUP BY u.id ORDER BY 2 DESC, u.id LIMIT 1",
+        (),
+        lambda filas: bool(filas) and filas[0][1] > 0,
+    ),
+    (
+        "admin: motivoNoSePuedeBorrar de uno SIN cierres -> vacio",
+        "SELECT u.id FROM usuarios u "
+        "WHERE NOT EXISTS (SELECT 1 FROM pos_cierres pc WHERE pc.usuario_id = u.id) "
+        "ORDER BY u.id LIMIT 1",
+        (),
+        lambda filas: bool(filas),
+    ),
+    # --- fecha_traslado: la fecha de negocio del traslado (migracion 5) ---
+    # El COALESCE es lo que pintan y ordenan las vistas de historial. Tiene que
+    # dar la fecha de la requisicion, no la del registro del movimiento.
+    (
+        "movimientos: el COALESCE da el dia de la requisicion, no el del registro",
+        "SELECT COUNT(*) FROM movimientos m "
+        "  JOIN requisiciones r ON r.id = m.requisicion_id "
+        " WHERE m.fecha_traslado IS NOT NULL "
+        "   AND COALESCE(m.fecha_traslado, m.fecha_movimiento)::date "
+        "       = r.fecha_creacion::date "
+        "   AND m.fecha_movimiento::date <> r.fecha_creacion::date",
+        (),
+        lambda filas: bool(filas) and filas[0][0] > 0,
+    ),
+    (
+        "movimientos: ningun traslado se ve en un dia distinto al de su requisicion",
+        "SELECT COUNT(*) FROM movimientos m "
+        "  JOIN requisiciones r ON r.id = m.requisicion_id "
+        " WHERE COALESCE(m.fecha_traslado, m.fecha_movimiento)::date "
+        "       <> r.fecha_creacion::date",
+        (),
+        lambda filas: bool(filas) and filas[0][0] == 0,
+    ),
+    (
+        "movimientos: el recalculo de stock no se altera (existencias == ultimo)",
+        "SELECT COUNT(*) FROM existencias e "
+        " WHERE ABS(e.cantidad - ("
+        "   SELECT m.cantidad_nueva FROM movimientos m "
+        "    WHERE m.producto_id = e.producto_id AND m.almacen = e.almacen "
+        "    ORDER BY m.fecha_movimiento DESC, m.id DESC LIMIT 1"
+        " )) > 1e-6",
+        (),
+        lambda filas: bool(filas) and filas[0][0] == 0,
+    ),
 ]
 
 
@@ -121,13 +176,22 @@ def main():
 
         fallos = 0
         print("--- lecturas ---")
-        for etiqueta, sql, params in PRUEBAS:
+        for prueba in PRUEBAS:
+            etiqueta, sql, params = prueba[0], prueba[1], prueba[2]
+            # Cuarto elemento opcional: un predicado sobre las filas. Si no se
+            # cumple, la prueba falla aunque el SQL no de error.
+            esperado = prueba[3] if len(prueba) > 3 else None
             # Un SAVEPOINT por prueba: sin esto, el primer error aborta la
             # transaccion entera y todas las demas pruebas mienten con
             # "transaccion abortada".
             c.execute("SAVEPOINT p")
             try:
                 filas = c.execute(sql, params).fetchall()
+                if esperado is not None and not esperado(filas):
+                    fallos += 1
+                    print(f"  [FALLA] {etiqueta:52} no cumplio lo esperado: "
+                          f"{filas[:2]}")
+                    continue
                 muestra = ", ".join(str(f[0]) for f in filas[:4])
                 print(f"  [OK   ] {etiqueta:52} {len(filas)} filas  [{muestra}]")
             except Exception as e:

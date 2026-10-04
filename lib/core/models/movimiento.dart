@@ -50,7 +50,13 @@ class Movimiento {
         registradoPor: m['registrado_por'] as String?,
         observaciones: m['observaciones'] as String?,
         almacen: m['almacen'] as String?,
-        fechaMovimiento: _parseDt(m['fecha_movimiento']),
+        // `fecha_traslado` es la fecha de negocio del traslado (la fecha en que
+        // se creó la requisición) y solo existe en los traslados. Cuando está,
+        // es la que hay que mostrar y ordenar: la mercadería se movió ese día,
+        // aunque el operador totalizara la requisición días después.
+        // `fecha_movimiento` sigue siendo la fecha de registro, y la que usa el
+        // recálculo de stock, así que no se toca.
+        fechaMovimiento: _parseDt(m['fecha_traslado'] ?? m['fecha_movimiento']),
         createdAt: _parseDt(m['created_at']),
       );
 

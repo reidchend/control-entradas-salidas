@@ -59,11 +59,15 @@ Future<void> showHistorialAuditoria(
   final filtrados = seleccion == _todosAlmacenes
       ? movs
       : movs.where((m) => m['almacen'] == seleccion).toList();
-  filtrados.sort((a, b) {
-    final da = DateTime.tryParse(a['fecha_movimiento']?.toString() ?? '') ?? DateTime(0);
-    final db = DateTime.tryParse(b['fecha_movimiento']?.toString() ?? '') ?? DateTime(0);
-    return db.compareTo(da);
-  });
+  // Se ordena por la fecha de negocio del traslado cuando existe
+  // (`fecha_traslado`, la fecha en que se creó la requisición) y por la de
+  // registro en los demás casos. Si se ordenara solo por `fecha_movimiento`,
+  // un traslado de una requisición totalizada días después se iría al final y
+  // rompería la secuencia del historial.
+  DateTime fechaDe(Map<String, dynamic> m) =>
+      DateTime.tryParse((m['fecha_traslado'] ?? m['fecha_movimiento'])?.toString() ?? '') ??
+      DateTime(0);
+  filtrados.sort((a, b) => fechaDe(b).compareTo(fechaDe(a)));
 
   if (!context.mounted) return;
   await showDialog<void>(
@@ -141,7 +145,10 @@ class _MovimientoCard extends StatelessWidget {
     final tipo = (m['tipo'] as String?) ?? '';
     final (label, color) =
         _tipoLabels[tipo] ?? (tipo.isEmpty ? '?' : tipo, scheme.outline);
-    final fecha = DateTime.tryParse(m['fecha_movimiento']?.toString() ?? '');
+    // Misma regla que el orden de arriba: la fecha de negocio del traslado si
+    // existe, si no la de registro.
+    final fecha = DateTime.tryParse(
+        (m['fecha_traslado'] ?? m['fecha_movimiento'])?.toString() ?? '');
     final cantidad = (m['cantidad'] as num?)?.toDouble() ?? 0;
     final pesoTotal = (m['peso_total'] as num?)?.toDouble() ?? 0;
     final cantAnterior = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;

@@ -346,7 +346,10 @@ class _MovimientosReportScreenState extends ConsumerState<MovimientosReportScree
 
   Widget _buildItem(BuildContext context, int index) {
     final m = _movimientos[index];
-    final fecha = _fmtFecha(m['fecha_movimiento']);
+    // El filtro de fechas de este reporte usa la fecha de negocio del traslado
+    // (fecha_traslado), así que hay que pintar la misma y no la de registro, o
+    // el listado no cuadra con el rango elegido.
+    final fecha = _fmtFecha(m['fecha_traslado'] ?? m['fecha_movimiento']);
     final tipo = m['tipo'] as String? ?? '—';
     final prod = m['producto_nombre'] as String? ?? 'Producto #${m['producto_id']}';
     final cant = (m['cantidad'] as num?)?.toDouble() ?? 0;

@@ -100,10 +100,16 @@ class ReportesRepository {
       desde.toUtc().toIso8601String(),
       hasta.toUtc().toIso8601String(),
     ];
+    // El rango de fechas y el orden usan la fecha de negocio del traslado
+    // (fecha_traslado = fecha en que se creó la requisición) cuando existe. Sin
+    // esto, un traslado de una requisición totalizada días después se contaría
+    // en el día equivocado. La columna real fecha_movimiento sigue viniendo en
+    // el SELECT y la pantalla la usa solo si no hay fecha_traslado.
     var sql =
         'SELECT m.*, p.nombre AS __producto_nombre FROM movimientos m '
         'INNER JOIN productos p ON p.id = m.producto_id '
-        'WHERE m.fecha_movimiento >= \$1 AND m.fecha_movimiento <= \$2';
+        'WHERE COALESCE(m.fecha_traslado, m.fecha_movimiento) >= \$1 '
+        'AND COALESCE(m.fecha_traslado, m.fecha_movimiento) <= \$2';
     if (tipo != null && tipo != 'Todos') {
       sql += ' AND m.tipo = \$${params.length + 1}';
       params.add(tipo);
@@ -112,7 +118,7 @@ class ReportesRepository {
       sql += ' AND m.almacen = \$${params.length + 1}';
       params.add(almacen);
     }
-    sql += ' ORDER BY m.fecha_movimiento DESC';
+    sql += ' ORDER BY COALESCE(m.fecha_traslado, m.fecha_movimiento) DESC';
 
     final rows = await _db.executeSql(sql, params: params);
 
@@ -259,12 +265,13 @@ class ReportesRepository {
         m.peso_total,
         m.observaciones,
         m.almacen,
-        m.fecha_movimiento,
+        COALESCE(m.fecha_traslado, m.fecha_movimiento) AS fecha_movimiento,
         m.registrado_por
       FROM movimientos m
       WHERE m.producto_id = \$1
-        AND m.fecha_movimiento >= \$2 AND m.fecha_movimiento <= \$3
-      ORDER BY m.fecha_movimiento DESC
+        AND COALESCE(m.fecha_traslado, m.fecha_movimiento) >= \$2
+        AND COALESCE(m.fecha_traslado, m.fecha_movimiento) <= \$3
+      ORDER BY COALESCE(m.fecha_traslado, m.fecha_movimiento) DESC
     ''', params: [
       productoId,
       desde.toUtc().toIso8601String(),
