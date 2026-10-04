@@ -68,7 +68,30 @@ class UsuariosRepository {
   }
 
   /// Elimina definitivamente un usuario (cascada a módulos y dispositivos).
+  ///
+  /// Falla con error de FK (sqlstate 23503) si el usuario tiene cierres de
+  /// caja: `pos_cierres` guarda el historial y su FK a `usuarios` es
+  /// `ON DELETE NO ACTION`, sin CASCADE, para no perder de quién fue cada
+  /// cierre. Usá [motivoNoSePuedeBorrar] para avisar antes de intentarlo y
+  /// ofrecer desactivar en su lugar.
   Future<void> eliminar(int id) => _db.deleteById('usuarios', id);
+
+  /// Por qué no se puede borrar físicamente a este usuario, o `null` si sí
+  /// se puede. Hoy la única traba son los cierros de caja; los módulos y los
+  /// equipos caen en cascada, así que no cuentan.
+  Future<String?> motivoNoSePuedeBorrar(int id) async {
+    final rows = await _db.executeSql(
+      'SELECT COUNT(*) AS cierres FROM pos_cierres WHERE usuario_id = \$1',
+      params: [id],
+    );
+    // COUNT(*) siempre devuelve una fila, pero se chequea igual para no
+    // confiarse si algún día la consulta cambia.
+    final n = rows.isEmpty ? 0 : ((rows.first['cierres'] as num?)?.toInt() ?? 0);
+    if (n == 0) return null;
+    return n == 1
+        ? 'tiene 1 cierre de caja registrado'
+        : 'tiene $n cierres de caja registrados';
+  }
 
   /// Equipos vinculados a un usuario (para ver/desvincular).
   Future<List<DispositivoVinculado>> dispositivosDe(int usuarioId) async {

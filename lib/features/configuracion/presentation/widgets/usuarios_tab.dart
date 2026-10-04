@@ -30,7 +30,57 @@ class _UsuariosTabState extends ConsumerState<UsuariosTab> {
     if (ok == true) ref.invalidate(usuariosAdminProvider);
   }
 
+  /// Borrar un usuario se hace solo si no deja rastro. Si tiene cierres de
+  /// caja, `pos_cierres` bloquea el borrado (FK `ON DELETE NO ACTION`, para no
+  /// perder de quién fue cada cierre), así que se avisa antes de intentar y se
+  /// ofrece desactivar, que conserva el historial. El `try/catch` alrededor del
+  /// borrado es la red por si mañana otra tabla también lo bloquea: sin él, la
+  /// excepción sube y el diálogo se cierra sin decir nada.
   Future<void> _eliminar(UsuariosRepository repo, Usuario u) async {
+    final motivo = await repo.motivoNoSePuedeBorrar(u.id);
+    if (motivo != null) {
+      if (!mounted) return;
+      final desactivar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No se puede eliminar'),
+          content: Text(
+            '"${u.nombre}" $motivo. Borrarlo dejaría la caja sin saber quién '
+            'cerró.\n\nDesactivarlo deja el historial intacto y le impide '
+            'entrar al sistema.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Desactivar'),
+            ),
+          ],
+        ),
+      );
+      if (desactivar == true) {
+        try {
+          await repo.actualizar(u.id, activo: false);
+          ref.invalidate(usuariosAdminProvider);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${u.nombre} desactivado. Ya no puede entrar.'),
+            ),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No se pudo desactivar a "${u.nombre}": $e')),
+          );
+        }
+      }
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -50,7 +100,21 @@ class _UsuariosTabState extends ConsumerState<UsuariosTab> {
       ),
     );
     if (ok != true) return;
-    await repo.eliminar(u.id);
+
+    try {
+      await repo.eliminar(u.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo eliminar a "${u.nombre}": $e. '
+            'Si tiene historial, desactívalo en su lugar.',
+          ),
+        ),
+      );
+      return;
+    }
     ref.invalidate(usuariosAdminProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
