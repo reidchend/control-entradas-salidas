@@ -1,24 +1,141 @@
 name: Build & Release nativa (Flutter)
 
+# Flujo por app: cada app (inventario/pos/hosteleria) tiene su propia versión en
+# `versions.json` y su propia release (`<appId>-vX.Y.Z`). Solo se compilan las
+# apps cuyos archivos cambiaron (cualquier cambio en `lib/core/**` o `pubspec.*`
+# afecta a las tres, porque es código compartido).
+
 on:
-  # Publicar una release manual: selecciona "Run workflow" y pon la versión.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'versions.json'
+  # Ejecución manual:
+  #   apps=auto            -> detecta por archivos cambiados respecto al commit previo
+  #   apps=all             -> publica las tres apps
+  #   apps=inventario,pos  -> publica solo esas
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Versión de la release (ej: 1.0.0). Se crea el tag vX.Y.Z.'
+      apps:
+        description: 'Apps a publicar: auto | all | inventario,pos,hosteleria'
         required: true
+        default: 'auto'
         type: string
-  # O al empujar un tag vX.Y.Z (también publica la release).
-  push:
-    tags:
-      - 'v*'
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Windows — POS (main_pos.dart) y inventario (main.dart)
+  # prepare — detecta qué apps cambiaron y calcula la nueva versión de cada una
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Detectar cambios y versiones
+    runs-on: ubuntu-latest
+    outputs:
+      any: ${{ steps.plan.outputs.any }}
+      inv_changed: ${{ steps.plan.outputs.inv_changed }}
+      inv_version: ${{ steps.plan.outputs.inv_version }}
+      pos_changed: ${{ steps.plan.outputs.pos_changed }}
+      pos_version: ${{ steps.plan.outputs.pos_version }}
+      host_changed: ${{ steps.plan.outputs.host_changed }}
+      host_version: ${{ steps.plan.outputs.host_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detectar rutas cambiadas
+        id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shared:
+              - 'lib/core/**'
+              - 'pubspec.yaml'
+              - 'pubspec.lock'
+              - 'assets/**'
+              - 'windows/**'
+              - 'linux/**'
+              - 'android/**'
+              - '.github/workflows/release.yml'
+            inventario:
+              - 'lib/main.dart'
+              - 'lib/features/{activos,auth,calculadora,configuracion,historial,inventario,producciones,requisiciones,reportes,stock,validacion,whatsapp}/**'
+              - 'web/**'
+            pos:
+              - 'lib/main_pos.dart'
+              - 'lib/features/pos/**'
+              - 'web_pos/**'
+            hosteleria:
+              - 'lib/main_hosteleria.dart'
+              - 'lib/features/hosteleria/**'
+              - 'web_hosteleria/**'
+
+      - name: Calcular versiones
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_INPUT='${{ github.event.inputs.apps }}'
+          if [ -z "$APP_INPUT" ]; then APP_INPUT='auto'; fi
+
+          SHARED='${{ steps.filter.outputs.shared }}'
+          FIL_INV='${{ steps.filter.outputs.inventario }}'
+          FIL_POS='${{ steps.filter.outputs.pos }}'
+          FIL_HOST='${{ steps.filter.outputs.hosteleria }}'
+
+          chg_inv=false; chg_pos=false; chg_host=false
+          if [ "$APP_INPUT" = "all" ]; then
+            chg_inv=true; chg_pos=true; chg_host=true
+          elif [ "$APP_INPUT" != "auto" ]; then
+            case ",$APP_INPUT," in *",inventario,"*) chg_inv=true;; esac
+            case ",$APP_INPUT," in *",pos,"*) chg_pos=true;; esac
+            case ",$APP_INPUT," in *",hosteleria,"*) chg_host=true;; esac
+          else
+            if [ "$SHARED" = "true" ]; then
+              chg_inv=true; chg_pos=true; chg_host=true
+            fi
+            if [ "$FIL_INV" = "true" ]; then chg_inv=true; fi
+            if [ "$FIL_POS" = "true" ]; then chg_pos=true; fi
+            if [ "$FIL_HOST" = "true" ]; then chg_host=true; fi
+          fi
+
+          # Sube el componente patch: 2.0.1 -> 2.0.2
+          bump() { echo "$1" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}'; }
+
+          inv_v=$(jq -r '.inventario.version' versions.json)
+          pos_v=$(jq -r '.pos.version' versions.json)
+          host_v=$(jq -r '.hosteleria.version' versions.json)
+          if [ "$chg_inv" = true ]; then inv_v=$(bump "$inv_v"); fi
+          if [ "$chg_pos" = true ]; then pos_v=$(bump "$pos_v"); fi
+          if [ "$chg_host" = true ]; then host_v=$(bump "$host_v"); fi
+
+          any=false
+          if [ "$chg_inv" = true ] || [ "$chg_pos" = true ] || [ "$chg_host" = true ]; then
+            any=true
+          fi
+
+          {
+            echo "any=$any"
+            echo "inv_changed=$chg_inv"
+            echo "inv_version=$inv_v"
+            echo "pos_changed=$chg_pos"
+            echo "pos_version=$pos_v"
+            echo "host_changed=$chg_host"
+            echo "host_version=$host_v"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "any=$any inv=$chg_inv($inv_v) pos=$chg_pos($pos_v) host=$chg_host($host_v)"
+
+  # ---------------------------------------------------------------------------
+  # Windows — POS, inventario y Hostelería
   # ---------------------------------------------------------------------------
   windows-pos:
     name: Windows POS (zip)
+    needs: prepare
+    if: needs.prepare.outputs.pos_changed == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,21 +146,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Determinar version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Actualizar version en pubspec.yaml
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.tag }}"
-          (Get-Content pubspec.yaml) -replace 'version: .+', "version: $version+1" | Set-Content pubspec.yaml
-          Write-Host "Version actualizada a $version"
+          (Get-Content pubspec.yaml) -replace 'version: .+', "version: ${{ needs.prepare.outputs.pos_version }}+1" | Set-Content pubspec.yaml
       - name: Build Windows POS
         env:
           LYCORIS_BINARY_NAME: LycorisPOS
@@ -54,6 +160,7 @@ jobs:
           flutter build windows --release -t lib/main_pos.dart `
             --dart-define=APP_ID=pos `
             --dart-define=APP_LABEL="Lycoris POS" `
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.pos_version }} `
             --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
       - name: Empaquetar zip
         shell: pwsh
@@ -67,6 +174,8 @@ jobs:
 
   windows-inventario:
     name: Windows Inventario (zip)
+    needs: prepare
+    if: needs.prepare.outputs.inv_changed == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,21 +186,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Determinar version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Actualizar version en pubspec.yaml
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.tag }}"
-          (Get-Content pubspec.yaml) -replace 'version: .+', "version: $version+1" | Set-Content pubspec.yaml
-          Write-Host "Version actualizada a $version"
+          (Get-Content pubspec.yaml) -replace 'version: .+', "version: ${{ needs.prepare.outputs.inv_version }}+1" | Set-Content pubspec.yaml
       - name: Build Windows Inventario
         env:
           LYCORIS_BINARY_NAME: LycorisControl
@@ -102,6 +200,7 @@ jobs:
           flutter build windows --release `
             --dart-define=APP_ID=inventario `
             --dart-define=APP_LABEL="Control de Entradas y Salidas" `
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.inv_version }} `
             --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
       - name: Empaquetar zip
         shell: pwsh
@@ -115,6 +214,8 @@ jobs:
 
   windows-hosteleria:
     name: Windows Hostelería (zip)
+    needs: prepare
+    if: needs.prepare.outputs.host_changed == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,21 +226,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Determinar version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Actualizar version en pubspec.yaml
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.tag }}"
-          (Get-Content pubspec.yaml) -replace 'version: .+', "version: $version+1" | Set-Content pubspec.yaml
-          Write-Host "Version actualizada a $version"
+          (Get-Content pubspec.yaml) -replace 'version: .+', "version: ${{ needs.prepare.outputs.host_version }}+1" | Set-Content pubspec.yaml
       - name: Build Windows Hostelería
         env:
           LYCORIS_BINARY_NAME: LycorisHostel
@@ -150,6 +240,7 @@ jobs:
           flutter build windows --release -t lib/main_hosteleria.dart `
             --dart-define=APP_ID=hosteleria `
             --dart-define=APP_LABEL="Lycoris Hostelería" `
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.host_version }} `
             --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
       - name: Empaquetar zip
         shell: pwsh
@@ -162,10 +253,12 @@ jobs:
           path: app-hosteleria-windows.zip
 
   # ---------------------------------------------------------------------------
-  # Linux — POS (main_pos.dart) e inventario (main.dart)
+  # Linux — POS e inventario (solo si alguno cambió)
   # ---------------------------------------------------------------------------
   linux:
     name: Linux POS & Inventario (tar.gz)
+    needs: prepare
+    if: needs.prepare.outputs.pos_changed == 'true' || needs.prepare.outputs.inv_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -181,58 +274,56 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libsecret-1-dev libstdc++-12-dev
-      - name: Determinar version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Actualizar version en pubspec.yaml
-        run: |
-          VERSION="${{ steps.version.outputs.tag }}"
-          sed -i "s/^version: .*/version: $VERSION+1/" pubspec.yaml
-          echo "Version actualizada a $VERSION"
       - name: Build Linux POS
+        if: needs.prepare.outputs.pos_changed == 'true'
         env:
           WHATSAPP_BOT_TOKEN: ${{ secrets.WHATSAPP_BOT_TOKEN }}
         run: |
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.pos_version }}+1/" pubspec.yaml
           flutter pub get
           flutter build linux --release -t lib/main_pos.dart \
             --dart-define=APP_ID=pos \
             --dart-define=APP_LABEL="Lycoris POS" \
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.pos_version }} \
             --dart-define=WHATSAPP_BOT_TOKEN=${WHATSAPP_BOT_TOKEN}
           cd build/linux/x64/release
           cp -r bundle lycoris-pos
           mv lycoris-pos/control_entradas_salidas lycoris-pos/LycorisPOS
           tar -czf ../../../../app-pos-linux.tar.gz -C lycoris-pos .
       - name: Build Linux Inventario
+        if: needs.prepare.outputs.inv_changed == 'true'
         env:
           WHATSAPP_BOT_TOKEN: ${{ secrets.WHATSAPP_BOT_TOKEN }}
         run: |
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.inv_version }}+1/" pubspec.yaml
+          flutter pub get
           flutter build linux --release -t lib/main.dart \
             --dart-define=APP_ID=inventario \
             --dart-define=APP_LABEL="Control de Entradas y Salidas" \
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.inv_version }} \
             --dart-define=WHATSAPP_BOT_TOKEN=${WHATSAPP_BOT_TOKEN}
           cd build/linux/x64/release
           cp -r bundle lycoris-inventario
           mv lycoris-inventario/control_entradas_salidas lycoris-inventario/LycorisControl
           tar -czf ../../../../app-inventario-linux.tar.gz -C lycoris-inventario .
       - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.pos_changed == 'true'
         with:
           name: app-pos-linux
           path: app-pos-linux.tar.gz
       - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.inv_changed == 'true'
         with:
           name: app-inventario-linux
           path: app-inventario-linux.tar.gz
 
   # ---------------------------------------------------------------------------
-  # Android — inventario (main.dart) en APK
+  # Android — inventario (APK)
   # ---------------------------------------------------------------------------
   android:
     name: Android Inventario (APK)
+    needs: prepare
+    if: needs.prepare.outputs.inv_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -243,19 +334,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Determinar version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
       - name: Actualizar version en pubspec.yaml
         run: |
-          VERSION="${{ steps.version.outputs.tag }}"
-          sed -i "s/^version: .*/version: $VERSION+1/" pubspec.yaml
-          echo "Version actualizada a $VERSION"
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.inv_version }}+1/" pubspec.yaml
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > android/release.p12
       - name: Create key.properties
@@ -272,6 +353,7 @@ jobs:
           flutter build apk --release \
             --dart-define=APP_ID=inventario \
             --dart-define=APP_LABEL="Control de Entradas y Salidas" \
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.inv_version }} \
             --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
       - name: Copiar con nombre estable
         run: |
@@ -282,50 +364,93 @@ jobs:
           path: app-inventario-android.apk
 
   # ---------------------------------------------------------------------------
-  # Release — junta los 5 assets en una GitHub Release
+  # release — publica una release por app que cambió y actualiza versions.json
   # ---------------------------------------------------------------------------
   release:
-    name: Publicar GitHub Release
-    needs: [windows-pos, windows-inventario, windows-hosteleria, linux, android]
+    name: Publicar releases por app
+    needs: [prepare, windows-pos, windows-inventario, windows-hosteleria, linux, android]
+    if: >-
+      always() && needs.prepare.outputs.any == 'true' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determinar versión
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: Crear tag (workflow_dispatch)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${{ steps.version.outputs.tag }}"
-          git push origin "v${{ steps.version.outputs.tag }}"
-        if: github.event_name == 'workflow_dispatch'
-
-      - name: Publicar release
+      - name: Publicar releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ steps.version.outputs.tag }}" \
-            artifacts/app-pos-windows.zip \
-            artifacts/app-inventario-windows.zip \
-            artifacts/app-hosteleria-windows.zip \
-            artifacts/app-pos-linux.tar.gz \
-            artifacts/app-inventario-linux.tar.gz \
-            artifacts/app-inventario-android.apk \
-            --title "Lycoris v${{ steps.version.outputs.tag }}" \
-            --notes "Build nativo Flutter. POS (Windows/Linux) + Inventario (Windows/Linux/Android) + Hostelería (Windows)."
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+          set -euo pipefail
+
+          create_release() {
+            local tag="$1"; shift
+            local title="$1"; shift
+            if [ "$#" -eq 0 ]; then
+              echo "Sin assets para $tag, se omite"
+              return 0
+            fi
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "$@" --clobber
+            else
+              gh release create "$tag" "$@" \
+                --title "$title" \
+                --notes "Build nativo Flutter. Versión publicada por app."
+            fi
+          }
+
+          if [ "${{ needs.prepare.outputs.inv_changed }}" = "true" ]; then
+            files=()
+            for f in app-inventario-windows.zip app-inventario-linux.tar.gz app-inventario-android.apk; do
+              if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
+            done
+            create_release "inventario-v${{ needs.prepare.outputs.inv_version }}" \
+              "Inventario v${{ needs.prepare.outputs.inv_version }}" ${files[@]+"${files[@]}"}
+          fi
+
+          if [ "${{ needs.prepare.outputs.pos_changed }}" = "true" ]; then
+            files=()
+            for f in app-pos-windows.zip app-pos-linux.tar.gz; do
+              if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
+            done
+            create_release "pos-v${{ needs.prepare.outputs.pos_version }}" \
+              "POS v${{ needs.prepare.outputs.pos_version }}" ${files[@]+"${files[@]}"}
+          fi
+
+          if [ "${{ needs.prepare.outputs.host_changed }}" = "true" ]; then
+            files=()
+            for f in app-hosteleria-windows.zip; do
+              if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
+            done
+            create_release "hosteleria-v${{ needs.prepare.outputs.host_version }}" \
+              "Hostelería v${{ needs.prepare.outputs.host_version }}" ${files[@]+"${files[@]}"}
+          fi
+
+      - name: Actualizar versions.json
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg i "${{ needs.prepare.outputs.inv_version }}" \
+            --arg p "${{ needs.prepare.outputs.pos_version }}" \
+            --arg h "${{ needs.prepare.outputs.host_version }}" \
+            '{inventario:{version:$i}, pos:{version:$p}, hosteleria:{version:$h}}' \
+            > versions.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add versions.json
+          if git diff --cached --quiet; then
+            echo "versions.json sin cambios"
+          else
+            git commit -m "chore(release): versions.json -> inv ${{ needs.prepare.outputs.inv_version }}, pos ${{ needs.prepare.outputs.pos_version }}, host ${{ needs.prepare.outputs.host_version }} [skip ci]"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi

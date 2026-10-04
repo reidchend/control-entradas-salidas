@@ -19,9 +19,10 @@ class UpdateProgress {
 
 /// Servicio de actualización remota de la app nativa (Windows/Android).
 ///
-/// Porta `usr/updater.py` al Flutter: consulta la última release de GitHub,
-/// compara con la versión local, descarga el binario de la plataforma y lo
-/// instala. En web no aplica (se sirve desde el server) → `canRun=false`.
+/// Porta `usr/updater.py` al Flutter: lee `versions.json`, compara la versión
+/// de **esta** app (`APP_ID`) con la publicada y, si hay una nueva, descarga
+/// el binario de la release `"$appId-v$version"`. En web no aplica (se sirve
+/// desde el server) → `canRun=false`.
 class AppUpdater {
   AppUpdater({
     GitHubReleasesSource? source,
@@ -41,21 +42,26 @@ class AppUpdater {
   /// True si la plataforma soporta actualización (nativa, no web).
   bool get canRun => updaterCanRun;
 
-  /// Version local (pubspec `version`).
+  /// Version local de ESTA app (`APP_VERSION` sellado al compilar). Si el
+  /// build no lo definió, cae a la versión de `pubspec` vía PackageInfo.
   Future<String> localVersion() async {
+    final stamped = AppConfig.appVersion;
+    if (stamped.isNotEmpty) return stamped;
     final info = await PackageInfo.fromPlatform();
     return info.version;
   }
 
-  /// Compara con la release más reciente. `null` = al día.
-  /// `force` ignora la comparación (para "Buscar actualizaciones" manual).
+  /// Compara la versión de esta app contra su entrada en `versions.json`.
+  /// `null` = al día (o el release del manifiesto aún no existe).
   Future<AppUpdateInfo?> checkForUpdate({bool force = false}) async {
     if (!canRun) return null;
-    final remote = await _source.fetchLatest();
+    final remoteVersion = await _source.fetchManifestVersion(AppConfig.appId);
+    if (remoteVersion == null || remoteVersion.isEmpty) return null;
     final local = await localVersion();
-    final newer = _source.checkOfNewer(local, remote.version);
+    final newer = _source.checkOfNewer(local, remoteVersion);
     if (newer == null) return null;
-    return remote;
+    // Descarga la release del tag propio de la app (`<appId>-v<version>`).
+    return _source.fetchReleaseByTag('${AppConfig.appId}-v$newer');
   }
 
   /// Descarga el binario de la plataforma y devuelve la ruta local.

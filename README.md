@@ -443,31 +443,46 @@ La `DATABASE_URL` se lee de la variable de entorno o de `.env.local` (prioriza `
 
 ### Nativos (CI / GitHub Actions)
 
-Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se generan en **CI** con `.github/workflows/release.yml`:
+Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se generan en **CI** con `.github/workflows/release.yml`.
 
-| Job | Producto | Assets publicados en la release |
+**Version por app.** `versions.json` (raiz) guarda la version vigente de cada app:
+
+```json
+{ "inventario": {"version":"2.0.1"}, "pos": {"version":"2.0.1"}, "hosteleria": {"version":"2.0.1"} }
+```
+
+Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica su **propia release** con tag `<appId>-vX.Y.Z`. El updater lee `versions.json`, compara solo su entrada de `APP_ID` y descarga el asset de **su** release. Por eso, al cambiar una app, **las otras no se enteran** de que hubo una publicacion nueva.
+
+**Que se construye.** El job `prepare` detecta por `dorny/paths-filter` que apps cambiaron y sube el `patch` de su version. Cualquier cambio en `lib/core/**`, `pubspec.*`, `assets/**`, `windows/**`, `linux/**` o `android/**` cuenta como cambio de **las tres** (codigo compartido).
+
+| Job | Producto | Assets de su release |
 |---|---|---|
-| `windows-pos` | `LycorisPOS.exe` (icono azul) | `app-pos-windows.zip` |
-| `windows-inventario` | `LycorisControl.exe` (icono normal) | `app-inventario-windows.zip` |
-| `windows-hosteleria` | `LycorisHostel.exe` (icono dorado) | `app-hosteleria-windows.zip` |
+| `windows-pos` | `LycorisPOS.exe` (icono azul), solo si `pos` cambio | `app-pos-windows.zip` |
+| `windows-inventario` | `LycorisControl.exe`, solo si `inventario` cambio | `app-inventario-windows.zip` |
+| `windows-hosteleria` | `LycorisHostel.exe`, solo si `hosteleria` cambio | `app-hosteleria-windows.zip` |
 | `linux` | `LycorisPOS` + `LycorisControl` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz` |
-| `android` | APK inventario (icono normal) | `app-inventario-android.apk` |
-| `release` | Publica la release `vX.Y.Z` | — |
+| `android` | APK inventario | `app-inventario-android.apk` |
+| `release` | Publica `<appId>-vX.Y.Z` y actualiza `versions.json` | — |
 
 **Como generar una release**:
-1. Push a `main`.
-2. Agregar los secrets en *Settings → Secrets and variables → Actions*:
-   - `WHATSAPP_BOT_TOKEN` — lo usan los 5 jobs de build.
+1. Agregar los secrets en *Settings → Secrets and variables → Actions*:
+   - `WHATSAPP_BOT_TOKEN` — lo usan los jobs de build.
    - `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — solo para el APK de Android.
-3. *Actions → "Build & Release nativa" → Run workflow* con la version deseada (ej. `2.0.1`).
-4. Descargar los binarios desde la pagina de la release.
+2. Push a `main` (se detectan las apps cambiadas) o *Actions → "Build & Release nativa" → Run workflow* con `apps`:
+   - `auto` (default) — detecta por archivos cambiados.
+   - `all` — publica las tres.
+   - `inventario,pos` (o `hosteleria`) — publica solo esas.
+3. El job `release` crea una release por app cambiada y commitea el nuevo `versions.json` a `main` con `[skip ci]`.
+
+> Para publicar una version puntual (no un simple `+1` de patch), editar `versions.json` a mano en `main` y lanzar el workflow con `apps=all` — el `prepare` respeta el valor base del manifiesto y solo sube el patch de lo que cambie.
 
 > Los builds nativos **no** llevan `DATABASE_URL` ni `PROXY_SQL_TOKEN`: la app
 > nativa lee la conexion del almacen seguro del equipo, asi que las credenciales
 > no se distribuyen dentro del binario. El token del proxy se configura desde
 > Ajustes → Base de datos.
 
-> El workflow tambien dispara con un tag `v*` pusheado.
+> Ya no hay tag global `vX.Y.Z`: cada app usa `<appId>-vX.Y.Z`.
+
 
 ---
 
@@ -479,10 +494,11 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 | `GIST_ID` | `5b37693a...` | Gist donde se publica la URL del tunel (`api_url.json`) |
 | `GIST_TOKEN` | — | Solo si el Gist es privado. El default es publico y se lee sin autenticar |
 | `DATABASE_URL` | — | Connection string de PostgreSQL. Solo como fallback: la config del dispositivo tiene prioridad |
-| `APP_ID` | `inventario` | `pos` o `inventario` — define icono, binario y asset del updater |
+| `APP_ID` | `inventario` | `pos`, `inventario` o `hosteleria` — define icono, binario, entrada del manifiesto y asset del updater |
 | `APP_LABEL` | segun `APP_ID` | Nombre mostrado en dialogos y titulos |
+| `APP_VERSION` | — | Version de **esta** app sellada al compilar (la del `versions.json`). Si falta, el updater cae a `PackageInfo` |
 | `WHATSAPP_BOT_TOKEN` | — | Token del bot de WhatsApp (`whatsapp_bot/.env`, ver `.env.example`) |
-| `UPDATE_URL` | GitHub `version.json` | URL del manifiesto de actualizaciones |
+| `UPDATE_URL` | GitHub `versions.json` | URL del manifiesto de versiones por app |
 | `UPDATE_REPO` | `reidchend/control-entradas-salidas` | Repo de releases para el updater |
 | `WEB_PORT` | `8502` | Legacy, ya no se usa |
 

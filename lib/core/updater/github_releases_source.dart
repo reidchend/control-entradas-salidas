@@ -26,15 +26,59 @@ class GitHubReleasesSource {
   final String _repo;
   final http.Client _client;
 
+  static const _headers = {'User-Agent': 'Lycoris-App'};
+
   /// Endpoint público sin auth (60 req/h por IP): releases/latest.
   Uri get _latestUrl =>
       Uri.parse('https://api.github.com/repos/$_repo/releases/latest');
 
+  /// Release concreta por tag (p.ej. `hosteleria-v2.0.3`).
+  Uri _tagUrl(String tag) =>
+      Uri.parse('https://api.github.com/repos/$_repo/releases/tags/$tag');
+
+  /// Manifiesto de versiones por app. Se le agrega un cache-buster para
+  /// esquivar la caché de `raw.githubusercontent.com`.
+  Uri get _manifestUrl {
+    final base = AppConfig.updateUrl;
+    final sep = base.contains('?') ? '&' : '?';
+    return Uri.parse('$base${sep}t=${DateTime.now().millisecondsSinceEpoch}');
+  }
+
   /// Última release publicada. Lanza si no hay release o falla la red.
   Future<AppUpdateInfo> fetchLatest() async {
     final res = await _client
-        .get(_latestUrl, headers: {'User-Agent': 'Lycoris-App'})
+        .get(_latestUrl, headers: _headers)
         .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('GitHub respondió ${res.statusCode}');
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return AppUpdateInfo.fromJson(json);
+  }
+
+  /// Versión vigente de [appId] según `versions.json` (`null` si no está).
+  Future<String?> fetchManifestVersion(String appId) async {
+    final res = await _client
+        .get(_manifestUrl, headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('Manifiesto respondió ${res.statusCode}');
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final entry = json[appId];
+    if (entry is Map) {
+      final v = entry['version'];
+      if (v is String && v.isNotEmpty) return _normalizeVersion(v);
+    }
+    return null;
+  }
+
+  /// Release de un tag concreto. `null` si el tag aún no existe (404).
+  Future<AppUpdateInfo?> fetchReleaseByTag(String tag) async {
+    final res = await _client
+        .get(_tagUrl(tag), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode == 404) return null;
     if (res.statusCode != 200) {
       throw Exception('GitHub respondió ${res.statusCode}');
     }

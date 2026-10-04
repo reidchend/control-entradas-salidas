@@ -69,26 +69,39 @@ class AppConfig {
     };
   }
 
-  /// URL del updater (equivalent a UPDATE_URL del .env).
+  /// URL del manifiesto de actualizaciones (`versions.json`).
+  ///
+  /// Contiene la versión vigente de **cada** app
+  /// (`inventario`/`pos`/`hosteleria`) para que el updater solo avise a la app
+  /// que realmente cambió. Ver `versions.json` en la raíz del repo.
   static String get updateUrl {
     const fromEnv = String.fromEnvironment('UPDATE_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
-    return 'https://raw.githubusercontent.com/reidchend/control-entradas-salidas/main/version.json';
+    return 'https://raw.githubusercontent.com/reidchend/control-entradas-salidas/main/versions.json';
   }
 
-  /// Repo GitHub de las releases de la app (`releases/latest`).
+  /// Repo GitHub de las releases de la app (tag `<appId>-vX.Y.Z`).
   static String get updateRepo {
     const fromEnv = String.fromEnvironment('UPDATE_REPO');
     if (fromEnv.isNotEmpty) return fromEnv;
     return 'reidchend/control-entradas-salidas';
   }
 
-  /// Identificador de la app en el updater: `pos` o `inventario`.
+  /// Identificador de la app en el updater: `pos`, `inventario` o `hosteleria`.
   /// El POS se distribuye solo en Windows; el inventario en Windows y Android.
   static String get appId {
     const fromEnv = String.fromEnvironment('APP_ID');
     return fromEnv.isNotEmpty ? fromEnv : 'inventario';
   }
+
+  /// Versión de **esta** app, sellada al compilar con
+  /// `--dart-define=APP_VERSION=x.y.z` (la del `versions.json` de su entrada).
+  ///
+  /// Tiene prioridad sobre `PackageInfo.version` para que cada app siga su
+  /// propio ciclo de release sin depender de la versión global de `pubspec`.
+  /// Si está vacía (build sin el define), `AppUpdater` cae a `PackageInfo`.
+  static String get appVersion =>
+      const String.fromEnvironment('APP_VERSION');
 
   /// Etiqueta legible de la app (título del diálogo de actualización).
   static String get appLabel {
