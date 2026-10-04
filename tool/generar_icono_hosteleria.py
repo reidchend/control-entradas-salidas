@@ -1,17 +1,44 @@
-"""Genera los íconos de Lycoris Hostelería (dorado/ámbar) a partir del logo del POS.
+"""Genera los íconos web de Lycoris Hostelería (dorado/ámbar) desde el logo del POS.
 
 Recolorea `web_pos/icons/Icon-512.png` con un mapa de degradado dorado que
 preserva el sombreado, y produce:
-  - windows/runner/resources/app_icon_hosteleria.ico  (multi-resolución)
   - web_hosteleria/icons/*.png                        (192/512 + maskable)
   - web_hosteleria/favicon.png                         (64x64)
 
-Uso:  python3 tool/generar_icono_hosteleria.py
+NO genera `windows/runner/resources/app_icon_hosteleria.ico`. Ese archivo se
+mantiene a mano: se reemplazó por un diseño propio (fondo claro pleno, no el
+glifo dorado sobre fondo transparente que produce este script) y regenerarlo lo
+habría destruido sin avisar. Para regenerarlo hay que pedirlo explícitamente con
+`--ico`, y solo tiene sentido si además se va a rehacer desde la misma fuente.
+
+Requiere Pillow, que no viene en tool/venv:  pip install Pillow
+
+Uso:
+    python3 tool/generar_icono_hosteleria.py          # solo web (no toca el .ico)
+    python3 tool/generar_icono_hosteleria.py --ico    # además el .ico de Windows
 """
 
+import argparse
 from pathlib import Path
 
-from PIL import Image
+# PIL se carga perezoso y no al importar el modulo: si se cargara aqui, hasta
+# `--help` fallaria asking por Pillow, y `--help` es justamente donde se
+# descubre que existe el flag `--ico`.
+Image = None
+
+
+def _cargar_pil():
+    global Image
+    if Image is None:
+        try:
+            from PIL import Image as _img
+        except ImportError:
+            raise SystemExit(
+                "Falta Pillow. Se instala con:  pip install Pillow\n"
+                "No viene en tool/venv, hay que instalarlo a mano."
+            )
+        Image = _img
+    return Image
 
 RAIZ = Path(__file__).resolve().parent.parent
 BASE = RAIZ / "web_pos" / "icons" / "Icon-512.png"
@@ -60,15 +87,17 @@ def recolorear(imagen):
 
 
 def main():
-    base = Image.open(BASE)
-    icono = recolorear(base)
-
-    # Windows: .ico multi-resolución
-    ico = RAIZ / "windows" / "runner" / "resources" / "app_icon_hosteleria.ico"
-    icono.resize((256, 256), Image.LANCZOS).save(
-        ico, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    ap = argparse.ArgumentParser(
+        description="Genera los iconos web de Hosteleria desde el logo del POS."
     )
-    print("ico  ->", ico.relative_to(RAIZ))
+    ap.add_argument(
+        "--ico",
+        action="store_true",
+        help="Regenerar tambien windows/runner/resources/app_icon_hosteleria.ico. "
+        "LO SOBRESCRIBE. Por defecto ese archivo no se toca.",
+    )
+    args = ap.parse_args()
+    _cargar_pil()
 
     # Web
     web = RAIZ / "web_hosteleria"
@@ -87,6 +116,17 @@ def main():
     fav = recolorear(Image.open(RAIZ / "web_pos" / "favicon.png"))
     fav.save(web / "favicon.png")
     print("fav  ->", (web / "favicon.png").relative_to(RAIZ))
+
+    # Windows. Solo con --ico, porque el archivo se mantiene a mano.
+    ico = RAIZ / "windows" / "runner" / "resources" / "app_icon_hosteleria.ico"
+    if args.ico:
+        icono = recolorear(Image.open(BASE))
+        icono.resize((256, 256), Image.LANCZOS).save(
+            ico, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        )
+        print("ico  ->", ico.relative_to(RAIZ), "REGENERADO (se sobrescribio el anterior)")
+    else:
+        print("ico  ->", ico.relative_to(RAIZ), "intacto (--ico lo regeneraria y lo sobrescribiria)")
 
 
 if __name__ == "__main__":
