@@ -1,25 +1,26 @@
 name: Build & Release nativa (Flutter)
 
 # Flujo por app: cada app (inventario/pos/hosteleria) tiene su propia versión en
-# `versions.json` y su propia release (`<appId>-vX.Y.Z`). Solo se compilan las
-# apps cuyos archivos cambiaron (cualquier cambio en `lib/core/**` o `pubspec.*`
-# afecta a las tres, porque es código compartido).
+# `versions.json` y su propia release (`<appId>-vX.Y.Z`). El workflow es MANUAL:
+# se eligen las apps y (opcional) la versión. La versión por defecto es la que
+# está en `versions.json`; no se auto-incrementa.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'versions.json'
   # Ejecución manual:
-  #   apps=auto            -> detecta por archivos cambiados respecto al commit previo
   #   apps=all             -> publica las tres apps
   #   apps=inventario,pos  -> publica solo esas
+  #   version (opcional)   -> ej. 2.1.10; vacío = la de versions.json
   workflow_dispatch:
     inputs:
       apps:
-        description: 'Apps a publicar: auto | all | inventario,pos,hosteleria'
+        description: 'Apps a publicar: all | inventario,pos,hosteleria'
         required: true
-        default: 'auto'
+        default: 'all'
+        type: string
+      version:
+        description: 'Versión a publicar (ej: 2.1.10). Vacío = la de versions.json'
+        required: false
+        default: ''
         type: string
 
 concurrency:
@@ -28,10 +29,10 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # prepare — detecta qué apps cambiaron y calcula la nueva versión de cada una
+  # prepare — selecciona las apps y calcula la versión de cada una
   # ---------------------------------------------------------------------------
   prepare:
-    name: Detectar cambios y versiones
+    name: Seleccionar apps y versiones
     runs-on: ubuntu-latest
     outputs:
       any: ${{ steps.plan.outputs.any }}
@@ -44,34 +45,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detectar rutas cambiadas
-        id: filter
-        if: github.event_name == 'push'
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            shared:
-              - 'lib/core/**'
-              - 'pubspec.yaml'
-              - 'pubspec.lock'
-              - 'assets/**'
-              - 'windows/**'
-              - 'linux/**'
-              - 'android/**'
-              - '.github/workflows/release.yml'
-            inventario:
-              - 'lib/main.dart'
-              - 'lib/features/{activos,auth,calculadora,configuracion,historial,inventario,producciones,requisiciones,reportes,stock,validacion,whatsapp}/**'
-              - 'web/**'
-            pos:
-              - 'lib/main_pos.dart'
-              - 'lib/features/pos/**'
-              - 'web_pos/**'
-            hosteleria:
-              - 'lib/main_hosteleria.dart'
-              - 'lib/features/hosteleria/**'
-              - 'web_hosteleria/**'
-
       - name: Calcular versiones
         id: plan
         shell: bash
@@ -79,38 +52,27 @@ jobs:
           set -euo pipefail
 
           APP_INPUT='${{ github.event.inputs.apps }}'
-          if [ -z "$APP_INPUT" ]; then APP_INPUT='auto'; fi
-
-          SHARED='${{ steps.filter.outputs.shared }}'
-          FIL_INV='${{ steps.filter.outputs.inventario }}'
-          FIL_POS='${{ steps.filter.outputs.pos }}'
-          FIL_HOST='${{ steps.filter.outputs.hosteleria }}'
+          if [ -z "$APP_INPUT" ]; then APP_INPUT='all'; fi
+          VER_INPUT='${{ github.event.inputs.version }}'
 
           chg_inv=false; chg_pos=false; chg_host=false
           if [ "$APP_INPUT" = "all" ]; then
             chg_inv=true; chg_pos=true; chg_host=true
-          elif [ "$APP_INPUT" != "auto" ]; then
+          else
             case ",$APP_INPUT," in *",inventario,"*) chg_inv=true;; esac
             case ",$APP_INPUT," in *",pos,"*) chg_pos=true;; esac
             case ",$APP_INPUT," in *",hosteleria,"*) chg_host=true;; esac
-          else
-            if [ "$SHARED" = "true" ]; then
-              chg_inv=true; chg_pos=true; chg_host=true
-            fi
-            if [ "$FIL_INV" = "true" ]; then chg_inv=true; fi
-            if [ "$FIL_POS" = "true" ]; then chg_pos=true; fi
-            if [ "$FIL_HOST" = "true" ]; then chg_host=true; fi
           fi
 
-          # Sube el componente patch: 2.0.1 -> 2.0.2
-          bump() { echo "$1" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}'; }
-
+          # Versión base = la del manifiesto; `version` la puede forzar.
           inv_v=$(jq -r '.inventario.version' versions.json)
           pos_v=$(jq -r '.pos.version' versions.json)
           host_v=$(jq -r '.hosteleria.version' versions.json)
-          if [ "$chg_inv" = true ]; then inv_v=$(bump "$inv_v"); fi
-          if [ "$chg_pos" = true ]; then pos_v=$(bump "$pos_v"); fi
-          if [ "$chg_host" = true ]; then host_v=$(bump "$host_v"); fi
+          if [ -n "$VER_INPUT" ]; then
+            if [ "$chg_inv" = true ]; then inv_v="$VER_INPUT"; fi
+            if [ "$chg_pos" = true ]; then pos_v="$VER_INPUT"; fi
+            if [ "$chg_host" = true ]; then host_v="$VER_INPUT"; fi
+          fi
 
           any=false
           if [ "$chg_inv" = true ] || [ "$chg_pos" = true ] || [ "$chg_host" = true ]; then
@@ -253,7 +215,7 @@ jobs:
           path: app-hosteleria-windows.zip
 
   # ---------------------------------------------------------------------------
-  # Linux — POS e inventario (solo si alguno cambió)
+  # Linux — POS e inventario (si se seleccionan)
   # ---------------------------------------------------------------------------
   linux:
     name: Linux POS & Inventario (tar.gz)
@@ -364,7 +326,7 @@ jobs:
           path: app-inventario-android.apk
 
   # ---------------------------------------------------------------------------
-  # release — publica una release por app que cambió y actualiza versions.json
+  # release — publica una release por app seleccionada y actualiza versions.json
   # ---------------------------------------------------------------------------
   release:
     name: Publicar releases por app

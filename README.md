@@ -448,18 +448,18 @@ Flutter no puede compilar Windows desde Linux, asi que los binarios nativos se g
 **Version por app.** `versions.json` (raiz) guarda la version vigente de cada app:
 
 ```json
-{ "inventario": {"version":"2.0.1"}, "pos": {"version":"2.0.1"}, "hosteleria": {"version":"2.0.1"} }
+{ "inventario": {"version":"2.1.10"}, "pos": {"version":"2.1.10"}, "hosteleria": {"version":"2.1.10"} }
 ```
 
-Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica su **propia release** con tag `<appId>-vX.Y.Z`. El updater lee `versions.json`, compara solo su entrada de `APP_ID` y descarga el asset de **su** release. Por eso, al cambiar una app, **las otras no se enteran** de que hubo una publicacion nueva.
+Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica su **propia release** con tag `<appId>-vX.Y.Z`. El updater lee `versions.json`, compara solo su entrada de `APP_ID` y descarga el asset de **su** release. Por eso puedes publicar una app sin que las otras crean que deben actualizarse.
 
-**Que se construye.** El job `prepare` detecta por `dorny/paths-filter` que apps cambiaron y sube el `patch` de su version. Cualquier cambio en `lib/core/**`, `pubspec.*`, `assets/**`, `windows/**`, `linux/**` o `android/**` cuenta como cambio de **las tres** (codigo compartido).
+**Que se construye.** El workflow es **manual**: se eligen las apps con `apps` (`all` o una lista) y, opcionalmente, `version`. Solo se compilan las apps seleccionadas. La version por defecto es la de `versions.json` (no se auto-incrementa); si indicas `version`, esa se usa para las apps seleccionadas y se commitea al manifiesto.
 
 | Job | Producto | Assets de su release |
 |---|---|---|
-| `windows-pos` | `LycorisPOS.exe` (icono azul), solo si `pos` cambio | `app-pos-windows.zip` |
-| `windows-inventario` | `LycorisControl.exe`, solo si `inventario` cambio | `app-inventario-windows.zip` |
-| `windows-hosteleria` | `LycorisHostel.exe`, solo si `hosteleria` cambio | `app-hosteleria-windows.zip` |
+| `windows-pos` | `LycorisPOS.exe` (icono azul), si se elige `pos` | `app-pos-windows.zip` |
+| `windows-inventario` | `LycorisControl.exe`, si se elige `inventario` | `app-inventario-windows.zip` |
+| `windows-hosteleria` | `LycorisHostel.exe`, si se elige `hosteleria` | `app-hosteleria-windows.zip` |
 | `linux` | `LycorisPOS` + `LycorisControl` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz` |
 | `android` | APK inventario | `app-inventario-android.apk` |
 | `release` | Publica `<appId>-vX.Y.Z` y actualiza `versions.json` | — |
@@ -468,13 +468,14 @@ Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica
 1. Agregar los secrets en *Settings → Secrets and variables → Actions*:
    - `WHATSAPP_BOT_TOKEN` — lo usan los jobs de build.
    - `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — solo para el APK de Android.
-2. Push a `main` (se detectan las apps cambiadas) o *Actions → "Build & Release nativa" → Run workflow* con `apps`:
-   - `auto` (default) — detecta por archivos cambiados.
-   - `all` — publica las tres.
-   - `inventario,pos` (o `hosteleria`) — publica solo esas.
-3. El job `release` crea una release por app cambiada y commitea el nuevo `versions.json` a `main` con `[skip ci]`.
+2. *Actions → "Build & Release nativa" → Run workflow* con:
+   - `apps` — `all` (default) publica las tres; `inventario,pos` (o `hosteleria`) publica solo esas.
+   - `version` (opcional) — ej. `2.1.10`. Si se deja vacio, usa la de `versions.json`.
+3. El job `release` crea una release por app seleccionada y commitea `versions.json` a `main` con `[skip ci]`.
 
-> Para publicar una version puntual (no un simple `+1` de patch), editar `versions.json` a mano en `main` y lanzar el workflow con `apps=all` — el `prepare` respeta el valor base del manifiesto y solo sube el patch de lo que cambie.
+> Para subir de version, edita `versions.json` (o pasa `version` en el workflow). No hay auto-incremento: lo que dice el manifiesto es lo que se publica.
+
+> Ya no hay tag global `vX.Y.Z`: cada app usa `<appId>-vX.Y.Z`. El workflow ya **no** corre solo con cada push.
 
 > Los builds nativos **no** llevan `DATABASE_URL` ni `PROXY_SQL_TOKEN`: la app
 > nativa lee la conexion del almacen seguro del equipo, asi que las credenciales
