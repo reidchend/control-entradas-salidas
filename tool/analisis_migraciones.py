@@ -129,14 +129,20 @@ def main():
             for nom, pin, largo in muestra:
                 print(f"    {nom!r:22} pin_hash={pin!r} len={largo}")
 
-        du = c.execute("SELECT COUNT(*) FROM dispositivo_usuario").fetchone()[0]
-        print(f"  filas en dispositivo_usuario a migrar: {du}")
-        nombres = c.execute(
-            "SELECT LOWER(TRIM(nombre)), COUNT(*), COUNT(DISTINCT device_id) "
-            "FROM dispositivo_usuario GROUP BY 1 ORDER BY 2 DESC"
-        ).fetchall()
-        for clave, filas, devs in nombres:
-            print(f"    {clave!r:22} filas={filas} devices={devs}")
+        # La tabla se borra en la migracion 7 (20261004200000). Antes de eso este
+        # bloque era el inventario de lo que falcontaba por migrar; ahora que no
+        # existe, avisar es suficiente y consultarla revienta con UndefinedTable.
+        if existe("dispositivo_usuario"):
+            du = c.execute("SELECT COUNT(*) FROM dispositivo_usuario").fetchone()[0]
+            print(f"  filas en dispositivo_usuario a migrar: {du}")
+            nombres = c.execute(
+                "SELECT LOWER(TRIM(nombre)), COUNT(*), COUNT(DISTINCT device_id) "
+                "FROM dispositivo_usuario GROUP BY 1 ORDER BY 2 DESC"
+            ).fetchall()
+            for clave, filas, devs in nombres:
+                print(f"    {clave!r:22} filas={filas} devices={devs}")
+        else:
+            print("  dispositivo_usuario ya no existe (migracion 7 aplicada): nada que migrar")
         problemas.extend(f"M2: {x}" for x in m2)
         print()
 
