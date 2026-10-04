@@ -10,6 +10,10 @@ on:
   #   apps=all             -> publica las tres apps
   #   apps=inventario,pos  -> publica solo esas
   #   version (opcional)   -> ej. 2.1.10; vacío = la de versions.json
+  #   bridge=true          -> además de las releases por app, publica una
+  #                           release legada `vX.Y.Z` con TODOS los binarios
+  #                           (ver el job release). Es lo que hace que las apps
+  #                           compiladas antes de 1d39de9 se actualicen solas.
   workflow_dispatch:
     inputs:
       apps:
@@ -21,6 +25,11 @@ on:
         description: 'Versión a publicar (ej: 2.1.10). Vacío = la de versions.json'
         required: false
         default: ''
+        type: string
+      bridge:
+        description: 'Publicar también la release legada vX.Y.Z (compila las tres apps)'
+        required: false
+        default: 'false'
         type: string
 
 concurrency:
@@ -42,6 +51,8 @@ jobs:
       pos_version: ${{ steps.plan.outputs.pos_version }}
       host_changed: ${{ steps.plan.outputs.host_changed }}
       host_version: ${{ steps.plan.outputs.host_version }}
+      bridge: ${{ steps.plan.outputs.bridge }}
+      bridge_version: ${{ steps.plan.outputs.bridge_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +65,7 @@ jobs:
           APP_INPUT='${{ github.event.inputs.apps }}'
           if [ -z "$APP_INPUT" ]; then APP_INPUT='all'; fi
           VER_INPUT='${{ github.event.inputs.version }}'
+          BRIDGE='${{ github.event.inputs.bridge }}'
 
           chg_inv=false; chg_pos=false; chg_host=false
           if [ "$APP_INPUT" = "all" ]; then
@@ -79,6 +91,37 @@ jobs:
             any=true
           fi
 
+          # Release legada `vX.Y.Z` para las apps viejas.
+          #
+          # Las apps compiladas antes de 1d39de9 consultan /releases/latest y leen
+          # el tag tal cual. Con el tag nuevo (`pos-v2.1.11`) el comparador hace
+          # int.tryParse('pos-v2') sobre el primer componente, que no es un
+          # número, y lo resuelve a 0: la release 2.x se lee como major=0 y la
+          # comparación siempre da "sin actualización". Con un tag `vX.Y.Z` el
+          # parseo funciona y se actualizan solas.
+          #
+          # Por eso el puente compila las tres apps: los assets salen de los
+          # artifacts de esta corrida, así que una app que no se compile
+          # publica sin su binario y las apps viejas que la buscen no lo
+          # encuentran. Se usa una vez y después se vuelve al flujo por app.
+          bridge=false
+          bridge_v=''
+          if [ "$BRIDGE" = "true" ]; then
+            bridge=true
+            chg_inv=true; chg_pos=true; chg_host=true
+            if [ -n "$VER_INPUT" ]; then
+              bridge_v="$VER_INPUT"
+              inv_v="$VER_INPUT"; pos_v="$VER_INPUT"; host_v="$VER_INPUT"
+            elif [ "$inv_v" = "$pos_v" ] && [ "$pos_v" = "$host_v" ]; then
+              # Un tag único no puede representar tres versiones divergentes.
+              # Con bridge se exige que coincidan, o que se fuerce con `version`.
+              bridge_v="$inv_v"
+            else
+              echo "::error::bridge=true exige que las tres apps tengan la misma versión (inv=$inv_v pos=$pos_v host=$host_v). Pasala en el input 'version' para forzar una."
+              exit 1
+            fi
+          fi
+
           {
             echo "any=$any"
             echo "inv_changed=$chg_inv"
@@ -87,9 +130,11 @@ jobs:
             echo "pos_version=$pos_v"
             echo "host_changed=$chg_host"
             echo "host_version=$host_v"
+            echo "bridge=$bridge"
+            echo "bridge_version=$bridge_v"
           } >> "$GITHUB_OUTPUT"
 
-          echo "any=$any inv=$chg_inv($inv_v) pos=$chg_pos($pos_v) host=$chg_host($host_v)"
+          echo "any=$any inv=$chg_inv($inv_v) pos=$chg_pos($pos_v) host=$chg_host($host_v) bridge=$bridge($bridge_v)"
 
   # ---------------------------------------------------------------------------
   # Windows — POS, inventario y Hostelería
@@ -393,6 +438,29 @@ jobs:
             done
             create_release "hosteleria-v${{ needs.prepare.outputs.host_version }}" \
               "Hostelería v${{ needs.prepare.outputs.host_version }}" ${files[@]+"${files[@]}"}
+          fi
+
+          # ---------------------------------------------------------------------
+          # Release legada `vX.Y.Z` (solo con bridge=true).
+          #
+          # Va SIEMPRE al final, y no por casualidad: /releases/latest devuelve
+          # una sola release, la de created_at más reciente. Si esta se publica
+          # antes que las releases por app, las apps viejas dejan de detectar
+          # actualizaciones en la siguiente corrida.
+          #
+          # Solo Windows: las apps viejas en Android también pegan a
+          # /releases/latest, pero el APK se incluye si esta corrida lo compilo.
+          # ---------------------------------------------------------------------
+          if [ "${{ needs.prepare.outputs.bridge }}" = "true" ]; then
+            files=()
+            for f in app-pos-windows.zip app-inventario-windows.zip \
+                     app-hosteleria-windows.zip app-inventario-android.apk; do
+              if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
+            done
+            create_release "v${{ needs.prepare.outputs.bridge_version }}" \
+              "Lycoris v${{ needs.prepare.outputs.bridge_version }} (legado)" \
+              ${files[@]+"${files[@]}"}
+            echo "::notice::Release legada v${{ needs.prepare.outputs.bridge_version }} publicada con ${#files[@]} asset(s). Las apps compiladas antes de 1d39de9 se actualizan a esta."
           fi
 
       - name: Actualizar versions.json
