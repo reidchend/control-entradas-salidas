@@ -15,6 +15,7 @@ class Movimiento {
     this.observaciones,
     this.almacen,
     this.fechaMovimiento,
+    this.fechaRegistro,
     this.createdAt,
   });
 
@@ -33,6 +34,17 @@ class Movimiento {
   final String? observaciones;
   final String? almacen;
   final DateTime? fechaMovimiento;
+
+  /// Fecha en que se **registró** el movimiento, tal cual vino de
+  /// `fecha_movimiento`, sin la fecha de negocio del traslado encima.
+  ///
+  /// El historial ordena por `id`, no por fecha, porque la cadena
+  /// `cantidad_anterior -> cantidad_nueva` se construyó en orden de registro.
+  /// Como se muestra la fecha de negocio, un traslado totalizado días después
+  /// aparece con una fecha anterior a la de los movimientos que tiene encima, y
+  /// sin este campo eso parece un historial desordenado. Con las dos fechas se
+  /// ve que la mercadería se movió ese día pero se registró más tarde.
+  final DateTime? fechaRegistro;
   final DateTime? createdAt;
 
   factory Movimiento.fromMap(Map<String, dynamic> m) => Movimiento(
@@ -52,11 +64,13 @@ class Movimiento {
         almacen: m['almacen'] as String?,
         // `fecha_traslado` es la fecha de negocio del traslado (la fecha en que
         // se creó la requisición) y solo existe en los traslados. Cuando está,
-        // es la que hay que mostrar y ordenar: la mercadería se movió ese día,
-        // aunque el operador totalizara la requisición días después.
-        // `fecha_movimiento` sigue siendo la fecha de registro, y la que usa el
-        // recálculo de stock, así que no se toca.
+        // es la que hay que mostrar: la mercadería se movió ese día, aunque el
+        // operador totalizara la requisición días después. No se ordena por
+        // ella, porque la cadena `cantidad_anterior -> cantidad_nueva` se
+        // construyó en orden de registro y reordenar la deja sin cerrar; para
+        // eso queda `fechaRegistro`.
         fechaMovimiento: _parseDt(m['fecha_traslado'] ?? m['fecha_movimiento']),
+        fechaRegistro: _parseDt(m['fecha_movimiento']),
         createdAt: _parseDt(m['created_at']),
       );
 
@@ -93,6 +107,7 @@ class Movimiento {
     String? observaciones,
     String? almacen,
     DateTime? fechaMovimiento,
+    DateTime? fechaRegistro,
   }) =>
       Movimiento(
         id: id ?? this.id,
@@ -110,6 +125,7 @@ class Movimiento {
         observaciones: observaciones ?? this.observaciones,
         almacen: almacen ?? this.almacen,
         fechaMovimiento: fechaMovimiento ?? this.fechaMovimiento,
+        fechaRegistro: fechaRegistro ?? this.fechaRegistro,
         createdAt: createdAt,
       );
 

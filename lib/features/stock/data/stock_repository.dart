@@ -231,11 +231,19 @@ class StockRepository {
     final rows = await _db.fetchAll(
       'movimientos',
       filters: {'producto_id': productoId},
-      // Se ordena por la misma fecha que se muestra (COALESCE de
-      // fecha_traslado y fecha_movimiento), no solo por fecha_movimiento. Con
-      // solo fecha_movimiento, un traslado de una requisición totalizada tarde
-      // se listing al final y rompe la secuencia del historial.
-      orderBy: 'COALESCE(fecha_traslado, fecha_movimiento)',
+      // El historial se ordena por `id` (orden de registro) y NO por
+      // COALESCE(fecha_traslado, fecha_movimiento). La cadena
+      // `cantidad_anterior -> cantidad -> cantidad_nueva` que pinta cada tarjeta
+      // se calculó en el momento de insertar, en orden de `id`: el `anterior`
+      // de un movimiento es el `nueva` del que se grabó justo antes. Reordenar
+      // por la fecha de negocio del traslado mete ese movimiento entre dos que
+      // sí se encadenan y la cuenta deja de cerrar (la mercadería se movió el
+      // día que se creó la requisición, aunque el operador la totalizara días
+      // después; para eso la tarjeta ya muestra `fecha_traslado` como fecha).
+      // Medido con tool/verificar_cadena_movimientos.py: ordenar por la fecha
+      // rompía 419 movimientos; por `id`, solo 85 (y esos 85 son datos, no
+      // orden: hay entradas que se grabaron sin efecto sobre el stock).
+      orderBy: 'id',
       ascending: false,
       limit: limit,
     );

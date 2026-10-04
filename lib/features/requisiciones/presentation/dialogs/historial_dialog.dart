@@ -59,15 +59,16 @@ Future<void> showHistorialAuditoria(
   final filtrados = seleccion == _todosAlmacenes
       ? movs
       : movs.where((m) => m['almacen'] == seleccion).toList();
-  // Se ordena por la fecha de negocio del traslado cuando existe
-  // (`fecha_traslado`, la fecha en que se creó la requisición) y por la de
-  // registro en los demás casos. Si se ordenara solo por `fecha_movimiento`,
-  // un traslado de una requisición totalizada días después se iría al final y
-  // rompería la secuencia del historial.
-  DateTime fechaDe(Map<String, dynamic> m) =>
-      DateTime.tryParse((m['fecha_traslado'] ?? m['fecha_movimiento'])?.toString() ?? '') ??
-      DateTime(0);
-  filtrados.sort((a, b) => fechaDe(b).compareTo(fechaDe(a)));
+  // Se ordena por `id`, el orden en que se grabó cada movimiento, y no por la
+  // fecha de negocio del traslado. La cadena `anterior -> cantidad -> nueva` de
+  // cada tarjeta se calculó al insertar, en orden de `id`: el `anterior` de un
+  // movimiento es el `nueva` del que se grabó justo antes. Ordenar por
+  // `fecha_traslado` metía un traslado entre dos movimientos que sí se
+  // encadenaban y la cuenta dejaba de cerrar. La fecha que se muestra sigue
+  // siendo la de negocio (`fecha_traslado`), así que no se pierde de vista el
+  // día en que se movió la mercadería.
+  filtrados.sort((a, b) => ((b['id'] as num?)?.toInt() ?? 0)
+      .compareTo((a['id'] as num?)?.toInt() ?? 0));
 
   if (!context.mounted) return;
   await showDialog<void>(
@@ -145,10 +146,20 @@ class _MovimientoCard extends StatelessWidget {
     final tipo = (m['tipo'] as String?) ?? '';
     final (label, color) =
         _tipoLabels[tipo] ?? (tipo.isEmpty ? '?' : tipo, scheme.outline);
-    // Misma regla que el orden de arriba: la fecha de negocio del traslado si
-    // existe, si no la de registro.
-    final fecha = DateTime.tryParse(
-        (m['fecha_traslado'] ?? m['fecha_movimiento'])?.toString() ?? '');
+    // La fecha que se muestra es la de negocio del traslado si existe y la de
+    // registro en los demás casos. El orden, en cambio, es por `id`: la cadena
+    // `anterior -> cantidad -> nueva` se calculó al insertar, en orden de
+    // registro, así que ordenar por fecha la deja sin cerrar. Cuando las dos
+    // fechas no coinciden se avisa, para que un traslado totalizado días
+    // después no parezca un historial desordenado.
+    final fechaRegistro =
+        DateTime.tryParse(m['fecha_movimiento']?.toString() ?? '');
+    final fechaNegocio =
+        DateTime.tryParse(m['fecha_traslado']?.toString() ?? '');
+    final fecha = fechaNegocio ?? fechaRegistro;
+    final desfasado = fechaRegistro != null &&
+        fecha != null &&
+        fechaRegistro.difference(fecha).inMinutes.abs() >= 1;
     final cantidad = (m['cantidad'] as num?)?.toDouble() ?? 0;
     final pesoTotal = (m['peso_total'] as num?)?.toDouble() ?? 0;
     final cantAnterior = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
@@ -186,6 +197,11 @@ class _MovimientoCard extends StatelessWidget {
             children: [
               Text(_fmt(fecha),
                   style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+              if (desfasado) ...[
+                const SizedBox(width: 4),
+                Text('(registrado ${_fmt(fechaRegistro)})',
+                    style: TextStyle(fontSize: 9, color: scheme.outline)),
+              ],
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),

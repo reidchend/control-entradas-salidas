@@ -254,7 +254,13 @@ class ReportesRepository {
       productoId.toString(),
     ]);
 
-    // Movimientos de inventario del producto
+    // Movimientos de inventario del producto.
+    // Este reporte ordena por la fecha de negocio a proposito, y no es la misma
+    // regla que el historial: aca no se pinta la cadena
+    // `cantidad_anterior -> cantidad_nueva` (solo se selecciona), asi que el
+    // listado puede ir en orden cronologico de negocio sin que la cuenta se vea
+    // rota. Las vistas que si pintan la cadena ordenan por `id`; ver
+    // tool/verificar_cadena_movimientos.py.
     final movRows = await _db.executeSql('''
       SELECT
         m.id,

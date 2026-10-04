@@ -367,8 +367,10 @@ class RequisicionesRepository {
       // el recálculo de stock elige el último movimiento de cada
       // producto/almacén y confía en su `cantidad_nueva`, y esa cadena solo es
       // válida en orden de inserción. La fecha de negocio va en
-      // `fecha_traslado`, que las vistas pintan y ordenan con
-      // COALESCE(fecha_traslado, fecha_movimiento).
+      // `fecha_traslado`, que las vistas pintan con
+      // COALESCE(fecha_traslado, fecha_movimiento). El orden de esas vistas, en
+      // cambio, es por `id`, no por fecha: la cadena de stock solo cierra en
+      // orden de registro.
       //
       // Cuándo se totalizó no se pierde: queda en requisiciones.fecha_procesamiento.
       // Si la requisición no tuviera fecha de creación (no debería pasar), se

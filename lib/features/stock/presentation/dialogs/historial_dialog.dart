@@ -100,6 +100,14 @@ class _MovimientoCard extends StatelessWidget {
     final signColor = cantMedio >= 0 ? Colors.green : scheme.error;
     final infoParts = [m.registradoPor ?? '?', if (m.almacen != null) m.almacen!];
     final obs = (m.observaciones ?? '').trim();
+    // El historial se ordena por `id` para que la cadena cierre, pero la fecha
+    // que se muestra es la de negocio. Cuando un traslado se totaliz días
+    // después, su fecha de negocio es anterior a la de los movimientos que tiene
+    // encima; sin esta nota el historial parece desordenado.
+    final registro = m.fechaRegistro;
+    final desfasado = registro != null &&
+        m.fechaMovimiento != null &&
+        registro.difference(m.fechaMovimiento!).inMinutes.abs() >= 1;
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -115,6 +123,11 @@ class _MovimientoCard extends StatelessWidget {
             children: [
               Text(_fmt(m.fechaMovimiento),
                   style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+              if (desfasado) ...[
+                const SizedBox(width: 4),
+                Text('(registrado ${_fmt(m.fechaRegistro)})',
+                    style: TextStyle(fontSize: 9, color: scheme.outline)),
+              ],
               const SizedBox(width: 6),
               Container(
                 padding:
