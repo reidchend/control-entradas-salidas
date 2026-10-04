@@ -68,6 +68,39 @@ PRUEBAS = [
         "SELECT COUNT(*) FROM pos_cierres WHERE usuario_id = %s",
         (1,),
     ),
+    # --- administracion de usuarios (commit 4d14354, usuarios_tab) ---
+    (
+        "admin: listarTodos (con GROUP BY u.id y array_agg)",
+        "SELECT u.*, "
+        "       COALESCE(array_agg(m.modulo) FILTER (WHERE m.modulo IS NOT NULL), "
+        "                '{}') AS modulos "
+        "FROM usuarios u LEFT JOIN usuario_modulos m ON m.usuario_id = u.id "
+        "GROUP BY u.id ORDER BY u.nombre",
+        (),
+    ),
+    (
+        "admin: listarTodos solo activos",
+        "SELECT u.*, "
+        "       COALESCE(array_agg(m.modulo) FILTER (WHERE m.modulo IS NOT NULL), "
+        "                '{}') AS modulos "
+        "FROM usuarios u LEFT JOIN usuario_modulos m ON m.usuario_id = u.id "
+        "WHERE u.activo = 1 GROUP BY u.id ORDER BY u.nombre",
+        (),
+    ),
+    (
+        "admin: dispositivosDe(usuario)",
+        "SELECT device_id, configurado_en FROM usuario_dispositivos "
+        "WHERE usuario_id = %s ORDER BY configurado_en DESC NULLS LAST",
+        (2,),
+    ),
+    (
+        "admin: getUsuarioDispositivo (desvincular el propio)",
+        "SELECT u.id, u.nombre, u.pin_hash, d.configurado_en "
+        "FROM usuario_dispositivos d JOIN usuarios u ON u.id = d.usuario_id "
+        "WHERE d.device_id = %s "
+        "ORDER BY d.configurado_en DESC NULLS LAST, d.id DESC LIMIT 1",
+        ("acc2a6f6-18d2-479d-b926-dca36971d675",),
+    ),
 ]
 
 
@@ -155,6 +188,20 @@ def main():
                 "INSERT INTO usuarios (nombre, pin_hash, nivel, activo, creado_en) "
                 "VALUES (%s, %s, 'operador', 1, now()::text) RETURNING id",
                 ("Prueba Escritura", "x" * 64),
+            ),
+            (
+                "admin: desvincularDeUsuario (DELETE por usuario+device)",
+                "DELETE FROM usuario_dispositivos "
+                "WHERE usuario_id = 2 AND device_id = %s RETURNING device_id",
+                ("device_que_no_existe_xyz",),
+            ),
+            (
+                "admin: eliminar() de un usuario SIN cierres",
+                "WITH u AS (SELECT id FROM usuarios "
+                "  WHERE NOT EXISTS (SELECT 1 FROM pos_cierres WHERE usuario_id = usuarios.id) "
+                "  ORDER BY id DESC LIMIT 1) "
+                "DELETE FROM usuarios WHERE id IN (SELECT id FROM u) RETURNING id",
+                (),
             ),
         ]
         for etiqueta, sql, params in escrituras:
