@@ -1,17 +1,31 @@
-// Verifica si las apps compILadas con el workflow ANTERIOR detectan las releases
-// nuevas (tag `<appId>-vX.Y.Z`) o si quedaron ciegas.
+// Verifica si las apps compiladas con el workflow ANTERIOR detectan las releases
+// nuevas, o si quedaron ciegas.
 //
-// Replica exactamente las funciones de la version VIEJA del updater, que Vivian
+// Replica exactamente las funciones de la version VIEJA del updater, queanian
 // en github_releases_source.dart antes del commit 1d39de9. No las importa:
 // estan copiadas tal cual para que el resultado no dependa de poder compilar el
 // proyecto (esta maquina no tiene Flutter ni .dart_tool).
 //
-// Lo que se midio en vivo contra la API de GitHub (sin auth) el 2026-10-04:
-//   GET /repos/reidchend/control-entradas-salidas/releases/latest
-//     -> tag_name: hosteleria-v2.1.11
-//     -> assets:   [app-hosteleria-windows.zip]
+// La razon de que el codigo viejo este pegado aqui y no sea un import es que
+// ese codigo ya no existe en ninguna rama: el unico modo de probarlo es
+// Keeping una copia textual. Si cambia, esta copia hay que volver a sacarla de
+// 1d39de9^.
+//
+// Que mira, contra la API real de GitHub (sin auth):
+//   1. que /releases/latest devuelva un tag que el parser viejo pueda leer;
+//   2. que las apps viejas en 2.0.x/2.1.x detecten la release;
+//   3. que el asset que cada app vieja pide este de verdad en esa release;
+//   4. que ese tag sea una release legada `vX.Y.Z` y no una por app.
+//
+// El punto 4 es el que hace de alarma: /releases/latest devuelve una sola
+// release, la de created_at mas reciente. Si alguien publica una release por
+// app despues del puente, el endpoint vuelve a devolver `pos-v2.1.13` y las
+// apps viejas se vuelven a quedar ciegas en silencio. Esta prueba falla ese dia.
 //
 // Uso:  dart run tool/verificar_updater_viejo.dart
+
+import 'dart:convert';
+import 'dart:io';
 
 /// Tal cual en update_models.dart (LA VIEJA, sin el +build).
 String normalizeUpdateModels(String tag) =>
@@ -48,6 +62,11 @@ String? checkOfNewer(String localVersion, String remoteVersion) {
   return remote;
 }
 
+/// Tal cual en app_updater.dart: el nombre del asset no cambio entre el
+/// workflow viejo y el nuevo, asi que las apps viejas piden estos y nada mas.
+String assetName(String appId, [String platform = 'windows']) =>
+    platform == 'android' ? 'app-$appId-android.apk' : 'app-$appId-windows.zip';
+
 int fallos = 0;
 void check(String etiqueta, bool ok, String detalle) {
   if (ok) {
@@ -59,128 +78,109 @@ void check(String etiqueta, bool ok, String detalle) {
   }
 }
 
-void main() {
-  // Lo que el endpoint /releases/latest devuelve hoy.
-  const latestTag = 'hosteleria-v2.1.11';
-  const latestAssets = ['app-hosteleria-windows.zip'];
+Future<Map<String, dynamic>> leerLatestRelease() async {
+  final cliente = HttpClient();
+  try {
+    final peticion = await cliente.getUrl(Uri.parse('https://api.github.com/repos/'
+        'reidchend/control-entradas-salidas/releases/latest'));
+    // La API de GitHub rechaza las peticiones sin User-Agent.
+    peticion.headers.set('User-Agent', 'verificar-updater-viejo');
+    final res = await peticion.close();
+    if (res.statusCode != 200) {
+      throw Exception('la API respondio ${res.statusCode}');
+    }
+    final cuerpo = await res.transform(utf8.decoder).join();
+    return jsonDecode(cuerpo) as Map<String, dynamic>;
+  } finally {
+    cliente.close();
+  }
+}
 
-  print('=== Lo que ve una app VIEJA al arrancar ===');
-  print('  GET /releases/latest  ->  tag_name = $latestTag');
-  print('  assets               ->  $latestAssets');
-  final remoteVersion = normalizeUpdateModels(latestTag);
-  print('  AppUpdateInfo.version=  $remoteVersion   (solo se le quita un "v" inicial)');
+Future<void> main() async {
+  Map<String, dynamic> release;
+  try {
+    release = await leerLatestRelease();
+  } catch (e) {
+    print('  No se pudo leer /releases/latest: $e');
+    exit(1);
+  }
+
+  final tag = release['tag_name'] as String;
+  final assets = <String>[
+    for (final a in release['assets'] as List) a['name'] as String
+  ];
+
+  print('=== Lo que ve hoy una app VIEJA al arrancar ===');
+  print('  GET /releases/latest  ->  tag_name = $tag');
+  print('  published_at          = ${release['published_at']}');
+  print('  assets                ->  $assets');
+  final remoto = normalizeUpdateModels(tag);
+  print('  AppUpdateInfo.version = $remoto   (la vieja solo le quita un "v")');
   print('');
 
-  print('=== Por que el parseo se rompe ===');
-  print('  _parse("$remoteVersion") = ${parse(remoteVersion)}');
-  print('    ^ el primer componente es "hosteleria-v2", que int.tryParse no puede');
-  print('      leer, asi que cae a 0. La app ve major=0 en una release 2.x.');
-  print('  _parse("2.1.10")            = ${parse('2.1.10')}');
-  print('  compare(remoto, local)      = ${compareVersions(remoteVersion, '2.1.10')}');
-  print('');
+  // ------------------------------------------------------------------ 1
+  print('=== 1. El tag tiene que ser legible por el parser viejo ===');
+  print('  _parse("$remoto") = ${parse(remoto)}');
+  check('el parser viejo no lo manda a major=0', parse(remoto)[0] > 0,
+      'el primer componente es "$remoto", y int.tryParse no lo puede leer: '
+      'la app ve una release 0.x y nunca actualiza');
+  check('es una release legada vX.Y.Z, no una por app',
+      RegExp(r'^v\d+\.\d+\.\d+$').hasMatch(tag),
+      'el endpoint devolvio "$tag". Si es una por app (pos-v2.1.13) es que se '
+      'publico despues del puente y las apps viejas volvieron a quedar ciegas');
 
-  print('=== Apps viejas contra el endpoint actual ===');
-  // La app vieja tomaba la version local de PackageInfo, y el workflow viejo
-  // escribia en pubspec `version: <tag>+1`.
-  final appsViejas = <String, String>{
+  // ------------------------------------------------------------------ 2
+  print('');
+  print('=== 2. Las apps viejas detectan la release ===');
+  const appsViejas = <String, String>{
     'pos 2.1.10+1': '2.1.10+1',
     'inventario 2.1.10+1': '2.1.10+1',
     'hosteleria 2.1.10+1': '2.1.10+1',
-    'inventario 2.0.2+1': '2.0.2+1',
     'pos 2.1.9+1': '2.1.9+1',
+    'inventario 2.0.2+1': '2.0.2+1',
   };
   appsViejas.forEach((nombre, local) {
-    final r = checkOfNewer(local, remoteVersion);
+    final r = checkOfNewer(local, remoto);
     print('  $nombre  ->  ${r ?? "SIN ACTUALIZACION (no se avisa)"}');
   });
+  check('toda app vieja de 2.0.x/2.1.x ve laActualizacion',
+      appsViejas.values
+          .every((v) => checkOfNewer(v, remoto) != null),
+      'alguna sigue sin avisar');
+  check('una app que ya esta en $remoto no se actualiza (no el loop)',
+      checkOfNewer('$remoto+1', remoto) == null,
+      'se detecto a si misma como mas nueva');
+
+  // ------------------------------------------------------------------ 3
   print('');
-
-  check('una app vieja en 2.1.10 no detecta la 2.1.11',
-      checkOfNewer('2.1.10+1', remoteVersion) == null,
-      'deberia avisar y no avisa: el parseo del tag le da major=0');
-
-  check('ninguna app vieja de 2.x detecta la release nueva',
-      appsViejas.values.every((v) => checkOfNewer(v, remoteVersion) == null),
-      'alguna si detecto, habria que ver que asset se intenta descargar');
-
-  print('');
-  print('=== Y si una app vieja SI llegara a descargar ===');
-  // _assetName(appId, 'windows') = 'app-<appId>-windows.zip'
+  print('=== 3. El asset que pide cada app esta en la release ===');
   for (final appId in ['pos', 'inventario', 'hosteleria']) {
-    final asset = 'app-$appId-windows.zip';
-    final existe = latestAssets.contains(asset);
-    print('  appId=$appId  busca $asset  ->  ${existe ? "esta" : "NO ESTA"}');
-    if (appId != 'hosteleria') {
-      check('la app vieja de $appId no puede descargar (el asset no esta)',
-          !existe,
-          'encontro el asset: descargaria un binario de otra app');
-    }
+    final nombre = assetName(appId);
+    final hay = assets.contains(nombre);
+    print('  $appId pide $nombre  ->  ${hay ? "esta" : "NO ESTA"}');
+    check('  $nombre esta en $tag', hay,
+        'la app vieja lo descargaria y recibiria "No hay asset $nombre en la '
+        'release ${normalizeSource(tag)}"');
   }
 
+  // ------------------------------------------------------------------ 4
   print('');
-  print('=== La app NUEVA, en cambio ===');
-  // checkForUpdate: fetchManifestVersion(APP_ID) -> fetchReleaseByTag('$APP_ID-v$newer')
-  const manifiesto = {'inventario': '2.1.11', 'pos': '2.1.11', 'hosteleria': '2.1.11'};
-  manifiesto.forEach((appId, remoto) {
-    final local = '2.1.10'; // APP_VERSION sellado al compilar
-    final nuevo = checkOfNewer(local, remoto);
-    final tag = nuevo == null ? null : '$appId-v$nuevo';
-    print('  appId=$appId  local=$local  manifiesto=$remoto  ->  tag=$tag');
-    check('la app nueva de $appId apunta a su propio tag',
-        tag == '$appId-v2.1.11',
-        'apunto a $tag en vez de $appId-v2.1.11');
-  });
+  print('=== 4. Por que hace falta la release legada (A/B) ===');
+  // Con el tag por app, el parser viejo no ve nada. Esto es lo que el puente
+  // vino a arreglar, asi que queda escrito como contraste.
+  const tagPorApp = 'pos-v2.1.12';
+  final porApp = normalizeUpdateModels(tagPorApp);
+  print('  con "$tagPorApp": _parse = ${parse(porApp)}  ->  '
+      '${checkOfNewer('2.1.10+1', porApp) ?? "SIN ACTUALIZACION"}');
+  check('el tag por app es ilegible para el parser viejo (por eso el puente)',
+      checkOfNewer('2.1.10+1', porApp) == null,
+      'si detectara, el puente no habria hecho falta');
 
   print('');
   if (fallos == 0) {
-    print('Todo OK: el comportamiento es el esperado');
+    print('Todo OK: las apps viejas se actualizan solas desde $tag');
   } else {
     print('FALLARON $fallos verificaciones');
   }
-
-  // ---------------------------------------------------------------------------
-  // ¿Se pueden rescatar las apps viejas publicando ademas una release en el
-  // formato viejo? Es la unica palanca que queda, porque el codigo de la app ya
-  // esta compilado y no se puede tocar.
-  //
-  // La clave: el problema no es el prefijo del appId en si, sino que
-  // _normalizeVersion no lo quita. Si el tag vuelve a ser "vX.Y.Z", el parseo
-  // funciona y la comparacion vuelve a dar lo que debe.
-  print('');
-  print('=== ¿Se pueden rescatar? Release legada con el tag viejo "vX.Y.Z" ===');
-  const legadoTag = 'v2.1.12';
-  const legadoAssets = [
-    'app-pos-windows.zip',
-    'app-inventario-windows.zip',
-    'app-hosteleria-windows.zip',
-  ];
-  final legadoVersion = normalizeUpdateModels(legadoTag);
-  print('  /releases/latest  ->  $legadoTag');
-  print('  AppUpdateInfo.version= $legadoVersion');
-  print('  _parse("$legadoVersion") = ${parse(legadoVersion)}   <- si se entiende el tag');
-  print('');
-  for (final appId in ['pos', 'inventario', 'hosteleria']) {
-    const local = '2.1.10+1';
-    final nuevo = checkOfNewer(local, legadoVersion);
-    final asset = 'app-$appId-windows.zip';
-    final puede = nuevo != null && legadoAssets.contains(asset);
-    print('  app vieja $appId: local=$local -> detecta=$nuevo, '
-        "asset $asset ${legadoAssets.contains(asset) ? 'esta' : 'NO esta'}"
-        '  => ${puede ? 'SE RESCATA' : 'sigue ciega'}');
-    check('la app vieja de $appId se rescata con la release legada', puede,
-        'no detecta la version o no encuentra su asset');
-  }
-  print('');
-  print('  OJO: /releases/latest devuelve UNA sola release, la mas reciente.');
-  print('  Si el workflow publica primero pos-v2.1.13 y despues la legada');
-  print('  v2.1.13, la legada queda como la ultima y las apps viejas siguen');
-  print('  funcionando. Si se publica al reves, vuelven a quedar ciegas.');
-  print('');
-  print('CONCLUSION FINAL:');
-  print('  1. Las apps compiladas antes de 1d39de9 NO detectan las releases nuevas.');
-  print('     No es red ni version: el tag con prefijo de appId no lo parsea el');
-  print('     comparador y siempre da "sin actualizacion".');
-  print('  2. Se pueden mantener funcionando publicando ademas una release');
-  print('     legada vX.Y.Z con los tres .zip de Windows, creada AL FINAL.');
-  print('  3. Sin eso, los usuarios tienen que bajar e instalar a mano una vez.');
+  exit(fallos > 0 ? 1 : 0);
 }
