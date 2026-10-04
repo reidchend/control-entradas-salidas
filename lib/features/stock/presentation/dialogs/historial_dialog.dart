@@ -65,10 +65,17 @@ class _MovimientoCard extends StatelessWidget {
   final Movimiento m;
   final bool esPesable;
 
+  /// Formatea en hora local. Sin el `toLocal()` la cadena se lee en UTC, y la
+  /// base guarda los horarios con offset (`-04:00`), asi que `DateTime.parse`
+  /// los deja en UTC: una venta de las 20:42 del 02/10 se pasaba a pantalla
+  /// como 03/10 00:42 y el historial ponia la venta al dia equivocado. Los otros
+  /// tres formateadores de movimientos (dialogo de requisiciones y los dos
+  /// reportes) ya lo hacen.
   String _fmt(DateTime? d) {
     if (d == null) return '';
+    final l = d.toLocal();
     String p(int v) => v.toString().padLeft(2, '0');
-    return '${p(d.day)}/${p(d.month)}/${d.year} ${p(d.hour)}:${p(d.minute)}';
+    return '${p(l.day)}/${p(l.month)}/${l.year} ${p(l.hour)}:${p(l.minute)}';
   }
 
   /// Muestra la cantidad real (hasta 3 decimales) sin ceros redundantes.
