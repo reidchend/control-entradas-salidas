@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const bot = require('./bot');
+const descargarImagen = require('./descargar_imagen');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -249,10 +250,16 @@ app.post('/send', async (req, res) => {
 // Endpoint para enviar imagen con caption al grupo
 app.post('/send-image', async (req, res) => {
     try {
-        const { caption, imagePath, imageBase64 } = req.body;
+        // imageUrl es lo que manda el panel web. imageBase64 es lo que manda la
+        // app Flutter. imagePath lo que mandaba uno a mano desde el server.
+        // Antes solo se leian los dos ultimos, y el panel por eso nunca pudo
+        // mandar una imagen: caia en el 400 de "se requiere imagePath".
+        const { caption, imageUrl, imagePath, imageBase64 } = req.body;
 
-        if (!imagePath && !imageBase64) {
-            return res.status(400).json({ error: 'Se requiere "imagePath" o "imageBase64"' });
+        if (!imageUrl && !imagePath && !imageBase64) {
+            return res.status(400).json({
+                error: 'Se requiere "imageUrl", "imagePath" o "imageBase64"'
+            });
         }
 
         if (!bot.isConnected()) {
@@ -262,6 +269,9 @@ app.post('/send-image', async (req, res) => {
         let imageBuffer;
         if (imageBase64) {
             imageBuffer = Buffer.from(imageBase64, 'base64');
+        } else if (imageUrl) {
+            const bajada = await descargarImagen.descargar(imageUrl);
+            imageBuffer = bajada.buffer;
         } else {
             const fs = require('fs');
             if (!fs.existsSync(imagePath)) {
@@ -275,7 +285,10 @@ app.post('/send-image', async (req, res) => {
         res.json({ success: true, message: 'Imagen enviada al grupo' });
     } catch (error) {
         console.error('Error:', error.message);
-        res.status(500).json({ error: error.message });
+        // descargarImagen marca con .status los errores que son culpa de lo que
+        // se mando (URL rota, no es imagen, demasiado pesada). Esos son 400 y no
+        // 500: el server esta bien, lo que estaba mal era el pedido.
+        res.status(error.status || 500).json({ error: error.message });
     }
 });
 
