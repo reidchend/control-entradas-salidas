@@ -7,6 +7,7 @@ import 'package:control_entradas_salidas/core/models/producto.dart';
 import 'package:control_entradas_salidas/core/models/receta.dart';
 import 'package:control_entradas_salidas/core/models/existencia.dart';
 import 'package:control_entradas_salidas/features/calculadora/presentation/calculadora.dart';
+import 'package:control_entradas_salidas/features/configuracion/data/configuracion_providers.dart';
 import 'package:control_entradas_salidas/features/inventario/data/inventario_providers.dart';
 import 'package:control_entradas_salidas/features/producciones/data/producciones_providers.dart';
 import 'package:control_entradas_salidas/features/producciones/data/producciones_repository.dart';
@@ -61,19 +62,59 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
     if (_esProductoProduccion) _cargarRecetas();
   }
 
+  /// Carga las existencias del producto y la lista de almacenes a elegir.
+  ///
+  /// La lista de almacenes NO se sacaba de aqui antes, y por eso un producto sin
+  /// movimientos previos solo ofrecia "principal": el dropdown se armaba con
+  /// los almacenes donde ese producto en particular tenia existencias, mas
+  /// "principal" forzado. Un producto recien creado no tiene existencias, asi
+  /// que no aparecia ningun otro almacen aunque el sistema tuviera varios
+  /// configurados, y para dar entrada en otro almacen el usuario no tenia
+  /// como: la unica salida era registrar antes un movimiento en ese almacen.
+  ///
+  /// Ahora la lista sale del catalogo (tabla `almacenes`), en union con los
+  /// almacenes donde este producto ya tiene stock. La union es a proposito: si
+  /// un almacen quedara desactivado en el catalogo pero el producto tuviera
+  /// stock ahi, ese stock no debe quedar inalcanzable.
   Future<void> _cargarExistencias() async {
     final repo = ref.read(inventarioRepoProvider)!;
     final existencias = await repo.getExistenciasByProducto(_producto.id);
-    final almacenes = existencias.map((e) => e.almacen).toSet().toList();
-    if (!almacenes.contains('principal')) almacenes.add('principal');
+
+    final nombres = <String>{
+      // Almacenes donde este producto ya tiene existencias.
+      ...existencias.map((e) => e.almacen),
+      // Catalogo completo de almacenes disponibles.
+      ...await _almacenesCatalogo(),
+    };
+    // Nunca dejar la lista vacia: un dropdown sin items se queda sin
+    // seleccion y `lista.first` reventaria.
+    if (nombres.isEmpty) nombres.add('principal');
+
+    final lista = nombres.toList()..sort();
     var almacen = _producto.almacenPredeterminado;
-    if (!almacenes.contains(almacen)) almacen = almacenes.first;
+    if (!lista.contains(almacen)) almacen = lista.first;
     if (!mounted) return;
     setState(() {
       _existencias = existencias;
-      _almacenes = almacenes;
+      _almacenes = lista;
       _almacen = almacen;
     });
+  }
+
+  /// Nombres de todos los almacenes disponibles, desde el catalogo.
+  ///
+  /// Si la lectura del catalogo falla se devuelve una lista vacia en vez de
+  /// propagar el error: el dialogo igual puede mostrar el stock y registrar el
+  /// movimiento, que es mas util que no abrirlo. Un fallo aqui solo deja el
+  /// dropdown reducido a los almacenes del propio producto, que es como
+  /// funcionaba antes.
+  Future<List<String>> _almacenesCatalogo() async {
+    try {
+      return await ref.read(almacenesConfigProvider.future);
+    } catch (e, st) {
+      debugPrint('No se pudo leer el catalogo de almacenes: $e\n$st');
+      return const [];
+    }
   }
 
   Future<void> _cargarRecetas() async {
