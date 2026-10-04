@@ -25,6 +25,7 @@ MIGRACIONES = [
     (3, "20261002020000_hosteleria_checkin.sql"),
     (4, "20261002030000_habitaciones_estados_op.sql"),
     (5, "20261004090000_movimientos_fecha_traslado.sql"),
+    (6, "20261004170000_dispositivo_usuario_pins_hasheados.sql"),
 ]
 
 
@@ -442,8 +443,68 @@ def verificar_5(ch):
     )
 
 
+def verificar_6(ch):
+    # Esta migracion no crea ni borra nada: hashea en el lugar los PIN de
+    # `dispositivo_usuario`. Lo que hay que confirmar es que se quedo legible
+    # para contrastar (mismas filas, mismos device_id) y que ya no queda ningun
+    # PIN en texto plano.
+    print("  -- la tabla sigue entera --")
+    ch.filas("dispositivo_usuario (no se borra)", "SELECT COUNT(*) FROM dispositivo_usuario", 16)
+    ch.filas(
+        "dispositivo_usuario con device_id",
+        "SELECT COUNT(*) FROM dispositivo_usuario WHERE device_id IS NOT NULL",
+        16,
+    )
+
+    print("  -- ningun PIN en texto plano --")
+    planas = ch.c.execute(
+        "SELECT COUNT(*) FROM dispositivo_usuario "
+        "WHERE pin_hash IS NOT NULL AND pin_hash <> '' AND pin_hash !~ '^[0-9a-f]{64}$'"
+    ).fetchone()[0]
+    if planas == 0:
+        ch.ok += 1
+        print("  [OK   ] todos los pin_hash de dispositivo_usuario son sha256")
+    else:
+        ch.fallos.append(f"{planas} pin_hash de dispositivo_usuario siguen en texto plano")
+        print(f"  [FALLA] {planas} pin_hash de dispositivo_usuario siguen en texto plano")
+
+    print("  -- y coincide con el hash que tiene `usuarios` --")
+    # Los dos lados usan encode(digest(pin,'sha256'),'hex'), asi que donde el
+    # operador existe en las dos tablas Y tiene PIN en las dos, los hashes
+    # tienen que ser iguales. Si no, el PIN quedaria guardado de dos maneras y
+    # no se podria contrastar.
+    #
+    # Se excluyen las filas con pin_hash vacio en `usuarios`: son los operadores
+    # que `usuarios_centrales` no pudo migrar porque ya existian sin PIN (el
+    # caso "desarrollador"). Es un problema preexistente y aparte, que reporta
+    # `tool/verificar_legacy_dispositivo.py`; esta migracion no lo arregla ni
+    # lo empeora, asi que contarlo como fallo bloquearia el COMMIT sin motivo.
+    descuadres = ch.c.execute(
+        "SELECT COUNT(*) FROM dispositivo_usuario d JOIN usuarios u "
+        "  ON LOWER(TRIM(u.nombre)) = LOWER(TRIM(d.nombre)) "
+        "WHERE u.pin_hash IS NOT NULL AND u.pin_hash <> '' "
+        "  AND d.pin_hash <> u.pin_hash"
+    ).fetchone()[0]
+    if descuadres == 0:
+        ch.ok += 1
+        print("  [OK   ] los operadores presentes en las dos tablas tienen el mismo hash")
+    else:
+        ch.fallos.append(f"{descuadres} operadores con hash distinto entre las dos tablas")
+        print(f"  [FALLA] {descuadres} operadores con hash distinto entre las dos tablas")
+
+    print("  -- la migracion no toca el directorio central --")
+    ch.filas("usuarios (intactos)", "SELECT COUNT(*) FROM usuarios", 7, 20)
+    ch.filas(
+        "usuario_dispositivos (intactos)",
+        "SELECT COUNT(*) FROM usuario_dispositivos",
+        9,
+        20,
+    )
+
+
 VERIFICADORES = {
     1: verificar_1, 2: verificar_2, 3: verificar_3, 4: verificar_4, 5: verificar_5,
+    6: verificar_6,
 }
 
 
@@ -545,7 +606,7 @@ def main():
 
     if args[0] == "verificar":
         if len(args) < 2:
-            print("usar: verificar <1|2|3|4|5>")
+            print(f"usar: verificar <1..{max(VERIFICADORES)}>")
             return 2
         return 0 if solo_verificar(int(args[1]), url) else 1
 
@@ -565,7 +626,8 @@ def main():
         print(f"numero invalido: {args[0]}")
         return 2
     if numero not in VERIFICADORES:
-        print(f"no hay migracion {numero}. Disponibles: 1-4, verificar <n>, estado")
+        print(f"no hay migracion {numero}. Disponibles: "
+              f"1-{max(VERIFICADORES)}, verificar <n>, estado")
         return 2
 
     return 0 if aplicar(numero, url) else 1

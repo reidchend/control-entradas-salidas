@@ -31,6 +31,7 @@ Uso:
     tool\\venv\\Scripts\\python.exe tool\\smoke_sql.py
     (con tool/server.py corriendo en otro proceso)
 """
+import hashlib
 import json
 import os
 import re
@@ -595,20 +596,24 @@ def prueba_listeners_en_dart():
 
 # ------------------- un operador puede estar en varios dispositivos
 #
-# `dispositivo_usuario` guarda un `device_id` por fila, asi que "un operador en
-# N dispositivos" se representa con N filas que comparten `nombre`. Lo que no
-# puede pasar es que registrar en un dispositivo pise el `device_id` de otro:
-# antes `verificarPin` buscaba la fila por nombre y le escribia el device_id
-# del dispositivo actual, con lo cual entrar desde la tablet desvinculaba el
-# telefono.
+# "Un operador en N dispositivos" son N filas de `usuario_dispositivos` que
+# comparten `usuario_id`. Lo que no puede pasar es que registrar en un
+# dispositivo pise la fila de otro: antes de `usuarios_centrales` el
+# `verificarPin` buscaba la fila por nombre en `dispositivo_usuario` y le
+# escribia el device_id del dispositivo actual, con lo cual entrar desde la
+# tablet desvinculaba el telefono.
 #
-# Se reproduce la logica de `SessionController.verificarPin` contra la base
-# real, dentro de una transaccion que se descarta al final.
+# Esta prueba ya no toca `dispositivo_usuario` (tabla deprecada, sin uso en
+# lib/): reproduce la logica actual de `SessionController.verificarPin` contra
+# `usuarios` + `usuario_modulos` + `usuario_dispositivos`, dentro de una
+# transaccion que se descarta al final.
 
 DEV_TELEFONO = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 DEV_TABLET = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
 DEV_NOTEBOOK = "cccccccc-3333-4333-8333-cccccccccccc"
+DEV_APARTADO = "dddddddd-4444-4444-8444-dddddddddddd"
 USUARIO_PRUEBA = "ZZ Smoke Multidispositivo"
+USUARIO_SIN_PIN = "ZZ Smoke Sin Pin"
 PIN_PRUEBA = "4821"
 
 
@@ -616,51 +621,80 @@ def _ahora():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _pin_hash(pin):
+    """El mismo que usan `SessionController._pinHash` y `UsuariosRepository`."""
+    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+
+
+def _usuario_por_nombre(conn, nombre):
+    return conn.execute(
+        "SELECT id, nombre, pin_hash, activo FROM usuarios "
+        "WHERE LOWER(TRIM(nombre)) = LOWER(%s) ORDER BY id LIMIT 1",
+        (nombre,),
+    ).fetchone()
+
+
+def _tiene_inventario(conn, usuario_id):
+    return conn.execute(
+        "SELECT 1 FROM usuario_modulos WHERE usuario_id = %s AND modulo = 'inventario'",
+        (usuario_id,),
+    ).fetchone() is not None
+
+
 def _nombre_por_device(conn, device_id):
+    """Espejo de `UsuariosRepository.porDeviceId`."""
     cur = conn.execute(
-        "SELECT nombre FROM dispositivo_usuario WHERE device_id = %s "
-        "ORDER BY configurado_en DESC, id DESC LIMIT 1",
+        "SELECT u.nombre FROM usuario_dispositivos d "
+        "JOIN usuarios u ON u.id = d.usuario_id "
+        "WHERE d.device_id = %s AND u.activo = 1 "
+        "ORDER BY d.configurado_en DESC NULLS LAST, d.id DESC LIMIT 1",
         (device_id,),
     )
     fila = cur.fetchone()
     return fila[0] if fila else None
 
 
-def _filas_de(conn, nombre):
+def _dispositivos_de(conn, nombre):
+    """Cuantos equipos tiene asociados este operador."""
     return conn.execute(
-        "SELECT device_id FROM dispositivo_usuario "
-        "WHERE LOWER(TRIM(nombre)) = LOWER(%s)",
+        "SELECT count(*) FROM usuario_dispositivos d "
+        "JOIN usuarios u ON u.id = d.usuario_id "
+        "WHERE LOWER(TRIM(u.nombre)) = LOWER(%s)",
         (nombre,),
-    ).fetchall()
+    ).fetchone()[0]
+
+
+def _vincular(conn, usuario_id, device_id):
+    """Espejo de `UsuariosRepository.vincularDispositivo`.
+
+    El ON CONFLICT es lo que evita que registrar en un equipo pise al otro: la
+    fila es por (usuario_id, device_id), no por device_id.
+    """
+    conn.execute(
+        "INSERT INTO usuario_dispositivos (usuario_id, device_id, configurado_en) "
+        "VALUES (%s, %s, %s) "
+        "ON CONFLICT (usuario_id, device_id) "
+        "DO UPDATE SET configurado_en = EXCLUDED.configurado_en",
+        (usuario_id, device_id, _ahora()),
+    )
 
 
 def _verificar_pin(conn, nombre, pin, device_id):
-    """Espejo de `SessionController.verificarPin`."""
-    u = conn.execute(
-        "SELECT id, nombre, pin_hash FROM dispositivo_usuario "
-        "WHERE LOWER(TRIM(nombre)) = LOWER(%s) ORDER BY id LIMIT 1",
-        (nombre,),
-    ).fetchone()
-    if u is None or u[2] != pin:
-        return False
+    """Espejo de `SessionController.verificarPin`.
 
-    propias = conn.execute(
-        "SELECT id FROM dispositivo_usuario "
-        "WHERE LOWER(TRIM(nombre)) = LOWER(%s) AND device_id = %s "
-        "ORDER BY id LIMIT 1",
-        (nombre, device_id),
-    ).fetchone()
-    if propias is None:
-        conn.execute(
-            "INSERT INTO dispositivo_usuario "
-            "(nombre, pin_hash, device_id, configurado_en) VALUES (%s,%s,%s,%s)",
-            (u[1], pin, device_id, _ahora()),
-        )
-    else:
-        conn.execute(
-            "UPDATE dispositivo_usuario SET configurado_en = %s WHERE id = %s",
-            (_ahora(), propias[0]),
-        )
+    Ojo con el `if u[2]:`. Si el usuario no tiene PIN, se entra igual: es lo que
+    hace `UsuariosRepository.verificarPin` cuando `pin_hash` viene vacio, y por
+    eso un usuario sin PIN es una puerta abierta en vez de un bloqueo. La
+    prueba lo fija a proposito, para que un cambio accidental se vea.
+    """
+    u = _usuario_por_nombre(conn, nombre)
+    if u is None or not u[3]:
+        return False
+    if not _tiene_inventario(conn, u[0]):
+        return False
+    if u[2] and u[2] != _pin_hash(pin):
+        return False
+    _vincular(conn, u[0], device_id)
     return True
 
 
@@ -669,10 +703,21 @@ def prueba_multidispositivo(conn):
     conn.autocommit = False
     problemas = []
     try:
+        # Operador de prueba: el directorio central lo pide con modulo de
+        # inventario y el PIN ya hasheado, como lo guarda `UsuariosRepository`.
+        usuario_id = conn.execute(
+            "INSERT INTO usuarios (nombre, pin_hash, nivel, activo, creado_en) "
+            "VALUES (%s, %s, 'basico', 1, %s) RETURNING id",
+            (USUARIO_PRUEBA, _pin_hash(PIN_PRUEBA), _ahora()),
+        ).fetchone()[0]
         conn.execute(
-            "INSERT INTO dispositivo_usuario "
-            "(nombre, pin_hash, device_id, configurado_en) VALUES (%s,%s,%s,%s)",
-            (USUARIO_PRUEBA, PIN_PRUEBA, DEV_TELEFONO, _ahora()),
+            "INSERT INTO usuario_modulos (usuario_id, modulo) VALUES (%s, 'inventario')",
+            (usuario_id,),
+        )
+        conn.execute(
+            "INSERT INTO usuario_dispositivos (usuario_id, device_id, configurado_en) "
+            "VALUES (%s, %s, %s)",
+            (usuario_id, DEV_TELEFONO, _ahora()),
         )
 
         def exigir(condicion, mensaje):
@@ -712,10 +757,10 @@ def prueba_multidispositivo(conn):
             )
 
         # Reentrar en un dispositivo ya vinculado actualiza, no duplica.
-        antes = len(_filas_de(conn, USUARIO_PRUEBA))
+        antes = _dispositivos_de(conn, USUARIO_PRUEBA)
         _verificar_pin(conn, USUARIO_PRUEBA, PIN_PRUEBA, DEV_TELEFONO)
         exigir(
-            len(_filas_de(conn, USUARIO_PRUEBA)) == antes,
+            _dispositivos_de(conn, USUARIO_PRUEBA) == antes,
             "reentrar duplico la fila en vez de actualizarla",
         )
 
@@ -728,11 +773,31 @@ def prueba_multidispositivo(conn):
             not _verificar_pin(conn, "ZZ Smoke Nadie", PIN_PRUEBA, DEV_TELEFONO),
             "acepto un nombre inexistente",
         )
+
+        # Sin PIN se entra igual. No es lo que uno querria, pero es lo que hay:
+        # `UsuariosRepository.verificarPin` devuelve true cuando `pin_hash` viene
+        # vacio, y `SessionController` ni muestra el dialogo. Por eso hay que
+        # ponerle PIN a las cuentas que lo tienen vacio, y no esta prueba la que
+        # avisa. Si algun dia se cambia para que vacio signifique "bloqueado",
+        # esta comprobacion falla y hay que invertirla a proposito.
+        sin_pin_id = conn.execute(
+            "INSERT INTO usuarios (nombre, pin_hash, nivel, activo, creado_en) "
+            "VALUES (%s, '', 'basico', 1, %s) RETURNING id",
+            (USUARIO_SIN_PIN, _ahora()),
+        ).fetchone()[0]
+        conn.execute(
+            "INSERT INTO usuario_modulos (usuario_id, modulo) VALUES (%s, 'inventario')",
+            (sin_pin_id,),
+        )
+        exigir(
+            _verificar_pin(conn, USUARIO_SIN_PIN, "", DEV_APARTADO),
+            "un usuario sin pin_hash dejo de entrar sin PIN (cambio de comportamiento)",
+        )
     finally:
         conn.rollback()
         conn.autocommit = True
 
-    filas = len(_filas_de(conn, USUARIO_PRUEBA))
+    filas = _dispositivos_de(conn, USUARIO_PRUEBA)
     limpio = filas == 0
     detalle = (
         f"3 dispositivos asociados a un mismo operador; "

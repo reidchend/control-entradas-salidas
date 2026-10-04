@@ -46,6 +46,8 @@ ARCHIVOS = [
      "check-in de Hostelería: tipos de habitación, acompañantes y vehículos"),
     ("supabase/migrations/20261002030000_habitaciones_estados_op.sql",
      "estados de habitación (aseo/mantenimiento) y modalidad por horas (OP)"),
+    ("supabase/migrations/20261004170000_dispositivo_usuario_pins_hasheados.sql",
+     "hashea los PIN en texto plano que dejó dispositivo_usuario"),
 ]
 
 

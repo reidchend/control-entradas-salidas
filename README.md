@@ -187,12 +187,20 @@ Al cerrar una sesion se inserta una fila en `pos_cierres` (historica, inmutable)
 
 ### Auth por dispositivo
 
-El operador se identifica por **nombre + PIN** (case-insensitive sobre el nombre),
-no por `device_id`: el PIN se compara contra `dispositivo_usuario.pin_hash`.
+El operador se identifica por **nombre + PIN** (case-insensitive sobre el nombre).
+Los dos datos viven en el directorio central: `usuarios.nombre` y
+`usuarios.pin_hash`, que es un sha256, nunca el PIN en claro.
+`SessionController.verificarPin` ademas exige que el usuario este `activo` y que
+tenga el modulo `inventario` en `usuario_modulos`.
 
-**Un operador puede estar en varios dispositivos a la vez.** La tabla guarda una
-fila por `(operador, dispositivo)`, con lo que un solo usuario en el telefono, la
-tablet y el notebook son tres filas que comparten `nombre`:
+> Un `pin_hash` **vacio no bloquea**: `UsuariosRepository.verificarPin` devuelve
+> `true` cuando no hay hash, asi que ese usuario entra sin verificar nada y la
+> app ni muestra el dialogo de PIN. La UI lo marca con un badge *Sin PIN*. Hay
+> que ponerle PIN a esas cuentas.
+
+**Un operador puede estar en varios dispositivos a la vez.** `usuario_dispositivos`
+guarda una fila por `(usuario_id, device_id)`, con lo que un solo usuario en el
+telefono, la tablet y el notebook son tres filas que comparten `usuario_id`:
 
 ```
 fila 1: (Juan, device_id del telefono)
@@ -202,13 +210,15 @@ fila 3: (Juan, device_id del notebook)
 
 `verificarPin` separa las dos cosas que hace:
 
-1. **Valida el PIN** contra cualquier fila con ese nombre.
-2. **Asocia este dispositivo**: si ya hay una fila `(nombre, device_id)` la
-   refresca; si no, inserta una nueva. Las filas de los demas dispositivos no se
-   tocan, asi que entrar desde un equipo nuevo no desvincula los anteriores.
+1. **Valida el PIN** contra `usuarios.pin_hash` (sha256).
+2. **Asocia este dispositivo** con `vincularDispositivo`, que es un
+   `INSERT ... ON CONFLICT (usuario_id, device_id) DO UPDATE`. Las filas de los
+   demas dispositivos no se tocan, asi que entrar desde un equipo nuevo no
+   desvincula los anteriores.
 
-> Antes el paso 2 pisaba el `device_id` de la fila que encuentre por nombre, con
-> lo que una sola fila podia estar en un solo dispositivo: entrar desde la tablet
+> Antes, contra la tabla `dispositivo_usuario` (deprecada, ya sin uso en `lib/`),
+> el paso 2 pisaba el `device_id` de la fila que encontraba por nombre, con lo
+> que una sola fila podia estar en un solo dispositivo: entrar desde la tablet
 > desvinculaba el telefono. Y como `DeviceIdService` genera el UUID en
 > `SharedPreferences`, reinstalar la app se llevaba el enlace puesto.
 
