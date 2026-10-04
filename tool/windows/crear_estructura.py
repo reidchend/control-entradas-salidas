@@ -48,6 +48,8 @@ ARCHIVOS = [
      "estados de habitación (aseo/mantenimiento) y modalidad por horas (OP)"),
     ("supabase/migrations/20261004170000_dispositivo_usuario_pins_hasheados.sql",
      "hashea los PIN en texto plano que dejó dispositivo_usuario"),
+    ("supabase/migrations/20261004200000_borrar_dispositivo_usuario.sql",
+     "borra dispositivo_usuario (los PIN ya quedaron hasheados)"),
 ]
 
 

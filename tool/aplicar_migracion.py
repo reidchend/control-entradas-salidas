@@ -26,6 +26,7 @@ MIGRACIONES = [
     (4, "20261002030000_habitaciones_estados_op.sql"),
     (5, "20261004090000_movimientos_fecha_traslado.sql"),
     (6, "20261004170000_dispositivo_usuario_pins_hasheados.sql"),
+    (7, "20261004200000_borrar_dispositivo_usuario.sql"),
 ]
 
 
@@ -502,9 +503,73 @@ def verificar_6(ch):
     )
 
 
+def verificar_7(ch):
+    # La tabla no tiene que quedar. Lo que importa es que no se haya perdido un
+    # operador al borrarla: cada nombre que estaba ahi tiene que estar ahora en
+    # `usuarios` o ser uno de los dos que se descartaron a proposito.
+    print("  -- la tabla ya no esta --")
+    r = ch.c.execute("SELECT to_regclass('public.dispositivo_usuario')").fetchone()[0]
+    if r is None:
+        ch.ok += 1
+        print("  [OK   ] dispositivo_usuario no existe")
+    else:
+        ch.fallos.append("dispositivo_usuario todavia existe")
+        print("  [FALLA] dispositivo_usuario todavia existe")
+
+    print("  -- no quedo ningun PIN en texto plano --")
+    # Antes de hashear, `usuarios` tenia 3 planos: los de los operadores que se
+    # fusionaron. Ahora todos los pin_hash no vacios son sha256.
+    planas = ch.c.execute(
+        "SELECT COUNT(*) FROM usuarios "
+        "WHERE pin_hash IS NOT NULL AND pin_hash <> '' AND length(pin_hash) <> 64"
+    ).fetchone()[0]
+    if planas == 0:
+        ch.ok += 1
+        print("  [OK   ] todo pin_hash de usuarios no vacio tiene 64 chars (sha256)")
+    else:
+        ch.fallos.append(f"{planas} pin_hash de usuarios no son sha256")
+        print(f"  [FALLA] {planas} pin_hash de usuarios no son sha256")
+
+    print("  -- el PIN de 'Desarrollador' quedo conservado --")
+    # La migracion 2 no le copio el PIN porque la fila ya existia. Si el borrado
+    # de la tabla vieja lo hubiera dejado sin hash, ese PIN se perdia.
+    dev = ch.c.execute(
+        "SELECT activo, (pin_hash IS NOT NULL AND pin_hash <> '') "
+        "FROM usuarios WHERE LOWER(TRIM(nombre)) = 'desarrollador'"
+    ).fetchone()
+    if dev is None:
+        ch.fallos.append("no existe el usuario Desarrollador")
+        print("  [FALLA] no existe el usuario Desarrollador")
+    elif not dev[1]:
+        ch.fallos.append("Desarrollador quedo sin pin_hash: se perdio su PIN")
+        print("  [FALLA] Desarrollador quedo sin pin_hash")
+    else:
+        ch.ok += 1
+        print(f"  [OK   ] Desarrollador conserva su pin_hash (activo={dev[0]})")
+
+    print("  -- el directorio central quedo entero --")
+    ch.filas("usuarios", "SELECT COUNT(*) FROM usuarios", 12, 20)
+    ch.filas("usuario_modulos", "SELECT COUNT(*) FROM usuario_modulos", 18)
+    ch.filas("usuario_dispositivos", "SELECT COUNT(*) FROM usuario_dispositivos", 9, 20)
+
+    print("  -- los dos descartados no reaparecieron --")
+    # Resucitar "desarrollador web" o "Reidched" seria volver a crear cuentas
+    # que alguien borro a proposito.
+    resucitados = ch.c.execute(
+        "SELECT COUNT(*) FROM usuarios WHERE lower(trim(nombre)) IN "
+        "('desarrollador web', 'reidched')"
+    ).fetchone()[0]
+    if resucitados == 0:
+        ch.ok += 1
+        print("  [OK   ] 'desarrollador web' y 'Reidched' siguen sin crearse")
+    else:
+        ch.fallos.append(f"{resucitados} cuenta(s) descartada(s) reaparecieron")
+        print(f"  [FALLA] {resucitados} cuenta(s) descartada(s) reaparecieron")
+
+
 VERIFICADORES = {
     1: verificar_1, 2: verificar_2, 3: verificar_3, 4: verificar_4, 5: verificar_5,
-    6: verificar_6,
+    6: verificar_6, 7: verificar_7,
 }
 
 
