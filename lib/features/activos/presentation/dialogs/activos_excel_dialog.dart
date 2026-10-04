@@ -1,7 +1,9 @@
 import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/exportar_archivo.dart';
 import '../../../../core/utils/modal_sizing.dart';
 import '../../data/activos_providers.dart';
 
@@ -92,11 +94,48 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
       String p(int v) => v.toString().padLeft(2, '0');
       final nombre =
           'activos_${ahora.year}${p(ahora.month)}${p(ahora.day)}.xlsx';
-      _generarExcel(activos, totales, nombre);
 
-      messenger.showSnackBar(
-          SnackBar(content: Text('Archivo guardado: $nombre')));
-      if (mounted) Navigator.pop(context);
+      // Se arma el Excel en memoria y se pide la ruta. Antes se llamaba a
+      // excel.save(fileName: nombre), que escribe en ruta relativa al
+      // directorio de trabajo del proceso (el directorio del .exe, dentro de la
+      // carpeta del programa): el archivo se guardaba pero el usuario no sabia
+      // donde buscarlo, porque el mensaje solo decia el nombre del archivo.
+      final excel = _armarExcel(activos, totales);
+
+      // En movil y web esto no abre dialogo: en movil se guarda en la carpeta
+      // de la app y en web el navegador gestiona la descarga. El spinner se
+      // apaga antes de abrirlo, porque el dialogo del sistema se dibuja por
+      // encima de la app y el spinner se quedaria girando detras.
+      setState(() => _exportando = false);
+      final ruta = await guardarExcel(excel, nombre);
+      if (!mounted) return;
+
+      // ruta == null solo puede pasar en escritorio (el usuario cancelo el
+      // dialogo) o en web (el navegador descargo y no hay ruta que mostrar).
+      // En escritorio no se debe decir "guardado" si el usuario cancelo.
+      if (ruta == null && kIsWeb) {
+        messenger.showSnackBar(SnackBar(
+          content: Text('Archivo descargado: $nombre'),
+          duration: const Duration(seconds: 6),
+        ));
+        Navigator.pop(context);
+        return;
+      }
+
+      if (ruta == null) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Exportación cancelada')));
+        Navigator.pop(context);
+        return;
+      }
+
+      messenger.showSnackBar(SnackBar(
+        content: Text(esMovil
+            ? 'Archivo guardado en la carpeta de la app:\n$ruta'
+            : 'Archivo guardado en:\n$ruta'),
+        duration: const Duration(seconds: 6),
+      ));
+      Navigator.pop(context);
     } catch (e) {
       messenger.showSnackBar(SnackBar(
         content: Text('Error al exportar: $e'),
@@ -107,10 +146,9 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     }
   }
 
-  void _generarExcel(
+  Excel _armarExcel(
     List<Map<String, dynamic>> activos,
     List<Map<String, dynamic>> totales,
-    String nombre,
   ) {
     final excel = Excel.createExcel();
     final headerStyle = CellStyle(
@@ -125,7 +163,7 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     _hojaActivos(excel, headerStyle, activos);
     _hojaTotales(excel, headerStyle, totales);
 
-    excel.save(fileName: nombre);
+    return excel;
   }
 
   void _hojaActivos(
