@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:control_entradas_salidas/core/network/descubrimiento_servidor.dart';
+import 'package:control_entradas_salidas/core/network/motivo_descubrimiento.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,16 +17,19 @@ void main() {
   late DescubridorServidor descubridor;
   var status = 200;
   var responder = '';
+  var cabeceras = <String, String>{};
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     status = 200;
     responder = '';
+    cabeceras = {};
     gist = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     unawaited(gist.forEach((request) async {
       await request.drain<void>();
       request.response
         ..statusCode = status
+        ..headers.addAll(cabeceras)
         ..headers.contentType = ContentType.json
         ..write(responder);
       await request.response.close();
@@ -151,6 +155,77 @@ void main() {
 
     await descubridor.olvidar();
     expect(await descubridor.urlCacheada(), isNull);
+  });
+
+  group('el motivo del fallo queda a mano', () {
+    // Antes un 403 por cuota de GitHub y un 404 devolvían los dos `null`, sin
+    // dejar rastro. La pantalla terminaba diciendo "base sin configurar" en los
+    // dos casos, que es la conclusión equivocada: el equipo estaba
+    // configurado y lo que fallaba era una lectura de red.
+    test('un 403 se distingue de un 404', () async {
+      status = 403;
+      cabeceras = {'x-ratelimit-remaining': '0'};
+      expect(await descubridor.obtenerUrl(), isNull);
+
+      expect(descubridor.ultimoFallo?.motivo,
+          MotivoDescubrimiento.limiteGitHub);
+      // Con la cuota en 0 el texto tiene que decir que esperar no alcanza,
+      // porque reintentar hasta el reset no devuelve nada.
+      expect(descubridor.ultimoFallo?.mensaje, contains('reinicia sola'));
+
+      status = 404;
+      expect(await descubridor.obtenerUrl(forzar: true), isNull);
+      expect(descubridor.ultimoFallo?.motivo,
+          MotivoDescubrimiento.gistNoEncontrado);
+      expect(descubridor.ultimoFallo?.status, 404);
+    });
+
+    test('un 500 se distingue de los anteriores', () async {
+      status = 503;
+      expect(await descubridor.obtenerUrl(), isNull);
+
+      expect(descubridor.ultimoFallo?.motivo,
+          MotivoDescubrimiento.gistFallido);
+      expect(descubridor.ultimoFallo?.mensaje, contains('HTTP 503'));
+    });
+
+    test('una lectura que sí sale limpia el motivo anterior', () async {
+      // Si el motivo viejo se quedara, un equipo que anduvo mal una vez vería
+      // el diagnóstico viejo la próxima vez que todo funcione.
+      status = 500;
+      await descubridor.obtenerUrl();
+      expect(descubridor.ultimoFallo, isNotNull);
+
+      status = 200;
+      responder = gistCon('https://api.lycoris.cl');
+      expect(await descubridor.obtenerUrl(forzar: true),
+          'https://api.lycoris.cl');
+      expect(descubridor.ultimoFallo, isNull);
+    });
+
+    test('sin Gist y sin red el motivo no es de cuota', () async {
+      // Gist apagado: la conexión se rechaza, no hay respuesta HTTP que
+      // mirar. No puede reportarse como cuota agotada.
+      await gist.close(force: true);
+
+      expect(await descubridor.obtenerUrl(), isNull);
+      expect(descubridor.ultimoFallo?.motivo, isNot(MotivoDescubrimiento.limiteGitHub));
+      expect(descubridor.ultimoFallo?.mensaje, isNotEmpty);
+    });
+
+    test('el motivo de la red viaja con la URL cacheada', () async {
+      // El equipo funciona con lo último que se sabía, pero el Gist no
+      // contesta: conviene avisar, porque cuando esa URL muera no queda de
+      // dónde recuperar la nueva.
+      responder = gistCon('https://api.lycoris.cl');
+      await descubridor.obtenerUrl();
+
+      status = 500;
+      expect(await descubridor.obtenerUrl(forzar: true),
+          'https://api.lycoris.cl');
+      expect(descubridor.ultimoFallo?.motivo,
+          MotivoDescubrimiento.gistFallido);
+    });
   });
 
   test('entiende el contenido que escribe update_gist.js', () async {

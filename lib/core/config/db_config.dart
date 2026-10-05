@@ -16,6 +16,21 @@ class DbConfigStorageError implements Exception {
   String toString() => message;
 }
 
+/// Por qué la app todavía no sabe a qué base conectarse.
+///
+/// Los dos casos se ven igual en la pantalla si no se distinguen, y por eso
+/// importaba separarlos: "nunca configuraste esta máquina" y "estás
+/// configurado pero no pude obtener la URL" piden acciones opuestas. Con un solo
+/// texto el usuario iba a reconfigurar algo que ya estaba bien, y en un equipo
+/// con el antivirus interceptando HTTPS eso no servía de nada.
+enum MotivoSinConfigurar {
+  /// Nunca se escribió configuración y no hay URL embebida en el binario.
+  nuncaConfigurado,
+
+  /// Hay token guardado, pero no se pudo determinar la URL del servidor.
+  urlNoDeterminada,
+}
+
 /// La app todavía no sabe a qué base conectarse.
 ///
 /// Es distinto de "la base está caída": este error significa que el usuario
@@ -25,9 +40,13 @@ class DbConfigStorageError implements Exception {
 class DbNotConfiguredError implements Exception {
   const DbNotConfiguredError([
     this.detalle = 'Base de datos no configurada.',
+    this.motivo = MotivoSinConfigurar.nuncaConfigurado,
   ]);
 
   final String detalle;
+
+  /// Qué falta, para que la UI no le pida lo mismo a quien ya lo hizo.
+  final MotivoSinConfigurar motivo;
 
   @override
   String toString() => detalle;

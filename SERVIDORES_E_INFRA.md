@@ -178,7 +178,34 @@ quedaba apuntando a un túnel muerto y el usuario tenía que entrar a
 Configuración → Base de datos y guardar la configuración a mano para
 despertarla.
 
-**Ubicación en código:** `lib/core/network/descubrimiento_servidor.dart`
+**Ubicación en código:** `lib/core/network/descubrimiento_servidor.dart` (la
+lectura y la caché), `gist_api_url.dart` (el formato publicado) y
+`motivo_descubrimiento.dart` (por qué falló una lectura).
+
+### Si un equipo no encuentra la URL
+
+El túnel y el Gist pueden estar perfectos y el problema ser solo de esa
+máquina: si el navegador abre
+`https://api.github.com/gists/<id>` y la app no, la lectura HTTP de la app no
+llega a GitHub aunque el equipo sí llegue. Los dos motivos más comunes en
+Windows, y ninguno se arregla desde el servidor:
+
+- **Antivirus con inspección HTTPS.** Instala una raíz propia. El navegador la
+  confía porque usa la tienda de certificados de Windows; el cliente HTTP de
+  Dart no siempre la ve, así que el mismo equipo abre la página y la app no.
+- **IPv6 roto.** Dart no prueba las direcciones en paralelo como hace el
+  navegador, así que si el v6 resuelve y no enruta se queda esperando hasta el
+  timeout.
+
+La app ahora distingue esos casos de "no hay internet" y del 403 por cuota de
+GitHub (60 por hora sin token, **compartido por IP entre todos los equipos**,
+así que puede caer en varios a la vez) y lo dice en pantalla. Antes todos
+terminaban en el mismo "base de datos sin configurar", que mandaba a
+reconfigurar un equipo que ya tenía el token escrito.
+
+Mientras tanto, en Configuración → Base de datos → **Escribir la URL a mano**
+deja la app sin depender del Gist del todo: queda con `proxyUrlManual` y usa la
+URL tal cual.
 
 ---
 

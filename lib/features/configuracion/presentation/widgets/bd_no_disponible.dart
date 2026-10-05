@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/db_config.dart';
 import '../../../../core/data/postgres_guard.dart';
 import '../../../../core/network/postgres_client.dart';
 import '../dialogs/db_config_dialog.dart';
@@ -55,16 +56,33 @@ class _BdNoDisponibleState extends ConsumerState<BdNoDisponible> {
     final estado = ref.watch(estadoBdProvider);
     final error = ref.watch(errorConexionBdProvider);
 
-    final esSinConfigurar = estado == EstadoBd.noConfigurada;
-    final titulo = esSinConfigurar
-        ? 'Base de datos sin configurar'
-        : 'No se pudo conectar con la base de datos';
-    final mensaje = esSinConfigurar
-        ? 'Esta app necesita saber a qué servidor conectarse antes de poder '
-            'iniciar sesión. Es un paso que se hace una sola vez por equipo.'
-        : 'La configuración está cargada, pero el servidor no respondió. '
+    // Hay token guardado pero la URL no se pudo determinar: la app no está
+    // "sin configurar", está configurada a medias. El título y el texto
+    // apuntaban a "configurala una sola vez" en los dos casos, y eso mandaba a
+    // reconfigurar un equipo que ya tenía el token puesto.
+    final faltaUrl = error is DbNotConfiguredError &&
+        error.motivo == MotivoSinConfigurar.urlNoDeterminada;
+    final esSinConfigurar = estado == EstadoBd.noConfigurada && !faltaUrl;
+
+    final titulo = switch ((esSinConfigurar, faltaUrl)) {
+      (true, _) => 'Base de datos sin configurar',
+      (_, true) => 'No se pudo obtener la dirección del servidor',
+      _ => 'No se pudo conectar con la base de datos',
+    };
+    final mensaje = switch ((esSinConfigurar, faltaUrl)) {
+      (true, _) =>
+        'Esta app necesita saber a qué servidor conectarse antes de poder '
+            'iniciar sesión. Es un paso que se hace una sola vez por equipo.',
+      (_, true) =>
+        'El token ya está escrito en este equipo, lo que falla es leer la '
+            'dirección del servidor. El detalle dice por qué. Si preferís, '
+            'podés escribir la URL a mano y la app deja de depender de esa '
+            'lectura.',
+      _ =>
+        'La configuración está cargada, pero el servidor no respondió. '
             'Revisá que la PC servidor esté encendida y que la URL y el token '
-            'siguan vigentes.';
+            'siguan vigentes.',
+    };
 
     return Center(
       child: SingleChildScrollView(
@@ -76,7 +94,7 @@ class _BdNoDisponibleState extends ConsumerState<BdNoDisponible> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Icon(
-                esSinConfigurar
+                esSinConfigurar || faltaUrl
                     ? Icons.storage_outlined
                     : Icons.cloud_off_outlined,
                 size: 56,
@@ -97,7 +115,10 @@ class _BdNoDisponibleState extends ConsumerState<BdNoDisponible> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
-              if (!esSinConfigurar && error != null) ...[
+              // El detalle se muestra siempre que exista. Estaba atado a `!esSinConfigurar`,
+              // y justo el mensaje que explicaba el problema real ("no se pudo
+              // determinar la URL") llegaba con `noConfigurada`: nunca se veía.
+              if (error != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),

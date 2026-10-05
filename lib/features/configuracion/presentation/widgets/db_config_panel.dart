@@ -125,7 +125,8 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
   Future<void> _buscarUrl({bool silencioso = false}) async {
     if (!silencioso) setState(() => _buscandoUrl = true);
     try {
-      final url = await ref.read(descubridorProvider).obtenerUrl(forzar: true);
+      final servicio = ref.read(descubridorProvider);
+      final url = await servicio.obtenerUrl(forzar: true);
       if (!mounted) return;
       if (url != null && url.isNotEmpty) {
         setState(() {
@@ -137,10 +138,19 @@ class _DbConfigPanelState extends ConsumerState<DbConfigPanel> {
         // Sin URL no hay nada que probar. Se ofrece escribirla a mano en vez
         // de dejar un campo vacío que no dice qué hacer.
         setState(() => _urlEditable = true);
+        // El motivo va delante: el texto que se ponía antes ("verificá el
+        // túnel en la PC servidor") asumía que el problema era del servidor, y
+        // desde este equipo el servidor no tiene nada que ver. Con el antivirus
+        // interceptando HTTPS o el IPv6 roto, el Gist sí está bien y la
+        // lectura igual no llega.
+        final fallo = servicio.ultimoFallo;
         _error(
-          'No se pudo encontrar la URL. Verificá que el túnel esté corriendo '
-          'en la PC servidor y que tenga GITHUB_TOKEN configurado. Mientras '
-          'tanto podés escribirla a mano.',
+          fallo == null
+              ? 'No se pudo encontrar la URL. Verificá que el túnel esté '
+                  'corriendo en la PC servidor y que tenga GITHUB_TOKEN '
+                  'configurado. Mientras tanto podés escribirla a mano.'
+              : 'No se pudo encontrar la URL. ${fallo.mensaje} '
+                  'Mientras tanto podés escribirla a mano.',
         );
       }
     } catch (e) {

@@ -48,17 +48,28 @@ Future<SqlSession> initializePostgres({
     // La URL no sale de la config: se vuelve a preguntar al Gist, para que un
     // túnel que cambio de URL no deje a la app hablando con un servidor que ya
     // no existe. Solo la guardada si el Gist no responde.
-    final base = await resolverUrlProxy(
+    final resuelta = await resolverUrlProxy(
       urlGuardada: guardada.proxyUrl,
       urlManual: guardada.proxyUrlManual,
       descubridor: descubridor,
       forzar: forzarProxy,
     );
+    final base = resuelta.url;
     if (base.isEmpty) {
-      throw const DbNotConfiguredError(
-        'No se pudo determinar la URL del servidor. Revisá que el túnel esté '
-        'corriendo en la PC servidor, o escribí la URL a mano en '
-        'Configuración → Base de datos.',
+      // El motivo va adentro del mensaje y no se suelta: la pantalla elige
+      // título y textos según `motivo`, pero el texto de arriba es la única
+      // línea que el usuario lee. Antes decía siempre "revisá el túnel", que
+      // en un equipo con el antivirus interceptando HTTPS no era cierto, y la
+      // app quedaba con la culpa de algo que no era culpa de ella.
+      throw DbNotConfiguredError(
+        resuelta.fallo == null
+            ? 'No se pudo determinar la URL del servidor. Revisá que el túnel '
+                'esté corriendo en la PC servidor, o escribí la URL a mano en '
+                'Configuración → Base de datos.'
+            : 'No se pudo determinar la URL del servidor. ${resuelta.fallo!.mensaje}'
+                ' Si sigue igual, escribí la URL a mano en '
+                'Configuración → Base de datos.',
+        MotivoSinConfigurar.urlNoDeterminada,
       );
     }
     return HttpSqlSession(
