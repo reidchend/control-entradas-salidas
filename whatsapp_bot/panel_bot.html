@@ -56,7 +56,10 @@
 
         <!-- Configuración del servidor -->
         <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
-            <h2 class="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">⚙️ Conexión al Servidor</h2>
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <h2 class="text-lg font-semibold text-gray-200 flex items-center gap-2">⚙️ Conexión al Servidor</h2>
+                <a href="/qr" target="_blank" class="text-xs text-green-400 hover:text-green-300 underline">Abrir QR de vinculación ↗</a>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">URL Base del Bot</label>
@@ -67,6 +70,7 @@
                     <input type="password" id="apiToken" value="" placeholder="Introduce tu WHATSAPP_BOT_TOKEN" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-green-500 font-mono">
                 </div>
             </div>
+            <p id="conn-hint" class="text-xs text-gray-400 mt-3"></p>
         </section>
 
         <!-- Selección de grupo activo -->
@@ -188,9 +192,62 @@
     <script>
         let cachedGroups = [];
 
+        // El panel lo sirve el propio bot, así que su dirección (location.origin)
+        // ES la del bot: no hace falta pegarla. El token lo deja en el #fragmento
+        // abrir_panel_bot.bat, que lo lee del .env del bot (el navegador no puede
+        // leer archivos locales). El fragmento no viaja al servidor.
+        function _parametros() {
+            const p = new URLSearchParams(location.search);
+            if (location.hash.length > 1) {
+                for (const [k, v] of new URLSearchParams(location.hash.slice(1))) p.set(k, v);
+            }
+            return p;
+        }
+
+        // De dónde sale la URL a usar. Prioridad: #url / ?url (lo que pasó el
+        // lanzador) → lo guardado para este origen → la dirección de esta página
+        // → localhost (el último recurso está en getCredentials).
+        //
+        // "Lo guardado" vive por origen (localStorage), así que solo puede ser
+        // un valor que se fijó para ESTA dirección. Cuando el túnel cambia, el
+        // panel se carga en un origen nuevo sin guardado y cae a la dirección de
+        // la página, que es la vigente: por eso nunca hay que volver a pegarla.
+        function urlInicial() {
+            const delQuery = (_parametros().get('url') || '').trim();
+            if (delQuery) return { url: delQuery, origen: 'lo que abrió el lanzador' };
+            const guardada = (localStorage.getItem('bot_url') || '').trim();
+            if (guardada) return { url: guardada, origen: 'lo guardado en este equipo' };
+            if (/^https?:$/.test(location.protocol) && location.host) {
+                return { url: location.origin, origen: 'esta página' };
+            }
+            return { url: '', origen: null };
+        }
+
+        function tokenInicial() {
+            const delQuery = (_parametros().get('token') || '').trim();
+            if (delQuery) return delQuery;
+            return (localStorage.getItem('bot_token') || '').trim();
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
-            if(localStorage.getItem('bot_url')) document.getElementById('baseUrl').value = localStorage.getItem('bot_url');
-            if(localStorage.getItem('bot_token')) document.getElementById('apiToken').value = localStorage.getItem('bot_token');
+            const det = urlInicial();
+            document.getElementById('baseUrl').value = det.url;
+            document.getElementById('apiToken').value = tokenInicial();
+
+            const hint = document.getElementById('conn-hint');
+            if (det.origen) {
+                hint.innerHTML = `URL tomada de <strong>${det.origen}</strong>. ` +
+                    'El túnel puede cambiar de dirección: este panel la sigue solo.';
+            } else {
+                hint.textContent = 'No pude deducir la URL. Escribila a mano o abrí el panel ' +
+                    'con abrir_panel_bot.bat.';
+            }
+
+            // El token ya quedó en localStorage: se limpia el fragmento para que
+            // no siga en la barra de direcciones ni en el historial compartido.
+            if (location.hash.length > 1) {
+                history.replaceState(null, '', location.pathname + location.search);
+            }
             refreshAll();
         });
 
@@ -246,18 +303,25 @@
         async function cargarEstado() {
             const card = document.getElementById('conn-card');
             const groupCard = document.getElementById('active-group-card');
+            const reportCard = document.getElementById('report-group-card');
             const groupsCard = document.getElementById('groups-count-card');
             const detail = document.getElementById('active-group-detail');
             try {
                 const r = await apiGET('/config');
                 if (!r.ok) {
-                    card.textContent = 'Sin conexión';
+                    const esToken = r.status === 401;
+                    card.textContent = esToken ? '🔑 Falta el token' : 'Sin conexión';
                     card.className = "text-sm font-semibold text-red-400";
                     groupCard.textContent = '—';
+                    reportCard.textContent = '—';
                     groupsCard.textContent = '—';
                     detail.classList.add('hidden');
-                    actualizarEstatus(`Error ${r.status}`, true);
-                    setRespuesta(JSON.stringify({ status: r.status, body: r.data }, null, 2));
+                    actualizarEstatus(esToken ? 'Token faltante o inválido' : `Error ${r.status}`, true);
+                    setRespuesta(esToken
+                        ? 'HTTP 401: el token no coincide con el WHATSAPP_BOT_TOKEN del bot.\n\n' +
+                          'Abrí el panel con abrir_panel_bot.bat (lo lee del .env del bot) ' +
+                          'o escribilo a mano en "Token de Seguridad".'
+                        : JSON.stringify({ status: r.status, body: r.data }, null, 2));
                     return;
                 }
                 const d = r.data;
@@ -281,12 +345,21 @@
                     groupCard.className = "text-sm font-semibold text-yellow-400";
                     detail.classList.add('hidden');
                 }
+                const rid = d.report_group_id;
+                if (rid) {
+                    reportCard.textContent = d.report_group_name || rid;
+                    reportCard.className = "text-sm font-semibold text-green-400";
+                } else {
+                    reportCard.textContent = '⚠️ No configurado';
+                    reportCard.className = "text-sm font-semibold text-yellow-400";
+                }
                 groupsCard.textContent = cachedGroups.length > 0 ? `${cachedGroups.length}` : '—';
                 groupsCard.className = "text-sm font-semibold text-green-400";
             } catch (e) {
                 card.textContent = '⚠️ Fallo de red';
                 card.className = "text-sm font-semibold text-red-400";
                 groupCard.textContent = '—';
+                reportCard.textContent = '—';
                 groupsCard.textContent = '—';
                 detail.classList.add('hidden');
                 actualizarEstatus("Fallo de Red", true);

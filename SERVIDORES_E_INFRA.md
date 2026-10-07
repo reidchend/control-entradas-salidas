@@ -225,6 +225,8 @@ del proxy SQL.
 - `whatsapp_bot/config.json`: solo `groupId` y `reportGroupId`. **No contiene
   secretos** (el token va por header). Sí se versiona.
 - `whatsapp_bot/start_bot.bat` / `iniciar_bot.bat`: arranque en Windows.
+- `whatsapp_bot/abrir_panel_bot.bat`: abre el panel ya apuntando a la URL vigente
+  y con el token puesto (lee el `.env`; ver "Abrir el panel" más abajo).
 - `auth/`: sesión autenticada de WhatsApp Web, creada al pasar el QR. Es lo que
   evita tener que escanear el QR de nuevo. **No commitear** (ya está en
   `.gitignore`): subirla filtra la sesión de la cuenta.
@@ -259,6 +261,28 @@ La app lee la URL del bot del Gist, pero por un camino distinto al del proxy:
 `WhatsappRepository` pega directo al `raw` de `bot_url.json`
 (`gist.githubusercontent.com/<owner>/<id>/raw/bot_url.json`), sin pasar por la API
 de GitHub ni por `SharedPreferences`.
+
+### Abrir el panel
+
+`abrir_panel_bot.bat` abre el panel sin copiar y pegar la URL cuando el túnel
+cambia de dirección:
+
+1. Lee `WHATSAPP_BOT_TOKEN` del `.env` de la misma carpeta. El navegador no puede
+   leer archivos locales, por eso la pieza que lee el token es un `.bat` y no el
+   panel.
+2. Descubre la URL con la misma estrategia que la app: el Gist (`bot_url.json`)
+   primero; si no responde, la última URL buena guardada
+   (`%LOCALAPPDATA%\LycorisBot\panel_url.txt`); y `localhost:3000` como último
+   recurso, avisando en pantalla cuál usó.
+3. Abre `{url}/panel` con el token en el `#fragmento`, que no viaja al servidor,
+   así no queda ni en los logs del bot ni en los del túnel. Para apuntar a otro
+   servidor puntual: `abrir_panel_bot.bat https://otra-url`.
+
+El panel a su vez ya no exige pegar nada cuando lo sirve el bot: usa su propia
+dirección como URL base (`location.origin`, la vigente siempre) y acepta token
+por `#token`/`?token`. Los campos siguen siendo editables por si hace falta
+apuntar a otro servidor, y el token guardado por el lanzador se limpia de la
+barra de direcciones después de cargar.
 
 ### Flujo de envío
 
