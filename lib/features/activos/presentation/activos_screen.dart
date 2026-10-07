@@ -33,29 +33,25 @@ class ActivosScreen extends ConsumerStatefulWidget {
 
 /// Metadatos de una dimensión agrupable de activos.
 class _DimInfo {
-  const _DimInfo(this.columna, this.plural, this.singular, this.icono,
-      this.color, {this.editable = true});
+  const _DimInfo(
+      this.columna, this.plural, this.singular, this.icono, this.color);
 
   final String columna;
   final String plural;
   final String singular;
   final IconData icono;
   final Color color;
-  final bool editable;
 }
 
 const _dims = <String, _DimInfo>{
-  'ubicacion': _DimInfo(
-      'ubicacion', 'Ubicaciones', 'ubicación', Icons.place_outlined,
-      Color(0xFF00897B)),
+  'ubicacion': _DimInfo('ubicacion', 'Ubicaciones', 'ubicación',
+      Icons.place_outlined, Color(0xFF00897B)),
   'grupo': _DimInfo(
       'grupo', 'Grupos', 'grupo', Icons.folder_outlined, Color(0xFF7B1FA2)),
   'modelo': _DimInfo(
       'modelo', 'Modelos', 'modelo', Icons.memory_outlined, Color(0xFF1565C0)),
   'estado': _DimInfo(
-      'estado', 'Estados', 'estado', Icons.circle_outlined,
-      Color(0xFF455A64),
-      editable: false),
+      'estado', 'Estados', 'estado', Icons.circle_outlined, Color(0xFF455A64)),
 };
 
 class _ActivosScreenState extends ConsumerState<ActivosScreen> {
@@ -134,8 +130,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
           Expanded(
             child: Text(
               titulo,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -180,8 +175,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       ActivosRepository repo, ColorScheme colors, ActivoTipo tipo) {
     return Column(
       children: [
-        _backHeader(colors, tipo.nombre,
-            () => setState(() => _tipo = null)),
+        _backHeader(colors, tipo.nombre, () => setState(() => _tipo = null)),
         Expanded(
           child: UnidadesPanel(
             repo: repo,
@@ -193,8 +187,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     );
   }
 
-  Widget _valorPanel(
-      ActivosRepository repo, ColorScheme colors, String valor) {
+  Widget _valorPanel(ActivosRepository repo, ColorScheme colors, String valor) {
     final dim = _dims[_dim]!;
     final sing = dim.singular[0].toUpperCase() + dim.singular.substring(1);
     return ActivosFiltradosPanel(
@@ -301,17 +294,21 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         _search = '';
         _searchCtrl.clear();
       }),
-      onCrear: d.editable ? () => _crearValor(repo, d.columna, d.singular) : null,
+      onCrear: () => _crearValor(repo, d.columna, d.singular),
       onRenombrar: (antes, despues) => setState(() {
         // Si el valor renombrado era el que estaba abierto, el filtro viejo ya
         // no matchea nada y la pantalla quedaría vacía sin avisar.
         if (_valor == antes) _valor = despues;
         _tick++;
       }),
-      onQuitar: (valor) => setState(() {
-        if (_valor == valor) _valor = null;
-        _tick++;
-      }),
+      // El estado no se "quita" de las unidades (siempre tienen uno); se
+      // desactiva en su catálogo.
+      onQuitar: d.columna != 'estado'
+          ? (valor) => setState(() {
+                if (_valor == valor) _valor = null;
+                _tick++;
+              })
+          : null,
     );
   }
 
@@ -372,21 +369,20 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     final tipos = await _tipos(repo);
     final categorias = await repo.getCategorias();
     final ubicaciones = await repo.getUbicaciones();
+    final estados = await repo.getEstados();
     if (!mounted) return;
-    final nuevo = await showActivoFormScreen(
+    await showActivoFormScreen(
       context,
       tipos: tipos,
       categorias: categorias,
+      estados: estados,
+      onGuardar: (a) => repo.createActivo(a),
       onCrearTipo: (t) => repo.createTipo(t),
+      onCrearEstado: (n) => repo.createEstado(n),
+      onExisteUnidad: (t, u) => repo.existeUnidad(t, u),
       ubicacionesSugeridas: ubicaciones,
     );
-    if (nuevo == null) return;
-    try {
-      await repo.createActivo(nuevo);
-      if (mounted) setState(() {});
-    } catch (e) {
-      _snack('Error al crear activo: $e');
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _crearCategoria(ActivosRepository repo) async {
@@ -408,47 +404,67 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
     }
   }
 
-  /// Crea un valor nuevo (ubicación/grupo/modelo) y entra con el primer
-  /// activo ya prefijado a ese valor para agregarlo de inmediato.
+  /// Crea un valor nuevo (ubicación/grupo/modelo/estado) y entra al detalle.
+  ///
+  /// Para un estado se da de alta en el catálogo y se entra a la vista de la
+  /// dimensión; para las demás dimensiones se abre el alta de una unidad con
+  /// ese valor prefijado.
   Future<void> _crearValor(
       ActivosRepository repo, String columna, String singular) async {
     final nombre = await _pedirNuevoValor(singular);
     if (nombre == null) return;
+    if (columna == 'estado') {
+      try {
+        final creado = await repo.createEstado(nombre);
+        if (!mounted) return;
+        setState(() {
+          _valor = creado;
+          _categoria = null;
+          _tipo = null;
+          _tick++;
+        });
+      } catch (e) {
+        _snack('Error al crear estado: $e');
+      }
+      return;
+    }
     await _agregarAValor(repo, columna, nombre);
   }
 
   /// Agrega una unidad prefijando [columna]=[valor].
-  /// - ubicación: nueva unidad (elige o crea el tipo).
+  /// - ubicación/estado: nueva unidad (elige o crea el tipo) con ese valor.
   /// - grupo/modelo: nuevo tipo con ese valor prefijado, y entra a su detalle.
-  Future<void> _agregarAValor(ActivosRepository repo, String columna,
-      String valor) async {
-    if (columna == 'ubicacion') {
+  Future<void> _agregarAValor(
+      ActivosRepository repo, String columna, String valor) async {
+    if (columna == 'ubicacion' || columna == 'estado') {
+      final esUbicacion = columna == 'ubicacion';
       final tipos = await _tipos(repo);
       final categorias = await repo.getCategorias();
       final ubicaciones = await repo.getUbicaciones();
+      final estados = await repo.getEstados();
       if (!mounted) return;
-      final nuevo = await showActivoFormScreen(
+      await showActivoFormScreen(
         context,
         tipos: tipos,
         categorias: categorias,
+        estados: estados,
+        onGuardar: (a) => repo.createActivo(a),
         onCrearTipo: (t) => repo.createTipo(t),
-        ubicacionPreset: valor,
+        onCrearEstado: (n) => repo.createEstado(n),
+        onExisteUnidad: (t, u) => repo.existeUnidad(t, u),
+        ubicacionPreset: esUbicacion ? valor : null,
+        estadoPreset: esUbicacion ? null : valor,
         ubicacionesSugeridas: ubicaciones,
       );
-      if (nuevo == null) return;
-      try {
-        await repo.createActivo(nuevo);
-        if (mounted) {
-          setState(() {
-            _categoria = null;
-            _tipo = null;
-            _valor = valor;
-            _tick++;
-          });
-        }
-      } catch (e) {
-        _snack('Error al crear activo: $e');
-      }
+      if (!mounted) return;
+      setState(() {
+        _categoria = null;
+        _tipo = null;
+        _valor = valor;
+        _search = '';
+        _searchCtrl.clear();
+        _tick++;
+      });
       return;
     }
 

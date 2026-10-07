@@ -105,7 +105,7 @@ Future<String> resolveDatabaseUrl() async {
 }
 
 /// El driver `postgres` rechaza parámetros de query que no entiende (p. ej.
-/// `channel_binding`, propio de Neon). Se conservan solo los que soporta.
+/// `channel_binding`). Se conservan solo los que soporta.
 final _supportedQueryParams = {
   'sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'connect_timeout',
   'client_encoding', 'replication', 'query_timeout', 'max_connection_age',

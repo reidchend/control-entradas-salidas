@@ -1,10 +1,10 @@
 -- =====================================================================
 -- Migración: tablas pos_sesiones y whatsapp_queue
 -- =====================================================================
--- Estas dos tablas se crearon directamente en la base (Neon/Supabase) y
--- nunca estuvieron definidas en el repo. La definición se reconstruyó
--- desde el código de la app (lib/features/pos, lib/features/whatsapp)
--- siguiendo las convenciones de schema.sql (pos_usuarios/pos_cierres).
+-- Estas dos tablas se crearon directamente en la base y nunca estuvieron
+-- definidas en el repo. La definición se reconstruyó desde el código de la app
+-- (lib/features/pos, lib/features/whatsapp) siguiendo las convenciones de
+-- schema.sql (pos_usuarios/pos_cierres).
 --
 -- pos_sesiones: turno de caja del POS abierto por cajero. `cerrada_en`
 --   NULL = turno abierto. Las fechas viajan como ISO8601 (TEXT), igual

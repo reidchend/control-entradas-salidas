@@ -134,20 +134,19 @@ class _TiposPanelState extends ConsumerState<TiposPanel> {
 
   Future<void> _agregarUnidad(ActivoTipo tipo) async {
     final ubicaciones = await widget.repo.getUbicaciones();
+    final estados = await widget.repo.getEstados();
     if (!mounted) return;
-    final nueva = await showUnidadDialog(
+    await showUnidadDialog(
       context,
       tipos: [tipo],
       tipoIdFijo: tipo.id,
+      estados: estados,
+      onGuardar: (a) => widget.repo.createActivo(a),
+      onCrearEstado: (n) => widget.repo.createEstado(n),
+      onExisteUnidad: (t, u) => widget.repo.existeUnidad(t, u),
       ubicacionesSugeridas: ubicaciones,
     );
-    if (nueva == null) return;
-    try {
-      await widget.repo.createActivo(nueva);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error al agregar unidad: $e');
-    }
+    if (mounted) await _recargar();
   }
 
   Future<bool?> _confirmar(

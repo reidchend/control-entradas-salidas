@@ -199,10 +199,6 @@ def main():
     print("  Lo que no se recupera: el PIN en claro de un operador. Para")
     print("  obtenerlo hay que pedir que lo cambie; el hash no se puede volver")
     print("  a PIN.")
-    print("")
-    print("  `neon.dump` queda fuera: es un dump custom de pg_dump, binario.")
-    print("  Los PIN de la epoca estan ahi y no se pueden hashear sin")
-    print("  pg_restore. Si se quiere sacar de disco, hay que borrarlo.")
 
 
 if __name__ == "__main__":

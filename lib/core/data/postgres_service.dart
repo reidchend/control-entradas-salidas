@@ -3,7 +3,7 @@ import 'dart:async';
 import 'pg_client.dart';
 import 'sql_session.dart';
 
-/// Servicio base para operaciones CRUD contra PostgreSQL directo (pooler Neon).
+/// Servicio base para operaciones CRUD contra PostgreSQL directo.
 ///
 /// Provee métodos genéricos para select, insert, update, delete, upsert.
 /// Los repositorios de cada feature usan este servicio o acceden a la

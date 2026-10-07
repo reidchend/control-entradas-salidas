@@ -150,8 +150,7 @@ class _ActivosCategoriasGridState extends ConsumerState<ActivosCategoriasGrid> {
               conteo: conteo,
               onTap: () => widget.onSelect(categoria),
               onEdit: _trabajando ? null : () => _editar(categoria),
-              onDelete:
-                  _trabajando ? null : () => _eliminar(categoria, conteo),
+              onDelete: _trabajando ? null : () => _eliminar(categoria, conteo),
             );
           },
         );

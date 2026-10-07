@@ -57,7 +57,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 | Imagenes (adjuntos de WhatsApp) | `image ^4.3` |
 
 > **No hay dependencias de Supabase.** La app habla PostgreSQL directo; el
-> proveedor anterior (Neon) quedo decommissionado. Ver
+> proveedor anterior quedo decommissionado. Ver
 > [`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
 
 Ver `pubspec.yaml` (version actual: **2.0.1**).
@@ -285,7 +285,7 @@ Algunas pantallas tienen su propio polling ademas del central:
 ## Base de datos
 
 PostgreSQL, servido desde una PC propia. El proveedor anterior era Supabase
-(Neon) y quedo decommissionado por cuota; la transicion esta documentada en
+y quedo decommissionado por cuota; la transicion esta documentada en
 [`docs/migracion-bd-local.md`](docs/migracion-bd-local.md).
 
 ### Levantar la base local (PC Windows)
@@ -470,7 +470,7 @@ Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica
 | `windows-pos` | `LycorisPOS.exe` (icono azul), si se elige `pos` | `app-pos-windows.zip` |
 | `windows-inventario` | `LycorisControl.exe`, si se elige `inventario` | `app-inventario-windows.zip` |
 | `windows-hosteleria` | `LycorisHostel.exe`, si se elige `hosteleria` | `app-hosteleria-windows.zip` |
-| `linux` | `LycorisPOS` + `LycorisControl` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz` |
+| `linux` | `LycorisPOS` + `LycorisControl` + `LycorisHostel` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz`, `app-hosteleria-linux.tar.gz` |
 | `android` | APK inventario | `app-inventario-android.apk` |
 | `release` | Publica `<appId>-vX.Y.Z` y actualiza `versions.json` | — |
 
@@ -579,7 +579,7 @@ app, asi que siguen siendo validas si le cambian el valor.
 ### Migracion Drift → Supabase → PostgreSQL (completada)
 
 Fases 1-10: de Drift a Supabase (2026-08), y despues de Supabase a PostgreSQL
-directo (2026-09), cuando Neon se quedo sin cuota de compute. Los archivos
+directo (2026-09), al agotarse la cuota del plan gestionado. Los archivos
 conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 `supabase/`), pero el backend es PostgreSQL.
 
@@ -594,7 +594,7 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 - **Fase 8**: Fix bool↔int — conversion automatica por tipo real de columna
 - **Fase 9**: Fix N+1 queries — batch queries en historial, requisiciones y facturas
 - **Fase 10**: Fix error handling — try/catch en comanda_screen, validacion_screen, bandeja_screen
-- **Fase 11**: Neon → PostgreSQL local — `SqlSession` con implementaciones nativa y HTTP, proxy `/proxy-sql`, descubrimiento por Gist, conexion configurable desde la app
+- **Fase 11**: PostgreSQL gestionado → PostgreSQL local — `SqlSession` con implementaciones nativa y HTTP, proxy `/proxy-sql`, descubrimiento por Gist, conexion configurable desde la app
 
 ### Migraciones recientes
 
@@ -616,7 +616,7 @@ conservaron nombres de la epoca de Supabase (`supabase_cast.dart`,
 - `supabase/schema.sql` — esquema base (idempotente). El directorio quedo con el nombre de la epoca de Supabase.
 - `supabase/schema_activos.sql` — categorias, tipos y unidades de activos.
 - `supabase/migrations/` — migraciones SQL, en orden por timestamp.
-- `docs/migracion-bd-local.md` — transicion de Neon a PostgreSQL local.
+- `docs/migracion-bd-local.md` — transicion de PostgreSQL gestionado a PostgreSQL local.
 - `docs/montar-pc-servidor.md` — montaje paso a paso de la PC servidor.
 - `tool/windows/` — scripts para preparar la PC servidor.
 - `INSTRUCCIONES_AGENTE_SERVIDOR.md` — estado del servidor y diagnostico.

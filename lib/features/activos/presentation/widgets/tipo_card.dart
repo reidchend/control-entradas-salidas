@@ -56,8 +56,8 @@ class TipoCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
                   chips.join(' · '),
-                  style: TextStyle(
-                      fontSize: 12.5, color: colors.onSurfaceVariant),
+                  style:
+                      TextStyle(fontSize: 12.5, color: colors.onSurfaceVariant),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -85,8 +85,7 @@ class TipoCard extends StatelessWidget {
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'unidad', child: Text('Agregar unidad')),
             const PopupMenuItem(value: 'editar', child: Text('Editar')),
-            const PopupMenuItem(
-                value: 'desactivar', child: Text('Desactivar')),
+            const PopupMenuItem(value: 'desactivar', child: Text('Desactivar')),
             const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
           ],
         ),

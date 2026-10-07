@@ -17,10 +17,10 @@ Future<ActivoTipo?> showTipoDialog(
   String? modeloPreset,
 }) async {
   final nombreCtrl = TextEditingController(text: tipo?.nombre ?? '');
-  final grupoCtrl = TextEditingController(
-      text: tipo?.grupo?.trim() ?? grupoPreset ?? '');
-  final modeloCtrl = TextEditingController(
-      text: tipo?.modelo?.trim() ?? modeloPreset ?? '');
+  final grupoCtrl =
+      TextEditingController(text: tipo?.grupo?.trim() ?? grupoPreset ?? '');
+  final modeloCtrl =
+      TextEditingController(text: tipo?.modelo?.trim() ?? modeloPreset ?? '');
   var categoriaId = tipo?.categoriaId;
 
   return showDialog<ActivoTipo>(

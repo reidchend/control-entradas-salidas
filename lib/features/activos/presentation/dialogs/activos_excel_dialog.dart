@@ -22,7 +22,8 @@ class _ActivosExcelDialog extends ConsumerStatefulWidget {
   const _ActivosExcelDialog();
 
   @override
-  ConsumerState<_ActivosExcelDialog> createState() => _ActivosExcelDialogState();
+  ConsumerState<_ActivosExcelDialog> createState() =>
+      _ActivosExcelDialogState();
 }
 
 class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
@@ -85,8 +86,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
       final totales = await repo.getTotalesPorGrupo();
 
       if (activos.isEmpty) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('No hay activos para exportar')));
+        messenger.showSnackBar(
+            const SnackBar(content: Text('No hay activos para exportar')));
         return;
       }
 
@@ -123,8 +124,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
       }
 
       if (ruta == null) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Exportación cancelada')));
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Exportación cancelada')));
         Navigator.pop(context);
         return;
       }
@@ -173,6 +174,7 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
   ) {
     final sheet = excel['Activos'];
     const headers = [
+      'Código',
       'Categoría',
       'Grupo',
       'Tipo',
@@ -194,6 +196,7 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
 
     for (final a in activos) {
       sheet.appendRow([
+        TextCellValue((a['codigo'] as String?) ?? ''),
         TextCellValue((a['categoria_nombre'] as String?) ?? 'Sin categoría'),
         TextCellValue((a['grupo'] as String?) ?? 'Sin grupo'),
         TextCellValue((a['nombre'] as String?) ?? 'Sin tipo'),
@@ -240,7 +243,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     }
   }
 
-  double _toDouble(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v') ?? 0;
+  double _toDouble(dynamic v) =>
+      v is num ? v.toDouble() : double.tryParse('$v') ?? 0;
 
   String _fechaCorta(dynamic v) {
     if (v == null) return '';

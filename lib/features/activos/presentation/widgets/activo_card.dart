@@ -36,7 +36,8 @@ class ActivoCard extends StatelessWidget {
         : ubicacion.isNotEmpty
             ? ubicacion
             : 'Sin ubicación';
-    final subtexto = mostrarTipo ? ubicacion : (activo.observaciones ?? '').trim();
+    final subtexto =
+        mostrarTipo ? ubicacion : (activo.observaciones ?? '').trim();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -79,6 +80,8 @@ class ActivoCard extends StatelessWidget {
               ),
             Row(
               children: [
+                if ((activo.codigo ?? '').trim().isNotEmpty)
+                  _chip(context, activo.codigo!.trim(), color: colors.tertiary),
                 _chip(context, activo.estado, color: lider),
                 if (activo.valor > 0)
                   _chip(context, 'Bs ${_fmtValor(activo.valor)}',
@@ -127,7 +130,8 @@ class ActivoCard extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style:
+            TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }

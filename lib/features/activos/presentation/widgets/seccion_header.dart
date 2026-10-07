@@ -41,8 +41,7 @@ class SeccionHeader extends StatelessWidget {
           ),
           if (conteo != null)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: c.withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(10),

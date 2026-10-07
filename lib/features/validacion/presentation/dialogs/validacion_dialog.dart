@@ -57,6 +57,7 @@ class _ValidacionDialog extends ConsumerStatefulWidget {
 
 class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
   final _facturaCtrl = TextEditingController();
+  final _facturaFocus = FocusNode();
   final _nuevoProveedorCtrl = TextEditingController();
   final _nuevoRifCtrl = TextEditingController();
   final _montoCtrl = TextEditingController();
@@ -153,6 +154,7 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
   void dispose() {
     _pasteCancel?.call();
     _facturaCtrl.dispose();
+    _facturaFocus.dispose();
     _nuevoProveedorCtrl.dispose();
     _nuevoRifCtrl.dispose();
     _montoCtrl.dispose();
@@ -198,6 +200,53 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
     return _proveedor != null && _proveedor!.isNotEmpty;
   }
 
+  /// Si el número de factura ya existe en el sistema, pregunta si se quieren
+  /// vincular las entradas a esa misma factura o si el número está mal.
+  /// Devuelve `true` para vincular, `false` si el número es un error y `null`
+  /// si el usuario cancela.
+  Future<bool?> _confirmarFacturaExistente(
+    Map<String, dynamic> factura, {
+    required int cantidad,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final prov = (factura['proveedor'] as String?)?.trim();
+    final provTexto =
+        (prov == null || prov.isEmpty) ? 'Varios (sin proveedor)' : prov;
+    final fecha =
+        DateTime.tryParse(factura['fecha_factura']?.toString() ?? '');
+    final fechaTexto = fecha == null ? '—' : _fmtFecha(fecha);
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.warning_amber_rounded, color: scheme.error),
+        title: const Text('La factura ya existe'),
+        content: Text(
+          'El número «${factura['numero_factura']}» ya está registrado en el '
+          'sistema:\n'
+          '\n· Proveedor: $provTexto'
+          '\n· Fecha: $fechaTexto'
+          '\n\n¿Vincular las $cantidad entrada(s) a esa misma factura, o se '
+          'equivocó de número?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Corregir número'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Vincular a la misma factura'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _validar() async {
     final repo = ref.read(validacionRepoProvider)!;
     setState(() => _validando = true);
@@ -211,6 +260,32 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
       final factura = _conPrefijo(_facturaCtrl.text.trim());
       final monto = double.tryParse(_montoCtrl.text.trim()) ?? 0;
       final pagos = _pagosKey.currentState?.pagos ?? [];
+
+      // Si el número ya está registrado, avisar: evita validar dos entradas con
+      // la misma factura por error. El usuario decide vincular o corregir.
+      final existenteNro = await repo.buscarFacturaPorNumero(factura);
+      if (existenteNro != null) {
+        final vincular = await _confirmarFacturaExistente(
+          existenteNro,
+          cantidad: widget.selectedEntradas.length,
+        );
+        if (!mounted) return;
+        if (vincular != true) {
+          setState(() => _validando = false);
+          if (vincular == false) {
+            _facturaFocus.requestFocus();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'El número ya está registrado. Puede corregirlo y volver a '
+                  'validar.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
 
       // Capturar los productos ANTES de procesar (tras validar dejan de ser
       // entradas pendientes) para armar el mensaje de WhatsApp.
@@ -419,6 +494,7 @@ class _ValidacionDialogState extends ConsumerState<_ValidacionDialog> {
           const SizedBox(height: 10),
           TextField(
             controller: _facturaCtrl,
+            focusNode: _facturaFocus,
             decoration: const InputDecoration(
               labelText: 'Nro. Factura',
               hintText: 'Ej: F-2024-001',

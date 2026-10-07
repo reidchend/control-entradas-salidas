@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/orden_natural.dart';
 import '../../data/activo.dart';
 import '../../data/activo_tipo.dart';
 import '../../data/activos_repository.dart';
@@ -38,8 +39,7 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
   @override
   void didUpdateWidget(UnidadesPanel old) {
     super.didUpdateWidget(old);
-    if (old.searchTerm != widget.searchTerm ||
-        old.tipo.id != widget.tipo.id) {
+    if (old.searchTerm != widget.searchTerm || old.tipo.id != widget.tipo.id) {
       _fut = _load();
     }
   }
@@ -58,39 +58,39 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
 
   Future<void> _crearUnidad() async {
     final ubicaciones = await widget.repo.getUbicaciones();
+    final estados = await widget.repo.getEstados();
     if (!mounted) return;
-    final nueva = await showUnidadDialog(
+    await showUnidadDialog(
       context,
       tipos: [widget.tipo],
       tipoIdFijo: widget.tipo.id,
+      estados: estados,
+      onGuardar: (a) => widget.repo.createActivo(a),
+      onCrearEstado: (n) => widget.repo.createEstado(n),
+      onExisteUnidad: (t, u) => widget.repo.existeUnidad(t, u),
       ubicacionesSugeridas: ubicaciones,
     );
-    if (nueva == null) return;
-    try {
-      await widget.repo.createActivo(nueva);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error al crear unidad: $e');
-    }
+    if (mounted) await _recargar();
   }
 
   Future<void> _editar(Activo activo) async {
     final ubicaciones = await widget.repo.getUbicaciones();
+    final estados = await widget.repo.getEstados();
     if (!mounted) return;
-    final editado = await showUnidadDialog(
+    await showUnidadDialog(
       context,
       tipos: [widget.tipo],
       tipoIdFijo: widget.tipo.id,
       unidad: activo,
+      estados: estados,
+      onGuardar: (a) async {
+        await widget.repo.updateActivo(activo.id, a);
+        return a;
+      },
+      onCrearEstado: (n) => widget.repo.createEstado(n),
       ubicacionesSugeridas: ubicaciones,
     );
-    if (editado == null) return;
-    try {
-      await widget.repo.updateActivo(activo.id, editado);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error al editar unidad: $e');
-    }
+    if (mounted) await _recargar();
   }
 
   Future<void> _desactivar(Activo activo) async {
@@ -236,7 +236,7 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
       ..sort((x, y) {
         if (x.isEmpty) return 1;
         if (y.isEmpty) return -1;
-        return x.toLowerCase().compareTo(y.toLowerCase());
+        return compararNatural(x, y);
       });
 
     final filas = <Widget>[];

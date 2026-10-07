@@ -1,15 +1,19 @@
 import '../../../core/data/postgres_service.dart';
+import '../../../core/utils/prefijo_de_categoria.dart';
 import 'activo.dart';
 import 'activo_tipo.dart';
 import 'activos_categoria.dart';
 
 /// Repositorio de activos — CRUD del catálogo de tipos y sus unidades.
 ///
-/// Opera contra tres tablas:
-/// - `activos_categorias`: agrupación de primer nivel.
+/// Opera contra cinco tablas:
+/// - `activos_categorias`: agrupación de primer nivel (guarda el prefijo de
+///   la placa de inventario).
+/// - `activos_estados`: catálogo de estados de las unidades.
 /// - `activos_tipos`: catálogo maestro (nombre, grupo, modelo, categoría).
 /// - `activos`: una unidad física por fila (ubicación, estado, valor, ...),
 ///   referenciando su tipo con `tipo_id`.
+/// - `activos_codigos`: contador atómico por prefijo, para numerar las placas.
 class ActivosRepository {
   ActivosRepository(this._db);
 
@@ -17,7 +21,7 @@ class ActivosRepository {
 
   /// Columnas base de una unidad más los campos resueltos por JOIN.
   static const _colsActivo =
-      'a.id, a.tipo_id, a.ubicacion, a.estado, a.valor, a.fecha, '
+      'a.id, a.tipo_id, a.ubicacion, a.estado, a.codigo, a.valor, a.fecha, '
       'a.observaciones, a.activo, a.created_at, a.updated_at';
 
   // ---------------------------------------------------------------------
@@ -40,7 +44,7 @@ class ActivosRepository {
       'SELECT c.*, COUNT(a.id) AS n '
       'FROM activos_categorias c '
       'LEFT JOIN activos_tipos t ON t.categoria_id = c.id '
-      'LEFT JOIN activos a ON a.tipo_id = t.id '
+      'LEFT JOIN activos a ON a.tipo_id = t.id AND a.activo = TRUE '
       'WHERE c.activo = TRUE '
       'GROUP BY c.id '
       'ORDER BY c.nombre',
@@ -54,17 +58,46 @@ class ActivosRepository {
     ];
   }
 
-  Future<int> createCategoria(String nombre, {String color = '#2196F3'}) {
+  /// Crea la categoría y le deriva el prefijo de placa desde el nombre si no
+  /// viene explícito ([prefijo] queda guardado para que renombrar la categoría
+  /// no cambie las placas ya emitidas).
+  Future<int> createCategoria(
+    String nombre, {
+    String color = '#2196F3',
+    String? prefijo,
+  }) async {
+    final n = nombre.trim();
+    if (n.isEmpty) throw ArgumentError('El nombre de la categoría está vacío');
+    // Dedupe como en `createTipo`: si ya existe (sin importar mayúsculas), se
+    // devuelve el existente en vez de crear otra variante.
+    final filas = await _db.executeSql(
+      'SELECT id FROM activos_categorias '
+      'WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(\$1)) LIMIT 1',
+      params: [n],
+    );
+    if (filas.isNotEmpty) return filas.first['id'] as int;
+
     return _db.insert('activos_categorias', {
-      'nombre': nombre,
+      'nombre': n,
       'color': color,
+      'prefijo': (prefijo?.trim().isEmpty ?? true)
+          ? prefijoDeCategoria(n)
+          : prefijo,
       'activo': true,
     });
   }
 
-  Future<void> updateCategoria(ActivosCategoria categoria) {
-    return _db.updateById(
-        'activos_categorias', categoria.id, categoria.toMap());
+  Future<void> updateCategoria(ActivosCategoria categoria) async {
+    if (await existeCategoria(categoria.nombre,
+        ignorarId: categoria.id)) {
+      throw StateError('Ya existe otra categoría con ese nombre');
+    }
+    final map = categoria.toMap();
+    final p = (map['prefijo'] as String?)?.trim();
+    if (p == null || p.isEmpty) {
+      map['prefijo'] = prefijoDeCategoria(categoria.nombre);
+    }
+    await _db.updateById('activos_categorias', categoria.id, map);
   }
 
   Future<void> deactivateCategoria(int id) async {
@@ -106,6 +139,49 @@ class ActivosRepository {
   }
 
   // ---------------------------------------------------------------------
+  // Estados (catálogo de las unidades)
+  // ---------------------------------------------------------------------
+
+  /// Estados activos del catálogo, en el orden de visualización.
+  Future<List<String>> getEstados() async {
+    final rows = await _db.fetchAll(
+      'activos_estados',
+      orderBy: 'orden, nombre',
+      filters: {'activo': true},
+    );
+    return [for (final r in rows) r['nombre'] as String];
+  }
+
+  /// Da de alta un estado nuevo (o devuelve el nombre canónico si ya existe,
+  /// sin importar mayúsculas). El nombre vuelve normalizado para poder
+  /// seleccionarlo en el formulario.
+  Future<String> createEstado(String nombre) async {
+    final n = nombre.trim();
+    if (n.isEmpty) throw ArgumentError('El nombre del estado está vacío');
+    final filas = await _db.executeSql(
+      'SELECT nombre FROM activos_estados '
+      'WHERE lower(nombre) = lower(\$1) LIMIT 1',
+      params: [n],
+    );
+    if (filas.isNotEmpty) return filas.first['nombre'] as String;
+    await _db.insert('activos_estados', {
+      'nombre': n,
+      'orden': 100,
+      'activo': true,
+    });
+    return n;
+  }
+
+  /// Desactiva un estado (no se borra: las unidades que lo usan lo conservan).
+  Future<void> desactivarEstado(String nombre) {
+    return _db.updateWhere(
+      'activos_estados',
+      {'nombre': nombre},
+      {'activo': false},
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Tipos (catálogo)
   // ---------------------------------------------------------------------
 
@@ -124,8 +200,7 @@ class ActivosRepository {
     }
     final q = search?.trim().toLowerCase();
     if (q != null && q.isNotEmpty) {
-      condiciones.add(
-          '(LOWER(t.nombre) LIKE \$${i++} OR '
+      condiciones.add('(LOWER(t.nombre) LIKE \$${i++} OR '
           'LOWER(COALESCE(t.grupo, \'\')) LIKE \$${i++} OR '
           'LOWER(COALESCE(t.modelo, \'\')) LIKE \$${i++})');
       params
@@ -152,12 +227,72 @@ class ActivosRepository {
     ];
   }
 
-  Future<int> createTipo(ActivoTipo tipo) {
-    return _db.insert('activos_tipos', tipo.toMap());
+  /// Crea un tipo, o devuelve el existente si ya hay uno con la misma
+  /// categoría + grupo + nombre (sin importar mayúsculas ni espacios).
+  ///
+  /// Las escrituras canónicas de grupo/modelo ya registradas se reutilizan
+  /// (televisores → Televisores) para no volver a partir el catálogo en
+  /// variantes de capitalización.
+  Future<int> createTipo(ActivoTipo tipo) async {
+    final nombre = tipo.nombre.trim();
+    if (nombre.isEmpty) {
+      throw ArgumentError('El nombre del tipo no puede quedar vacío');
+    }
+    final grupo = (tipo.grupo ?? '').trim();
+    final modelo = (tipo.modelo ?? '').trim();
+    final grupoFinal = grupo.isEmpty ? '' : await _canonicoDe('grupo', grupo);
+    final modeloFinal =
+        modelo.isEmpty ? '' : await _canonicoDe('modelo', modelo);
+
+    final rows = await _db.executeSql(
+      'SELECT id FROM activos_tipos '
+      'WHERE COALESCE(categoria_id, 0) = \$1 '
+      'AND LOWER(TRIM(COALESCE(grupo, \'\'))) = LOWER(TRIM(\$2)) '
+      'AND LOWER(TRIM(nombre)) = LOWER(TRIM(\$3)) LIMIT 1',
+      params: [tipo.categoriaId ?? 0, grupoFinal, nombre],
+    );
+    if (rows.isNotEmpty) return rows.first['id'] as int;
+
+    return _db.insert('activos_tipos', {
+      'nombre': nombre,
+      'grupo': grupoFinal.isEmpty ? null : grupoFinal,
+      'modelo': modeloFinal.isEmpty ? null : modeloFinal,
+      'categoria_id': tipo.categoriaId,
+      'activo': tipo.activo ? 1 : 0,
+    });
   }
 
-  Future<void> updateTipo(int id, ActivoTipo tipo) {
-    return _db.updateById('activos_tipos', id, tipo.toMap());
+  Future<void> updateTipo(int id, ActivoTipo tipo) async {
+    final nombre = tipo.nombre.trim();
+    if (nombre.isEmpty) {
+      throw ArgumentError('El nombre del tipo no puede quedar vacío');
+    }
+    final grupo = (tipo.grupo ?? '').trim();
+    final rows = await _db.executeSql(
+      'SELECT id FROM activos_tipos '
+      'WHERE id <> \$1 AND COALESCE(categoria_id, 0) = \$2 '
+      'AND LOWER(TRIM(COALESCE(grupo, \'\'))) = LOWER(TRIM(\$3)) '
+      'AND LOWER(TRIM(nombre)) = LOWER(TRIM(\$4)) LIMIT 1',
+      params: [id, tipo.categoriaId ?? 0, grupo, nombre],
+    );
+    if (rows.isNotEmpty) {
+      throw StateError('Ya existe otro tipo con el mismo nombre en este grupo');
+    }
+    await _db.updateById('activos_tipos', id, tipo.toMap());
+  }
+
+  /// La escritura canónica (menor id) de un grupo/modelo, para reutilizarla en
+  /// vez de crear una variante de mayúsculas. Devuelve [valor] si no hay
+  /// ninguna registrada todavía.
+  Future<String> _canonicoDe(String col, String valor) async {
+    final rows = await _db.executeSql(
+      'SELECT $col FROM activos_tipos '
+      'WHERE LOWER(TRIM(COALESCE($col, \'\'))) = LOWER(TRIM(\$1)) '
+      'AND TRIM(COALESCE($col, \'\')) <> \'\' '
+      'ORDER BY id LIMIT 1',
+      params: [valor],
+    );
+    return rows.isEmpty ? valor : rows.first[col] as String;
   }
 
   Future<void> deactivateTipo(int id) async {
@@ -180,8 +315,7 @@ class ActivosRepository {
   Future<List<Activo>> getUnidadesDeTipo(int tipoId, {String? search}) async {
     final q = search?.trim().toLowerCase();
     final list = q != null && q.isNotEmpty;
-    final sql =
-        'SELECT $_colsActivo, '
+    final sql = 'SELECT $_colsActivo, '
         't.nombre AS tipo_nombre, t.grupo, t.modelo, t.categoria_id, '
         'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
         'FROM activos a '
@@ -189,7 +323,7 @@ class ActivosRepository {
         'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
         'WHERE a.tipo_id = \$1'
         '${list ? ' AND (LOWER(COALESCE(a.ubicacion, \'\')) LIKE \$2 OR LOWER(COALESCE(a.observaciones, \'\')) LIKE \$2)' : ''} '
-        'ORDER BY a.ubicacion NULLS LAST, a.id';
+        'ORDER BY a.codigo';
     final rows = await _db.executeSql(
       sql,
       params: list ? [tipoId, '%$q%'] : [tipoId],
@@ -197,12 +331,89 @@ class ActivosRepository {
     return rows.map(Activo.fromMap).toList();
   }
 
-  Future<int> createActivo(Activo activo) {
-    return _db.insert('activos', activo.toMap());
+  /// ¿Ya existe una unidad activa de este tipo en esa ubicación?
+  ///
+  /// El ítem "¿agregar otra igual?" es una advertencia, no un bloqueo: dos
+  /// unidades iguales en el mismo lugar pueden ser correctas (dos sillas
+  /// idénticas en el comedor).
+  Future<bool> existeUnidad(int tipoId, String ubicacion) async {
+    final filas = await _db.executeSql(
+      'SELECT 1 FROM activos '
+      'WHERE tipo_id = \$1 AND COALESCE(ubicacion, \'\') = COALESCE(\$2, \'\') '
+      'AND activo = TRUE LIMIT 1',
+      params: [tipoId, ubicacion.trim()],
+    );
+    return filas.isNotEmpty;
   }
 
-  Future<void> updateActivo(int id, Activo activo) {
-    return _db.updateById('activos', id, activo.toMap());
+  /// Siguiente placa disponible para un prefijo, asignada de forma atómica.
+  ///
+  /// Formato `PREFIJO-NNNNN`. El `ON CONFLICT ... ultimo + 1` es el punto
+  /// único donde el contador avanza, así que dos altas simultáneas no pueden
+  /// emitir la misma placa.
+  Future<String> nextCodigo(String prefijo) async {
+    final p = prefijo.trim().toUpperCase();
+    final filas = await _db.executeSql(
+      'INSERT INTO activos_codigos (prefijo, ultimo) VALUES (\$1, 1) '
+      'ON CONFLICT (prefijo) DO UPDATE SET ultimo = activos_codigos.ultimo + 1 '
+      'RETURNING ultimo',
+      params: [p],
+    );
+    final n = (filas.first['ultimo'] as num).toInt();
+    return '$p-${n.toString().padLeft(5, '0')}';
+  }
+
+  /// Prefijo de la categoría del tipo (con 'ACT' de respaldo cuando el tipo no
+  /// tiene categoría o la categoría no tiene prefijo).
+  Future<String> _prefijoDeTipo(int tipoId) async {
+    final filas = await _db.executeSql(
+      'SELECT COALESCE(c.prefijo, \'\') AS prefijo '
+      'FROM activos_tipos t '
+      'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+      'WHERE t.id = \$1',
+      params: [tipoId],
+    );
+    if (filas.isEmpty) return 'ACT';
+    final p = (filas.first['prefijo'] as String?)?.trim();
+    return (p == null || p.isEmpty) ? 'ACT' : p.toUpperCase();
+  }
+
+  /// Da de alta la unidad y le asigna la placa desde la categoría de su tipo.
+  ///
+  /// Devuelve el [Activo] persistido (con `id` y `codigo`) para que la
+  /// interface pueda mostrar la placa recién emitida.
+  Future<Activo> createActivo(Activo activo) async {
+    final map = activo.toMap();
+    final prefijo = await _prefijoDeTipo(activo.tipoId ?? 0);
+    final codigo = await nextCodigo(prefijo);
+    map['codigo'] = codigo;
+    final id = await _db.insert('activos', map);
+    return Activo.fromMap({
+      ...map,
+      'id': id,
+      'codigo': codigo,
+    });
+  }
+
+  Future<void> updateActivo(int id, Activo activo) async {
+    final map = activo.toMap();
+    if (activo.tipoId != null) {
+      // Si cambia la categoría (y por tanto el prefijo de la placa), se emite
+      // una placa nueva en vez de dejar la anterior desactualizada.
+      final prefijo = await _prefijoDeTipo(activo.tipoId!);
+      final filas = await _db.executeSql(
+        'SELECT codigo FROM activos WHERE id = \$1',
+        params: [id],
+      );
+      final codigo = filas.first['codigo'] as String?;
+      final prefijoActual = (codigo == null || !codigo.contains('-'))
+          ? null
+          : codigo.split('-').first.trim().toUpperCase();
+      if (prefijoActual != prefijo) {
+        map['codigo'] = await nextCodigo(prefijo);
+      }
+    }
+    await _db.updateById('activos', id, map);
   }
 
   Future<void> deactivateActivo(int id) async {
@@ -225,11 +436,23 @@ class ActivosRepository {
   ///
   /// Si [hasta] ya existe, las dos filas quedan con el mismo valor: eso es justo
   /// lo que hace útil para corregir `hab01` contra `Hab01`.
-  Future<void> renombrarValor(String columna, String desde, String hasta) {
-    return _db.updateWhere(
+  ///
+  /// Para `estado` el valor no se toca fila por fila: se renombra el catálogo
+  /// (`activos_estados`) y la FK con `ON UPDATE CASCADE` actualiza todas las
+  /// unidades en un solo golpe.
+  Future<void> renombrarValor(
+      String columna, String desde, String hasta) async {
+    final esEstado = columna == 'estado';
+    final col = esEstado ? 'nombre' : columna;
+    var destino = hasta;
+    if ((columna == 'grupo' || columna == 'modelo') &&
+        destino.trim().isNotEmpty) {
+      destino = await _canonicoDe(columna, destino);
+    }
+    await _db.updateWhere(
       _tablaDeValor(columna),
-      {columna: desde},
-      {columna: hasta},
+      {col: desde},
+      {col: destino},
     );
   }
 
@@ -237,8 +460,13 @@ class ActivosRepository {
   ///
   /// Deja la columna en NULL, no borra la fila: quitar la ubicación de 10
   /// unidades no debería borrar 10 unidades del inventario. Para borrar
-  /// unidades están los métodos de cada una.
+  /// unidades están los métodos de cada una. El estado no se puede quitar
+  /// (las unidades siempre tienen uno); se desactiva en su catálogo.
   Future<void> quitarValor(String columna, String valor) {
+    if (columna == 'estado') {
+      throw ArgumentError(
+          'El estado no se quita de las unidades; desactívalo en el catálogo');
+    }
     return _db.updateWhere(
       _tablaDeValor(columna),
       {columna: valor},
@@ -255,6 +483,8 @@ class ActivosRepository {
     switch (columna) {
       case 'ubicacion':
         return 'activos';
+      case 'estado':
+        return 'activos_estados';
       case 'grupo':
       case 'modelo':
         return 'activos_tipos';
@@ -290,15 +520,24 @@ class ActivosRepository {
 
   /// Valores de una columna con el nº de unidades activas que lo usan.
   /// `grupo` y `modelo` viven en el catálogo (tipos); `ubicacion` y
-  /// `estado` en las unidades.
+  /// `estado` en las unidades. El estado se lee del catálogo `activos_estados`
+  /// (incluye estados sin unidades, en el orden de visualización).
   Future<List<Map<String, dynamic>>> getValoresConConteo(String columna) async {
+    if (columna == 'estado') {
+      return _db.executeSql(
+        'SELECT e.nombre AS valor, COUNT(a.id) AS n '
+        'FROM activos_estados e '
+        'LEFT JOIN activos a ON a.estado = e.nombre AND a.activo = TRUE '
+        'WHERE e.activo = TRUE '
+        'GROUP BY e.nombre, e.orden ORDER BY e.orden, e.nombre',
+      );
+    }
     if (columna == 'grupo' || columna == 'modelo') {
       return _db.executeSql(
         'SELECT t.$columna AS valor, COUNT(a.id) AS n '
         'FROM activos_tipos t '
-        'LEFT JOIN activos a ON a.tipo_id = t.id '
+        'LEFT JOIN activos a ON a.tipo_id = t.id AND a.activo = TRUE '
         'WHERE t.$columna IS NOT NULL AND t.$columna <> \'\' '
-        'AND a.activo = TRUE '
         'GROUP BY t.$columna ORDER BY t.$columna',
       );
     }
@@ -329,24 +568,27 @@ class ActivosRepository {
     }
 
     if (categoriaId != null) add('t.categoria_id = \$${i++}', categoriaId);
-    if (grupo != null && grupo.trim().isNotEmpty) add('t.grupo = \$${i++}', grupo.trim());
-    if (modelo != null && modelo.trim().isNotEmpty) add('t.modelo = \$${i++}', modelo.trim());
+    if (grupo != null && grupo.trim().isNotEmpty) {
+      add('t.grupo = \$${i++}', grupo.trim());
+    }
+    if (modelo != null && modelo.trim().isNotEmpty) {
+      add('t.modelo = \$${i++}', modelo.trim());
+    }
     if (ubicacion != null && ubicacion.trim().isNotEmpty) {
       add('a.ubicacion = \$${i++}', ubicacion.trim());
     }
-    if (estado != null && estado.trim().isNotEmpty) add('a.estado = \$${i++}', estado.trim());
+    if (estado != null && estado.trim().isNotEmpty) {
+      add('a.estado = \$${i++}', estado.trim());
+    }
 
-    final where =
-        condiciones.isEmpty ? '' : ' WHERE ${condiciones.join(' AND ')}';
-    final sql =
-        'SELECT $_colsActivo, '
+    final sql = 'SELECT $_colsActivo, '
         't.nombre AS tipo_nombre, t.grupo, t.modelo, t.categoria_id, '
         'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
         'FROM activos a '
         'JOIN activos_tipos t ON t.id = a.tipo_id '
-        'LEFT JOIN activos_categorias c ON c.id = t.categoria_id'
-        '$where '
-        'ORDER BY categoria_nombre, t.grupo, t.nombre, a.id';
+        'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+        'WHERE ${condiciones.isEmpty ? 'TRUE' : condiciones.join(' AND ')} '
+        'ORDER BY categoria_nombre, t.grupo, t.nombre, a.codigo';
     return _db.executeSql(sql, params: params);
   }
 
@@ -355,7 +597,7 @@ class ActivosRepository {
   // ---------------------------------------------------------------------
 
   /// Todas las unidades (incluye desactivadas) con datos de su tipo y
-  /// categoría resueltos por JOIN.
+  /// categoría resueltos por JOIN, en el mismo orden que la pantalla.
   Future<List<Map<String, dynamic>>> getActivosParaExportar() async {
     return _db.executeSql(
       'SELECT a.*, t.nombre, t.grupo, t.modelo, t.categoria_id, '
@@ -363,7 +605,7 @@ class ActivosRepository {
       'FROM activos a '
       'JOIN activos_tipos t ON t.id = a.tipo_id '
       'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
-      'ORDER BY categoria_nombre, t.grupo, t.nombre, a.id',
+      'ORDER BY categoria_nombre, t.grupo, t.nombre, a.codigo',
     );
   }
 

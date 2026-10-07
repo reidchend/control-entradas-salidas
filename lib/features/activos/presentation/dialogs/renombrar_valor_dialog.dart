@@ -75,19 +75,20 @@ class _RenombrarValorDialogState extends State<_RenombrarValorDialog> {
   bool _chocaConOtro(String texto) {
     final t = texto.trim();
     if (t.isEmpty || t == widget.valor.trim()) return false;
-    return widget.existentes.any((e) => e.trim().toLowerCase() == t.toLowerCase());
+    return widget.existentes
+        .any((e) => e.trim().toLowerCase() == t.toLowerCase());
   }
 
   /// Texto de ayuda bajo el campo: dice cuántas unidades quedan con el nombre
-/// nuevo y avisa si el nombre escrito ya existe como otro valor.
-String get _ayuda {
-  final n = widget.afectados;
-  final unidades = n == 1 ? '1 unidad' : '$n unidades';
-  if (_chocaConOtro(_ctrl.text)) {
-    return 'Ya existe ese valor: las $unidades de las dos quedan juntas.';
+  /// nuevo y avisa si el nombre escrito ya existe como otro valor.
+  String get _ayuda {
+    final n = widget.afectados;
+    final unidades = n == 1 ? '1 unidad' : '$n unidades';
+    if (_chocaConOtro(_ctrl.text)) {
+      return 'Ya existe ese valor: las $unidades de las dos quedan juntas.';
+    }
+    return 'Se renombra en $unidades.';
   }
-  return 'Se renombra en $unidades.';
-}
 
   void _aceptar() {
     final v = _ctrl.text.trim();

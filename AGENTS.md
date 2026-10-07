@@ -11,6 +11,14 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
+## Pendientes de producción
+
+**Regla obligatoria:** cada vez que se actualice el repositorio local (`git pull`/`git fetch`/cambio de rama), verificar si existe `PENDIENTES_PRODUCCION.md` en la raíz del proyecto.
+
+- Si existe y tiene casillas `- [ ]` sin completar, **avisar al usuario** qué pendientes quedan y recordar que requieren permisos de propietario (`postgres`, no `control_app`) para ejecutarse en la base master.
+- No ejecutar los DDL por cuenta propia a menos que el usuario lo pida explícitamente.
+- Al confirmar que un pendiente se ejecutó, borrar su casilla del archivo; si el archivo queda sin pendientes, borrar el archivo.
+
 ## Estilo de codificación modular (separación de responsabilidades)
 
 **Regla obligatoria:** Dividir el código por responsabilidad en archivos separados. No crear archivos "todo en uno" de cientos de líneas.

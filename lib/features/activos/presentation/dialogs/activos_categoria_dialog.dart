@@ -11,8 +11,16 @@ Future<ActivosCategoria?> showActivosCategoriaDialog(
   final nombreCtrl = TextEditingController(text: categoria?.nombre ?? '');
   var color = categoria?.color ?? '#2196F3';
   const colores = [
-    '#2196F3', '#4CAF50', '#FF9800', '#F44336', '#9C27B0',
-    '#00BCD4', '#795548', '#E91E63', '#3F51B5', '#607D8B',
+    '#2196F3',
+    '#4CAF50',
+    '#FF9800',
+    '#F44336',
+    '#9C27B0',
+    '#00BCD4',
+    '#795548',
+    '#E91E63',
+    '#3F51B5',
+    '#607D8B',
   ];
 
   return showDialog<ActivosCategoria>(
@@ -36,8 +44,10 @@ Future<ActivosCategoria?> showActivosCategoriaDialog(
                   onTap: () => color = c,
                   child: CircleAvatar(
                     radius: 16,
-                    backgroundColor: Color(int.parse(c.replaceFirst('#', '0xFF'))),
-                    child: color == c ? const Icon(Icons.check, size: 16) : null,
+                    backgroundColor:
+                        Color(int.parse(c.replaceFirst('#', '0xFF'))),
+                    child:
+                        color == c ? const Icon(Icons.check, size: 16) : null,
                   ),
                 ),
             ],
@@ -59,6 +69,9 @@ Future<ActivosCategoria?> showActivosCategoriaDialog(
                 id: categoria?.id ?? 0,
                 nombre: nombre,
                 color: color,
+                // El prefijo se conserva al renombrar: la placa ya emitida no
+                // debe cambiar porque la categoría cambie de nombre.
+                prefijo: categoria?.prefijo,
                 activo: categoria?.activo ?? true,
               ),
             );

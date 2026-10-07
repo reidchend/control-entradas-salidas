@@ -124,6 +124,21 @@ class ValidacionRepository {
     return null;
   }
 
+  /// Busca una factura ya registrada con el mismo número (sin importar su
+  /// estado). Devuelve `id`, `proveedor`, `fecha_factura` y `estado`, o `null`
+  /// si el número no existe. Se usa para avisar antes de vincular una segunda
+  /// entrada a un número ya validado (ver `validacion_dialog._validar`).
+  Future<Map<String, dynamic>?> buscarFacturaPorNumero(String numero) async {
+    final n = numero.trim();
+    if (n.isEmpty) return null;
+    return await _db.client
+        .from('facturas')
+        .select(
+            'id, numero_factura, proveedor, fecha_factura, estado, total_neto')
+        .eq('numero_factura', n)
+        .maybeSingle();
+  }
+
   Future<Map<String, dynamic>> crearProveedor({
     required String nombre,
     String rif = '',

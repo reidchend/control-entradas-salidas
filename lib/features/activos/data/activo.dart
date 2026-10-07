@@ -12,6 +12,7 @@ class Activo {
     this.tipoId,
     this.ubicacion,
     this.estado = 'Activo',
+    this.codigo,
     this.valor = 0,
     this.fecha,
     this.observaciones,
@@ -29,6 +30,10 @@ class Activo {
   final int? tipoId;
   final String? ubicacion;
   final String estado;
+
+  /// Placa de inventario ('PREFIJO-NNNNN'). La asigna el repositorio al
+  /// insertar la unidad; no es editable desde el formulario.
+  final String? codigo;
   final double valor;
   final String? fecha;
   final String? observaciones;
@@ -55,11 +60,10 @@ class Activo {
 
   factory Activo.fromMap(Map<String, dynamic> m) => Activo(
         id: m['id'] as int,
-        tipoId: m['tipo_id'] == null
-            ? null
-            : (m['tipo_id'] as num).toInt(),
+        tipoId: m['tipo_id'] == null ? null : (m['tipo_id'] as num).toInt(),
         ubicacion: m['ubicacion'] as String?,
         estado: (m['estado'] as String?) ?? 'Activo',
+        codigo: m['codigo'] as String?,
         valor: _toDouble(m['valor']) ?? 0,
         fecha: _fechaTexto(m['fecha']),
         observaciones: m['observaciones'] as String?,

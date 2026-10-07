@@ -260,12 +260,15 @@ jobs:
           path: app-hosteleria-windows.zip
 
   # ---------------------------------------------------------------------------
-  # Linux — POS e inventario (si se seleccionan)
+  # Linux — POS, inventario y Hostelería (si se seleccionan)
   # ---------------------------------------------------------------------------
   linux:
-    name: Linux POS & Inventario (tar.gz)
+    name: Linux POS, Inventario & Hostelería (tar.gz)
     needs: prepare
-    if: needs.prepare.outputs.pos_changed == 'true' || needs.prepare.outputs.inv_changed == 'true'
+    if: >-
+      needs.prepare.outputs.pos_changed == 'true' ||
+      needs.prepare.outputs.inv_changed == 'true' ||
+      needs.prepare.outputs.host_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -313,6 +316,22 @@ jobs:
           cp -r bundle lycoris-inventario
           mv lycoris-inventario/control_entradas_salidas lycoris-inventario/LycorisControl
           tar -czf ../../../../app-inventario-linux.tar.gz -C lycoris-inventario .
+      - name: Build Linux Hostelería
+        if: needs.prepare.outputs.host_changed == 'true'
+        env:
+          WHATSAPP_BOT_TOKEN: ${{ secrets.WHATSAPP_BOT_TOKEN }}
+        run: |
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.host_version }}+1/" pubspec.yaml
+          flutter pub get
+          flutter build linux --release -t lib/main_hosteleria.dart \
+            --dart-define=APP_ID=hosteleria \
+            --dart-define=APP_LABEL="Lycoris Hostelería" \
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.host_version }} \
+            --dart-define=WHATSAPP_BOT_TOKEN=${WHATSAPP_BOT_TOKEN}
+          cd build/linux/x64/release
+          cp -r bundle lycoris-hosteleria
+          mv lycoris-hosteleria/control_entradas_salidas lycoris-hosteleria/LycorisHostel
+          tar -czf ../../../../app-hosteleria-linux.tar.gz -C lycoris-hosteleria .
       - uses: actions/upload-artifact@v4
         if: needs.prepare.outputs.pos_changed == 'true'
         with:
@@ -323,6 +342,11 @@ jobs:
         with:
           name: app-inventario-linux
           path: app-inventario-linux.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.host_changed == 'true'
+        with:
+          name: app-hosteleria-linux
+          path: app-hosteleria-linux.tar.gz
 
   # ---------------------------------------------------------------------------
   # Android — inventario (APK)
@@ -433,7 +457,7 @@ jobs:
 
           if [ "${{ needs.prepare.outputs.host_changed }}" = "true" ]; then
             files=()
-            for f in app-hosteleria-windows.zip; do
+            for f in app-hosteleria-windows.zip app-hosteleria-linux.tar.gz; do
               if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
             done
             create_release "hosteleria-v${{ needs.prepare.outputs.host_version }}" \

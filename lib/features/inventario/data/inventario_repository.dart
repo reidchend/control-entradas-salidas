@@ -4,7 +4,7 @@ import '../../../core/models/producto.dart';
 import '../../../core/models/existencia.dart';
 
 /// Repositorio de inventario — CRUD de productos, movimientos y lista de compra.
-/// Opera directamente contra PostgreSQL (pooler Neon).
+/// Opera directamente contra PostgreSQL.
 class InventarioRepository {
   InventarioRepository(this._db);
 

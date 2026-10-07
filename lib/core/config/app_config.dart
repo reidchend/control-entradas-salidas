@@ -88,7 +88,7 @@ class AppConfig {
   }
 
   /// Identificador de la app en el updater: `pos`, `inventario` o `hosteleria`.
-  /// El POS se distribuye solo en Windows; el inventario en Windows y Android.
+  /// inventario: Windows/Linux/Android; pos y hosteleria: Windows/Linux.
   static String get appId {
     const fromEnv = String.fromEnvironment('APP_ID');
     return fromEnv.isNotEmpty ? fromEnv : 'inventario';

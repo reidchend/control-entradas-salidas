@@ -11,9 +11,9 @@
 -- contrastar datos".
 --
 -- El problema es el PIN: ahí está en texto plano, y son credenciales reales de
--- operarios. Mientras la tabla exista, un dump de la base (neon.dump, los
--- respaldos de tool/respaldos/) lleva los PIN legibles. Hashearlos en el lugar
--- los vuelve ilegibles como credencial.
+-- operarios. Mientras la tabla exista, un dump de la base (los respaldos de
+-- tool/respaldos/) lleva los PIN legibles. Hashearlos en el lugar los vuelve
+-- ilegibles como credencial.
 --
 -- Por qué hashear y no borrar:
 --

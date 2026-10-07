@@ -8,14 +8,6 @@ import 'activo_form_campos.dart';
 import 'opciones_field.dart';
 import 'tipo_selector_field.dart';
 
-const _estados = [
-  'Activo',
-  'Mantenimiento',
-  'Baja',
-  'Reservado',
-  'Traslado',
-];
-
 /// Ancho a partir del cual los campos pasan a dos columnas.
 ///
 /// El formulario viene de un `AlertDialog`, donde seis campos en una columna no
@@ -27,18 +19,25 @@ const _anchoDosColumnas = 720.0;
 ///
 /// Va aparte de la pantalla y del diálogo a propósito: los dos necesitan los
 /// mismos campos y las mismas reglas, y mantener una sola implementación evita
-/// que uno quede viejo sin que se note. Quien lo usa decide qué hacer con el
-/// [Activo] armado a través de [onGuardar].
+/// que uno quede viejo sin que se note. Quien lo usa se encarga de persistir a
+/// través de [onGuardar] (que devuelve la unidad guardada, placa incluida) y de
+/// cerrarse con [onCerrar]; el formulario decide si quedarse abierto en modo
+/// "guardar y agregar otra".
 class ActivoForm extends StatefulWidget {
   const ActivoForm({
     super.key,
     required this.tipos,
     required this.onGuardar,
-    required this.onCancelar,
+    required this.onCerrar,
     this.tipoIdFijo,
     this.unidad,
     this.categorias = const [],
+    this.estados = const ['Activo'],
+    this.grupos = const [],
+    this.modelos = const [],
     this.onCrearTipo,
+    this.onCrearEstado,
+    this.onExisteUnidad,
     this.ubicacionPreset,
     this.estadoPreset,
     this.ubicacionesSugeridas = const [],
@@ -46,18 +45,36 @@ class ActivoForm extends StatefulWidget {
 
   final List<ActivoTipo> tipos;
 
-  /// Recibe el activo ya validado. Un `await` en esta etapa deja el botón
-  /// bloqueado, así que sirve tanto para cerrar la pantalla como para persistir.
-  final Future<void> Function(Activo activo) onGuardar;
+  /// Persiste la unidad (alta o edición) y devuelve el [Activo] guardado, para
+  /// que el modo "agregar otra" pueda mostrar la placa recién emitida. Un
+  /// `await` acá deja el botón bloqueado; ante error debe lanzar excepción.
+  final Future<Activo> Function(Activo activo) onGuardar;
 
-  final VoidCallback onCancelar;
+  /// Cierra el host (pantalla o diálogo) después de guardar o cancelar.
+  final VoidCallback onCerrar;
 
   /// Cuando viene seteado el tipo no es editable (agregar a un tipo concreto
   /// desde su detalle).
   final int? tipoIdFijo;
   final Activo? unidad;
   final List<ActivosCategoria> categorias;
+
+  /// Estados del catálogo. El estado actual de una unidad que no esté en la
+  /// lista se ofrece igual, para no resetear a 'Activo' en silencio.
+  final List<String> estados;
+
+  /// Grupos y modelos existentes para sugerir al crear un tipo desde el alta
+  /// de unidad (mismo listado que se muestra en el diálogo del catálogo).
+  final List<String> grupos;
+  final List<String> modelos;
   final Future<int> Function(ActivoTipo tipo)? onCrearTipo;
+
+  /// Da de alta un estado en el catálogo (devuelve el nombre canónico).
+  final Future<String> Function(String nombre)? onCrearEstado;
+
+  /// ¿Ya existe una unidad activa de este tipo en una ubicación? Solo se
+  /// consulta al buscar un posible duplicado en el alta.
+  final Future<bool> Function(int tipoId, String ubicacion)? onExisteUnidad;
   final String? ubicacionPreset;
   final String? estadoPreset;
   final List<String> ubicacionesSugeridas;
@@ -76,6 +93,12 @@ class _ActivoFormState extends State<ActivoForm> {
   /// Tipo recién creado y todavía no persistido: se guarda junto con la unidad.
   ActivoTipo? _nuevo;
 
+  /// Estados del catálogo; los recién creados se agregan acá.
+  late final List<String> _estados = [...widget.estados];
+
+  /// Filtro opcional por categoría para acotar la lista de tipos al elegir.
+  int? _categoriaFiltro;
+
   late final TextEditingController _tipoCtrl;
   late final TextEditingController _ubicacionCtrl;
   late final TextEditingController _valorCtrl;
@@ -85,6 +108,11 @@ class _ActivoFormState extends State<ActivoForm> {
   late String _estado;
   String? _errorTipo;
   bool _guardando = false;
+  bool _agregarOtro = false;
+
+  /// Cuando el usuario confirma un posible duplicado, no se vuelve a preguntar
+  /// por la misma pareja tipo+ubicación dentro de la sesión (alta en serie).
+  final Set<String> _duplicadosAceptados = {};
 
   @override
   void initState() {
@@ -114,7 +142,7 @@ class _ActivoFormState extends State<ActivoForm> {
       text: unidad?.ubicacion?.trim() ?? widget.ubicacionPreset ?? '',
     );
     _estado = (unidad?.estado ?? widget.estadoPreset ?? 'Activo').trim();
-    if (_estado.isEmpty || !_estados.contains(_estado)) {
+    if (_estado.isEmpty) {
       _estado = 'Activo';
     }
     _valorCtrl = TextEditingController(
@@ -153,6 +181,16 @@ class _ActivoFormState extends State<ActivoForm> {
     return t == null ? '' : textoTipo(t);
   }
 
+  /// Tipos que el selector puede mostrar, acotados por el filtro de categoría.
+  List<ActivoTipo> get _tiposVisibles {
+    final f = _categoriaFiltro;
+    if (f == null) return _tipos;
+    return [
+      for (final t in _tipos)
+        if (t.categoriaId == f) t
+    ];
+  }
+
   /// Se dispara cada vez que cambia el texto del campo de tipo.
   ///
   /// `TextEditingController.addListener` entrega un `VoidCallback` (sin
@@ -169,7 +207,12 @@ class _ActivoFormState extends State<ActivoForm> {
   }
 
   Future<void> _elegirNuevoTipo() async {
-    final nuevo = await showTipoDialog(context, categorias: widget.categorias);
+    final nuevo = await showTipoDialog(
+      context,
+      categorias: widget.categorias,
+      grupos: widget.grupos,
+      modelos: widget.modelos,
+    );
     if (nuevo == null || !mounted) return;
     setState(() {
       _nuevo = nuevo;
@@ -188,28 +231,65 @@ class _ActivoFormState extends State<ActivoForm> {
       });
 
   Future<void> _guardar() async {
-    var tipoId = _selected;
-    if (tipoId == null || tipoId <= 0) {
-      final nuevo = _nuevo;
-      if (nuevo == null || widget.onCrearTipo == null) {
-        setState(() => _errorTipo = 'Selecciona o creá un tipo');
-        return;
-      }
-      try {
-        tipoId = await widget.onCrearTipo!(nuevo);
-      } catch (e) {
-        setState(() => _errorTipo = 'No se pudo crear el tipo');
-        return;
-      }
-    }
-    if (!mounted) return;
     setState(() => _guardando = true);
     try {
-      await widget.onGuardar(
+      var tipoId = _selected;
+      if (tipoId == null || tipoId <= 0) {
+        final nuevo = _nuevo;
+        if (nuevo == null || widget.onCrearTipo == null) {
+          setState(() {
+            _guardando = false;
+            _errorTipo = 'Selecciona o creá un tipo';
+          });
+          return;
+        }
+        try {
+          tipoId = await widget.onCrearTipo!(nuevo);
+        } catch (e) {
+          setState(() {
+            _guardando = false;
+            _errorTipo = 'No se pudo crear el tipo';
+          });
+          return;
+        }
+        if (!mounted) return;
+      }
+
+      final ubi = _blanco(_ubicacionCtrl.text);
+
+      // Advertencia (no bloqueo) de que esa unidad ya existe en la ubicación:
+      // evita registrar dos veces la misma por accidente.
+      if (widget.unidad == null &&
+          ubi != null &&
+          widget.onExisteUnidad != null) {
+        final key = '$tipoId|$ubi';
+        if (!_duplicadosAceptados.contains(key)) {
+          final yaExiste = await widget.onExisteUnidad!(tipoId, ubi);
+          if (!mounted) {
+            setState(() => _guardando = false);
+            return;
+          }
+          if (yaExiste) {
+            final ok = await _confirmarDuplicado(ubi);
+            if (!mounted) {
+              setState(() => _guardando = false);
+              return;
+            }
+            if (ok != true) {
+              setState(() => _guardando = false);
+              return;
+            }
+            _duplicadosAceptados.add(key);
+          }
+        }
+      }
+      if (!mounted) return;
+
+      final guardado = await widget.onGuardar(
         Activo(
           id: widget.unidad?.id ?? 0,
           tipoId: tipoId,
-          ubicacion: _blanco(_ubicacionCtrl.text),
+          ubicacion: ubi,
           estado: _estado,
           valor: double.tryParse(_valorCtrl.text.trim()) ?? 0,
           fecha: _blanco(_fechaCtrl.text),
@@ -217,9 +297,106 @@ class _ActivoFormState extends State<ActivoForm> {
           activo: widget.unidad?.activo ?? true,
         ),
       );
+      if (!mounted) return;
+
+      if (widget.unidad == null && _agregarOtro) {
+        final codigo = guardado.codigo;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(codigo == null ? 'Unidad guardada' : 'Guardada: $codigo'),
+          duration: const Duration(seconds: 3),
+        ));
+        return;
+      }
+      widget.onCerrar();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo guardar: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
+      }
     } finally {
+      // Si `onCerrar` cerró el host desmonta el formulario: `mounted` ya es
+      // falso y el `setState` se omite.
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  Future<bool?> _confirmarDuplicado(String ubicacion) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ya existe en esta ubicación'),
+        content: Text(
+          'Ya hay una unidad de este tipo en «$ubicacion».\n\n'
+          '¿Agregar de todos modos? (Útil si son varias iguales)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Agregar de todos modos'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _crearEstado() async {
+    final ctrl = TextEditingController();
+    final nombre = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuevo estado'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nombre del estado'),
+          onSubmitted: (v) {
+            final t = v.trim();
+            if (t.isNotEmpty) Navigator.pop(ctx, t);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final t = ctrl.text.trim();
+              if (t.isNotEmpty) Navigator.pop(ctx, t);
+            },
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (nombre == null || nombre.trim().isEmpty || !mounted) return;
+    try {
+      final creado = await widget.onCrearEstado!(nombre);
+      if (!mounted) return;
+      setState(() {
+        if (!_estados.contains(creado)) _estados.add(creado);
+        _estado = creado;
+      });
+    } catch (e) {
+      if (mounted) _snack('No se pudo crear el estado: $e');
+    }
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
   }
 
   static String? _blanco(String s) {
@@ -237,7 +414,9 @@ class _ActivoFormState extends State<ActivoForm> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dosColumnas = constraints.maxWidth >= _anchoDosColumnas;
+        final filtroCategoria = _campoCategoriaFiltro();
         final campos = <Widget>[
+          if (filtroCategoria != null) filtroCategoria,
           _campoTipo(),
           _campoEstado(),
           _campoUbicacion(),
@@ -282,13 +461,39 @@ class _ActivoFormState extends State<ActivoForm> {
               const SizedBox(height: 4),
               ActivoAcciones(
                 guardando: _guardando,
-                onCancelar: widget.onCancelar,
+                lote: widget.unidad == null,
+                agregarOtro: _agregarOtro,
+                onToggleAgregarOtro: (v) => setState(() => _agregarOtro = v ?? false),
+                onCancelar: widget.onCerrar,
                 onGuardar: _guardar,
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget? _campoCategoriaFiltro() {
+    if (widget.tipoIdFijo != null || widget.categorias.isEmpty) return null;
+    return _campo(
+      DropdownButtonFormField<int?>(
+        initialValue: _categoriaFiltro,
+        decoration: const InputDecoration(
+          labelText: 'Categoría',
+          helperText: 'Acota los tipos para elegir',
+        ),
+        items: [
+          const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
+          for (final c in widget.categorias)
+            DropdownMenuItem(value: c.id, child: Text(c.nombre)),
+        ],
+        onChanged: (v) => setState(() {
+          _categoriaFiltro = v;
+          _selected = null;
+          _tipoCtrl.clear();
+        }),
+      ),
     );
   }
 
@@ -306,7 +511,7 @@ class _ActivoFormState extends State<ActivoForm> {
     return _campo(
       TipoSelectorField(
         controller: _tipoCtrl,
-        tipos: _tipos,
+        tipos: _tiposVisibles,
         onSelected: _elegirTipo,
         onCrearNuevo: widget.onCrearTipo == null ? null : _elegirNuevoTipo,
         errorText: _errorTipo,
@@ -314,19 +519,42 @@ class _ActivoFormState extends State<ActivoForm> {
     );
   }
 
-  Widget _campoEstado() => _campo(
-        DropdownButtonFormField<String>(
-          initialValue: _estado,
-          decoration: const InputDecoration(labelText: 'Estado'),
-          items: [
-            if (!_estados.contains(_estado))
-              DropdownMenuItem(value: _estado, child: Text(_estado)),
-            for (final s in _estados)
-              DropdownMenuItem(value: s, child: Text(s)),
-          ],
-          onChanged: (v) => setState(() => _estado = v ?? _estado),
-        ),
-      );
+  Widget _campoEstado() {
+    final estados = List<String>.from(_estados);
+    // Si la unidad tiene un estado que ya no está en el catálogo de la app, se
+    // ofrece igual en la lista: editar no debe resetear a 'Activo' en silencio.
+    if (!estados.contains(_estado)) estados.add(_estado);
+    return _campo(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _estado,
+            decoration: const InputDecoration(labelText: 'Estado'),
+            items: [
+              for (final s in estados)
+                DropdownMenuItem(value: s, child: Text(s)),
+            ],
+            onChanged: (v) => setState(() => _estado = v ?? _estado),
+          ),
+          if (widget.onCrearEstado != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+                icon: const Icon(Icons.add, size: 16),
+                label:
+                    const Text('Crear estado', style: TextStyle(fontSize: 12)),
+                onPressed: _crearEstado,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _campoUbicacion() => _campo(
         OpcionesField<String>(
@@ -347,10 +575,9 @@ class _ActivoFormState extends State<ActivoForm> {
       );
 
   Widget _campoFecha() => _campo(
-        ActivoCampoTexto(
+        ActivoCampoFecha(
           controller: _fechaCtrl,
-          label: 'Fecha (AAAA-MM-DD)',
-          hintText: '2025-01-15',
+          label: 'Fecha',
         ),
       );
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/orden_natural.dart';
 import '../../data/activo.dart';
 import '../../data/activo_tipo.dart';
 import '../../data/activos_filtro.dart';
@@ -36,8 +37,7 @@ class ActivosFiltradosPanel extends ConsumerStatefulWidget {
       _ActivosFiltradosPanelState();
 }
 
-class _ActivosFiltradosPanelState
-    extends ConsumerState<ActivosFiltradosPanel> {
+class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
   late Future<List<Map<String, dynamic>>> _fut;
 
   @override
@@ -97,22 +97,27 @@ class _ActivosFiltradosPanelState
     final tipos = await _tipos();
     final categorias = await widget.repo.getCategorias();
     final ubicaciones = await widget.repo.getUbicaciones();
+    final estados = await widget.repo.getEstados();
+    final grupos = await widget.repo.getGrupos();
+    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
-    final editado = await showUnidadDialog(
+    await showUnidadDialog(
       context,
       tipos: tipos,
       unidad: activo,
       categorias: categorias,
+      estados: estados,
+      grupos: grupos,
+      modelos: modelos,
+      onGuardar: (a) async {
+        await widget.repo.updateActivo(activo.id, a);
+        return a;
+      },
       onCrearTipo: (t) => widget.repo.createTipo(t),
+      onCrearEstado: (n) => widget.repo.createEstado(n),
       ubicacionesSugeridas: ubicaciones,
     );
-    if (editado == null) return;
-    try {
-      await widget.repo.updateActivo(activo.id, editado);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error al editar: $e');
-    }
+    if (mounted) await _recargar();
   }
 
   Future<void> _desactivar(Map<String, dynamic> row) async {
@@ -284,7 +289,7 @@ class _ActivosFiltradosPanelState
       final cat = (f['categoria_nombre'] as String?) ?? 'Sin categoría';
       porCategoria.putIfAbsent(cat, () => []).add(f);
     }
-    final cats = porCategoria.keys.toList()..sort();
+    final cats = porCategoria.keys.toList()..sort(compararNatural);
 
     final out = <Widget>[];
     for (final cat in cats) {
@@ -300,7 +305,7 @@ class _ActivosFiltradosPanelState
         final t = ((f['tipo_nombre'] as String?) ?? '').trim();
         porTipo.putIfAbsent(t.isEmpty ? 'Sin nombre' : t, () => []).add(f);
       }
-      final tipos = porTipo.keys.toList()..sort();
+      final tipos = porTipo.keys.toList()..sort(compararNatural);
       for (final t in tipos) {
         out.add(SeccionHeader(
           titulo: t,

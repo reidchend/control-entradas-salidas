@@ -385,7 +385,7 @@ Si la app no logra conectar por proxy: verificar que `cloudflared` sigue corrien
 
 ## 10. Notas importantes
 
-- **No commitear secretos.** `.env.local`, tokens, `auth/` de WhatsApp, `cloudflared.exe`, `node_modules/`, dumps (`neon.dump`), etc., deben quedar fuera de git.
+- **No commitear secretos.** `.env.local`, tokens, `auth/` de WhatsApp, `cloudflared.exe`, `node_modules/`, dumps de la base, etc., deben quedar fuera de git.
 - **Placeholder repetido:** Prohibido en SQL crudo (`executeSql`). Usar números distintos (`$1`, `$2`) aunque el valor sea el mismo. El builder (`PgClient`) ya renumera por orden de aparición.
 - **Orden de parámetros:** Corregido en `PgClient._bindPlan()` (renumera por orden textual). Esto evita el cruce entre SET y WHERE en `UPDATE`.
 - **SELECT fuera de transacción:** El proxy devuelve filas correctamente (corregido `_exec_autocommit()`).
