@@ -98,5 +98,8 @@ tool/respaldos/
 # sesion de la cuenta.
 /whatsapp_bot/node_modules/
 /whatsapp_bot/auth/
+# Copias de la sesion en subcarpetas del bot (ej: "Nueva carpeta") filtran la
+# misma credencial: la regla de arriba, anclada, no las cubre.
+/whatsapp_bot/*/auth/
 /whatsapp_bot/cloudflared.exe
 # config.json SI se versiona (tiene grupos y puertos, no secretos).
