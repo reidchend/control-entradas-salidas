@@ -89,6 +89,34 @@ class PosRepository {
     });
   }
 
+  /// Cierra en BD todas las sesiones abiertas de [usuarioId] excepto
+  /// [exceptoId]: limpia turnos duplicados (doble login concurrente o sesiones
+  /// huérfanas de un mismo cajero) para que nunca queden dos turnos abiertos a
+  /// la vez del mismo usuario.
+  Future<void> cerrarSesionesAbiertasDe(
+    int usuarioId, {
+    required int exceptoId,
+  }) async {
+    await _cerrarAbiertosDeUsuario(_db, usuarioId, exceptoId: exceptoId);
+  }
+
+  Future<void> _cerrarAbiertosDeUsuario(
+    PostgresService db,
+    int usuarioId, {
+    required int exceptoId,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    await db.executeCommand(
+      'UPDATE pos_sesiones SET cerrada_en = \$1, '
+      'caja_final = caja_inicial + COALESCE((SELECT SUM(total) '
+      'FROM pos_ventas v WHERE v.sesion_id = pos_sesiones.id '
+      "AND v.estado = 'vigente'), 0), "
+      'updated_at = \$1 '
+      'WHERE usuario_id = \$2 AND id <> \$3 AND cerrada_en IS NULL',
+      params: [now, usuarioId, exceptoId],
+    );
+  }
+
   Future<double> _totalVigenteDeSesion(int sesionId) async {
     final rows = await _db.client
         .from('pos_ventas')
@@ -839,6 +867,12 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
         'caja_final': cierre.cajaFinal,
         'updated_at': now,
       });
+      // Cerrar atómicamente cualquier OTRA sesión abierta del mismo cajero
+      // (duplicados por doble login o turnos huérfanos): al cerrar el turno
+      // no deben quedar abiertas para que el login no siga marcando 'Turno
+      // abierto'.
+      await _cerrarAbiertosDeUsuario(tx, cierre.usuarioId,
+          exceptoId: cierre.sesionId);
     });
   }
 }

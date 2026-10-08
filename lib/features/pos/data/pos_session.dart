@@ -69,12 +69,26 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
 
     final abierto = await repo.getSesionActivaDeUsuario(usuario.id);
     if (abierto != null) {
-      // Turno del MISMO usuario abierto: retomarlo.
+      // Turno del MISMO usuario abierto: retomarlo. De paso se limpian turnos
+      // duplicados/huérfanos del cajero (doble login o sesiones viejas):
+      // queda solo el más reciente, el que se está retomando.
+      await repo.cerrarSesionesAbiertasDe(usuario.id,
+          exceptoId: abierto.sesion.id);
       state = PosSesionActiva(usuario: usuario, sesionId: abierto.sesion.id);
       return SesionLoginResult.retomada;
     }
 
     final sesionId = await repo.abrirSesion(usuario.id);
+    // Guard contra doble login concurrente (dos toques seguidos): si entre la
+    // comprobación y el alta otra sesión del mismo cajero quedó más reciente,
+    // se cierra la nuestra (perdedora) y se retoma la vigente, para que nunca
+    // queden dos turnos abiertos del mismo usuario.
+    final vigente = await repo.getSesionActivaDeUsuario(usuario.id);
+    if (vigente != null && vigente.sesion.id != sesionId) {
+      await repo.forzarCerrarSesion(sesionId);
+      state = PosSesionActiva(usuario: usuario, sesionId: vigente.sesion.id);
+      return SesionLoginResult.retomada;
+    }
     state = PosSesionActiva(usuario: usuario, sesionId: sesionId);
     return SesionLoginResult.nueva;
   }
