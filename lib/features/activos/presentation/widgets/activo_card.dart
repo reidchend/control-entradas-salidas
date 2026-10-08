@@ -57,27 +57,11 @@ class ActivoCard extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if ((activo.modelo ?? '').trim().isNotEmpty)
+              _linea(
+                  context, Icons.sell_outlined, activo.modelo!.trim(), colors),
             if (subtexto.isNotEmpty)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1.5),
-                    child: Icon(Icons.place_outlined,
-                        size: 14, color: colors.outline),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      subtexto,
-                      style: TextStyle(
-                          fontSize: 12.5, color: colors.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+              _linea(context, Icons.place_outlined, subtexto, colors),
             Row(
               children: [
                 if ((activo.codigo ?? '').trim().isNotEmpty)
@@ -118,6 +102,30 @@ class ActivoCard extends StatelessWidget {
   String _fmtValor(double v) {
     if (v == v.roundToDouble()) return v.toStringAsFixed(0);
     return v.toStringAsFixed(2);
+  }
+
+  /// Línea compacta icono + texto (modelo, ubicación) con elipsis, para que un
+  /// modelo largo no rompa la tarjeta.
+  Widget _linea(
+      BuildContext context, IconData icono, String texto, ColorScheme colors) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1.5),
+          child: Icon(icono, size: 14, color: colors.outline),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(fontSize: 12.5, color: colors.onSurfaceVariant),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _chip(BuildContext context, String text, {required Color color}) {

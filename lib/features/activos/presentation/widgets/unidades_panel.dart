@@ -73,20 +73,41 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
     if (mounted) await _recargar();
   }
 
+  /// Todos los tipos activos, con el tipo actual asegurado aunque esté
+  /// desactivado: al editar una unidad de este panel el tipo ya no viene fijo,
+  /// así que debe poder elegirse cualquiera y no perder el actual.
+  Future<List<ActivoTipo>> _todosLosTipos() async {
+    final maps = await widget.repo.getTipos();
+    final tipos = [for (final m in maps) m['tipo'] as ActivoTipo];
+    if (!tipos.any((t) => t.id == widget.tipo.id)) {
+      tipos.insert(0, widget.tipo);
+    }
+    return tipos;
+  }
+
+  /// Edita la unidad. A diferencia de agregar (siempre de este tipo), acá el
+  /// tipo es editable: se puede mover la unidad a otro tipo o crear uno nuevo.
   Future<void> _editar(Activo activo) async {
+    final tipos = await _todosLosTipos();
     final ubicaciones = await widget.repo.getUbicaciones();
     final estados = await widget.repo.getEstados();
+    final categorias = await widget.repo.getCategorias();
+    final grupos = await widget.repo.getGrupos();
+    final modelos = await widget.repo.getModelos();
     if (!mounted) return;
     await showUnidadDialog(
       context,
-      tipos: [widget.tipo],
-      tipoIdFijo: widget.tipo.id,
+      tipos: tipos,
       unidad: activo,
+      categorias: categorias,
       estados: estados,
+      grupos: grupos,
+      modelos: modelos,
       onGuardar: (a) async {
         await widget.repo.updateActivo(activo.id, a);
         return a;
       },
+      onCrearTipo: (t) => widget.repo.createTipo(t),
       onCrearEstado: (n) => widget.repo.createEstado(n),
       ubicacionesSugeridas: ubicaciones,
     );
