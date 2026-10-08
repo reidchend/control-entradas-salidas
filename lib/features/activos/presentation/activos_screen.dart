@@ -13,15 +13,16 @@ import 'dialogs/activos_excel_dialog.dart';
 import 'dialogs/tipo_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
+import 'widgets/activos_tipos_grid.dart';
 import 'widgets/activos_valores_grid.dart';
 import 'widgets/tipos_panel.dart';
 import 'widgets/unidades_panel.dart';
 
 /// Pantalla de Inventario de Activos (catálogo de tipos + unidades):
-/// - Raíz: grid de categorías + selector de dimensión (Ubicación, Grupo,
-///   Modelo, Estado).
-/// - Categoría → el nivel de tipos del catálogo (con su conteo de unidades).
+/// - Raíz: grilla de tipos (vista principal) agrupada por categoría, con
+///   selector de dimensión (Categorías, Ubicación, Grupo, Modelo, Estado).
 /// - Tipo → el detalle de sus unidades físicas (por ubicación).
+/// - Categoría → el nivel de tipos del catálogo (con su conteo de unidades).
 /// El selector por valor (ubicación/grupo/modelo/estado) muestra las
 /// unidades que cumplen esa dimensión.
 class ActivosScreen extends ConsumerStatefulWidget {
@@ -55,7 +56,7 @@ const _dims = <String, _DimInfo>{
 };
 
 class _ActivosScreenState extends ConsumerState<ActivosScreen> {
-  String _dim = 'categoria';
+  String _dim = 'tipo';
   ActivosCategoria? _categoria;
   ActivoTipo? _tipo;
   String? _valor;
@@ -223,6 +224,11 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         child: SegmentedButton<String>(
           segments: const [
             ButtonSegment(
+              value: 'tipo',
+              label: Text('Tipos'),
+              icon: Icon(Icons.dashboard_customize_outlined, size: 18),
+            ),
+            ButtonSegment(
               value: 'categoria',
               label: Text('Categorías'),
               icon: Icon(Icons.category_outlined, size: 18),
@@ -259,6 +265,20 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   Widget _buildGrid(ActivosRepository repo, ColorScheme colors) {
     // Sin key con `_tick`: cada grid se recarga solo tras su propio cambio, y
     // poner la key acá dispararía una segunda consulta idéntica.
+    if (_dim == 'tipo') {
+      return ActivosTiposGrid(
+        repo: repo,
+        searchTerm: _search,
+        onOpenTipo: (t) => setState(() {
+          _tipo = t;
+          _categoria = null;
+          _valor = null;
+          _tick++;
+          _search = '';
+          _searchCtrl.clear();
+        }),
+      );
+    }
     if (_dim == 'categoria') {
       return ActivosCategoriasGrid(
         repo: repo,

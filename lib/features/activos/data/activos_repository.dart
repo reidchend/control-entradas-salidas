@@ -185,7 +185,8 @@ class ActivosRepository {
   // Tipos (catálogo)
   // ---------------------------------------------------------------------
 
-  /// Tipos activos de una categoría (o todos) con su conteo de unidades.
+  /// Tipos activos de una categoría (o todos) con su conteo de unidades y el
+  /// nombre de su categoría (para agrupar en la grilla raíz).
   /// [search] filtra por nombre, grupo o modelo (insensible a mayúsculas).
   Future<List<Map<String, dynamic>>> getTipos({
     int? categoriaId,
@@ -210,12 +211,14 @@ class ActivosRepository {
     }
 
     final rows = await _db.executeSql(
-      'SELECT t.*, COUNT(a.id) AS unidades '
+      'SELECT t.*, COUNT(a.id) AS unidades, '
+      'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
       'FROM activos_tipos t '
       'LEFT JOIN activos a ON a.tipo_id = t.id '
+      'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
       'WHERE ${condiciones.join(' AND ')} '
-      'GROUP BY t.id '
-      'ORDER BY t.nombre',
+      'GROUP BY t.id, c.nombre '
+      'ORDER BY c.nombre, t.nombre',
       params: params,
     );
     return [
@@ -223,6 +226,8 @@ class ActivosRepository {
         {
           'tipo': ActivoTipo.fromMap(r),
           'unidades': (r['unidades'] as num?)?.toInt() ?? 0,
+          'categoria_nombre':
+              (r['categoria_nombre'] as String?) ?? 'Sin categoría',
         }
     ];
   }
