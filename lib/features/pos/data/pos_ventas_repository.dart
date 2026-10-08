@@ -29,38 +29,59 @@ class PosVentasRepository {
     final itemsJson = jsonEncode(items);
     final now = DateTime.now().toIso8601String();
 
-    Map<String, dynamic>? existente;
-    if (mesaId != null) {
-      final rows = await _db.client
-          .from('pos_comandas')
-          .select()
-          .eq('mesa_id', mesaId)
-          .eq('estado', 'abierta')
-          .order('id', ascending: false)
-          .limit(1);
-      if (rows.isNotEmpty) existente = rows.first;
-    } else if (habitacionId != null) {
-      final rows = await _db.client
-          .from('pos_comandas')
-          .select()
-          .eq('habitacion_id', habitacionId)
-          .eq('estado', 'abierta')
-          .order('id', ascending: false)
-          .limit(1);
-      if (rows.isNotEmpty) existente = rows.first;
-    }
+    // Toda la operación va en una transacción que primero bloquea la fila de
+    // la mesa/habitación (`FOR UPDATE`). Así, si dos guardados de la misma
+    // ubicación llegan a la vez (doble toque, dos dispositivos, reintento por
+    // red lenta), el segundo espera al commit del primero y encuentra la
+    // comanda ya creada: actualiza en vez de insertar otra. Sin el lock, ambos
+    // pasaban el chequeo "no hay comanda abierta" y se insertaba el duplicado
+    // que aparecía dos veces en la lista de comandas activas.
+    return _db.transaction<int>((tx) async {
+      if (mesaId != null) {
+        await tx.executeSql(
+          'SELECT id FROM pos_mesas WHERE id = \$1 FOR UPDATE',
+          params: [mesaId],
+        );
+      } else if (habitacionId != null) {
+        await tx.executeSql(
+          'SELECT id FROM habitaciones WHERE id = \$1 FOR UPDATE',
+          params: [habitacionId],
+        );
+      }
 
-    int id;
-    if (existente != null) {
-      id = existente['id'] as int;
-      await _db.updateById('pos_comandas', id, {
-        'items_json': itemsJson,
-        'total': total,
-        'updated_at': now,
-      });
-    } else {
+      Map<String, dynamic>? existente;
+      if (mesaId != null) {
+        final rows = await tx.client
+            .from('pos_comandas')
+            .select()
+            .eq('mesa_id', mesaId)
+            .eq('estado', 'abierta')
+            .order('id', ascending: false)
+            .limit(1);
+        if (rows.isNotEmpty) existente = rows.first;
+      } else if (habitacionId != null) {
+        final rows = await tx.client
+            .from('pos_comandas')
+            .select()
+            .eq('habitacion_id', habitacionId)
+            .eq('estado', 'abierta')
+            .order('id', ascending: false)
+            .limit(1);
+        if (rows.isNotEmpty) existente = rows.first;
+      }
+
+      if (existente != null) {
+        final id = existente['id'] as int;
+        await tx.updateById('pos_comandas', id, {
+          'items_json': itemsJson,
+          'total': total,
+          'updated_at': now,
+        });
+        return id;
+      }
+
       final syncUuid = _uuid.v4();
-      id = await _db.insert('pos_comandas', {
+      return tx.insert('pos_comandas', {
         'sesion_id': sesionId,
         'mesa_id': mesaId,
         'habitacion_id': habitacionId,
@@ -70,8 +91,7 @@ class PosVentasRepository {
         'sync_uuid': syncUuid,
         'created_at': now,
       });
-    }
-    return id;
+    });
   }
 
   Future<PosComanda?> getComanda(int id) async {

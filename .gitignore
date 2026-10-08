@@ -19,6 +19,10 @@ graphify-out/
 *.db-wal
 *.sqlite
 
+# Volcados de base de datos (pg_dump): no son codigo y pueden traer datos reales.
+neon.dump
+*.dump
+
 # Python venv del proxy SQL (tool/server.py)
 /tool/venv/
 

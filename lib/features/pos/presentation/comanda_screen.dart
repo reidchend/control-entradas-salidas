@@ -72,6 +72,11 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   String _tasaFecha = '';
   bool _iniciando = true;
   bool _consultandoTasa = false;
+  // Evitan que un segundo toque (o un reintento mientras la red está lenta)
+  // dispare otra vez guardar/eliminar/cobrar y duplique la comanda/venta.
+  bool _guardando = false;
+  bool _eliminando = false;
+  bool _cobrando = false;
 
   _Seccion _seccion = _Seccion.categorias;
   final _historial = <_Snapshot>[];
@@ -168,28 +173,36 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   Future<void> _guardar() async {
-    if (_items.isEmpty) return;
-    final total = _total;
-    final comandaId = await ref.read(posVentasRepoProvider)!.guardarComanda(
-          widget.sesion.sesionId,
-          [for (final i in _items) i.toJson()],
-          total,
-          mesaId: widget.mesa?.id,
-          habitacionId: widget.habitacion?.id,
-        );
-    _comandaId = comandaId;
-    ref.invalidate(mesasOcupadasProvider);
-    ref.invalidate(habitacionesOcupadasProvider);
-    ref.invalidate(comandasActivasProvider);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
-    widget.onBack();
+    if (_guardando || _items.isEmpty) return;
+    setState(() => _guardando = true);
+    try {
+      final total = _total;
+      final comandaId = await ref.read(posVentasRepoProvider)!.guardarComanda(
+            widget.sesion.sesionId,
+            [for (final i in _items) i.toJson()],
+            total,
+            mesaId: widget.mesa?.id,
+            habitacionId: widget.habitacion?.id,
+          );
+      _comandaId = comandaId;
+      ref.invalidate(mesasOcupadasProvider);
+      ref.invalidate(habitacionesOcupadasProvider);
+      ref.invalidate(comandasActivasProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
+      widget.onBack();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Error al guardar la comanda: $e', color: const Color(0xFFEF5350));
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
   }
 
   Future<void> _eliminarComanda() async {
     final id = _comandaId;
-    if (id == null) return;
+    if (id == null || _eliminando) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -207,16 +220,24 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    await ref.read(posVentasRepoProvider)!.eliminarComanda(id);
-    _comandaId = null;
-    _items.clear();
-    ref.invalidate(mesasOcupadasProvider);
-    ref.invalidate(habitacionesOcupadasProvider);
-    ref.invalidate(comandasActivasProvider);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Comanda eliminada')));
-    widget.onBack();
+    setState(() => _eliminando = true);
+    try {
+      await ref.read(posVentasRepoProvider)!.eliminarComanda(id);
+      _comandaId = null;
+      _items.clear();
+      ref.invalidate(mesasOcupadasProvider);
+      ref.invalidate(habitacionesOcupadasProvider);
+      ref.invalidate(comandasActivasProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Comanda eliminada')));
+      widget.onBack();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Error al eliminar la comanda: $e', color: const Color(0xFFEF5350));
+    } finally {
+      if (mounted) setState(() => _eliminando = false);
+    }
   }
 
   void _cobrar() {
@@ -233,7 +254,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   Future<void> _confirmarCobro() async {
-    if (!mounted) return;
+    if (_cobrando || !mounted) return;
+    setState(() => _cobrando = true);
     final repo = ref.read(posVentasRepoProvider)!;
     final mesaI = widget.mesa?.id;
     final habId = widget.habitacion?.id;
@@ -311,6 +333,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       final msg = ex is Exception ? (ex.toString().replaceFirst('Exception: ', '')) : '$ex';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Error al cobrar: $msg')));
+    } finally {
+      if (mounted) setState(() => _cobrando = false);
     }
   }
 
@@ -1074,6 +1098,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
 
   Widget _franjaBotones() {
     final tieneItems = _items.isNotEmpty;
+    final ocupado = _guardando || _eliminando || _cobrando;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
@@ -1085,20 +1110,32 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       child: Row(
         children: [
           OutlinedButton.icon(
-            onPressed: widget.onBack,
+            onPressed: ocupado ? null : widget.onBack,
             icon: const Icon(Icons.cancel, color: Color(0xFFEF5350)),
             label: const Text('Cancelar'),
           ),
           const SizedBox(width: 8),
           OutlinedButton.icon(
-            onPressed: _comandaId == null ? null : _eliminarComanda,
-            icon: const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
+            onPressed: (_comandaId == null || ocupado) ? null : _eliminarComanda,
+            icon: _eliminando
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
             label: const Text('Eliminar'),
           ),
           const Spacer(),
           FilledButton.icon(
-            onPressed: tieneItems ? _guardar : null,
-            icon: const Icon(Icons.save_outlined),
+            onPressed: (tieneItems && !ocupado) ? _guardar : null,
+            icon: _guardando
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.save_outlined),
             label: const Text('Guardar'),
           ),
           const SizedBox(width: 8),
@@ -1106,8 +1143,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF4CAF50),
             ),
-            onPressed: tieneItems ? _cobrar : null,
-            icon: const Icon(Icons.payments_outlined),
+            onPressed: (tieneItems && !ocupado) ? _cobrar : null,
+            icon: _cobrando
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.payments_outlined),
             label: const Text('Cobrar'),
           ),
         ],
