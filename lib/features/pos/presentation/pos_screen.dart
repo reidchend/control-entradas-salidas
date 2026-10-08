@@ -537,16 +537,28 @@ class _LoginViewState extends ConsumerState<_LoginView> {
   int? _selectedId;
 
   Future<void> _login(PosUsuario u) async {
-    if (u.pinHash != null && u.pinHash!.isNotEmpty) {
-      final result = await showPinDialog(context, u);
-      // El diálogo ya inicia la sesión internamente con el PIN. Solo
-      // invalidamos la lista si se canceló o el PIN fue incorrecto.
-      if (result == null || result == SesionLoginResult.pinIncorrecto) {
-        if (mounted) ref.invalidate(usuariosProvider);
+    try {
+      if (u.pinHash != null && u.pinHash!.isNotEmpty) {
+        final result = await showPinDialog(context, u);
+        // El diálogo ya inicia la sesión internamente con el PIN. Solo
+        // invalidamos la lista si se canceló o el PIN fue incorrecto.
+        if (result == null || result == SesionLoginResult.pinIncorrecto) {
+          if (mounted) ref.invalidate(usuariosProvider);
+        }
+        return;
       }
-      return;
+      await ref.read(posSessionProvider.notifier).iniciarSesion(u);
+    } catch (e) {
+      // Sin esto, cualquier fallo al abrir/retomar el turno (p. ej. una query
+      // rechazada por la base) se perdía y el botón parecía "no hacer nada".
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo iniciar sesión: $e'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
     }
-    await ref.read(posSessionProvider.notifier).iniciarSesion(u);
   }
 
   @override

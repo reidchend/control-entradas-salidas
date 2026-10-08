@@ -111,9 +111,9 @@ class PosRepository {
       'caja_final = caja_inicial + COALESCE((SELECT SUM(total) '
       'FROM pos_ventas v WHERE v.sesion_id = pos_sesiones.id '
       "AND v.estado = 'vigente'), 0), "
-      'updated_at = \$1 '
-      'WHERE usuario_id = \$2 AND id <> \$3 AND cerrada_en IS NULL',
-      params: [now, usuarioId, exceptoId],
+      'updated_at = \$2 '
+      'WHERE usuario_id = \$3 AND id <> \$4 AND cerrada_en IS NULL',
+      params: [now, now, usuarioId, exceptoId],
     );
   }
 

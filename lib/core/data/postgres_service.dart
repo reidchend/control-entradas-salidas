@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'pg_client.dart';
+import 'sql_placeholders.dart';
 import 'sql_session.dart';
 
 /// Servicio base para operaciones CRUD contra PostgreSQL directo.
@@ -77,7 +78,8 @@ class PostgresService {
     String sql,
     List<dynamic> params,
   ) async {
-    final result = await _session.execute(sql, parameters: params);
+    final n = normalizarPlaceholders(sql, params);
+    final result = await _session.execute(n.sql, parameters: n.params);
     return result.rows;
   }
 
@@ -93,7 +95,8 @@ class PostgresService {
 
   /// Ejecuta un comando (INSERT/UPDATE/DELETE) y retorna filas afectadas.
   Future<int> _execute(String sql, List<dynamic> params) async {
-    final result = await _session.execute(sql, parameters: params);
+    final n = normalizarPlaceholders(sql, params);
+    final result = await _session.execute(n.sql, parameters: n.params);
     return result.affectedRows;
   }
 

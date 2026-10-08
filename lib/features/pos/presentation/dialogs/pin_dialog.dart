@@ -46,9 +46,17 @@ class _PinDialogState extends ConsumerState<_PinDialog> {
   Future<void> _entrar() async {
     final pin = _ctrl.text.trim();
     if (pin.isEmpty) return;
-    final result = await ref
-        .read(posSessionProvider.notifier)
-        .iniciarSesion(widget.usuario, pin: pin);
+    final SesionLoginResult result;
+    try {
+      result = await ref
+          .read(posSessionProvider.notifier)
+          .iniciarSesion(widget.usuario, pin: pin);
+    } catch (e) {
+      // Un fallo de conexión/consulta no debe dejar el diálogo mudo.
+      if (!mounted) return;
+      setState(() => _error = 'Error al iniciar sesión: $e');
+      return;
+    }
     if (!mounted) return;
     if (result == SesionLoginResult.pinIncorrecto) {
       setState(() {
