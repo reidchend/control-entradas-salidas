@@ -312,6 +312,38 @@ class ActivosRepository {
     });
   }
 
+  /// Fusiona [origenIds] en [destinoId]: mueve todas las unidades (activas e
+  /// inactivas) de los tipos origen al tipo destino y elimina los tipos origen,
+  /// que quedan vacíos.
+  ///
+  /// Se conservan las placas (`codigo`) de cada unidad: unificar el catálogo no
+  /// debe renumerar inventario ya emitido/impreso, aunque la categoría del
+  /// destino tenga otro prefijo. También se conservan ubicación, estado, valor,
+  /// fecha y observaciones de cada unidad; lo único que cambia es su `tipo_id`.
+  ///
+  /// Todo corre en una transacción: la FK `activos.tipo_id` es ON DELETE
+  /// RESTRICT, así que si el borrado fallara por alguna referencia, se revierte
+  /// también el movimiento de unidades y el catálogo queda como estaba.
+  /// Devuelve cuántas unidades se movieron.
+  Future<int> mergeTipos(int destinoId, List<int> origenIds) async {
+    final origenes = <int>{
+      for (final id in origenIds)
+        if (id != destinoId) id,
+    }.toList();
+    if (origenes.isEmpty) return 0;
+    return _db.transaction<int>((tx) async {
+      final movidas = await tx.executeCommand(
+        'UPDATE activos SET tipo_id = \$1 WHERE tipo_id = ANY(\$2::int[])',
+        params: [destinoId, origenes],
+      );
+      await tx.executeCommand(
+        'DELETE FROM activos_tipos WHERE id = ANY(\$1::int[])',
+        params: [origenes],
+      );
+      return movidas;
+    });
+  }
+
   // ---------------------------------------------------------------------
   // Unidades (activos físicos)
   // ---------------------------------------------------------------------

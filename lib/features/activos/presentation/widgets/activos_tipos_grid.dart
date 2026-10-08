@@ -19,11 +19,16 @@ class ActivosTiposGrid extends ConsumerStatefulWidget {
     required this.repo,
     required this.searchTerm,
     required this.onOpenTipo,
+    this.refreshToken = 0,
   });
 
   final ActivosRepository repo;
   final String searchTerm;
   final ValueChanged<ActivoTipo> onOpenTipo;
+
+  /// Cambia desde afuera (p. ej. tras fusionar tipos) para forzar la recarga
+  /// sin recrear el widget con una key nueva.
+  final int refreshToken;
 
   @override
   ConsumerState<ActivosTiposGrid> createState() => _ActivosTiposGridState();
@@ -41,7 +46,8 @@ class _ActivosTiposGridState extends ConsumerState<ActivosTiposGrid> {
   @override
   void didUpdateWidget(ActivosTiposGrid old) {
     super.didUpdateWidget(old);
-    if (old.searchTerm != widget.searchTerm) {
+    if (old.searchTerm != widget.searchTerm ||
+        old.refreshToken != widget.refreshToken) {
       _fut = _load();
     }
   }

@@ -10,6 +10,7 @@ import '../data/activos_repository.dart';
 import 'activo_form_screen.dart';
 import 'dialogs/activos_categoria_dialog.dart';
 import 'dialogs/activos_excel_dialog.dart';
+import 'dialogs/fusionar_tipos_dialog.dart';
 import 'dialogs/tipo_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
@@ -269,6 +270,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       return ActivosTiposGrid(
         repo: repo,
         searchTerm: _search,
+        refreshToken: _tick,
         onOpenTipo: (t) => setState(() {
           _tipo = t;
           _categoria = null;
@@ -368,6 +370,14 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
             ),
           ),
           if (_categoria == null && _tipo == null && _valor == null) ...[
+            if (_dim == 'tipo') ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.call_merge),
+                tooltip: 'Fusionar tipos',
+                onPressed: () => _fusionarTipos(repo),
+              ),
+            ],
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.file_download_outlined),
@@ -383,6 +393,43 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   Future<List<ActivoTipo>> _tipos(ActivosRepository repo) async {
     final maps = await repo.getTipos();
     return [for (final m in maps) m['tipo'] as ActivoTipo];
+  }
+
+  /// Fusiona tipos del catálogo: mueve las unidades de los tipos origen al
+  /// tipo que sobrevive y elimina los tipos origen.
+  Future<void> _fusionarTipos(ActivosRepository repo) async {
+    var tipos = <Map<String, dynamic>>[];
+    try {
+      tipos = await repo.getTipos();
+    } catch (e) {
+      _snack('Error al cargar tipos: $e');
+      return;
+    }
+    if (!mounted) return;
+    if (tipos.length < 2) {
+      _snack('Necesitás al menos dos tipos para fusionar');
+      return;
+    }
+    final res = await showFusionarTiposDialog(context, tipos: tipos);
+    if (res == null) return;
+    try {
+      final movidas = await repo.mergeTipos(res.destinoId, res.origenIds);
+      if (!mounted) return;
+      setState(() {
+        _tick++;
+        _search = '';
+        _searchCtrl.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(movidas == 1
+              ? 'Fusión lista: 1 unidad movida'
+              : 'Fusión lista: $movidas unidades movidas'),
+        ),
+      );
+    } catch (e) {
+      _snack('Error al fusionar: $e');
+    }
   }
 
   Future<void> _crearActivo(ActivosRepository repo) async {
