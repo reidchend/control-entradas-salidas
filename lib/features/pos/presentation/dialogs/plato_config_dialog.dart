@@ -6,6 +6,7 @@ import '../../../../core/models/producto.dart' as domain;
 import '../../../../core/utils/modal_sizing.dart';
 import '../../../../features/inventario/data/inventario_providers.dart';
 import '../../data/pos_providers.dart';
+import '../widgets/producto_selector_field.dart';
 
 /// Alta/edición de plato con ingredientes dinámicos (port de
 /// `ConfigPOSView._show_plato_dialog`). Retorna `true` si se guardó.
@@ -17,20 +18,42 @@ Future<bool> showPlatoConfigDialog(BuildContext context, {PosPlato? plato}) asyn
   return ok ?? false;
 }
 
+/// ¿El producto puede usarse como ingrediente de un plato?
+///
+/// Se aceptan los tipos "para uso interno" e "insumo". La comparación ignora
+/// mayúsculas y espacios porque el tipo se cargó a mano durante años y en la
+/// base conviven variantes ('productos para uso Interno',
+/// 'PRODUCTO PARA USO INTERNO', ...). Con la igualdad exacta anterior, esos
+/// productos no aparecían y la lista de ingredientes quedaba vacía.
+bool _esInsumo(String tipo) {
+  final t = tipo.trim().toLowerCase();
+  return t.contains('uso interno') || t == 'insumo' || t == 'insumos';
+}
+
 class _IngRow {
-  _IngRow({this.productoId, String? cantidad, String? unidad}) {
-    cantidadCtrl = TextEditingController(text: cantidad ?? '');
-    unidadCtrl = TextEditingController(text: unidad ?? 'unidad');
-  }
+  _IngRow({this.productoId, String? producto, String? cantidad, String? unidad})
+      : productoCtrl = TextEditingController(text: producto ?? ''),
+        cantidadCtrl = TextEditingController(text: cantidad ?? ''),
+        unidadCtrl = TextEditingController(text: unidad ?? 'unidad');
 
   int? productoId;
-  late TextEditingController cantidadCtrl;
-  late TextEditingController unidadCtrl;
+  final TextEditingController productoCtrl;
+  final TextEditingController cantidadCtrl;
+  final TextEditingController unidadCtrl;
 
   void dispose() {
+    productoCtrl.dispose();
     cantidadCtrl.dispose();
     unidadCtrl.dispose();
   }
+}
+
+/// Nombre del insumo con ese id, o vacío si no está en la lista de insumos.
+String _nombreInsumo(List<domain.Producto> insumos, int id) {
+  for (final p in insumos) {
+    if (p.id == id) return p.nombre;
+  }
+  return '';
 }
 
 class _PlatoConfigDialog extends ConsumerStatefulWidget {
@@ -76,16 +99,19 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
     final productos = await invRepo.getAllProductos();
     final insumos = [
       for (final pr in productos)
-        if (pr.tipo == 'Productos para uso interno' || pr.tipo == 'Insumos') pr,
+        if (_esInsumo(pr.tipo)) pr,
     ];
     if (_esEdicion) {
       final ings = await posRepo.getIngredientes(widget.plato!.id);
       for (final i in ings) {
-        _ingRows.add(_IngRow(
+        final row = _IngRow(
           productoId: i.productoId,
+          producto: _nombreInsumo(insumos, i.productoId),
           cantidad: i.cantidad.toString(),
           unidad: i.unidad,
-        ));
+        );
+        _escucharProducto(row);
+        _ingRows.add(row);
       }
     }
     if (!mounted) return;
@@ -167,6 +193,34 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
     }
   }
 
+  /// Producto insumo elegido con ese id, o null si no está en la lista.
+  domain.Producto? _productoDe(int? id) {
+    if (id == null) return null;
+    for (final p in _insumos) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  /// Si se edita a mano el texto del producto, la fila deja de apuntar a un
+  /// producto elegido: se suelta el id para no guardar un ingrediente cuyo
+  /// texto y producto no coinciden.
+  void _escucharProducto(_IngRow row) {
+    row.productoCtrl.addListener(() {
+      final p = _productoDe(row.productoId);
+      if (p != null && row.productoCtrl.text != p.nombre) {
+        row.productoId = null;
+        if (mounted) setState(() {});
+      }
+    });
+  }
+
+  void _agregarIngRow() {
+    final row = _IngRow();
+    _escucharProducto(row);
+    setState(() => _ingRows.add(row));
+  }
+
   Widget _ingredientesSection() {
     final scheme = Theme.of(context).colorScheme;
     return Column(
@@ -181,22 +235,11 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: _ingRows[i].productoId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Producto',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    for (final p in _insumos)
-                      DropdownMenuItem(
-                        value: p.id,
-                        child: Text(p.nombre, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() => _ingRows[i].productoId = v),
+                child: ProductoSelectorField(
+                  controller: _ingRows[i].productoCtrl,
+                  productos: _insumos,
+                  onSelected: (p) =>
+                      setState(() => _ingRows[i].productoId = p.id),
                 ),
               ),
               const SizedBox(width: 8),
@@ -245,7 +288,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
             ),
           ),
         TextButton.icon(
-          onPressed: () => setState(() => _ingRows.add(_IngRow())),
+          onPressed: _agregarIngRow,
           icon: const Icon(Icons.add, size: 18, color: Color(0xFF4CAF50)),
           label: const Text('Agregar ingrediente',
               style: TextStyle(color: Color(0xFF4CAF50))),
