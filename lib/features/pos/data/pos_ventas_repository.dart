@@ -159,7 +159,9 @@ class PosVentasRepository {
           .from('pos_mesas')
           .select('id, nombre, numero')
           .inFilter('id', mesaIds);
-      for (final m in rows) mesas[m['id'] as int] = m;
+      for (final m in rows) {
+        mesas[m['id'] as int] = m;
+      }
     }
     final habitaciones = <int, Map<String, dynamic>>{};
     if (habIds.isNotEmpty) {
@@ -167,7 +169,9 @@ class PosVentasRepository {
           .from('habitaciones')
           .select('id, numero')
           .inFilter('id', habIds);
-      for (final h in rows) habitaciones[h['id'] as int] = h;
+      for (final h in rows) {
+        habitaciones[h['id'] as int] = h;
+      }
     }
 
     final result = <ComandaActiva>[];

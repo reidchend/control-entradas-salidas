@@ -84,6 +84,8 @@ List<int> construirTicketEscpos({
   String? habitacion,
   required TicketHeader header,
   String fecha = '',
+  bool esCopiaCliente = false,
+  bool esComandaCocina = false,
 }) {
   final cmd = <int>[];
 
@@ -152,6 +154,21 @@ List<int> construirTicketEscpos({
   add([0x1b, 0x61, 0x00]);
   text(fecha.isEmpty ? _fechaHoraActual() : fecha);
   newline();
+  if (esComandaCocina) {
+    add([0x1b, 0x61, 0x02]); // derecha
+    add([0x1b, 0x45, 0x01]);
+    text('PARA COCINA');
+    newline();
+    add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x61, 0x00]); // izquierda
+  } else if (esCopiaCliente) {
+    add([0x1b, 0x61, 0x02]);
+    add([0x1b, 0x45, 0x01]);
+    text('COPIA CLIENTE');
+    newline();
+    add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x61, 0x00]);
+  }
   if (cajero != null && cajero.isNotEmpty) {
     text('Cajero: $cajero');
     newline();
@@ -171,22 +188,30 @@ List<int> construirTicketEscpos({
   for (final item in items) {
     final cantStr = '${_formatearCantidad(item.cantidad)}x ';
     final subtotal = item.precio * item.cantidad;
-    final precioStr = '\$${subtotal.toStringAsFixed(2)}';
+    final precioStr = esComandaCocina ? '' : '\$${subtotal.toStringAsFixed(2)}';
     var nombre =
         item.nombre.substring(0, item.nombre.isNotEmpty ? item.nombre.length : 0);
-    final maxNombre = ticketCols - precioStr.length - 1 - cantStr.length;
-    if (nombre.length > maxNombre) nombre = nombre.substring(0, maxNombre);
+    final maxNombre = esComandaCocina
+        ? (ticketCols - cantStr.length)
+        : (ticketCols - precioStr.length - 1 - cantStr.length);
+    if (nombre.length > maxNombre && maxNombre > 0) {
+      nombre = nombre.substring(0, maxNombre);
+    }
     final izquierda = cantStr + nombre;
-    final relleno = ticketCols - izquierda.length - precioStr.length;
+    final relleno = esComandaCocina
+        ? 0
+        : (ticketCols - izquierda.length - precioStr.length);
 
     add([0x1b, 0x45, 0x01]);
     text(cantStr);
     add([0x1b, 0x45, 0x00]);
     text(nombre);
-    add(List.filled(relleno, 0x20));
-    add([0x1b, 0x45, 0x01]);
-    text(precioStr);
-    add([0x1b, 0x45, 0x00]);
+    if (!esComandaCocina) {
+      add(List.filled(relleno > 0 ? relleno : 0, 0x20));
+      add([0x1b, 0x45, 0x01]);
+      text(precioStr);
+      add([0x1b, 0x45, 0x00]);
+    }
     newline();
 
     for (final c in item.contornos) {
@@ -198,7 +223,7 @@ List<int> construirTicketEscpos({
   text('-' * ticketCols);
   newline();
 
-  if (total != null) {
+  if (!esComandaCocina && total != null) {
     add([0x1b, 0x61, 0x02]); // derecha
     add([0x1b, 0x45, 0x01]);
     text('TOTAL: \$${total.toStringAsFixed(2)}');
@@ -213,6 +238,16 @@ List<int> construirTicketEscpos({
     newline();
     add([0x1b, 0x45, 0x01]);
     text('TOTAL Bs: ${formatearBs(total * tasa)}');
+    newline();
+    add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x61, 0x00]);
+  }
+
+  if (esComandaCocina) {
+    newline();
+    add([0x1b, 0x61, 0x02]);
+    add([0x1b, 0x45, 0x01]);
+    text('*** PARA COCINA ***');
     newline();
     add([0x1b, 0x45, 0x00]);
     add([0x1b, 0x61, 0x00]);
@@ -251,6 +286,8 @@ List<String> construirTicketPreview({
   String? habitacion,
   required TicketHeader header,
   String fecha = '',
+  bool esCopiaCliente = false,
+  bool esComandaCocina = false,
 }) {
   final lineas = <String>[];
 
@@ -263,6 +300,13 @@ List<String> construirTicketPreview({
   if (rif.isNotEmpty) lineas.add(_centrar('RIF: $rif', ticketCols));
   if (direccion.isNotEmpty) lineas.add(_centrar(direccion, ticketCols));
   if (telefono.isNotEmpty) lineas.add(_centrar('Tel: $telefono', ticketCols));
+
+  if (esCopiaCliente) {
+    lineas.add(_centrar('COPIA CLIENTE', ticketCols));
+  }
+  if (esComandaCocina) {
+    lineas.add(_centrar('COCINA - PARA COCINA', ticketCols));
+  }
 
   if (comandaId != null) {
     final corr = correlativo ?? 0;

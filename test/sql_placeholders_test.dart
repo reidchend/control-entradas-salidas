@@ -6,8 +6,7 @@ void main() {
   group('normalizarPlaceholders', () {
     // Regresion: el SQL raw (`executeSql`/`executeCommand`) no pasaba por
     // `_bindPlan`, asi que un `$n` repetido llegaba crudo al proxy, que traduce
-    // cada aparicion a `%s` posicional y psycopg reventaba con "the query has N
-    // placeholders but M parameters were passed". Reventaba al retomar un turno
+    // cada aparicion a `%s` posicional y psycopg reventaba con "the query has N placeholders but M parameters were passed". Reventaba al retomar un turno
     // del POS (`_cerrarAbiertosDeUsuario`).
     test('un \$1 repetido recibe un numero propio y repite su valor', () {
       final r = normalizarPlaceholders(

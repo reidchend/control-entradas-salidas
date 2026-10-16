@@ -189,6 +189,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ref.invalidate(habitacionesOcupadasProvider);
       ref.invalidate(comandasActivasProvider);
       if (!mounted) return;
+
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
       widget.onBack();
@@ -206,16 +209,16 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar comanda'),
+        title: const Text('Anular comanda'),
         content:
-            const Text('¿Eliminar esta comanda? Esta acción no se puede deshacer.'),
+            const Text('¿Anular esta comanda? Esta acción no se puede deshacer.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancelar')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Eliminar')),
+              child: const Text('Anular')),
         ],
       ),
     );
@@ -230,11 +233,11 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ref.invalidate(comandasActivasProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Comanda eliminada')));
+          .showSnackBar(const SnackBar(content: Text('Comanda anulada')));
       widget.onBack();
     } catch (e) {
       if (!mounted) return;
-      _snack('Error al eliminar la comanda: $e', color: const Color(0xFFEF5350));
+      _snack('Error al anular la comanda: $e', color: const Color(0xFFEF5350));
     } finally {
       if (mounted) setState(() => _eliminando = false);
     }
@@ -305,8 +308,30 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         total: total,
         comandaId: comandaId,
         correlativo: correlativo,
-        correccionDe: anulada?.correlativo,
+        esComandaCocina: true,
       );
+      if (!mounted) return;
+      final imprimirCliente = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Imprimir copia cliente'),
+          content: const Text('¿Desea imprimir la copia para el cliente?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+          ],
+        ),
+      );
+      if (imprimirCliente == true && mounted) {
+        await _mostrarTicket(
+          items: ticketItems,
+          total: total,
+          comandaId: comandaId,
+          correlativo: correlativo,
+          correccionDe: anulada?.correlativo,
+          esCopiaCliente: true,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
@@ -394,8 +419,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     required List<TicketItem> items,
     required double total,
     required int comandaId,
-    required int correlativo,
+    int? correlativo,
     int? correccionDe,
+    bool esCopiaCliente = false,
+    bool esComandaCocina = false,
   }) async {
     final header = await cargarMembrete(ref.read(posRepoProvider)!);
     final lineas = construirTicketPreview(
@@ -409,6 +436,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       mesa: _mesaTicketLabel,
       habitacion: _habitacionTicketLabel,
       header: header,
+      esCopiaCliente: esCopiaCliente,
+      esComandaCocina: esComandaCocina,
     );
     if (!mounted) return;
 
@@ -425,6 +454,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         mesa: _mesaTicketLabel,
         habitacion: _habitacionTicketLabel,
         header: header,
+        esCopiaCliente: esCopiaCliente,
+        esComandaCocina: esComandaCocina,
       );
       final dispositivo = await getPrinterDevice(ref.read(posRepoProvider)!);
       try {
@@ -440,6 +471,27 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     await showTicketPreview(context, lineas: lineas);
   }
 
+  Future<void> _imprimirComanda() async {
+    if (_items.isEmpty || !mounted) return;
+    final ticketItems = [for (final i in _items) _aTicketItem(i)];
+    final repo = ref.read(posVentasRepoProvider)!;
+    final correlativo = await repo.siguienteCorrelativo();
+    final comandaId = _comandaId ?? 0;
+    await _mostrarTicket(
+      items: ticketItems,
+      total: _total,
+      comandaId: comandaId,
+      correlativo: correlativo,
+      esComandaCocina: true,
+    );
+    await _mostrarTicket(
+      items: ticketItems,
+      total: _total,
+      comandaId: comandaId,
+      correlativo: correlativo,
+      esCopiaCliente: true,
+    );
+  }
   // =========================================================================
   // Catálogo: navegación
   // =========================================================================
@@ -1116,9 +1168,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
-            label: const Text('Eliminar'),
+            label: const Text('Anular'),
           ),
           const Spacer(),
+          OutlinedButton.icon(
+            onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Imprimir comanda'),
+          ),
+          const SizedBox(width: 8),
           FilledButton.icon(
             onPressed: (tieneItems && !ocupado) ? _guardar : null,
             icon: _guardando
