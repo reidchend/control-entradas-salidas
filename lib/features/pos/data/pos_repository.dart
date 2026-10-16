@@ -530,6 +530,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     bool activo = true,
     int? categoriaPadreId,
     int? posCategoriaPadreId,
+    int? platoCategoriaPadreId,
   }) async {
     final now = DateTime.now().toIso8601String();
     final data = {
@@ -538,6 +539,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
       'activo': activo,
       'categoria_padre_id': categoriaPadreId,
       'pos_categoria_padre_id': posCategoriaPadreId,
+      'plato_categoria_padre_id': platoCategoriaPadreId,
       'updated_at': now,
     };
     if (id != null) {
@@ -611,6 +613,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
   Future<List<PosPlatoCategoria>> getSubcategorias({
     int? categoriaPadreId,
     int? posCategoriaPadreId,
+    int? platoCategoriaPadreId,
   }) async {
     var query = _db.client
         .from('platos_categorias')
@@ -621,6 +624,9 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     }
     if (posCategoriaPadreId != null) {
       query = query.eq('pos_categoria_padre_id', posCategoriaPadreId);
+    }
+    if (platoCategoriaPadreId != null) {
+      query = query.eq('plato_categoria_padre_id', platoCategoriaPadreId);
     }
     final rows = await query.order('nombre') as List<Map<String, dynamic>>;
     return rows.map(PosPlatoCategoria.fromMap).toList();

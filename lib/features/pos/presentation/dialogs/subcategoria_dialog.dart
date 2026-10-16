@@ -6,8 +6,10 @@ import '../../../../core/models/pos_models.dart';
 import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
-/// Alta/edición de sub-categoría (platos_categorias) con padre opcional
-/// (categoría de inventario INV_ o categoría POS POS_).
+/// Alta/edición de categoría de platos (tabla `platos_categorias`) con padre
+/// opcional: categoría de inventario (INV_), categoría POS (POS_) o otra
+/// categoría de platos (PLATO_). Sin padre queda como categoría raíz y se
+/// muestra directamente en la raíz del POS.
 /// Port de `ConfigPOSView._show_subcategoria_dialog` / `_show_subcat_edit_dialog`.
 /// Retorna `true` si se guardó.
 Future<bool> showSubcategoriaDialog(BuildContext context,
@@ -41,12 +43,34 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
 
   final _nombreCtrl = TextEditingController();
   late String _color;
-  String? _padre; // '' = sin padre, 'INV_x' | 'POS_x'
+  String? _padre; // '' = sin padre, 'INV_x' | 'POS_x' | 'SUB_x'
   bool _cargando = true;
   bool _guardando = false;
 
   List<Categoria> _catsInv = [];
   List<PosCategoria> _posCats = [];
+  List<PosPlatoCategoria> _platosCats = [];
+
+  /// Ids que no pueden ser padre de esta categoría: ella misma y sus
+  /// descendientes. Evita ciclos al anidar categorías de platos entre sí.
+  Set<int> get _prohibidos {
+    final raiz = widget.subcategoria?.id;
+    if (raiz == null) return const {};
+    final hijos = <int, List<int>>{};
+    for (final c in _platosCats) {
+      final p = c.platoCategoriaPadreId;
+      if (p != null) hijos.putIfAbsent(p, () => []).add(c.id);
+    }
+    final out = <int>{raiz};
+    final pila = <int>[raiz];
+    while (pila.isNotEmpty) {
+      final cur = pila.removeLast();
+      for (final h in hijos[cur] ?? const <int>[]) {
+        if (out.add(h)) pila.add(h);
+      }
+    }
+    return out;
+  }
 
   bool get _esEdicion => widget.subcategoria != null;
 
@@ -61,6 +85,8 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
         _padre = 'INV_${sc.categoriaPadreId}';
       } else if (sc.posCategoriaPadreId != null) {
         _padre = 'POS_${sc.posCategoriaPadreId}';
+      } else if (sc.platoCategoriaPadreId != null) {
+        _padre = 'SUB_${sc.platoCategoriaPadreId}';
       } else {
         _padre = '';
       }
@@ -74,10 +100,12 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
     final repo = ref.read(posRepoProvider)!;
     final inv = await repo.getCategoriasPos();
     final pos = await repo.getPosCategorias();
+    final platosCats = await repo.getPlatosCategorias();
     if (!mounted) return;
     setState(() {
       _catsInv = inv;
       _posCats = pos;
+      _platosCats = platosCats;
       _cargando = false;
     });
   }
@@ -98,11 +126,14 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
     }
     int? catPadreId;
     int? posPadreId;
+    int? platoPadreId;
     final padre = _padre ?? '';
     if (padre.startsWith('INV_')) {
       catPadreId = int.tryParse(padre.substring(4));
     } else if (padre.startsWith('POS_')) {
       posPadreId = int.tryParse(padre.substring(4));
+    } else if (padre.startsWith('SUB_')) {
+      platoPadreId = int.tryParse(padre.substring(4));
     }
     setState(() => _guardando = true);
     final repo = ref.read(posRepoProvider)!;
@@ -114,6 +145,7 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
         activo: widget.subcategoria?.activo ?? true,
         categoriaPadreId: catPadreId,
         posCategoriaPadreId: posPadreId,
+        platoCategoriaPadreId: platoPadreId,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -128,7 +160,9 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_esEdicion ? 'Editar sub-categoría' : 'Nueva sub-categoría'),
+      title: Text(_esEdicion
+          ? 'Editar categoría de platos'
+          : 'Nueva categoría de platos'),
       content: SizedBox(
         width: modalContentWidth(context),
         child: _cargando
@@ -199,6 +233,12 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
                           value: 'POS_${c.id}',
                           child: Text('POS: ${c.nombre}'),
                         ),
+                      for (final c in _platosCats)
+                        if (!_prohibidos.contains(c.id))
+                          DropdownMenuItem(
+                            value: 'SUB_${c.id}',
+                            child: Text('PLATO: ${c.nombre}'),
+                          ),
                     ],
                     onChanged: (v) => setState(() => _padre = v),
                   ),

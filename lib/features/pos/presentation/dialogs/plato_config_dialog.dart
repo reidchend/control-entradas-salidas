@@ -132,6 +132,26 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
     super.dispose();
   }
 
+  /// Etiqueta de la categoría con su jerarquía de categorías de platos
+  /// (`DESAYUNOS > CAFÉS`) para distinguir sub-categorías homónimas.
+  String _etiquetaCategoria(PosPlatoCategoria c) {
+    final nombres = <String>[c.nombre];
+    int? padreId = c.platoCategoriaPadreId;
+    for (var i = 0; i < 10 && padreId != null; i++) {
+      PosPlatoCategoria? padre;
+      for (final x in _categorias) {
+        if (x.id == padreId) {
+          padre = x;
+          break;
+        }
+      }
+      if (padre == null) break;
+      nombres.insert(0, padre.nombre);
+      padreId = padre.platoCategoriaPadreId;
+    }
+    return nombres.join(' > ');
+  }
+
   Future<void> _guardar() async {
     final nombre = _nombreCtrl.text.trim();
     if (nombre.isEmpty) {
@@ -331,7 +351,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
                         for (final c in _categorias)
                           DropdownMenuItem(
                             value: c.id,
-                            child: Text(c.nombre),
+                            child: Text(_etiquetaCategoria(c)),
                           ),
                       ],
                       onChanged: (v) => setState(() => _categoriaId = v),

@@ -366,6 +366,7 @@ class PosPlatoCategoria {
     this.activo = true,
     this.categoriaPadreId,
     this.posCategoriaPadreId,
+    this.platoCategoriaPadreId,
     this.createdAt,
     this.updatedAt,
   });
@@ -376,6 +377,10 @@ class PosPlatoCategoria {
   final bool activo;
   final int? categoriaPadreId;
   final int? posCategoriaPadreId;
+
+  /// Padre cuando la categoría cuelga de otra categoría de platos (anidado).
+  /// Null = categoría de platos raíz (se muestra en la raíz del POS).
+  final int? platoCategoriaPadreId;
   final String? createdAt;
   final String? updatedAt;
 
@@ -387,6 +392,7 @@ class PosPlatoCategoria {
         activo: (m['activo'] as int?) == 1,
         categoriaPadreId: m['categoria_padre_id'] as int?,
         posCategoriaPadreId: m['pos_categoria_padre_id'] as int?,
+        platoCategoriaPadreId: m['plato_categoria_padre_id'] as int?,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
       );
@@ -398,6 +404,7 @@ class PosPlatoCategoria {
         'activo': activo ? 1 : 0,
         'categoria_padre_id': categoriaPadreId,
         'pos_categoria_padre_id': posCategoriaPadreId,
+        'plato_categoria_padre_id': platoCategoriaPadreId,
         'created_at': createdAt,
       };
 }

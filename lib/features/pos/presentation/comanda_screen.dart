@@ -39,7 +39,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
   ConsumerState<ComandaScreen> createState() => _ComandaScreenState();
 }
 
-enum _Seccion { categorias, subcategorias, productos, platos, platosDeCat, contornos }
+enum _Seccion { categorias, subcategorias, productos, platosDeCat, contornos }
 
 class _CatalogoEntry {
   const _CatalogoEntry({
@@ -472,13 +472,14 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final platosCats = await repo.getPlatosCategorias(soloActivas: true);
     final contornos = await repo.getContornosActivos();
 
+    final contornoCatIds = {for (final ct in contornos) ct.categoriaId};
     final rootPlatosCats = platosCats
         .where((c) =>
             c.categoriaPadreId == null &&
             c.posCategoriaPadreId == null &&
-            !{for (final ct in contornos) ct.categoriaId}.contains(c.id))
+            c.platoCategoriaPadreId == null &&
+            !contornoCatIds.contains(c.id))
         .toList();
-    final hayPlatos = rootPlatosCats.isNotEmpty;
 
     final entries = <_CatalogoEntry>[
       for (final c in cats)
@@ -493,11 +494,13 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           color: pc.color,
           onTap: () => _clickCategoria(pc.id, pc.color, pc.nombre, esPos: true),
         ),
-      if (hayPlatos)
+      // Las categorías de platos raíz (DESAYUNOS, PIZZAS, ...) van directo a
+      // la raíz; ya no hay una entrada "PLATOS" que las agrupe.
+      for (final c in rootPlatosCats)
         _CatalogoEntry(
-          nombre: 'PLATOS',
-          color: '#FF6F00',
-          onTap: _cargarPlatosSeccion,
+          nombre: c.nombre,
+          color: c.color,
+          onTap: () => _clickPlatoCategoria(c.id, c.color, c.nombre),
         ),
       if (contornos.isNotEmpty)
         _CatalogoEntry(
@@ -547,7 +550,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         _CatalogoEntry(
           nombre: sc.nombre,
           color: sc.color,
-          onTap: () => _cargarPlatos(sc.id, sc.color, sc.nombre),
+          onTap: () => _clickPlatoCategoria(sc.id, sc.color, sc.nombre),
         ),
       if (prods.isNotEmpty) ...[
         const _CatalogoEntry(
@@ -594,38 +597,28 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     });
   }
 
-  Future<void> _cargarPlatosSeccion() async {
+  /// Entra a una categoría de platos (raíz o anidada): muestra sus
+  /// sub-categorías —si tiene— y sus platos.
+  Future<void> _clickPlatoCategoria(
+      int categoriaId, String color, String nombre) async {
     final repo = ref.read(posRepoProvider)!;
-    final pcats = await repo.getPlatosCategorias(soloActivas: true);
-    final contornos = await repo.getContornosActivos();
-    final contornoCatIds = {for (final c in contornos) c.categoriaId};
-    final root = pcats
-        .where((c) =>
-            c.categoriaPadreId == null &&
-            c.posCategoriaPadreId == null &&
-            !contornoCatIds.contains(c.id))
-        .toList();
-    final entries = [
-      for (final c in root)
-        _CatalogoEntry(
-          nombre: c.nombre,
-          color: c.color,
-          onTap: () => _cargarPlatos(c.id, c.color, c.nombre),
-        ),
-    ];
-    _ir(_Seccion.platos);
-    setState(() {
-      _titulo = 'PLATOS';
-      _tituloColor = '#FF6F00';
-      _catalogo = entries;
-    });
-  }
-
-  Future<void> _cargarPlatos(int categoriaId, String color, String nombre) async {
-    final repo = ref.read(posRepoProvider)!;
+    final subcats =
+        await repo.getSubcategorias(platoCategoriaPadreId: categoriaId);
     final platos = await repo.getPlatos(
         soloActivos: true, categoriaId: categoriaId, esContorno: false);
-    final entries = [
+    final entries = <_CatalogoEntry>[
+      for (final sc in subcats)
+        _CatalogoEntry(
+          nombre: sc.nombre,
+          color: sc.color,
+          onTap: () => _clickPlatoCategoria(sc.id, sc.color, sc.nombre),
+        ),
+      if (subcats.isNotEmpty && platos.isNotEmpty)
+        _CatalogoEntry(
+          nombre: 'PLATOS',
+          color: color,
+          onTap: _noop,
+        ),
       for (final p in platos)
         _CatalogoEntry(
           nombre: p.nombre,
