@@ -136,5 +136,5 @@ class SubcatRow extends StatelessWidget {
 /// Convierte un color hex a [Color].
 Color hexColor(String value) {
   final v = value.replaceFirst('#', '');
-  return Color(int.parse('FF' + v, radix: 16));
+  return Color(int.parse('FF$v', radix: 16));
 }

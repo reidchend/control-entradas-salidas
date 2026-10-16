@@ -484,13 +484,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       correlativo: correlativo,
       esComandaCocina: true,
     );
-    await _mostrarTicket(
-      items: ticketItems,
-      total: _total,
-      comandaId: comandaId,
-      correlativo: correlativo,
-      esCopiaCliente: true,
-    );
   }
   // =========================================================================
   // Catálogo: navegación
