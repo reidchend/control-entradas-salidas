@@ -129,8 +129,8 @@ class StockRepository {
       return productos
           .where((p) {
             final s = stock[p.id] ?? 0;
-            return s > 0 &&
-                s <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity);
+            if (s <= 0) return true;
+            return s <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity);
           })
           .skip(offset)
           .take(limit)
