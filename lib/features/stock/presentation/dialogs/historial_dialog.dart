@@ -133,7 +133,10 @@ class _MovimientoCard extends StatelessWidget {
               if (desfasado) ...[
                 const SizedBox(width: 4),
                 Text('(registrado ${_fmt(m.fechaRegistro)})',
-                    style: TextStyle(fontSize: 9, color: scheme.outline)),
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurfaceVariant)),
               ],
               const SizedBox(width: 6),
               Container(

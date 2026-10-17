@@ -9,7 +9,7 @@ import 'receta_editor_screen.dart';
 import 'recetas_tab.dart';
 
 /// Pantalla de Producciones — porta `producciones/view.py`. Tres pestañas
-/// (Recetas, En Producción, Historial) y editor de receta en pantalla
+/// (En Producción, Recetas, Historial) y editor de receta en pantalla
 /// completa cuando está abierto.
 class ProduccionesScreen extends ConsumerStatefulWidget {
   const ProduccionesScreen({super.key});
@@ -85,8 +85,8 @@ class _ProduccionesScreenState extends ConsumerState<ProduccionesScreen>
           labelColor: scheme.primary,
           unselectedLabelColor: scheme.onSurfaceVariant,
           tabs: const [
-            Tab(icon: Icon(Icons.description_outlined), text: 'Recetas'),
             Tab(icon: Icon(Icons.pending_actions), text: 'En Producción'),
+            Tab(icon: Icon(Icons.description_outlined), text: 'Recetas'),
             Tab(icon: Icon(Icons.history_outlined), text: 'Historial'),
           ],
         ),
@@ -94,8 +94,8 @@ class _ProduccionesScreenState extends ConsumerState<ProduccionesScreen>
           child: TabBarView(
             controller: _tabController,
             children: [
-              RecetasTab(onEdit: _abrirEditor),
               const PendientesTab(),
+              RecetasTab(onEdit: _abrirEditor),
               const HistorialTab(),
             ],
           ),
