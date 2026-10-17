@@ -3,6 +3,7 @@ import '../../../core/models/categoria.dart';
 import '../../../core/models/existencia.dart';
 import '../../../core/models/movimiento.dart';
 import '../../../core/models/producto.dart';
+import 'vinculo_producto.dart';
 
 class StockStats {
   const StockStats({this.total = 0, this.bajo = 0, this.agotado = 0});
@@ -101,11 +102,11 @@ class StockRepository {
       } else {
         join = 'LEFT JOIN existencias e ON e.producto_id = p.id';
       }
-      final stockExpr = 'COALESCE(SUM(e.cantidad), 0) AS stock_prd';
-      var sql = 'SELECT p.*, $stockExpr FROM productos p '
+      const stockSum = 'COALESCE(SUM(e.cantidad), 0)';
+      var sql = 'SELECT p.*, $stockSum AS stock_prd FROM productos p '
           '$join WHERE $where GROUP BY p.id ORDER BY p.nombre ASC';
       if (stockStatus == 'out') {
-        sql += ' HAVING stock_prd <= 0';
+        sql += ' HAVING $stockSum <= 0';
       }
       rows = await _db.executeSql(sql, params: params);
     } else {
@@ -155,6 +156,95 @@ class StockRepository {
       for (final r in rows)
         r['producto_id'] as int: (r['stock'] as num).toDouble(),
     };
+  }
+
+  /// Vínculos de producción de varios productos en una sola consulta.
+  ///
+  /// Devuelve, por cada producto pedido, la lista de productos relacionados por
+  /// recetas: los que se producen usándolo como insumo ([esDerivado] true) y los
+  /// insumos necesarios para producirlo ([esDerivado] false). El stock se toma
+  /// de `existencias` (total, o del [almacen] si se especifica).
+  Future<Map<int, List<VinculoProducto>>> getVinculosDeProductos(
+    List<int> productoIds, {
+    String? almacen,
+  }) async {
+    final result = <int, List<VinculoProducto>>{};
+    if (productoIds.isEmpty) return result;
+
+    // Receta simple: insumo en `producto_base_id`, producido = componente
+    // RESULTADO. Receta compuesta: producto terminado en `producto_final_id`,
+    // insumos = componentes INGREDIENTE.
+    const sql = '''
+      SELECT DISTINCT origen_id, vinculado_id, nombre, tipo, unidad, direccion
+      FROM (
+        SELECT r.producto_base_id AS origen_id, p.id AS vinculado_id,
+               p.nombre AS nombre, p.tipo AS tipo,
+               p.unidad_medida AS unidad, 'derivado' AS direccion
+        FROM recetas r
+        JOIN receta_componentes rc
+          ON rc.receta_id = r.id AND rc.tipo_componente = 'RESULTADO'
+        JOIN productos p ON p.id = rc.producto_id AND p.activo = TRUE
+        WHERE r.activo = TRUE
+
+        UNION ALL
+
+        SELECT rc.producto_id AS origen_id, pf.id AS vinculado_id,
+               pf.nombre AS nombre, pf.tipo AS tipo,
+               pf.unidad_medida AS unidad, 'derivado' AS direccion
+        FROM recetas r
+        JOIN receta_componentes rc
+          ON rc.receta_id = r.id AND rc.tipo_componente = 'INGREDIENTE'
+        JOIN productos pf ON pf.id = r.producto_final_id AND pf.activo = TRUE
+        WHERE r.activo = TRUE
+
+        UNION ALL
+
+        SELECT rc.producto_id AS origen_id, pb.id AS vinculado_id,
+               pb.nombre AS nombre, pb.tipo AS tipo,
+               pb.unidad_medida AS unidad, 'insumo' AS direccion
+        FROM receta_componentes rc
+        JOIN recetas r ON r.id = rc.receta_id AND r.activo = TRUE
+        JOIN productos pb ON pb.id = r.producto_base_id AND pb.activo = TRUE
+        WHERE rc.tipo_componente = 'RESULTADO'
+
+        UNION ALL
+
+        SELECT r.producto_final_id AS origen_id, pi.id AS vinculado_id,
+               pi.nombre AS nombre, pi.tipo AS tipo,
+               pi.unidad_medida AS unidad, 'insumo' AS direccion
+        FROM recetas r
+        JOIN receta_componentes rc
+          ON rc.receta_id = r.id AND rc.tipo_componente = 'INGREDIENTE'
+        JOIN productos pi ON pi.id = rc.producto_id AND pi.activo = TRUE
+        WHERE r.activo = TRUE
+      ) t
+      WHERE origen_id = ANY(\$1)
+      ORDER BY origen_id, direccion, nombre
+    ''';
+    final rows = await _db.executeSql(sql, params: [productoIds]);
+
+    final linkedIds = <int>{
+      for (final r in rows)
+        if (r['vinculado_id'] != null) r['vinculado_id'] as int,
+    };
+    final stockMap =
+        await getStockTotalAlmacenBase(linkedIds.toList(), almacen);
+
+    for (final r in rows) {
+      final origenId = r['origen_id'] as int;
+      final vinculadoId = r['vinculado_id'] as int;
+      result.putIfAbsent(origenId, () => []).add(
+            VinculoProducto(
+              productoId: vinculadoId,
+              nombre: r['nombre'] as String,
+              tipo: (r['tipo'] as String?) ?? '',
+              unidad: (r['unidad'] as String?) ?? '',
+              stock: stockMap[vinculadoId] ?? 0,
+              esDerivado: r['direccion'] == 'derivado',
+            ),
+          );
+    }
+    return result;
   }
 
   Future<StockStats> getStockStats({String? almacen}) async {

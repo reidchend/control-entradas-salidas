@@ -8,6 +8,7 @@ import '../../../core/models/existencia.dart';
 import '../../../core/models/producto.dart';
 import '../data/stock_providers.dart';
 import '../data/stock_repository.dart';
+import '../data/vinculo_producto.dart';
 import 'widgets/stock_stat_card.dart';
 import 'widgets/productos_grid.dart';
 import 'dialogs/historial_dialog.dart';
@@ -39,6 +40,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   StockStats _stats = const StockStats();
   List<Producto> _productos = [];
   Map<int, List<Existencia>> _existencias = {};
+  Map<int, List<VinculoProducto>> _vinculos = {};
   bool _cargando = false;
   bool _statsCargados = false;
   bool _cargandoMas = false;
@@ -113,12 +115,14 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       );
       final ids = [for (final p in productos) p.id];
       final exis = await repo.getExistenciasDeProductos(ids);
+      final vinc = await repo.getVinculosDeProductos(ids, almacen: _almacen);
       if (!mounted) return;
       setState(() {
         _stats = stats;
         _statsCargados = true;
         _productos = productos;
         _existencias = exis;
+        _vinculos = vinc;
         _cargando = false;
         _cargandoMas = false;
         _hasMore = productos.length >= volver;
@@ -148,10 +152,14 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       );
       final exis = await repo.getExistenciasDeProductos(
           [for (final p in nuevos) p.id]);
+      final vinc = await repo.getVinculosDeProductos(
+          [for (final p in nuevos) p.id],
+          almacen: _almacen);
       if (!mounted) return;
       setState(() {
         _productos = [..._productos, ...nuevos];
         _existencias = {..._existencias, ...exis};
+        _vinculos = {..._vinculos, ...vinc};
         _cargandoMas = false;
         _hasMore = nuevos.length == _pageSize;
       });
@@ -371,6 +379,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
       productos: _productos,
       existencias: _existencias,
       categorias: _categoriasMap,
+      vinculos: _vinculos,
       almacen: _almacen,
       scrollController: _scrollCtrl,
       onLoadMore: _cargarMas,

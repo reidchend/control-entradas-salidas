@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/existencia.dart';
 import '../../../../core/models/producto.dart';
+import '../../data/vinculo_producto.dart';
 import 'producto_stock_card.dart';
 
 /// Grid de productos de stock (porta `_render_productos` de stock_view.py).
@@ -18,6 +19,7 @@ class ProductosGrid extends StatelessWidget {
     required this.existencias,
     required this.categorias,
     required this.onAction,
+    this.vinculos = const {},
     this.scrollController,
     this.onLoadMore,
     this.hasMore = false,
@@ -28,6 +30,7 @@ class ProductosGrid extends StatelessWidget {
   final List<Producto> productos;
   final Map<int, List<Existencia>> existencias;
   final Map<int, String> categorias;
+  final Map<int, List<VinculoProducto>> vinculos;
   final String? almacen;
   final void Function(String action, Producto producto) onAction;
   final ScrollController? scrollController;
@@ -52,6 +55,7 @@ class ProductosGrid extends StatelessWidget {
               producto: p,
               existencias: existencias[p.id] ?? const [],
               categorias: categorias,
+              vinculos: vinculos[p.id] ?? const [],
               almacen: almacen,
               onAction: onAction,
             ),

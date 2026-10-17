@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/existencia.dart';
 import '../../../../core/models/producto.dart';
+import '../../data/vinculo_producto.dart';
+import 'producto_vinculos_tile.dart';
 
 /// Tarjeta de producto en la vista de stock (porta `build_product_card`).
 /// Nombre + menú, categoría/código, existencias por almacén y stock
@@ -14,12 +16,14 @@ class ProductoStockCard extends StatelessWidget {
     required this.existencias,
     required this.categorias,
     required this.onAction,
+    this.vinculos = const [],
     this.almacen,
   });
 
   final Producto producto;
   final List<Existencia> existencias;
   final Map<int, String> categorias;
+  final List<VinculoProducto> vinculos;
   final String? almacen;
   final void Function(String action, Producto producto) onAction;
 
@@ -121,6 +125,10 @@ class ProductoStockCard extends StatelessWidget {
                   ),
               ],
             ),
+          ],
+          if (vinculos.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ProductoVinculosTile(vinculos: vinculos),
           ],
           const SizedBox(height: 6),
           Align(
