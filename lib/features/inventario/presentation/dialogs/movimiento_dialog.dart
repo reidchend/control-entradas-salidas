@@ -58,8 +58,11 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   void initState() {
     super.initState();
     _esProductoProduccion = _producto.tipo.toLowerCase().contains('producci');
-    _cargarExistencias();
-    if (_esProductoProduccion) _cargarRecetas();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _cargarExistencias();
+      if (_esProductoProduccion) _cargarRecetas();
+    });
   }
 
   /// Carga las existencias del producto y la lista de almacenes a elegir.
