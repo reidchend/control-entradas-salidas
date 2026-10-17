@@ -6,6 +6,7 @@ import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import 'pos_comanda_models.dart';
+import 'pos_comanda_transfer_repository.dart';
 import 'pos_repository.dart';
 import 'pos_session.dart';
 import 'pos_ventas_repository.dart';
@@ -22,6 +23,14 @@ final posVentasRepoProvider = Provider<PosVentasRepository?>((ref) {
   final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return PosVentasRepository(db);
+});
+
+/// Repositorio de operaciones de casilla (mover/fusionar/separar comandas).
+final posComandaTransferRepoProvider =
+    Provider<PosComandaTransferRepository?>((ref) {
+  final db = ref.watch(postgresServiceProvider);
+  if (db == null) return null;
+  return PosComandaTransferRepository(db);
 });
 
 // ---------------------------------------------------------------------------

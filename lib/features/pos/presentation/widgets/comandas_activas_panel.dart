@@ -9,10 +9,16 @@ class ComandasActivasPanel extends StatelessWidget {
     super.key,
     required this.comandas,
     required this.onAbrirComanda,
+    this.onMover,
+    this.onFusionar,
   });
 
   final List<ComandaActiva> comandas;
   final void Function(int? mesaId, int? habitacionId) onAbrirComanda;
+
+  /// Acciones opcionales de casilla por comanda (menú `⋮`).
+  final void Function(ComandaActiva comanda)? onMover;
+  final void Function(ComandaActiva comanda)? onFusionar;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +73,9 @@ class ComandasActivasPanel extends StatelessWidget {
               comanda: comandas[i],
               onTap: () =>
                   onAbrirComanda(comandas[i].mesaId, comandas[i].habitacionId),
+              onMover: onMover == null ? null : () => onMover!(comandas[i]),
+              onFusionar:
+                  onFusionar == null ? null : () => onFusionar!(comandas[i]),
             ),
           ),
         ),
@@ -76,10 +85,17 @@ class ComandasActivasPanel extends StatelessWidget {
 }
 
 class _ComandaActivaTile extends StatelessWidget {
-  const _ComandaActivaTile({required this.comanda, required this.onTap});
+  const _ComandaActivaTile({
+    required this.comanda,
+    required this.onTap,
+    this.onMover,
+    this.onFusionar,
+  });
 
   final ComandaActiva comanda;
   final VoidCallback onTap;
+  final VoidCallback? onMover;
+  final VoidCallback? onFusionar;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +186,37 @@ class _ComandaActivaTile extends StatelessWidget {
                   ),
                 ],
               ),
+              if (onMover != null || onFusionar != null)
+                PopupMenuButton<String>(
+                  tooltip: 'Opciones',
+                  icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant),
+                  onSelected: (v) {
+                    if (v == 'mover') onMover?.call();
+                    if (v == 'fusionar') onFusionar?.call();
+                  },
+                  itemBuilder: (_) => [
+                    if (onMover != null)
+                      const PopupMenuItem(
+                        value: 'mover',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.drive_file_move_outline),
+                          title: Text('Mover a otra casilla'),
+                        ),
+                      ),
+                    if (onFusionar != null)
+                      const PopupMenuItem(
+                        value: 'fusionar',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.merge_type),
+                          title: Text('Fusionar con…'),
+                        ),
+                      ),
+                  ],
+                ),
             ],
           ),
         ),

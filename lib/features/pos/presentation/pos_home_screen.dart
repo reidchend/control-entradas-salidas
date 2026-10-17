@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
+import 'comanda_acciones.dart';
 import 'widgets/comandas_activas_panel.dart';
 import 'widgets/entry_card.dart';
 import 'widgets/pop_in.dart';
@@ -121,6 +122,20 @@ class PosHomeScreen extends ConsumerWidget {
                           child: ComandasActivasPanel(
                             comandas: comandasActivas,
                             onAbrirComanda: onAbrirComanda,
+                            onMover: (c) => moverComandaFlow(
+                              context,
+                              ref,
+                              comandaId: c.comandaId,
+                              etiqueta: c.etiqueta,
+                              mesaActual: c.mesaId,
+                              habitacionActual: c.habitacionId,
+                            ),
+                            onFusionar: (c) => fusionarComandaFlow(
+                              context,
+                              ref,
+                              comandaId: c.comandaId,
+                              etiqueta: c.etiqueta,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 32),

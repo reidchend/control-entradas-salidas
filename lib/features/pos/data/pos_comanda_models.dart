@@ -25,6 +25,7 @@ class ComandaItem {
     required this.precio,
     required this.cantidad,
     this.contornos = const [],
+    this.cuenta = 1,
   });
 
   final int id;
@@ -34,9 +35,23 @@ class ComandaItem {
   int cantidad;
   final List<({int? id, String nombre, int cantidad})> contornos;
 
+  /// Sub-cuenta ("cliente") dentro de la comanda. Permite separar la cuenta
+  /// de una misma casilla; 1 = cuenta única (sin separar).
+  int cuenta;
+
   bool get tieneContornos => contornos.isNotEmpty;
 
   double get subtotal => cantidad * precio;
+
+  ComandaItem copyWith({int? cantidad, int? cuenta}) => ComandaItem(
+        id: id,
+        tipo: tipo,
+        nombre: nombre,
+        precio: precio,
+        cantidad: cantidad ?? this.cantidad,
+        contornos: contornos,
+        cuenta: cuenta ?? this.cuenta,
+      );
 
   Map<String, dynamic> toJson() {
     final ids = <int>[];
@@ -56,6 +71,7 @@ class ComandaItem {
       if (contornos.isNotEmpty) 'contornos': nombres,
       if (ids.isNotEmpty) 'contorno_ids': ids,
       if (contornos.isNotEmpty) 'contorno_cantidades': cantidades,
+      if (cuenta != 1) 'cuenta': cuenta,
     };
   }
 
@@ -79,6 +95,7 @@ class ComandaItem {
       precio: (j['precio'] as num?)?.toDouble() ?? 0,
       cantidad: (j['cantidad'] as num?)?.toInt() ?? 1,
       contornos: contornos,
+      cuenta: (j['cuenta'] as num?)?.toInt() ?? 1,
     );
   }
 

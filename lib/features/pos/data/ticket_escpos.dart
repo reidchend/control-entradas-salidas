@@ -82,6 +82,7 @@ List<int> construirTicketEscpos({
   String? cajero,
   String? mesa,
   String? habitacion,
+  String? cliente,
   required TicketHeader header,
   String fecha = '',
   bool esCopiaCliente = false,
@@ -179,6 +180,10 @@ List<int> construirTicketEscpos({
   }
   if (habitacion != null && habitacion.isNotEmpty) {
     text('Hab.: $habitacion');
+    newline();
+  }
+  if (cliente != null && cliente.isNotEmpty) {
+    text('Cliente: $cliente');
     newline();
   }
   text('-' * ticketCols);
@@ -284,6 +289,7 @@ List<String> construirTicketPreview({
   String? cajero,
   String? mesa,
   String? habitacion,
+  String? cliente,
   required TicketHeader header,
   String fecha = '',
   bool esCopiaCliente = false,
@@ -320,6 +326,7 @@ List<String> construirTicketPreview({
   if (cajero != null && cajero.isNotEmpty) lineas.add('Cajero: $cajero');
   if (mesa != null && mesa.isNotEmpty) lineas.add('Mesa: $mesa');
   if (habitacion != null && habitacion.isNotEmpty) lineas.add('Hab.: $habitacion');
+  if (cliente != null && cliente.isNotEmpty) lineas.add('Cliente: $cliente');
   lineas.add('-' * ticketCols);
 
   for (final item in items) {

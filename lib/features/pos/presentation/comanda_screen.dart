@@ -9,10 +9,15 @@ import '../data/printer_service.dart';
 import '../data/tasa_bcv_service.dart';
 import '../data/ticket_escpos.dart';
 import '../data/ticket_settings.dart';
+import 'comanda_acciones.dart';
 import 'dialogs/cobro_dialog.dart';
+import 'dialogs/cobro_por_cliente_dialog.dart';
 import 'dialogs/contornos_dialog.dart';
+import 'dialogs/cuenta_item_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
+import 'widgets/clientes_bar.dart';
+import 'widgets/comanda_item_tile.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
 
@@ -27,6 +32,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
     this.habitacion,
     required this.onBack,
     required this.onLogout,
+    this.onComandaMovida,
   });
 
   final PosSesionActiva sesion;
@@ -34,6 +40,9 @@ class ComandaScreen extends ConsumerStatefulWidget {
   final Habitacion? habitacion;
   final VoidCallback onBack;
   final VoidCallback onLogout;
+
+  /// Tras mover la comanda a otra casilla, reabrir con la nueva ubicación.
+  final void Function(int? mesaId, int? habitacionId)? onComandaMovida;
 
   @override
   ConsumerState<ComandaScreen> createState() => _ComandaScreenState();
@@ -66,8 +75,13 @@ class _Snapshot {
 
 class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   final _items = <ComandaItem>[];
-  final _listKey = GlobalKey<AnimatedListState>();
+  GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   int? _comandaId;
+
+  /// Sub-cuentas ("clientes") de esta comanda y la activa para altas.
+  final Set<int> _clientes = {1};
+  int _clienteActivo = 1;
+
   double _tasa = 0;
   String _tasaFecha = '';
   bool _iniciando = true;
@@ -170,6 +184,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     _items
       ..clear()
       ..addAll(ComandaItem.listFromJson(existente.itemsJson));
+    _clientes
+      ..clear()
+      ..add(1)
+      ..addAll(_items.map((i) => i.cuenta));
   }
 
   Future<void> _guardar() async {
@@ -189,8 +207,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ref.invalidate(habitacionesOcupadasProvider);
       ref.invalidate(comandasActivasProvider);
       if (!mounted) return;
-
-
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
@@ -243,33 +259,68 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     }
   }
 
-  void _cobrar() {
-    showDialog<bool>(
-      context: context,
-      builder: (ctx) => CobroDialog(
-        total: _total,
-        tasa: _tasa,
-        tasaFecha: _tasaFecha,
-        ubicacion: _ubicacion,
-        onConfirm: _confirmarCobro,
-      ),
+  Future<void> _cobrar() async {
+    final conItems = _clientesConItems;
+    if (conItems.length <= 1) {
+      showDialog<bool>(
+        context: context,
+        builder: (ctx) => CobroDialog(
+          total: _total,
+          tasa: _tasa,
+          tasaFecha: _tasaFecha,
+          ubicacion: _ubicacion,
+          onConfirm: () => _confirmarCobro(),
+        ),
+      );
+      return;
+    }
+    final sel = await showCobroPorClienteDialog(
+      context,
+      total: _total,
+      tasa: _tasa,
+      ubicacion: _ubicacion,
+      clientes: [
+        for (final c in conItems)
+          (
+            cliente: c,
+            total: _items
+                .where((i) => i.cuenta == c)
+                .fold<double>(0, (s, i) => s + i.subtotal),
+          ),
+      ],
     );
+    if (sel == null || !mounted) return;
+    _confirmarCobro(clientes: sel.todo ? null : {sel.cliente!});
   }
 
-  Future<void> _confirmarCobro() async {
+  Future<void> _confirmarCobro({Set<int>? clientes}) async {
     if (_cobrando || !mounted) return;
+    final movidos = clientes == null
+        ? _items.toList()
+        : _items.where((i) => clientes.contains(i.cuenta)).toList();
+    if (movidos.isEmpty) return;
+    final restantes = clientes == null
+        ? <ComandaItem>[]
+        : _items.where((i) => !clientes.contains(i.cuenta)).toList();
+    final esParcial = restantes.isNotEmpty;
+
     setState(() => _cobrando = true);
     final repo = ref.read(posVentasRepoProvider)!;
     final mesaI = widget.mesa?.id;
     final habId = widget.habitacion?.id;
-    final total = _total;
-    final itemsJson = [for (final i in _items) i.toJson()];
+    final total = movidos.fold<double>(0, (s, i) => s + i.subtotal);
+    final totalRestantes = restantes.fold<double>(0, (s, i) => s + i.subtotal);
+    final itemsJson = [for (final i in movidos) i.toJson()];
+    final itemsComanda =
+        esParcial ? [for (final i in restantes) i.toJson()] : itemsJson;
+    final etiquetaCliente =
+        (clientes != null && clientes.length == 1) ? '${clientes.first}' : null;
     int? ventaId;
     try {
       final comandaId = await repo.guardarComanda(
         widget.sesion.sesionId,
-        itemsJson,
-        total,
+        itemsComanda,
+        esParcial ? totalRestantes : total,
         mesaId: mesaI,
         habitacionId: habId,
       );
@@ -294,10 +345,13 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         await repo.aplicarMovimientosVenta(ventaId, movs,
             registradoPor: widget.sesion.usuario.nombre);
       }
-      await repo.cerrarComanda(comandaId);
-      _comandaId = null;
-      final ticketItems = [for (final i in _items) _aTicketItem(i)];
-      _items.clear();
+      if (esParcial) {
+        _comandaId = comandaId;
+      } else {
+        await repo.cerrarComanda(comandaId);
+        _comandaId = null;
+      }
+      final ticketItems = [for (final i in movidos) _aTicketItem(i)];
       ref.invalidate(mesasOcupadasProvider);
       ref.invalidate(habitacionesOcupadasProvider);
       ref.invalidate(comandasActivasProvider);
@@ -317,8 +371,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           title: const Text('Imprimir copia cliente'),
           content: const Text('¿Desea imprimir la copia para el cliente?'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Sí')),
           ],
         ),
       );
@@ -329,15 +387,27 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           comandaId: comandaId,
           correlativo: correlativo,
           correccionDe: anulada?.correlativo,
+          cliente: etiquetaCliente,
           esCopiaCliente: true,
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            'Comanda #${correlativo.toString().padLeft(5, '0')} cobrada'),
-      ));
-      widget.onBack();
+      if (esParcial) {
+        _setItems(restantes, clienteActivo: restantes.first.cuenta);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Cobrado cliente ${etiquetaCliente ?? ''}: \$${total.toStringAsFixed(2)} · '
+              'quedan ${restantes.length} producto${restantes.length == 1 ? '' : 's'}'),
+          backgroundColor: const Color(0xFF4CAF50),
+        ));
+      } else {
+        _items.clear();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Comanda #${correlativo.toString().padLeft(5, '0')} cobrada'),
+        ));
+        widget.onBack();
+      }
     } catch (ex) {
       if (ventaId != null) {
         try {
@@ -421,6 +491,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     required int comandaId,
     int? correlativo,
     int? correccionDe,
+    String? cliente,
     bool esCopiaCliente = false,
     bool esComandaCocina = false,
   }) async {
@@ -435,6 +506,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       cajero: widget.sesion.usuario.nombre,
       mesa: _mesaTicketLabel,
       habitacion: _habitacionTicketLabel,
+      cliente: cliente,
       header: header,
       esCopiaCliente: esCopiaCliente,
       esComandaCocina: esComandaCocina,
@@ -453,6 +525,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         cajero: widget.sesion.usuario.nombre,
         mesa: _mesaTicketLabel,
         habitacion: _habitacionTicketLabel,
+        cliente: cliente,
         header: header,
         esCopiaCliente: esCopiaCliente,
         esComandaCocina: esComandaCocina,
@@ -471,6 +544,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     await showTicketPreview(context, lineas: lineas);
   }
 
+  /// Imprime una copia de la comanda actual para cocina (sin totales),
+  /// desde cualquier momento sin tener que cobrar.
   Future<void> _imprimirComanda() async {
     if (_items.isEmpty || !mounted) return;
     final ticketItems = [for (final i in _items) _aTicketItem(i)];
@@ -485,6 +560,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       esComandaCocina: true,
     );
   }
+
   // =========================================================================
   // Catálogo: navegación
   // =========================================================================
@@ -730,7 +806,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       }
     }
     for (final item in _items) {
-      if (item.id == id && item.tipo == tipo && !item.tieneContornos) {
+      if (item.id == id &&
+          item.tipo == tipo &&
+          item.cuenta == _clienteActivo &&
+          !item.tieneContornos) {
         setState(() => item.cantidad++);
         return;
       }
@@ -742,6 +821,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         nombre: nombre,
         precio: precio,
         cantidad: 1,
+        cuenta: _clienteActivo,
       ));
     });
     _listKey.currentState?.insertItem(_items.length - 1);
@@ -750,7 +830,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   void _agregarItemConContornos(
       int id, String nombre, double precio, List<ContornoSeleccion> contornos) {
     for (final item in _items) {
-      if (item.id == id && item.tipo == 'plato' && !item.tieneContornos) {
+      if (item.id == id &&
+          item.tipo == 'plato' &&
+          item.cuenta == _clienteActivo &&
+          !item.tieneContornos) {
         setState(() => item.cantidad++);
         return;
       }
@@ -762,6 +845,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         nombre: nombre,
         precio: precio,
         cantidad: 1,
+        cuenta: _clienteActivo,
         contornos: [
           for (final c in contornos)
             (id: c.plato.id, nombre: c.plato.nombre, cantidad: c.cantidad),
@@ -800,6 +884,175 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     );
   }
 
+  // =========================================================================
+  // Clientes (sub-cuentas) y acciones de casilla
+  // =========================================================================
+
+  List<int> get _clientesList => _clientes.toList()..sort();
+
+  List<int> get _clientesConItems {
+    final con = _items.map((i) => i.cuenta).toSet().toList()..sort();
+    return con;
+  }
+
+  void _pruneClientes() {
+    final conItems = _items.map((i) => i.cuenta).toSet();
+    _clientes.removeWhere(
+        (c) => c != 1 && c != _clienteActivo && !conItems.contains(c));
+  }
+
+  /// Reemplaza la lista de ítems (cambio masivo: separar, fusionar, cobro
+  /// parcial). Se recrea la clave de la AnimatedList para re-sincronizar el
+  /// conteo de una sola vez.
+  void _setItems(List<ComandaItem> nuevos, {int? clienteActivo}) {
+    final activo = clienteActivo ?? _clienteActivo;
+    _listKey = GlobalKey<AnimatedListState>();
+    setState(() {
+      _items
+        ..clear()
+        ..addAll(nuevos);
+      _clientes
+        ..clear()
+        ..add(1)
+        ..addAll(nuevos.map((i) => i.cuenta))
+        ..add(activo);
+      _clienteActivo = activo;
+    });
+  }
+
+  void _nuevoCliente() {
+    final nuevo = _clientesList.isEmpty
+        ? 1
+        : _clientesList.reduce((a, b) => a > b ? a : b) + 1;
+    setState(() {
+      _clientes.add(nuevo);
+      _clienteActivo = nuevo;
+    });
+  }
+
+  Future<void> _asignarCliente(int idx) async {
+    if (idx < 0 || idx >= _items.length) return;
+    final item = _items[idx];
+    final res = await showCuentaItemDialog(
+      context,
+      item: item,
+      clientes: _clientesList,
+    );
+    if (res == null || !mounted) return;
+
+    final clienteOriginal = item.cuenta;
+    final totalOriginal = item.cantidad;
+    if (res.cantidad >= totalOriginal) {
+      if (clienteOriginal == res.cliente) return;
+      setState(() {
+        item.cuenta = res.cliente;
+        _clientes.add(res.cliente);
+        _pruneClientes();
+      });
+      return;
+    }
+    if (clienteOriginal == res.cliente) return;
+
+    final resto = ComandaItem(
+      id: item.id,
+      tipo: item.tipo,
+      nombre: item.nombre,
+      precio: item.precio,
+      cantidad: totalOriginal - res.cantidad,
+      contornos: item.contornos,
+      cuenta: clienteOriginal,
+    );
+    setState(() {
+      item.cantidad = res.cantidad;
+      item.cuenta = res.cliente;
+      _clientes.add(res.cliente);
+      _items.insert(idx + 1, resto);
+      _pruneClientes();
+    });
+    _listKey.currentState?.insertItem(idx + 1);
+  }
+
+  /// Guarda la comanda sin salir de la pantalla (para operar sobre una comanda
+  /// todavía no persistida). Devuelve el id o `null` si falla.
+  Future<int?> _persistirSilencioso() async {
+    if (_items.isEmpty) return _comandaId;
+    try {
+      final id = await ref.read(posVentasRepoProvider)!.guardarComanda(
+            widget.sesion.sesionId,
+            [for (final i in _items) i.toJson()],
+            _total,
+            mesaId: widget.mesa?.id,
+            habitacionId: widget.habitacion?.id,
+          );
+      _comandaId = id;
+      ref.invalidate(comandasActivasProvider);
+      return id;
+    } catch (e) {
+      if (mounted) _snack('Error al guardar: $e', color: const Color(0xFFEF5350));
+      return null;
+    }
+  }
+
+  Future<void> _moverComanda() async {
+    if (_items.isEmpty) {
+      _snack('No hay productos en la comanda.');
+      return;
+    }
+    final id = _comandaId ?? await _persistirSilencioso();
+    if (id == null || id <= 0 || !mounted) return;
+    await moverComandaFlow(
+      context,
+      ref,
+      comandaId: id,
+      etiqueta: _ubicacion,
+      mesaActual: widget.mesa?.id,
+      habitacionActual: widget.habitacion?.id,
+      onMovida: (m, h) => widget.onComandaMovida?.call(m, h),
+    );
+  }
+
+  Future<void> _separarComanda() async {
+    if (_items.length < 2) {
+      _snack('Se necesitan al menos 2 productos para separar.');
+      return;
+    }
+    final id = _comandaId ?? await _persistirSilencioso();
+    if (id == null || id <= 0 || !mounted) return;
+    final restantes = await separarComandaFlow(
+      context,
+      ref,
+      comandaId: id,
+      items: List.of(_items),
+      sesionId: widget.sesion.sesionId,
+      mesaActual: widget.mesa?.id,
+      habitacionActual: widget.habitacion?.id,
+    );
+    if (restantes == null || !mounted) return;
+    _setItems(restantes);
+    if (restantes.isEmpty) {
+      _comandaId = null;
+      widget.onBack();
+    }
+  }
+
+  Future<void> _fusionarComanda() async {
+    final id = _comandaId ?? await _persistirSilencioso();
+    if (id == null || id <= 0 || !mounted) return;
+    await fusionarComandaFlow(context, ref, comandaId: id, etiqueta: _ubicacion);
+    if (!mounted) return;
+    await _recargarComanda(id);
+  }
+
+  Future<void> _recargarComanda(int id) async {
+    try {
+      final c = await ref.read(posVentasRepoProvider)!.getComanda(id);
+      if (c == null || !mounted) return;
+      _setItems(ComandaItem.listFromJson(c.itemsJson));
+    } catch (e) {
+      debugPrint('[comanda] _recargarComanda error: $e');
+    }
+  }
+
   double get _total => _items.fold(0, (s, i) => s + i.subtotal);
 
   static void _noop() {}
@@ -818,6 +1071,46 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             titulo: _ubicacion,
             onBack: widget.onBack,
             onLogout: widget.onLogout,
+            actions: [
+              PopupMenuButton<String>(
+                tooltip: 'Acciones de comanda',
+                icon: const Icon(Icons.more_vert),
+                onSelected: (v) {
+                  if (v == 'mover') _moverComanda();
+                  if (v == 'separar') _separarComanda();
+                  if (v == 'fusionar') _fusionarComanda();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'mover',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.drive_file_move_outline),
+                      title: Text('Mover a otra casilla'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'separar',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.call_split),
+                      title: Text('Separar productos…'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'fusionar',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.merge_type),
+                      title: Text('Fusionar con…'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const Divider(height: 1),
           Expanded(
@@ -877,6 +1170,13 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             ],
           ),
         ),
+        if (_items.isNotEmpty)
+          ClientesBar(
+            clientes: _clientesList,
+            activo: _clienteActivo,
+            onSelect: (c) => setState(() => _clienteActivo = c),
+            onNuevo: _nuevoCliente,
+          ),
         Expanded(
           child: _items.isEmpty
               ? const Center(
@@ -973,82 +1273,14 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   Widget _itemTile(ComandaItem item, int i) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: i.isEven ? scheme.surfaceContainerHigh : scheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.nombre,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold)),
-                Text(
-                  '\$${item.precio.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                ),
-                for (final c in item.contornos)
-                  Row(
-                    children: [
-                      const Icon(Icons.add, size: 10, color: Color(0xFFF57C00)),
-                      const SizedBox(width: 2),
-                      Expanded(
-                        child: Text(
-                          c.cantidad > 1
-                              ? '${c.cantidad}x ${c.nombre}'
-                              : c.nombre,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 10, color: Color(0xFFF57C00)),
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _cambiarCantidad(i, -1),
-            icon: const Icon(Icons.remove_circle_outline,
-                size: 18, color: Color(0xFFF57C00)),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 150),
-            child: Text(
-              '${item.cantidad}',
-              key: ValueKey(item.cantidad),
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _cambiarCantidad(i, 1),
-            icon: const Icon(Icons.add_circle_outline,
-                size: 18, color: Color(0xFF4CAF50)),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '\$${item.subtotal.toStringAsFixed(2)}',
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50)),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _eliminarItem(i),
-            icon: const Icon(Icons.delete_outline,
-                size: 18, color: Color(0xFFEF5350)),
-          ),
-        ],
-      ),
+    return ComandaItemTile(
+      item: item,
+      index: i,
+      onMenos: () => _cambiarCantidad(i, -1),
+      onMas: () => _cambiarCantidad(i, 1),
+      onEliminar: () => _eliminarItem(i),
+      mostrarCliente: _clientes.length > 1,
+      onCliente: () => _asignarCliente(i),
     );
   }
 

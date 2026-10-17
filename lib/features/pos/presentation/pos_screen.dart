@@ -374,11 +374,13 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
         );
       case _PosStage.comanda:
         return ComandaScreen(
+          key: ValueKey('comanda-${_mesa?.id ?? 0}-${_habitacion?.id ?? 0}'),
           sesion: s,
           mesa: _mesa,
           habitacion: _habitacion,
           onBack: () => _go(_PosStage.home),
           onLogout: _mostrarOpcionesCierre,
+          onComandaMovida: _abrirComandaActiva,
         );
       case _PosStage.ventas:
         return VentasScreen(
