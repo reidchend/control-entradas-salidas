@@ -37,8 +37,8 @@ class _SepararItemsDialogState extends State<_SepararItemsDialog> {
     }
   }
 
-  int get _total => _sel.fold(
-      0, (s, i) => s + widget.items[i].precio * (_cant[i] ?? 1));
+  double get _total => _sel.fold(
+      0.0, (s, i) => s + widget.items[i].precio * (_cant[i] ?? 1));
 
   void _toggle(int i, bool? on) {
     setState(() {
