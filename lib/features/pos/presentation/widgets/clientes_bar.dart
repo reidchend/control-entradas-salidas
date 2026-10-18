@@ -139,7 +139,7 @@ class ClientesBar extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Renombrar "${etiqueta(filtro!)}"',
                   onPressed: () => onRenombrar(filtro!),
-                  icon: const Icon(Icons.edit_outline, size: 16),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,

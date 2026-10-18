@@ -778,7 +778,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     String? desde,
     String hasta,
   ) async {
-    if (desde == null || desde.isEmpty) return (cantidad: 0, total: 0);
+    if (desde == null || desde.isEmpty) return (cantidad: 0, total: 0.0);
     final rows = await _db.client
         .from('pos_ventas')
         .select('total, sesion_id, created_at')
@@ -786,7 +786,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
         .eq('estado', 'vigente')
         .gte('created_at', desde)
         .lte('created_at', hasta);
-    if (rows.isEmpty) return (cantidad: 0, total: 0);
+    if (rows.isEmpty) return (cantidad: 0, total: 0.0);
     final ids = <int>{for (final r in rows) r['sesion_id'] as int}.toList();
     final sRows = await _db.client
         .from('pos_sesiones')
