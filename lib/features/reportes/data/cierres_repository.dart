@@ -11,15 +11,23 @@ class CierresRepository {
   CierresRepository(this._db);
   final PostgresService _db;
 
-  /// Fila de `pos_cierres` con el nombre del cajero resuelto vía join
-  /// (`usuarios(nombre)`): la tabla no guarda el nombre, solo el usuario_id.
+  /// FROM compartido: `pos_cierres` no guarda el nombre del cajero, solo el
+  /// `usuario_id`, así que se resuelve con un LEFT JOIN a `usuarios`.
+  ///
+  /// Ojo: no usar el embed de PostgREST `select('*, usuarios(nombre)')` —
+  /// la fachada `PgClient` no lo traduce y lo manda literal al SQL
+  /// (`SELECT *, usuarios(nombre) ...`), que Postgres rechaza con error 500.
+  static const _fromJoin =
+      'SELECT c.*, u.nombre AS usuario_nombre FROM pos_cierres c '
+      'LEFT JOIN usuarios u ON u.id = c.usuario_id';
+
+  /// Fila de `pos_cierres` con el nombre del cajero (columna
+  /// `usuario_nombre` del JOIN; vacío si el usuario ya no existe).
   CierreCaja _fromRow(Map<String, dynamic> r) {
-    final emb = r['usuarios'];
     return CierreCaja.fromJson({
       'sesion_id': r['sesion_id'],
       'usuario_id': r['usuario_id'],
-      'usuario_nombre':
-          emb is Map<String, dynamic> ? (emb['nombre'] as String? ?? '') : '',
+      'usuario_nombre': r['usuario_nombre'] as String? ?? '',
       'abierta_en': r['abierta_en'],
       'cerrada_en': r['cerrada_en'],
       'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
@@ -42,35 +50,33 @@ class CierresRepository {
     int? usuarioId,
     int limit = 50,
   }) async {
-    dynamic query = _db.client
-        .from('pos_cierres')
-        .select('*, usuarios(nombre)');
-
-    if (desde != null) {
-      query = query.gte('cerrada_en', desde.toIso8601String());
-    }
-    if (hasta != null) {
-      query = query.lte('cerrada_en', hasta.toIso8601String());
-    }
-    if (usuarioId != null) {
-      query = query.eq('usuario_id', usuarioId);
+    final params = <dynamic>[];
+    final conds = <String>[];
+    void addCond(String sql, dynamic valor) {
+      params.add(valor);
+      conds.add(sql.replaceAll('@', '\$${params.length}'));
     }
 
-    query = query
-        .order('cerrada_en', ascending: false)
-        .limit(limit);
+    if (desde != null) addCond('c.cerrada_en >= @', desde.toIso8601String());
+    if (hasta != null) addCond('c.cerrada_en <= @', hasta.toIso8601String());
+    if (usuarioId != null) addCond('c.usuario_id = @', usuarioId);
 
-    final rows = (await query) as List<Map<String, dynamic>>;
+    final sql = StringBuffer(_fromJoin);
+    if (conds.isNotEmpty) sql.write(' WHERE ${conds.join(' AND ')}');
+    // `limit` es int controlado por el caller (no proviene del usuario) y
+    // Postgres no admite placeholders en LIMIT, por eso se interpolan.
+    sql.write(' ORDER BY c.cerrada_en DESC LIMIT $limit');
+
+    final rows = await _db.executeSql(sql.toString(), params: params);
     return rows.map(_fromRow).toList();
   }
 
   /// Obtiene un cierre por ID
   Future<CierreCaja?> getCierreById(int id) async {
-    final rows = await _db.client
-        .from('pos_cierres')
-        .select('*, usuarios(nombre)')
-        .eq('id', id)
-        .limit(1);
+    final rows = await _db.executeSql(
+      '$_fromJoin WHERE c.id = \$1',
+      params: [id],
+    );
     if (rows.isEmpty) return null;
     return _fromRow(rows.first);
   }

@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
+import '../../reportes/data/cierres_repository.dart';
 import 'pos_comanda_models.dart';
 import 'pos_comanda_transfer_repository.dart';
 import 'pos_repository.dart';
@@ -122,34 +121,12 @@ final cierreProvider = FutureProvider.family<CierreCaja, int>((ref, sesionId) {
 });
 
 /// Historial de cierres guardados (para listar/consultar cierres anteriores).
+///
+/// Delega en `CierresRepository` (que resuelve el cajero con un LEFT JOIN);
+/// duplicar el mapeo de filas aquí ya causó un bug: el embed de PostgREST
+/// `usuarios(nombre)` no es SQL válido para nuestra fachada `PgClient`.
 final cierresHistorialProvider = FutureProvider<List<CierreCaja>>((ref) async {
   final db = ref.watch(postgresServiceProvider);
   if (db == null) return [];
-  final rows = await db.client
-      .from('pos_cierres')
-      .select('*, usuarios(nombre)')
-      .order('cerrada_en', ascending: false)
-      .limit(50) as List<Map<String, dynamic>>;
-  return rows.map((r) {
-    final emb = r['usuarios'];
-    return CierreCaja.fromJson({
-      'sesion_id': r['sesion_id'],
-      'usuario_id': r['usuario_id'],
-      'usuario_nombre': emb is Map<String, dynamic>
-          ? (emb['nombre'] as String? ?? '')
-          : '',
-      'abierta_en': r['abierta_en'],
-      'cerrada_en': r['cerrada_en'],
-      'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
-      'total_ventas': (r['total_ventas'] as num?)?.toDouble() ?? 0,
-      'caja_final': (r['caja_final'] as num?)?.toDouble() ?? 0,
-      'reporte_simple_json': r['reporte_simple_json'] is String
-          ? jsonDecode(r['reporte_simple_json'])
-          : r['reporte_simple_json'],
-      'reporte_detallado_json': r['reporte_detallado_json'] is String
-          ? jsonDecode(r['reporte_detallado_json'])
-          : r['reporte_detallado_json'],
-      'sync_uuid': r['sync_uuid'],
-    });
-  }).toList();
+  return CierresRepository(db).getCierres(limit: 50);
 });
