@@ -5,6 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/data/postgres_providers.dart';
 import '../../../core/data/postgres_service.dart';
 
+/// Orden del ranking de top productos. [sql] es el identificador interno del
+/// ORDER BY (constante de este archivo; nunca viene del usuario).
+enum _TopOrden {
+  facturacion('total'),
+  cantidad('cantidad');
+
+  const _TopOrden(this.sql);
+  final String sql;
+}
+
 class ReportesRepository {
   ReportesRepository(this._db);
   final PostgresService _db;
@@ -23,6 +33,41 @@ class ReportesRepository {
     if (v is String) return int.tryParse(v) ?? fallback;
     return fallback;
   }
+
+  // ---------------------------------------------------------------------------
+  // Límites de fecha
+  //
+  // `pos_ventas.created_at` es TEXT en hora local SIN zona (ej.
+  // "2026-10-18T14:32:54.475087"), así que sus consultas se comparan en local;
+  // mandar UTC corría ~4 h la ventana y dejaba fuera lo recién vendido.
+  // `movimientos` y `pos_cierres` sí son timestamptz: ahí el rango va en UTC.
+  // En ambos casos el "hasta" cierra el día completo (23:59:59.999999), para
+  // que el día elegido en el calendario quede incluido.
+  // ---------------------------------------------------------------------------
+
+  /// Inicio del día (00:00) en hora local, para columnas TEXT.
+  static String _inicioDiaLocal(DateTime f) =>
+      DateTime(f.year, f.month, f.day).toIso8601String();
+
+  /// Fin del día (23:59:59.999999) en hora local, para columnas TEXT.
+  static String _finDiaLocal(DateTime f) =>
+      DateTime(f.year, f.month, f.day, 23, 59, 59, 999, 999).toIso8601String();
+
+  /// Inicio del día local convertido a UTC, para columnas timestamptz.
+  static String _inicioDiaUtc(DateTime f) =>
+      DateTime(f.year, f.month, f.day).toUtc().toIso8601String();
+
+  /// Fin del día local convertido a UTC, para columnas timestamptz.
+  static String _finDiaUtc(DateTime f) => DateTime(
+        f.year,
+        f.month,
+        f.day,
+        23,
+        59,
+        59,
+        999,
+        999,
+      ).toUtc().toIso8601String();
 
   /// Ventas en un rango de fechas con filtros opcionales
   Future<List<Map<String, dynamic>>> getVentas({
@@ -58,8 +103,8 @@ class ReportesRepository {
       ${formaPago != null && formaPago != 'Todas' ? 'AND v.forma_pago = \$${3 + (cajero != null && cajero != 'Todos' ? 1 : 0)}' : ''}
       ORDER BY v.created_at DESC
     ''', params: [
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
       if (cajero != null && cajero != 'Todos') cajero,
       if (formaPago != null && formaPago != 'Todas') formaPago,
     ]);
@@ -97,8 +142,8 @@ class ReportesRepository {
     String? almacen,
   }) async {
     final params = <dynamic>[
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaUtc(desde),
+      _finDiaUtc(hasta),
     ];
     // El rango de fechas y el orden usan la fecha de negocio del traslado
     // (fecha_traslado = fecha en que se creó la requisición) cuando existe. Sin
@@ -135,23 +180,31 @@ class ReportesRepository {
   }
 
   /// KPIs principales para dashboard (agregación en SQL, sin N+1).
+  ///
+  /// Las ventas anuladas quedan FUERA de los totales (se cuentan aparte en
+  /// `num_anuladas`/`total_anuladas` para mostrar el dato sin inflar nada).
   Future<Map<String, dynamic>> getKPIs({
     required DateTime desde,
     required DateTime hasta,
   }) async {
     final rows = await _db.executeSql('''
       SELECT
-        COALESCE(SUM(total), 0)::numeric AS total_ventas,
-        COUNT(*) AS num_comandas,
+        COALESCE(SUM(total)
+          FILTER (WHERE COALESCE(estado, 'vigente') = 'vigente'), 0)::numeric AS total_ventas,
+        COUNT(*) FILTER (WHERE COALESCE(estado, 'vigente') = 'vigente') AS num_comandas,
+        COUNT(*) FILTER (WHERE COALESCE(estado, 'vigente') <> 'vigente') AS num_anuladas,
+        COALESCE(SUM(total)
+          FILTER (WHERE COALESCE(estado, 'vigente') <> 'vigente'), 0)::numeric AS total_anuladas,
         COALESCE(SUM(
           (SELECT COALESCE(SUM((x->>'cantidad')::numeric), 0)
            FROM json_array_elements(items_json::json) x)
-        ), 0)::numeric AS productos_vendidos
+        ) FILTER (WHERE COALESCE(estado, 'vigente') = 'vigente'), 0)::numeric
+          AS productos_vendidos
       FROM pos_ventas
       WHERE created_at >= \$1 AND created_at <= \$2
     ''', params: [
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
     ]);
 
     final r = rows.isNotEmpty ? rows.first : null;
@@ -164,14 +217,40 @@ class ReportesRepository {
       'ticket_promedio': numComandas > 0 ? totalVentas / numComandas : 0,
       'num_comandas': numComandas,
       'productos_vendidos': productosVendidos,
+      'num_anuladas': _toInt(r?['num_anuladas']),
+      'total_anuladas': _toDouble(r?['total_anuladas']),
     };
   }
 
-  /// Top productos vendidos (agregación en SQL, sin N+1).
+  /// Top productos: rankings por facturación y por cantidad, en paralelo.
+  Future<({List<Map<String, dynamic>> porFacturacion, List<Map<String, dynamic>> porCantidad})>
+      getTopProductosRankings({
+    required DateTime desde,
+    required DateTime hasta,
+    int limit = 10,
+  }) async {
+    final fFacturacion = _topProductos(
+        desde: desde, hasta: hasta, limit: limit, orden: _TopOrden.facturacion);
+    final fCantidad = _topProductos(
+        desde: desde, hasta: hasta, limit: limit, orden: _TopOrden.cantidad);
+    final results = await Future.wait([fFacturacion, fCantidad]);
+    return (porFacturacion: results[0], porCantidad: results[1]);
+  }
+
+  /// Top productos vendidos (agregación en SQL, sin N+1). Excluye anuladas.
   Future<List<Map<String, dynamic>>> getTopProductos({
     required DateTime desde,
     required DateTime hasta,
     int limit = 10,
+  }) =>
+      _topProductos(
+          desde: desde, hasta: hasta, limit: limit, orden: _TopOrden.facturacion);
+
+  Future<List<Map<String, dynamic>>> _topProductos({
+    required DateTime desde,
+    required DateTime hasta,
+    required int limit,
+    required _TopOrden orden,
   }) async {
     final rows = await _db.executeSql('''
       SELECT COALESCE(v.item->>'producto_id', v.item->>'id') AS producto_id,
@@ -181,12 +260,13 @@ class ReportesRepository {
       FROM pos_ventas p
       CROSS JOIN LATERAL json_array_elements(p.items_json::json) v(item)
       WHERE p.created_at >= \$1 AND p.created_at <= \$2
+        AND COALESCE(p.estado, 'vigente') = 'vigente'
       GROUP BY COALESCE(v.item->>'producto_id', v.item->>'id'), v.item->>'nombre'
-      ORDER BY total DESC
+      ORDER BY ${orden.sql} DESC
       LIMIT \$3
     ''', params: [
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
       limit,
     ]);
 
@@ -199,6 +279,7 @@ class ReportesRepository {
   }
 
   /// Tendencia de ventas por día (agregación en SQL, sin N+1).
+  /// Excluye anuladas para que la curva refleje ventas reales.
   Future<List<Map<String, dynamic>>> getTendenciaVentas({
     required DateTime desde,
     required DateTime hasta,
@@ -207,16 +288,47 @@ class ReportesRepository {
       SELECT substring(created_at, 1, 10) AS fecha, SUM(total) AS total
       FROM pos_ventas
       WHERE created_at >= \$1 AND created_at <= \$2
+        AND COALESCE(estado, 'vigente') = 'vigente'
       GROUP BY substring(created_at, 1, 10)
       ORDER BY fecha ASC
     ''', params: [
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
     ]);
 
     return rows.map((r) => {
       'fecha': r['fecha'] as String? ?? '',
       'total': _toDouble(r['total']),
+    }).toList();
+  }
+
+  /// Ventas por hora del día (0-23) para detectar picos de venta.
+  /// Excluye anuladas. `created_at` es texto ISO local (ej.
+  /// `2026-10-18T14:32:54.475087`), así que la hora sale del substring 12-13.
+  Future<List<Map<String, dynamic>>> getVentasPorHora({
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    final rows = await _db.executeSql('''
+      SELECT substring(created_at, 12, 2)::int AS hora,
+             COALESCE(SUM(total), 0)::numeric AS total,
+             COUNT(*) AS num_ventas
+      FROM pos_ventas
+      WHERE created_at >= \$1 AND created_at <= \$2
+        AND COALESCE(estado, 'vigente') = 'vigente'
+        AND substring(created_at, 12, 2) ~ '^[0-9]{2}\$'
+      GROUP BY 1
+      ORDER BY 1 ASC
+    ''', params: [
+      // created_at es TEXT en hora local: se compara en local (día completo).
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
+    ]);
+
+    return rows.map((r) => {
+      'hora': _toInt(r['hora']),
+      'total': _toDouble(r['total']),
+      'num_ventas': _toInt(r['num_ventas']),
     }).toList();
   }
 
@@ -249,8 +361,8 @@ class ReportesRepository {
         AND COALESCE(item->>'producto_id', item->>'id') = \$3
       ORDER BY v.created_at DESC
     ''', params: [
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaLocal(desde),
+      _finDiaLocal(hasta),
       productoId.toString(),
     ]);
 
@@ -280,8 +392,8 @@ class ReportesRepository {
       ORDER BY COALESCE(m.fecha_traslado, m.fecha_movimiento) DESC
     ''', params: [
       productoId,
-      desde.toUtc().toIso8601String(),
-      hasta.toUtc().toIso8601String(),
+      _inicioDiaUtc(desde),
+      _finDiaUtc(hasta),
     ]);
 
     // Normalizar campos numéricos (Postgres devuelve `numeric` como String)

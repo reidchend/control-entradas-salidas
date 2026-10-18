@@ -11,6 +11,15 @@ class CierresRepository {
   CierresRepository(this._db);
   final PostgresService _db;
 
+  /// `pos_cierres.cerrada_en` es TEXT en hora local (ej.
+  /// "2026-10-18T05:56:50.344183"). Estos límites cierran el día completo
+  /// para que el "Hasta" elegido en el calendario no quede excluido.
+  static String _inicioDia(DateTime f) =>
+      DateTime(f.year, f.month, f.day).toIso8601String();
+
+  static String _finDia(DateTime f) =>
+      DateTime(f.year, f.month, f.day, 23, 59, 59, 999, 999).toIso8601String();
+
   /// FROM compartido: `pos_cierres` no guarda el nombre del cajero, solo el
   /// `usuario_id`, así que se resuelve con un LEFT JOIN a `usuarios`.
   ///
@@ -57,8 +66,8 @@ class CierresRepository {
       conds.add(sql.replaceAll('@', '\$${params.length}'));
     }
 
-    if (desde != null) addCond('c.cerrada_en >= @', desde.toIso8601String());
-    if (hasta != null) addCond('c.cerrada_en <= @', hasta.toIso8601String());
+    if (desde != null) addCond('c.cerrada_en >= @', _inicioDia(desde));
+    if (hasta != null) addCond('c.cerrada_en <= @', _finDia(hasta));
     if (usuarioId != null) addCond('c.usuario_id = @', usuarioId);
 
     final sql = StringBuffer(_fromJoin);
