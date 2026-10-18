@@ -83,6 +83,22 @@ void main() {
       expect(linea.length, lessThanOrEqualTo(32));
       expect(linea.trim().endsWith(r'$12345.67'), isTrue);
     });
+
+    test('comanda de cocina muestra total en $ y en Bs igual que la copia '
+        'cliente', () {
+      final b = construirTicketEscpos(
+        items: items,
+        total: 12.5,
+        comandaId: 7,
+        correlativo: 3,
+        tasa: 835.9482,
+        header: header,
+        esComandaCocina: true,
+      );
+      final s = String.fromCharCodes(b);
+      expect(s, contains('TOTAL: \$12.50'));
+      expect(s, contains('TOTAL Bs: 10.449,35'));
+    });
   });
 
   group('construirTicketPreview', () {

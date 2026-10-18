@@ -228,7 +228,9 @@ List<int> construirTicketEscpos({
   text('-' * ticketCols);
   newline();
 
-  if (!esComandaCocina && total != null) {
+  // El total en $ se imprime siempre (también en la comanda de cocina) para
+  // que ambos tickets de cobro sean iguales: Bs ya salía incondicionalmente.
+  if (total != null) {
     add([0x1b, 0x61, 0x02]); // derecha
     add([0x1b, 0x45, 0x01]);
     text('TOTAL: \$${total.toStringAsFixed(2)}');
