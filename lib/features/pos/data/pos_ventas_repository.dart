@@ -7,6 +7,7 @@ import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
 import 'pos_comanda_models.dart';
+import 'sesion_cerrada_error.dart';
 
 class PosVentasRepository {
   PosVentasRepository(this._db);
@@ -14,6 +15,26 @@ class PosVentasRepository {
   final PostgresService _db;
 
   static const Uuid _uuid = Uuid();
+
+  /// Lanza [SesionCerradaError] si el turno no está abierto en BD.
+  ///
+  /// Protege contra la "terminal fantasma": una instancia de la app que sigue
+  /// con la sesión en memoria después de que el turno se cerró desde otra
+  /// terminal. Sin esta validación las ventas quedan huérfanas: se atribuyen
+  /// a un turno cerrado (salen a nombre de otro cajero) y no entran en ningún
+  /// cierre.
+  Future<void> _asegurarSesionAbierta(int sesionId,
+      {PostgresService? db}) async {
+    if (sesionId <= 0) return;
+    final rows = await (db ?? _db)
+        .client
+        .from('pos_sesiones')
+        .select('id')
+        .eq('id', sesionId)
+        .isFilter('cerrada_en', null)
+        .limit(1);
+    if (rows.isEmpty) throw SesionCerradaError(sesionId);
+  }
 
   // Comandas
 
@@ -37,6 +58,11 @@ class PosVentasRepository {
     // pasaban el chequeo "no hay comanda abierta" y se insertaba el duplicado
     // que aparecía dos veces en la lista de comandas activas.
     return _db.transaction<int>((tx) async {
+      // El turno debe seguir vivo en BD: se revalida dentro de la transacción
+      // para no cobrar (ni crear comandas) con un turno ya cerrado desde otra
+      // terminal.
+      await _asegurarSesionAbierta(sesionId, db: tx);
+
       if (mesaId != null) {
         await tx.executeSql(
           'SELECT id FROM pos_mesas WHERE id = \$1 FOR UPDATE',
@@ -273,6 +299,9 @@ class PosVentasRepository {
   }) async {
     // Modo desarrollador: sin escritura en BD
     if (sesionId != null && sesionId == 0) return -2;
+    // El turno debe seguir vivo en BD (otra terminal pudo haberlo cerrado):
+    // si no, la venta quedaría huérfana en un turno ya cerrado.
+    await _asegurarSesionAbierta(sesionId ?? 0);
     final now = DateTime.now().toIso8601String();
     final syncUuid = _uuid.v4();
 

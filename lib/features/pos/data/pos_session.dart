@@ -112,4 +112,22 @@ Future<void> cerrarSesion() async {
   void salirSinCerrar() {
     state = null;
   }
+
+  /// Revalida contra BD que la sesión local siga abierta. Si OTRO dispositivo
+  /// cerró este turno (o la sesión ya no existe), cierra la sesión local y
+  /// vuelve al login: así la terminal deja de operar con un turno cerrado
+  /// (sus ventas quedarían huérfanas, a nombre de otro cajero y sin entrar en
+  /// ningún cierre).
+  ///
+  /// Devuelve `false` si la sesión local fue cerrada por esta revalidación.
+  Future<bool> revalidarSesion() async {
+    final s = state;
+    if (s == null || s.sesionId <= 0) return true;
+    final repo = ref.read(posRepoProvider);
+    if (repo == null) return true;
+    final abierta = await repo.sesionAbierta(s.sesionId);
+    if (abierta) return true;
+    await cerrarSesion();
+    return false;
+  }
 }

@@ -756,6 +756,61 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     await _db.deleteById('platos', platoId);
   }
 
+  /// ¿El turno sigue abierto en BD? (`false` si fue cerrado desde otra
+  /// terminal o si ya no existe.)
+  Future<bool> sesionAbierta(int sesionId) async {
+    final rows = await _db.client
+        .from('pos_sesiones')
+        .select('id')
+        .eq('id', sesionId)
+        .isFilter('cerrada_en', null)
+        .limit(1);
+    return rows.isNotEmpty;
+  }
+
+  /// Ventas hechas durante la franja de ESTE turno pero con otra sesión que
+  /// ya estaba cerrada (ventas "huérfanas": no entran en ningún cierre).
+  ///
+  /// Solo se cuentan las de sesiones cerradas al momento de la venta, para no
+  /// marcar las ventas legítimas de otros cajeros que trabajan a la vez.
+  Future<({int cantidad, double total})> ventasFueraDeTurno(
+    int sesionId,
+    String? desde,
+    String hasta,
+  ) async {
+    if (desde == null || desde.isEmpty) return (cantidad: 0, total: 0);
+    final rows = await _db.client
+        .from('pos_ventas')
+        .select('total, sesion_id, created_at')
+        .neq('sesion_id', sesionId)
+        .eq('estado', 'vigente')
+        .gte('created_at', desde)
+        .lte('created_at', hasta);
+    if (rows.isEmpty) return (cantidad: 0, total: 0);
+    final ids = <int>{for (final r in rows) r['sesion_id'] as int}.toList();
+    final sRows = await _db.client
+        .from('pos_sesiones')
+        .select('id, cerrada_en')
+        .inFilter('id', ids);
+    final cierres = <int, String>{
+      for (final s in sRows)
+        if (s['cerrada_en'] != null)
+          s['id'] as int: s['cerrada_en'] as String,
+    };
+    var cantidad = 0;
+    var total = 0.0;
+    for (final r in rows) {
+      final cierre = cierres[r['sesion_id'] as int];
+      if (cierre == null) continue;
+      final creada = r['created_at'] as String?;
+      if (creada != null && creada.compareTo(cierre) > 0) {
+        cantidad++;
+        total += (r['total'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    return (cantidad: cantidad, total: total);
+  }
+
   /// Genera el cierre de caja completo (caja + reportes) para una sesión
   Future<CierreCaja> generarCierre(int sesionId) async {
     final ventasRepo = PosVentasRepository(_db);
@@ -811,10 +866,20 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     }
     final lineas = lineasMap.values.toList()
       ..sort((a, b) => a.nombre.compareTo(b.nombre));
+
+    // 3.b Ventas de esta franja hechas con otra sesión ya cerrada: no entran
+    //     en este cierre, pero se reportan como aviso para que el cierre no
+    //     quede incompleto en silencio (p. ej. otra terminal que siguió
+    //     cobrando con un turno ya cerrado).
+    final fueraTurno = await ventasFueraDeTurno(
+        sesionId, s['abierta_en'] as String?, DateTime.now().toIso8601String());
+
     final reporteSimple = ReporteSimple(
       lineas: lineas,
       contornos: resumen.contornos,
       totalGeneral: lineas.fold(0.0, (s, l) => s + l.total),
+      ventasFueraTurno: fueraTurno.cantidad,
+      montoFueraTurno: fueraTurno.total,
     );
 
     // 4. Reporte detallado: desglose por ingrediente

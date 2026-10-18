@@ -5,6 +5,7 @@ import '../../../core/models/pos_models.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
+import '../data/sesion_cerrada_error.dart';
 import '../data/printer_service.dart';
 import '../data/tasa_bcv_service.dart';
 import '../data/ticket_escpos.dart';
@@ -190,6 +191,20 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ..addAll(_items.map((i) => i.cuenta));
   }
 
+  /// Cierra la sesión local cuando el turno ya no está abierto en BD (fue
+  /// cerrado desde otra terminal): vuelve al login en vez de seguir operando
+  /// con un turno cerrado.
+  void _salirPorSesionCerrada() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text(
+          'El turno fue cerrado desde otra terminal. Inicie sesión nuevamente.'),
+      backgroundColor: Color(0xFFEF5350),
+      duration: Duration(seconds: 6),
+    ));
+    ref.read(posSessionProvider.notifier).cerrarSesion();
+  }
+
   Future<void> _guardar() async {
     if (_guardando || _items.isEmpty) return;
     setState(() => _guardando = true);
@@ -211,6 +226,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
       widget.onBack();
+    } on SesionCerradaError {
+      _salirPorSesionCerrada();
     } catch (e) {
       if (!mounted) return;
       _snack('Error al guardar la comanda: $e', color: const Color(0xFFEF5350));
@@ -408,6 +425,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         ));
         widget.onBack();
       }
+    } on SesionCerradaError {
+      _salirPorSesionCerrada();
     } catch (ex) {
       if (ventaId != null) {
         try {
@@ -987,6 +1006,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       _comandaId = id;
       ref.invalidate(comandasActivasProvider);
       return id;
+    } on SesionCerradaError {
+      _salirPorSesionCerrada();
+      return null;
     } catch (e) {
       if (mounted) _snack('Error al guardar: $e', color: const Color(0xFFEF5350));
       return null;

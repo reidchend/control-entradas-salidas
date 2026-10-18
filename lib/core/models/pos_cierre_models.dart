@@ -63,17 +63,29 @@ class ReporteSimple {
     required this.lineas,
     required this.totalGeneral,
     this.contornos = const [],
+    this.ventasFueraTurno = 0,
+    this.montoFueraTurno = 0,
   });
 
   final List<LineaVenta> lineas;
   final double totalGeneral;
   final List<ResumenContorno> contornos;
 
+  /// Ventas de la franja del turno hechas con otra sesión que ya estaba
+  /// cerrada: NO están incluidas en este cierre. Se reportan como aviso para
+  /// que el cierre no quede incompleto en silencio.
+  final int ventasFueraTurno;
+  final double montoFueraTurno;
+
   Map<String, dynamic> toJson() => {
         'lineas': lineas.map((l) => l.toJson()).toList(),
         'total_general': totalGeneral,
         if (contornos.isNotEmpty)
           'contornos': contornos.map((c) => c.toJson()).toList(),
+        if (ventasFueraTurno > 0) ...{
+          'ventas_fuera_turno': ventasFueraTurno,
+          'monto_fuera_turno': montoFueraTurno,
+        },
       };
 
   factory ReporteSimple.fromJson(Map<String, dynamic> j) => ReporteSimple(
@@ -83,6 +95,8 @@ class ReporteSimple {
                 ?.map((e) => ResumenContorno.fromJson(e))
                 .toList() ??
             const [],
+        ventasFueraTurno: (j['ventas_fuera_turno'] as num?)?.toInt() ?? 0,
+        montoFueraTurno: (j['monto_fuera_turno'] as num?)?.toDouble() ?? 0,
       );
 }
 

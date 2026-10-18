@@ -450,6 +450,14 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     sb.writeln('Ventas:  \$${_fmtNum(c.totalVentas)}');
     sb.writeln('──────────────');
     sb.writeln('Final:   \$${_fmtNum(c.cajaFinal)}');
+    if (c.reporteSimple.ventasFueraTurno > 0) {
+      sb.writeln('');
+      sb.writeln('⚠️ *VENTAS FUERA DE TURNO*');
+      sb.writeln(
+          '${c.reporteSimple.ventasFueraTurno} por \$${_fmtNum(c.reporteSimple.montoFueraTurno)} '
+          'cobradas con un turno ya cerrado');
+      sb.writeln('_No están incluidas en este cierre._');
+    }
     sb.writeln('');
 
     // Agrupar por categoría
@@ -504,6 +512,13 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     sb.writeln('Inicial: ${_fmtNum(c.cajaInicial)}');
     sb.writeln('Ventas:  ${_fmtNum(c.totalVentas)}');
     sb.writeln('Final:   ${_fmtNum(c.cajaFinal)}');
+    if (c.reporteSimple.ventasFueraTurno > 0) {
+      sb.writeln('');
+      sb.writeln('!! VENTAS FUERA DE TURNO !!');
+      sb.writeln('${c.reporteSimple.ventasFueraTurno} por '
+          '\$${_fmtNum(c.reporteSimple.montoFueraTurno)} cobradas con un turno');
+      sb.writeln('ya cerrado; NO están incluidas en este cierre.');
+    }
     sb.writeln('');
     sb.writeln('DESGLOSE POR INGREDIENTE');
     sb.writeln('------------------------');

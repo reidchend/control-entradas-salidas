@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/configuracion/data/configuracion_providers.dart';
 import '../../features/historial/data/historial_providers.dart';
 import '../../features/pos/data/pos_providers.dart';
+import '../../features/pos/data/pos_session.dart';
 import 'postgres_service.dart';
 
 /// Configuración de polling para reemplazar Realtime.
@@ -38,7 +39,14 @@ List<void Function()> initPollingSubscriptions(
     PollingConfig(
       table: 'pos_sesiones',
       interval: const Duration(seconds: 10),
-      invalidate: (r) => r.invalidate(turnosActivosProvider),
+      invalidate: (r) {
+        r.invalidate(turnosActivosProvider);
+        // Revalida que la sesión local siga viva: si OTRO dispositivo cerró
+        // este turno, la terminal vuelve al login en vez de seguir cobrando
+        // con un turno cerrado (ventas huérfanas a nombre de otro cajero que
+        // no entran en ningún cierre).
+        unawaited(r.read(posSessionProvider.notifier).revalidarSesion());
+      },
     ),
     PollingConfig(
       table: 'pos_comandas',
