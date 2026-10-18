@@ -61,4 +61,37 @@ void main() {
       expect(items.single.cuentaNombre, isNull);
     });
   });
+
+  group('indicesVisibles (filtro por cliente)', () {
+    final items = [
+      ComandaItem(id: 1, tipo: 'producto', nombre: 'A', precio: 1, cantidad: 1,
+          cuenta: 1),
+      ComandaItem(id: 2, tipo: 'producto', nombre: 'B', precio: 2, cantidad: 1,
+          cuenta: 2),
+      ComandaItem(id: 3, tipo: 'producto', nombre: 'C', precio: 3, cantidad: 1,
+          cuenta: 1),
+      ComandaItem(id: 4, tipo: 'producto', nombre: 'D', precio: 4, cantidad: 1,
+          cuenta: 3),
+    ];
+
+    test('filtro null devuelve todos los índices', () {
+      expect(indicesVisibles(items, null), [0, 1, 2, 3]);
+    });
+
+    test('filtro por cliente devuelve solo los suyos con índice real', () {
+      // Índices reales sobre _items (no posiciones de vista): clave para que
+      // +/−/eliminar operen sobre el item correcto.
+      expect(indicesVisibles(items, 1), [0, 2]);
+      expect(indicesVisibles(items, 3), [3]);
+    });
+
+    test('cliente sin productos devuelve vacío', () {
+      expect(indicesVisibles(items, 7), isEmpty);
+    });
+
+    test('lista vacía con cualquier filtro devuelve vacío', () {
+      expect(indicesVisibles(<ComandaItem>[], null), isEmpty);
+      expect(indicesVisibles(<ComandaItem>[], 2), isEmpty);
+    });
+  });
 }

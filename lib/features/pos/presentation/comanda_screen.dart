@@ -85,6 +85,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   final Set<int> _clientes = {1};
   int _clienteActivo = 1;
 
+  /// Cliente cuyos productos se están viendo en la lista; `null` = todos.
+  /// Al filtrar, ese cliente pasa a ser el activo (destino de los nuevos).
+  int? _filtroCliente;
+
   double _tasa = 0;
   String _tasaFecha = '';
   bool _iniciando = true;
@@ -899,7 +903,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   void _eliminarItem(int idx) {
     if (idx < 0 || idx >= _items.length) return;
     final item = _items[idx];
-    setState(() => _items.removeAt(idx));
+    setState(() {
+      _items.removeAt(idx);
+      _sanearFiltro();
+    });
     _listKey.currentState?.removeItem(
       idx,
       (ctx, anim) => SizeTransition(
@@ -949,6 +956,18 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final conItems = _items.map((i) => i.cuenta).toSet();
     _clientes.removeWhere(
         (c) => c != 1 && c != _clienteActivo && !conItems.contains(c));
+    _sanearFiltro();
+  }
+
+  /// Mantiene el invariante del filtro: si está activo debe coincidir con el
+  /// cliente activo y debe haber productos (si no, la barra con el chip
+  /// "Todos" desaparece y el usuario quedaría viendo una lista vacía sin
+  /// poder salir).
+  void _sanearFiltro() {
+    if (_filtroCliente != null &&
+        (_items.isEmpty || _filtroCliente != _clienteActivo)) {
+      _filtroCliente = null;
+    }
   }
 
   /// Reemplaza la lista de ítems (cambio masivo: separar, fusionar, cobro
@@ -967,6 +986,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         ..addAll(nuevos.map((i) => i.cuenta))
         ..add(activo);
       _clienteActivo = activo;
+      _sanearFiltro();
     });
   }
 
@@ -977,6 +997,16 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     setState(() {
       _clientes.add(nuevo);
       _clienteActivo = nuevo;
+      _filtroCliente = nuevo;
+    });
+  }
+
+  /// Filtra la lista para ver solo los productos de [c] y lo hace el cliente
+  /// activo (destino de los productos nuevos). Con `null` se ven todos.
+  void _filtrarCliente(int? c) {
+    setState(() {
+      _filtroCliente = c;
+      if (c != null) _clienteActivo = c;
     });
   }
 
@@ -1033,6 +1063,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         }
         _clientes.remove(c);
         if (_clienteActivo == c) _clienteActivo = destino;
+        _sanearFiltro();
       });
     }
     _persistirSilencioso();
@@ -1292,12 +1323,14 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           ClientesBar(
             clientes: _clientesList,
             activo: _clienteActivo,
+            filtro: _filtroCliente,
             subtotales: _subtotalesClientes,
             nombres: {
               for (final c in _clientesList)
                 if (_nombreCliente(c) != null) c: _nombreCliente(c)!,
             },
-            onSelect: (c) => setState(() => _clienteActivo = c),
+            onSelect: _filtrarCliente,
+            onVerTodos: () => setState(() => _filtroCliente = null),
             onNuevo: _nuevoCliente,
             onRenombrar: _renombrarCliente,
             onEliminar: _eliminarCliente,
@@ -1310,18 +1343,22 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                     style: TextStyle(fontStyle: FontStyle.italic),
                   ),
                 )
-              : AnimatedList.separated(
-                  key: _listKey,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  initialItemCount: _items.length,
-                  separatorBuilder: (_, __, ___) => const SizedBox(height: 4),
-                  removedSeparatorBuilder: (_, __, ___) =>
-                      const SizedBox(height: 4),
-                  itemBuilder: (context, i, anim) => SizeTransition(
-                    sizeFactor: anim,
-                    child: FadeTransition(opacity: anim, child: _itemTile(_items[i], i)),
-                  ),
-                ),
+              : _filtroCliente == null
+                  ? AnimatedList.separated(
+                      key: _listKey,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      initialItemCount: _items.length,
+                      separatorBuilder: (_, __, ___) =>
+                          const SizedBox(height: 4),
+                      removedSeparatorBuilder: (_, __, ___) =>
+                          const SizedBox(height: 4),
+                      itemBuilder: (context, i, anim) => SizeTransition(
+                        sizeFactor: anim,
+                        child: FadeTransition(
+                            opacity: anim, child: _itemTile(_items[i], i)),
+                      ),
+                    )
+                  : _listaFiltrada(),
         ),
         const Divider(height: 1),
         Padding(
@@ -1344,6 +1381,16 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                   ),
                 ],
               ),
+              if (_filtroCliente != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Viendo solo a ${_etiquetaCliente(_filtroCliente!)} · '
+                    '\$${(_subtotalesClientes[_filtroCliente] ?? 0).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontSize: 11, fontStyle: FontStyle.italic),
+                  ),
+                ),
               Row(
                 children: [
                   IconButton(
@@ -1397,15 +1444,59 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     );
   }
 
-  Widget _itemTile(ComandaItem item, int i) {
+  Widget _itemTile(ComandaItem item, int i, {int? colorIdx}) {
     return ComandaItemTile(
       item: item,
-      index: i,
+      // colorIdx = posición en la vista (para el cebreado); `i` = índice real
+      // sobre _items, el que usan +/−/eliminar/reasignar.
+      index: colorIdx ?? i,
       onMenos: () => _cambiarCantidad(i, -1),
       onMas: () => _cambiarCantidad(i, 1),
       onEliminar: () => _eliminarItem(i),
-      mostrarCliente: _clientes.length > 1,
+      // Con filtro activo todos los ítems son del mismo cliente: el badge
+      // "Cliente N" sería ruido.
+      mostrarCliente: _clientes.length > 1 && _filtroCliente == null,
       onCliente: () => _asignarCliente(i),
+    );
+  }
+
+  /// Lista de productos mostrada cuando hay un filtro de cliente activo:
+  /// solo los ítems de ese cliente, con sus **índices reales** sobre `_items`
+  /// (los +/−/eliminar/reasignar siguen operando igual). Si el cliente no
+  /// tiene productos, ofrece volver a la vista completa.
+  Widget _listaFiltrada() {
+    final visibles = indicesVisibles(_items, _filtroCliente);
+    if (visibles.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${_etiquetaCliente(_filtroCliente!)} no tiene productos '
+              'todavía',
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Los productos que seleccione entran aquí',
+              style: TextStyle(fontSize: 11),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => _filtrarCliente(null),
+              icon: const Icon(Icons.filter_alt_off_outlined, size: 16),
+              label: const Text('Ver todos los productos'),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      itemCount: visibles.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 4),
+      itemBuilder: (context, j) =>
+          _itemTile(_items[visibles[j]], visibles[j], colorIdx: j),
     );
   }
 

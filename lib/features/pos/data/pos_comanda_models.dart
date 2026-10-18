@@ -141,6 +141,16 @@ class ComandaItem {
   static String _encode(dynamic v) => const JsonEncoder().convert(v);
 }
 
+/// Índices de [items] visibles según el filtro de cliente: `filtro == null`
+/// muestra la comanda completa; con un número de cliente, solo los productos
+/// de esa sub-cuenta. Devuelve índices **reales** sobre [items] para que las
+/// acciones de cada ítem (+/−/eliminar/reasignar) sigan operando sin
+/// re-mapear posiciones.
+List<int> indicesVisibles(List<ComandaItem> items, int? filtro) => [
+      for (var i = 0; i < items.length; i++)
+        if (filtro == null || items[i].cuenta == filtro) i,
+    ];
+
 /// Formato venezolano 1.234,56 (port de `tasa_cambio.formatear_bs`).
 String formatearBs(double monto) {
   final m = monto.abs();
