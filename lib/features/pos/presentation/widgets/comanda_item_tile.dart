@@ -125,7 +125,7 @@ class ComandaItemTile extends StatelessWidget {
         border: Border.all(color: const Color(0xFF7E3FF2).withValues(alpha: 0.35)),
       ),
       child: Text(
-        'Cliente ${item.cuenta}',
+        item.cuentaNombre ?? 'Cliente ${item.cuenta}',
         style: const TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.bold,

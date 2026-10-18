@@ -8,17 +8,24 @@ Future<({int cantidad, int cliente})?> showCuentaItemDialog(
   BuildContext context, {
   required ComandaItem item,
   required List<int> clientes,
+  Map<int, String> nombres = const {},
 }) {
   return showDialog<({int cantidad, int cliente})>(
     context: context,
-    builder: (ctx) => _CuentaItemDialog(item: item, clientes: clientes),
+    builder: (ctx) =>
+        _CuentaItemDialog(item: item, clientes: clientes, nombres: nombres),
   );
 }
 
 class _CuentaItemDialog extends StatefulWidget {
-  const _CuentaItemDialog({required this.item, required this.clientes});
+  const _CuentaItemDialog({
+    required this.item,
+    required this.clientes,
+    required this.nombres,
+  });
   final ComandaItem item;
   final List<int> clientes;
+  final Map<int, String> nombres;
 
   @override
   State<_CuentaItemDialog> createState() => _CuentaItemDialogState();
@@ -59,7 +66,7 @@ class _CuentaItemDialogState extends State<_CuentaItemDialog> {
               children: [
                 for (final c in widget.clientes)
                   ChoiceChip(
-                    label: Text('Cliente $c'),
+                    label: Text(widget.nombres[c] ?? 'Cliente $c'),
                     selected: _cliente == c,
                     onSelected: (_) => setState(() => _cliente = c),
                   ),

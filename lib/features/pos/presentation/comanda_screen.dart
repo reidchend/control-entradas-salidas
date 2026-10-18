@@ -15,6 +15,8 @@ import 'dialogs/cobro_dialog.dart';
 import 'dialogs/cobro_por_cliente_dialog.dart';
 import 'dialogs/contornos_dialog.dart';
 import 'dialogs/cuenta_item_dialog.dart';
+import 'dialogs/eliminar_cliente_dialog.dart';
+import 'dialogs/renombre_cliente_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
 import 'widgets/clientes_bar.dart';
@@ -296,6 +298,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       total: _total,
       tasa: _tasa,
       ubicacion: _ubicacion,
+      nombres: {
+        for (final c in _clientesList)
+          if (_nombreCliente(c) != null) c: _nombreCliente(c)!,
+      },
       clientes: [
         for (final c in conItems)
           (
@@ -330,8 +336,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final itemsJson = [for (final i in movidos) i.toJson()];
     final itemsComanda =
         esParcial ? [for (final i in restantes) i.toJson()] : itemsJson;
-    final etiquetaCliente =
-        (clientes != null && clientes.length == 1) ? '${clientes.first}' : null;
+    final etiquetaCliente = (clientes != null && clientes.length == 1)
+        ? _etiquetaCliente(clientes.first)
+        : null;
     int? ventaId;
     try {
       final comandaId = await repo.guardarComanda(
@@ -914,6 +921,30 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     return con;
   }
 
+  /// Nombre personalizado del cliente (si se le puso uno en algún producto).
+  String? _nombreCliente(int c) {
+    for (final i in _items) {
+      if (i.cuenta == c &&
+          i.cuentaNombre != null &&
+          i.cuentaNombre!.isNotEmpty) {
+        return i.cuentaNombre;
+      }
+    }
+    return null;
+  }
+
+  /// Nombre visible del cliente: su nombre personalizado o "Cliente N".
+  String _etiquetaCliente(int c) => _nombreCliente(c) ?? 'Cliente $c';
+
+  /// Subtotal en $ que lleva cada sub-cuenta.
+  Map<int, double> get _subtotalesClientes {
+    final m = <int, double>{};
+    for (final i in _items) {
+      m.update(i.cuenta, (s) => s + i.subtotal, ifAbsent: () => i.subtotal);
+    }
+    return m;
+  }
+
   void _pruneClientes() {
     final conItems = _items.map((i) => i.cuenta).toSet();
     _clientes.removeWhere(
@@ -949,6 +980,67 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     });
   }
 
+  /// Pone (o quita) un nombre personalizado al cliente [c]. El nombre se
+  /// guarda en cada uno de sus productos, así que viaja con la comanda.
+  Future<void> _renombrarCliente(int c) async {
+    if (c == 1) return;
+    final nuevo = await showRenombreClienteDialog(
+      context,
+      numero: c,
+      nombreInicial: _nombreCliente(c),
+    );
+    if (nuevo == null || !mounted) return;
+    setState(() {
+      for (final i in _items) {
+        if (i.cuenta == c) i.cuentaNombre = nuevo.isEmpty ? null : nuevo;
+      }
+    });
+    _persistirSilencioso();
+  }
+
+  /// Elimina el cliente [c] (nunca el base). Si tiene productos, elige
+  /// moverlos a otro cliente o eliminarlos.
+  Future<void> _eliminarCliente(int c) async {
+    if (c == 1) return;
+    final etiqueta = _etiquetaCliente(c);
+    final propios = _items.where((i) => i.cuenta == c).toList();
+    final destinos = [
+      for (final otro in _clientesList)
+        if (otro != c) (cliente: otro, etiqueta: _etiquetaCliente(otro)),
+    ];
+    final res = await showEliminarClienteDialog(
+      context,
+      etiqueta: etiqueta,
+      cantidadItems: propios.length,
+      destinos: destinos,
+    );
+    if (res == null || !mounted) return;
+
+    if (res.vaciar) {
+      // Resincroniza la AnimatedList completa (mismo patrón que el cobro).
+      _setItems(
+        _items.where((i) => i.cuenta != c).toList(),
+        clienteActivo: _clienteActivo == c ? 1 : _clienteActivo,
+      );
+    } else {
+      final destino = res.moverA!;
+      final nombreDestino = _nombreCliente(destino);
+      setState(() {
+        for (final i in propios) {
+          i
+            ..cuenta = destino
+            ..cuentaNombre = nombreDestino;
+        }
+        _clientes.remove(c);
+        if (_clienteActivo == c) _clienteActivo = destino;
+      });
+    }
+    _persistirSilencioso();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$etiqueta eliminado')));
+  }
+
   Future<void> _asignarCliente(int idx) async {
     if (idx < 0 || idx >= _items.length) return;
     final item = _items[idx];
@@ -956,6 +1048,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       context,
       item: item,
       clientes: _clientesList,
+      nombres: {
+        for (final c in _clientesList)
+          if (_nombreCliente(c) != null) c: _nombreCliente(c)!,
+      },
     );
     if (res == null || !mounted) return;
 
@@ -1196,8 +1292,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           ClientesBar(
             clientes: _clientesList,
             activo: _clienteActivo,
+            subtotales: _subtotalesClientes,
+            nombres: {
+              for (final c in _clientesList)
+                if (_nombreCliente(c) != null) c: _nombreCliente(c)!,
+            },
             onSelect: (c) => setState(() => _clienteActivo = c),
             onNuevo: _nuevoCliente,
+            onRenombrar: _renombrarCliente,
+            onEliminar: _eliminarCliente,
           ),
         Expanded(
           child: _items.isEmpty

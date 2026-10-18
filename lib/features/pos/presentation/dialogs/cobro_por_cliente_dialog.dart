@@ -11,11 +11,13 @@ Future<({bool todo, int? cliente})?> showCobroPorClienteDialog(
   required double tasa,
   required String ubicacion,
   required List<({int cliente, double total})> clientes,
+  Map<int, String> nombres = const {},
 }) {
   return showDialog<({bool todo, int? cliente})>(
     context: context,
     builder: (ctx) {
       final scheme = Theme.of(ctx).colorScheme;
+      String etiqueta(int c) => nombres[c] ?? 'Cliente $c';
       return AlertDialog(
         title: const Text('Cobrar'),
         content: SizedBox(
@@ -52,7 +54,7 @@ Future<({bool todo, int? cliente})?> showCobroPorClienteDialog(
                   ListTile(
                     leading: const Icon(Icons.person_outline,
                         color: Color(0xFF7E3FF2)),
-                    title: Text('Cliente ${c.cliente}',
+                    title: Text(etiqueta(c.cliente),
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     trailing: Text('\$${c.total.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
