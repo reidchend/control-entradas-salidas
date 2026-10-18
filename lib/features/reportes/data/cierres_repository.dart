@@ -11,6 +11,30 @@ class CierresRepository {
   CierresRepository(this._db);
   final PostgresService _db;
 
+  /// Fila de `pos_cierres` con el nombre del cajero resuelto vía join
+  /// (`usuarios(nombre)`): la tabla no guarda el nombre, solo el usuario_id.
+  CierreCaja _fromRow(Map<String, dynamic> r) {
+    final emb = r['usuarios'];
+    return CierreCaja.fromJson({
+      'sesion_id': r['sesion_id'],
+      'usuario_id': r['usuario_id'],
+      'usuario_nombre':
+          emb is Map<String, dynamic> ? (emb['nombre'] as String? ?? '') : '',
+      'abierta_en': r['abierta_en'],
+      'cerrada_en': r['cerrada_en'],
+      'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
+      'total_ventas': (r['total_ventas'] as num?)?.toDouble() ?? 0,
+      'caja_final': (r['caja_final'] as num?)?.toDouble() ?? 0,
+      'reporte_simple_json': r['reporte_simple_json'] is String
+          ? jsonDecode(r['reporte_simple_json'])
+          : r['reporte_simple_json'],
+      'reporte_detallado_json': r['reporte_detallado_json'] is String
+          ? jsonDecode(r['reporte_detallado_json'])
+          : r['reporte_detallado_json'],
+      'sync_uuid': r['sync_uuid'],
+    });
+  }
+
   /// Lista cierres con filtros opcionales
   Future<List<CierreCaja>> getCierres({
     DateTime? desde,
@@ -20,7 +44,7 @@ class CierresRepository {
   }) async {
     dynamic query = _db.client
         .from('pos_cierres')
-        .select();
+        .select('*, usuarios(nombre)');
 
     if (desde != null) {
       query = query.gte('cerrada_en', desde.toIso8601String());
@@ -37,51 +61,18 @@ class CierresRepository {
         .limit(limit);
 
     final rows = (await query) as List<Map<String, dynamic>>;
-    return rows.map((r) => CierreCaja.fromJson({
-      'sesion_id': r['sesion_id'],
-      'usuario_id': r['usuario_id'],
-      'usuario_nombre': r['usuario_nombre'] ?? '',
-      'abierta_en': r['abierta_en'],
-      'cerrada_en': r['cerrada_en'],
-      'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
-      'total_ventas': (r['total_ventas'] as num?)?.toDouble() ?? 0,
-      'caja_final': (r['caja_final'] as num?)?.toDouble() ?? 0,
-      'reporte_simple_json': r['reporte_simple_json'] is String
-          ? jsonDecode(r['reporte_simple_json'])
-          : r['reporte_simple_json'],
-      'reporte_detallado_json': r['reporte_detallado_json'] is String
-          ? jsonDecode(r['reporte_detallado_json'])
-          : r['reporte_detallado_json'],
-      'sync_uuid': r['sync_uuid'],
-    })).toList();
+    return rows.map(_fromRow).toList();
   }
 
   /// Obtiene un cierre por ID
   Future<CierreCaja?> getCierreById(int id) async {
     final rows = await _db.client
         .from('pos_cierres')
-        .select()
+        .select('*, usuarios(nombre)')
         .eq('id', id)
         .limit(1);
     if (rows.isEmpty) return null;
-    final r = rows.first;
-    return CierreCaja.fromJson({
-      'sesion_id': r['sesion_id'],
-      'usuario_id': r['usuario_id'],
-      'usuario_nombre': r['usuario_nombre'] ?? '',
-      'abierta_en': r['abierta_en'],
-      'cerrada_en': r['cerrada_en'],
-      'caja_inicial': (r['caja_inicial'] as num?)?.toDouble() ?? 0,
-      'total_ventas': (r['total_ventas'] as num?)?.toDouble() ?? 0,
-      'caja_final': (r['caja_final'] as num?)?.toDouble() ?? 0,
-      'reporte_simple_json': r['reporte_simple_json'] is String
-          ? jsonDecode(r['reporte_simple_json'])
-          : r['reporte_simple_json'],
-      'reporte_detallado_json': r['reporte_detallado_json'] is String
-          ? jsonDecode(r['reporte_detallado_json'])
-          : r['reporte_detallado_json'],
-      'sync_uuid': r['sync_uuid'],
-    });
+    return _fromRow(rows.first);
   }
 }
 

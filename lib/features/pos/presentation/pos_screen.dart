@@ -10,6 +10,7 @@ import '../../../features/configuracion/presentation/widgets/bd_no_disponible.da
 import '../../../features/whatsapp/data/whatsapp_providers.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
+import '../data/reporte_cierre_texto.dart';
 import 'comanda_screen.dart';
 import 'config_screen.dart';
 import 'dialogs/cierre_turno_dialog.dart';
@@ -412,131 +413,15 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
   // Generación de reportes para WhatsApp (se envían tras persistir el cierre)
   // -------------------------------------------------------------------------
 
-  String _fmtNum(double v) {
-    if (v == v.truncateToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-  }
-
-  String _duracionCierre(CierreCaja c) {
-    final a = DateTime.tryParse(c.abiertaEn);
-    final b = DateTime.tryParse(c.cerradaEn);
-    if (a == null || b == null) return 'Desconocida';
-    final d = b.difference(a);
-    return '${d.inHours}h ${d.inMinutes % 60}m';
-  }
-
-  String _fmtFechaReporte(String? iso) {
-    if (iso == null) return '—';
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
-          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return iso;
-    }
-  }
+  // La implementación vive en `data/reporte_cierre_texto.dart` para poder
+  // reenviar estos MISMOS textos desde el historial de cierres (inventario).
 
   /// Genera el texto del reporte simple para WhatsApp
-  String _generarReporteSimpleTexto(CierreCaja c) {
-    final sb = StringBuffer();
-    sb.writeln('📊 *CIERRE DE TURNO*');
-    sb.writeln('Cajero: ${c.usuarioNombre}');
-    sb.writeln('Apertura: ${_fmtFechaReporte(c.abiertaEn)}');
-    sb.writeln('Cierre: ${_fmtFechaReporte(c.cerradaEn)}');
-    sb.writeln('Duración: ${_duracionCierre(c)}');
-    sb.writeln('');
-    sb.writeln('💰 *CAJA*');
-    sb.writeln('Inicial: \$${_fmtNum(c.cajaInicial)}');
-    sb.writeln('Ventas:  \$${_fmtNum(c.totalVentas)}');
-    sb.writeln('──────────────');
-    sb.writeln('Final:   \$${_fmtNum(c.cajaFinal)}');
-    if (c.reporteSimple.ventasFueraTurno > 0) {
-      sb.writeln('');
-      sb.writeln('⚠️ *VENTAS FUERA DE TURNO*');
-      sb.writeln(
-          '${c.reporteSimple.ventasFueraTurno} por \$${_fmtNum(c.reporteSimple.montoFueraTurno)} '
-          'cobradas con un turno ya cerrado');
-      sb.writeln('_No están incluidas en este cierre._');
-    }
-    sb.writeln('');
-
-    // Agrupar por categoría
-    final porCategoria = <String, List<LineaVenta>>{};
-    for (final l in c.reporteSimple.lineas) {
-      porCategoria.putIfAbsent(l.categoria, () => []).add(l);
-    }
-
-    sb.writeln('📦 *VENTAS POR CATEGORÍA*');
-    for (final entry in porCategoria.entries) {
-      final categoria = entry.key;
-      final items = entry.value;
-      final subtotal = items.fold<double>(0, (s, l) => s + l.total);
-
-      sb.writeln('');
-      sb.writeln('*${categoria.toUpperCase()}*');
-      sb.writeln('━━━━━━━━━━━━━━━━━━');
-      for (final l in items) {
-        sb.writeln('**${l.nombre}**');
-        sb.writeln('  ${_fmtNum(l.cantidad)} x \$${_fmtNum(l.precioUnitario)} = *\$${_fmtNum(l.total)}*');
-      }
-      sb.writeln('  *Subtotal: \$${_fmtNum(subtotal)}*');
-    }
-    sb.writeln('');
-    final contornos = c.reporteSimple.contornos;
-    if (contornos.isNotEmpty) {
-      sb.writeln('🍽️ *CONTORNOS SERVIDOS*');
-      for (final cn in contornos) {
-        sb.writeln('  ${cn.nombre}: ${_fmtNum(cn.cantidad)}');
-      }
-      sb.writeln('');
-    }
-    sb.writeln('💰 *TOTAL GENERAL: \$${_fmtNum(c.reporteSimple.totalGeneral)}*');
-    sb.writeln('');
-    sb.writeln('_Lycoris POS_');
-    return sb.toString();
-  }
+  String _generarReporteSimpleTexto(CierreCaja c) => reporteSimpleTexto(c);
 
   /// Genera el contenido del reporte detallado (.txt) para WhatsApp
-  String _generarReporteDetalladoTexto(CierreCaja c) {
-    final sb = StringBuffer();
-    sb.writeln('CIERRE DE TURNO - DETALLADO');
-    sb.writeln('============================');
-    sb.writeln('');
-    sb.writeln('Cajero: ${c.usuarioNombre}');
-    sb.writeln('Apertura: ${_fmtFechaReporte(c.abiertaEn)}');
-    sb.writeln('Cierre: ${_fmtFechaReporte(c.cerradaEn)}');
-    sb.writeln('Duración: ${_duracionCierre(c)}');
-    sb.writeln('');
-    sb.writeln('CAJA');
-    sb.writeln('----');
-    sb.writeln('Inicial: ${_fmtNum(c.cajaInicial)}');
-    sb.writeln('Ventas:  ${_fmtNum(c.totalVentas)}');
-    sb.writeln('Final:   ${_fmtNum(c.cajaFinal)}');
-    if (c.reporteSimple.ventasFueraTurno > 0) {
-      sb.writeln('');
-      sb.writeln('!! VENTAS FUERA DE TURNO !!');
-      sb.writeln('${c.reporteSimple.ventasFueraTurno} por '
-          '\$${_fmtNum(c.reporteSimple.montoFueraTurno)} cobradas con un turno');
-      sb.writeln('ya cerrado; NO están incluidas en este cierre.');
-    }
-    sb.writeln('');
-    sb.writeln('DESGLOSE POR INGREDIENTE');
-    sb.writeln('------------------------');
-    for (final d in c.reporteDetallado.desgloses) {
-      sb.writeln('');
-      sb.writeln('Ingrediente: ${d.ingrediente}');
-      sb.writeln('  Total consumido: ${_fmtNum(d.totalConsumido)}');
-      sb.writeln('  Stock final:     ${_fmtNum(d.stockFinal)}');
-      sb.writeln('  Usos:');
-      for (final u in d.usos) {
-        sb.writeln('    - ${u.plato}: ${_fmtNum(u.cantidad)}');
-      }
-    }
-    sb.writeln('');
-    sb.writeln('============================');
-    sb.writeln('Lycoris POS');
-    return sb.toString();
-  }
+  String _generarReporteDetalladoTexto(CierreCaja c) =>
+      reporteDetalladoTexto(c);
 }
 
 // ===========================================================================

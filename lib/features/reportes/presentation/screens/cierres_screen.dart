@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/auth/usuarios_providers.dart';
+import '../../../../core/auth/usuarios_repository.dart';
 import '../../../../core/models/pos_cierre_models.dart';
-import '../../../../core/utils/modal_sizing.dart';
+import '../../../../core/models/usuario.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/cierres_repository.dart';
+import '../dialogs/reenviar_cierre_dialog.dart';
+import '../widgets/cierre_card.dart';
+import '../widgets/cierre_detalle_dialog.dart';
+import '../widgets/cierre_resumen.dart';
 
-/// Pantalla de historial de cierres de caja
+/// Pantalla de historial de cierres de caja (módulo inventario).
+///
+/// Muestra el cajero de cada cierre, permite filtrar por cajero y
+/// reenviar los reportes (simple/detallado) por WhatsApp.
 class CierresHistorialScreen extends ConsumerStatefulWidget {
   const CierresHistorialScreen({super.key});
 
   @override
-  ConsumerState<CierresHistorialScreen> createState() => _CierresHistorialScreenState();
+  ConsumerState<CierresHistorialScreen> createState() =>
+      _CierresHistorialScreenState();
 }
 
 class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen> {
@@ -19,6 +29,7 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
   DateTime? _hasta;
   int? _usuarioId;
   List<CierreCaja> _cierres = [];
+  List<Usuario> _cajeros = [];
   bool _cargando = false;
 
   @override
@@ -27,6 +38,18 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
     _desde = DateTime.now().subtract(const Duration(days: 30));
     _hasta = DateTime.now();
     _cargar();
+    _cargarCajeros();
+  }
+
+  Future<void> _cargarCajeros() async {
+    final repo = ref.read(usuariosRepoProvider);
+    if (repo == null) return;
+    try {
+      final lista = await repo.listarPorModulo(UsuariosRepository.moduloPos);
+      if (mounted) setState(() => _cajeros = lista);
+    } catch (_) {
+      // Sin cajeros el filtro queda como "Todos"; no bloquea la pantalla.
+    }
   }
 
   Future<void> _cargar() async {
@@ -72,17 +95,17 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
           if (!esMovil) {
             return Column(
               children: [
-                _buildFiltros(scheme),
+                _buildFiltros(esMovil: false),
                 const Divider(height: 1),
-                Expanded(child: _buildContenido(scheme)),
+                Expanded(child: _contenido(scheme, esMovil: false)),
               ],
             );
           }
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(child: _buildFiltros(scheme)),
+              SliverToBoxAdapter(child: _buildFiltros(esMovil: true)),
               const SliverToBoxAdapter(child: Divider(height: 1)),
-              ..._buildContenidoSlivers(scheme),
+              ..._contenidoSlivers(scheme),
             ],
           );
         },
@@ -90,60 +113,101 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
     );
   }
 
-  Widget _buildFiltros(ColorScheme scheme) {
+  // -------------------------------------------------------------------------
+  // Filtros (fechas + cajero + actualizar)
+  // -------------------------------------------------------------------------
+
+  Widget _buildFiltros({required bool esMovil}) {
+    final scheme = Theme.of(context).colorScheme;
+    final actualizar = FilledButton.icon(
+      icon: const Icon(Icons.refresh, size: 18),
+      label: const Text('Actualizar'),
+      onPressed: _cargando ? null : _cargar,
+    );
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final esMovil = constraints.maxWidth < 600;
-          if (esMovil) {
-            return Column(
+      child: esMovil
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     Expanded(
-                      child: _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d), width: double.infinity),
+                      child: _buildDatePicker(
+                          'Desde', _desde, (d) => setState(() => _desde = d),
+                          width: double.infinity),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d), width: double.infinity),
+                      child: _buildDatePicker(
+                          'Hasta', _hasta, (d) => setState(() => _hasta = d),
+                          width: double.infinity),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                FilledButton.icon(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Actualizar'),
-                  onPressed: _cargando ? null : _cargar,
-                ),
+                _buildDropdownCajero(width: double.infinity),
+                const SizedBox(height: 8),
+                actualizar,
               ],
-            );
-          }
-          return Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildDatePicker('Desde', _desde, (d) => setState(() => _desde = d)),
-              _buildDatePicker('Hasta', _hasta, (d) => setState(() => _hasta = d)),
-              FilledButton.icon(
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Actualizar'),
-                onPressed: _cargando ? null : _cargar,
-              ),
-            ],
-          );
-        },
+            )
+          : Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _buildDatePicker(
+                    'Desde', _desde, (d) => setState(() => _desde = d)),
+                _buildDatePicker(
+                    'Hasta', _hasta, (d) => setState(() => _hasta = d)),
+                _buildDropdownCajero(width: 200),
+                actualizar,
+              ],
+            ),
+    );
+  }
+
+  Widget _buildDropdownCajero({required double width}) {
+    return SizedBox(
+      width: width,
+      child: DropdownButtonFormField<int?>(
+        initialValue: _usuarioId,
+        isDense: true,
+        decoration: const InputDecoration(
+          labelText: 'Cajero',
+          isDense: true,
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.person_outline, size: 18),
+        ),
+        items: [
+          const DropdownMenuItem<int?>(value: null, child: Text('Todos')),
+          for (final u in _cajeros)
+            DropdownMenuItem<int?>(
+              value: u.id,
+              child: Text(u.nombre,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14)),
+            ),
+        ],
+        onChanged: _cargando
+            ? null
+            : (v) {
+                setState(() => _usuarioId = v);
+                _cargar();
+              },
       ),
     );
   }
 
-  Widget _buildDatePicker(String label, DateTime? value, ValueChanged<DateTime> onChanged, {double? width}) {
+  Widget _buildDatePicker(String label, DateTime? value,
+      ValueChanged<DateTime> onChanged,
+      {double? width}) {
     return SizedBox(
       width: width ?? 160,
       child: InkWell(
@@ -171,36 +235,27 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
     );
   }
 
-  Widget _buildContenido(ColorScheme scheme) {
+  // -------------------------------------------------------------------------
+  // Contenido (resumen + lista de cierres)
+  // -------------------------------------------------------------------------
+
+  Widget _contenido(ColorScheme scheme, {required bool esMovil}) {
     if (_cargando) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_cierres.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: scheme.primary.withValues(alpha: 0.3)),
-            const SizedBox(height: 16),
-            Text('Sin cierres en el período', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Text('Ajusta los filtros e intenta de nuevo', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-          ],
-        ),
-      );
-    }
+    if (_cierres.isEmpty) return _vacio(scheme);
 
+    final lista = _buildLista(scheme, padding: 16);
+    if (esMovil) return lista;
     return Column(
       children: [
         _buildResumen(scheme),
-        Expanded(
-          child: _buildLista(scheme),
-        ),
+        Expanded(child: lista),
       ],
     );
   }
 
-  List<Widget> _buildContenidoSlivers(ColorScheme scheme) {
+  List<Widget> _contenidoSlivers(ColorScheme scheme) {
     if (_cargando) {
       return const [
         SliverFillRemaining(
@@ -211,21 +266,7 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
     }
     if (_cierres.isEmpty) {
       return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.history, size: 64, color: scheme.primary.withValues(alpha: 0.3)),
-                const SizedBox(height: 16),
-                Text('Sin cierres en el período', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                Text('Ajusta los filtros e intenta de nuevo', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-        ),
+        SliverFillRemaining(hasScrollBody: false, child: _vacio(scheme)),
       ];
     }
     return [
@@ -235,10 +276,32 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
         sliver: SliverList.separated(
           itemCount: _cierres.length,
           separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) => _buildItem(context, index, scheme),
+          itemBuilder: (context, index) => _buildItem(index),
         ),
       ),
     ];
+  }
+
+  Widget _vacio(ColorScheme scheme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.history,
+              size: 64, color: scheme.primary.withValues(alpha: 0.3)),
+          const SizedBox(height: 16),
+          Text('Sin cierres en el período',
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 8),
+          Text('Ajusta los filtros e intenta de nuevo',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
   }
 
   Widget _buildResumen(ColorScheme scheme) {
@@ -250,36 +313,46 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
         spacing: 24,
         runSpacing: 12,
         children: [
-          _ResumenCard(label: 'Total Cierres', valor: _cierres.length.toString(), icon: Icons.history, color: Colors.blue),
-          _ResumenCard(label: 'Caja Inicial Total', valor: '\$${_totalInicial.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
-          _ResumenCard(label: 'Ventas Totales', valor: '\$${_totalVentas.toStringAsFixed(2)}', icon: Icons.point_of_sale, color: Colors.orange),
-          _ResumenCard(label: 'Caja Final Total', valor: '\$${_totalFinal.toStringAsFixed(2)}', icon: Icons.savings, color: Colors.purple),
+          CierreResumenCard(
+              label: 'Total Cierres',
+              valor: _cierres.length.toString(),
+              icon: Icons.history,
+              color: Colors.blue),
+          CierreResumenCard(
+              label: 'Caja Inicial Total',
+              valor: '\$${_totalInicial.toStringAsFixed(2)}',
+              icon: Icons.attach_money,
+              color: Colors.green),
+          CierreResumenCard(
+              label: 'Ventas Totales',
+              valor: '\$${_totalVentas.toStringAsFixed(2)}',
+              icon: Icons.point_of_sale,
+              color: Colors.orange),
+          CierreResumenCard(
+              label: 'Caja Final Total',
+              valor: '\$${_totalFinal.toStringAsFixed(2)}',
+              icon: Icons.savings,
+              color: Colors.purple),
         ],
       ),
     );
   }
 
-  Widget _buildLista(ColorScheme scheme) {
+  Widget _buildLista(ColorScheme scheme, {required double padding}) {
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(padding),
       itemCount: _cierres.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (context, index) => _buildItem(context, index, scheme),
+      itemBuilder: (context, index) => _buildItem(index),
     );
   }
 
-  Widget _buildItem(BuildContext context, int index, ColorScheme scheme) {
+  Widget _buildItem(int index) {
     final c = _cierres[index];
-    final fecha = (c.cerradaEn as String?)?.substring(0, 16) ?? '—';
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
-        child: Text('${index + 1}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
-      ),
-      title: Text('Cierre #${c.sesionId} · $fecha'),
-      subtitle: Text('${c.usuarioNombre} · Duración: ${_duracionTexto(c)}'),
-      trailing: Text('\$${c.cajaFinal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary, fontSize: 16)),
+    return CierreCard(
+      cierre: c,
       onTap: () => _verDetalle(c),
+      onReenviar: () => _reenviar(c),
     );
   }
 
@@ -287,114 +360,21 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
   double get _totalVentas => _cierres.fold(0.0, (s, c) => s + c.totalVentas);
   double get _totalFinal => _cierres.fold(0.0, (s, c) => s + c.cajaFinal);
 
-  Future<void> _verDetalle(CierreCaja cierre) async {
+  void _verDetalle(CierreCaja cierre) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Detalle Cierre #${cierre.sesionId}'),
-        content: SizedBox(
-          width: modalContentWidth(context),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _DetalleRow(label: 'Cajero', valor: cierre.usuarioNombre),
-                _DetalleRow(label: 'Apertura', valor: _fmtFecha(cierre.abiertaEn)),
-                _DetalleRow(label: 'Cierre', valor: _fmtFecha(cierre.cerradaEn)),
-                _DetalleRow(label: 'Duración', valor: _duracionTexto(cierre)),
-                const Divider(),
-                _DetalleRow(label: 'Caja Inicial', valor: '\$${cierre.cajaInicial.toStringAsFixed(2)}', bold: true),
-                _DetalleRow(label: 'Total Ventas', valor: '\$${cierre.totalVentas.toStringAsFixed(2)}'),
-                _DetalleRow(label: 'Caja Final', valor: '\$${cierre.cajaFinal.toStringAsFixed(2)}', bold: true, color: Colors.green),
-                const Divider(),
-                Text('Reporte Simple:', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                _buildReporteSimple(cierre.reporteSimple),
-                const SizedBox(height: 16),
-                Text('Reporte Detallado:', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                _buildReporteDetallado(cierre.reporteDetallado),
-              ],
-            ),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
+      builder: (_) => CierreDetalleDialog(
+        cierre: cierre,
+        onReenviar: () => _reenviar(cierre),
       ),
     );
   }
 
-  Widget _buildReporteSimple(ReporteSimple reporte) {
-    final widgets = <Widget>[
-      for (final l in reporte.lineas)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(child: Text(l.nombre, style: const TextStyle(fontSize: 12))),
-              Text('${l.cantidad.toStringAsFixed(3)} x \$${l.precioUnitario.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-              Text('\$${l.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-    ];
-    if (reporte.contornos.isNotEmpty) {
-      widgets.add(const SizedBox(height: 8));
-      widgets.add(const Text('Contornos servidos:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)));
-      for (final cn in reporte.contornos) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text(cn.nombre, style: const TextStyle(fontSize: 11))),
-                Text(cn.cantidad.toStringAsFixed(3), style: const TextStyle(fontSize: 11)),
-              ],
-            ),
-          ),
-        );
-      }
-    }
-    return Column(children: widgets);
-  }
-
-  Widget _buildReporteDetallado(ReporteDetallado reporte) {
-    return Column(
-      children: reporte.desgloses.map((d) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(child: Text(d.ingrediente, style: const TextStyle(fontSize: 11))),
-            Text('Cons: ${d.totalConsumido.toStringAsFixed(3)}', style: const TextStyle(fontSize: 10)),
-            Text('Stock: ${d.stockFinal.toStringAsFixed(3)}', style: const TextStyle(fontSize: 10)),
-          ],
-        ),
-      )).toList(),
+  void _reenviar(CierreCaja cierre) {
+    showDialog(
+      context: context,
+      builder: (_) => ReenviarCierreDialog(cierre: cierre),
     );
-  }
-
-  String _duracionTexto(CierreCaja cierre) {
-    try {
-      final a = DateTime.parse(cierre.abiertaEn);
-      final c = DateTime.parse(cierre.cerradaEn);
-      final d = c.difference(a);
-      return '${d.inHours}h ${d.inMinutes % 60}m';
-    } catch (_) {
-      return '—';
-    }
-  }
-
-  String _fmtFecha(String? iso) {
-    if (iso == null) return '—';
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return iso;
-    }
   }
 
   void _exportar() {
@@ -403,49 +383,5 @@ class _CierresHistorialScreenState extends ConsumerState<CierresHistorialScreen>
 
   void _snack(String msg) {
     showErrorSnackBar(context, msg);
-  }
-}
-
-class _ResumenCard extends StatelessWidget {
-  const _ResumenCard({required this.label, required this.valor, required this.icon, required this.color});
-  final String label;
-  final String valor;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 4),
-        Text(valor, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-      ],
-    );
-  }
-}
-
-class _DetalleRow extends StatelessWidget {
-  const _DetalleRow({required this.label, required this.valor, this.bold = false, this.color});
-  final String label;
-  final String valor;
-  final bool bold;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(child: Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))),
-          const SizedBox(width: 12),
-          Flexible(child: Text(valor, textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color))),
-        ],
-      ),
-    );
   }
 }
