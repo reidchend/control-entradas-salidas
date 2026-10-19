@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/postgres_providers.dart';
+import 'motivos_no_validacion_repository.dart';
 import 'temporales_repository.dart';
 import 'validacion_repository.dart';
 
@@ -10,6 +11,23 @@ final validacionRepoProvider = Provider<ValidacionRepository?>((ref) {
   final db = ref.watch(postgresServiceProvider);
   if (db == null) return null;
   return ValidacionRepository(db);
+});
+
+/// Repositorio del catálogo de motivos de no validación y de las notas
+/// por entrada pendiente.
+final motivosNoValidacionRepoProvider =
+    Provider<MotivosNoValidacionRepository?>((ref) {
+  final db = ref.watch(postgresServiceProvider);
+  if (db == null) return null;
+  return MotivosNoValidacionRepository(db);
+});
+
+/// Catálogo de motivos frecuentes. Se invalida al agregar o borrar uno.
+final motivosPredefinidosProvider =
+    FutureProvider<List<MotivoNoValidacion>>((ref) async {
+  final repo = ref.watch(motivosNoValidacionRepoProvider);
+  if (repo == null) return const [];
+  return repo.listar();
 });
 
 final temporalesRepoProvider = Provider<TemporalesRepository>((ref) {

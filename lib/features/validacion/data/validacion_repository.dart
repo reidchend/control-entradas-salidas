@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import '../../../core/data/postgres_service.dart';
 import '../../../core/utils/supabase_cast.dart';
 
@@ -15,6 +17,7 @@ class EntradaPendiente {
     required this.cantidadAnterior,
     required this.cantidadNueva,
     this.observaciones,
+    this.motivoNoValidacion,
   });
 
   final int id;
@@ -29,6 +32,11 @@ class EntradaPendiente {
   final double cantidadAnterior;
   final double cantidadNueva;
   final String? observaciones;
+
+  /// Nota con el motivo por el que la entrada todavía no se ha validado
+  /// (`movimientos.motivo_no_validacion`). Null si aún no se anotó nada o si
+  /// la migración `20261019000000` todavía no corrió.
+  final String? motivoNoValidacion;
 
   String get cantidadTexto {
     if (esPesable && pesoTotal > 0) return '${pesoTotal.toStringAsFixed(3)} kg';
@@ -99,6 +107,10 @@ class ValidacionRepository {
             (m['cantidad_anterior'] as num?)?.toDouble() ?? 0,
         cantidadNueva: (m['cantidad_nueva'] as num?)?.toDouble() ?? 0,
         observaciones: (m['observaciones'] as String?)?.trim(),
+        // `m.*` trae la columna solo si la migración pendiente ya corrió;
+        // antes de eso queda null y la card no muestra nota.
+        motivoNoValidacion:
+            (m['motivo_no_validacion'] as String?)?.trim(),
       ));
     }
     return result;
@@ -252,6 +264,17 @@ class ValidacionRepository {
         .from('movimientos')
         .update({'factura_id': facturaId})
         .inFilter('id', ids.toList());
+    // Al validar ya no aplica el "por qué no se validaba": se borra la nota.
+    // Si la columna aún no existe (migración 20261019000000 pendiente),
+    // no bloquear la validación por eso.
+    try {
+      await _db.client
+          .from('movimientos')
+          .update({'motivo_no_validacion': null})
+          .inFilter('id', ids.toList());
+    } catch (e) {
+      debugPrint('[validacion] limpiar motivo_no_validacion falló: $e');
+    }
   }
 
   /// Elimina una entrada pendiente (movimiento 'entrada' sin validar) y

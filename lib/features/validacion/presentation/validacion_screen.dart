@@ -5,6 +5,7 @@ import '../../../core/auth/session_controller.dart';
 import '../data/temporales_repository.dart';
 import '../data/validacion_providers.dart';
 import '../data/validacion_repository.dart';
+import 'dialogs/motivo_no_validacion_dialog.dart';
 import 'dialogs/precargar_imagen_dialog.dart';
 import 'dialogs/temporales_dialog.dart';
 import 'dialogs/validacion_dialog.dart';
@@ -89,6 +90,14 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
     );
   }
 
+  Future<void> _onMotivo(EntradaPendiente entrada) async {
+    final guardado =
+        await mostrarMotivoNoValidacionDialog(context, entrada: entrada);
+    if (guardado != true || !mounted) return;
+    // Refrescar la lista para que la card muestre la nota nueva o quitada.
+    ref.invalidate(entradasPendientesProvider(_search));
+  }
+
   Future<void> _onEliminar(
       ValidacionRepository repo, EntradaPendiente entrada) async {
     final confirmar = await showDialog<bool>(
@@ -156,6 +165,7 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
                           : _selected.add(e.id);
                     }),
                     onEliminar: () => _onEliminar(repo, e),
+                    onNota: () => _onMotivo(e),
                   );
                 },
               );

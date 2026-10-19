@@ -4,7 +4,8 @@ import '../../data/validacion_repository.dart';
 
 /// Card de una entrada pendiente (porta el tile de `validacion_view.py`):
 /// la tarjeta completa es clickeable para seleccionar/deseleccionar,
-/// con borde resaltado cuando está seleccionada + botón eliminar.
+/// con borde resaltado cuando está seleccionada + botón para anotar el
+/// motivo de no validación + botón eliminar.
 class EntradaPendienteCard extends StatelessWidget {
   const EntradaPendienteCard({
     super.key,
@@ -12,6 +13,7 @@ class EntradaPendienteCard extends StatelessWidget {
     required this.selected,
     required this.onToggle,
     required this.onEliminar,
+    required this.onNota,
   });
 
   final EntradaPendiente entrada;
@@ -19,12 +21,18 @@ class EntradaPendienteCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onEliminar;
 
+  /// Abre el diálogo para anotar/editar el motivo de no validación.
+  final VoidCallback onNota;
+
   String get _fecha {
     final f = entrada.fecha;
     if (f == null) return '';
     String p(int v) => v.toString().padLeft(2, '0');
     return '${p(f.day)}/${p(f.month)}/${f.year}';
   }
+
+  bool get _tieneMotivo =>
+      (entrada.motivoNoValidacion ?? '').isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -78,12 +86,50 @@ class EntradaPendienteCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+            if (_tieneMotivo)
+              Row(
+                children: [
+                  Icon(Icons.edit_note,
+                      size: 14, color: scheme.tertiary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      entrada.motivoNoValidacion!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.tertiary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
-        trailing: IconButton(
-          icon: Icon(Icons.delete_outline, color: scheme.error),
-          tooltip: 'Eliminar entrada',
-          onPressed: onEliminar,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(
+                _tieneMotivo
+                    ? Icons.edit_note
+                    : Icons.description_outlined,
+                size: 20,
+                color: _tieneMotivo ? scheme.tertiary : scheme.outline,
+              ),
+              tooltip: _tieneMotivo
+                  ? 'Ver o cambiar el motivo'
+                  : 'Anotar por qué no se valida',
+              onPressed: onNota,
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: scheme.error),
+              tooltip: 'Eliminar entrada',
+              onPressed: onEliminar,
+            ),
+          ],
         ),
       ),
     );

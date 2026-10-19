@@ -11,7 +11,11 @@
 
 ## Pendientes
 
-_(ninguno pendiente)_
+- [ ] **Motivos de no validación de entradas** (nota por entrada pendiente + catálogo de motivos frecuentes).
+  - **Migracion:** `supabase/migrations/20261019000000_motivos_no_validacion.sql`
+  - **Que hace:** agrega la columna `movimientos.motivo_no_validacion` (y su espejo en `movimientos_archivo`, que el archivado copia fila completa), crea la tabla `motivos_no_validacion` y da GRANT a `control_app`.
+  - **Como:** correr el archivo con `psql` como `postgres` en `localhost:5432/control_entradas` (el rol `control_app` solo hace DML y no puede hacer DDL).
+  - **Importante:** correrlo **antes de probar** la pantalla de Validación. Sin la migración, "Validar" sigue funcionando, pero no se pueden guardar notas y el catálogo de motivos sale vacío.
 
 ---
 
