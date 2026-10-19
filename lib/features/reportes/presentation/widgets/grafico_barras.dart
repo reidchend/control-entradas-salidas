@@ -53,37 +53,66 @@ class GraficoBarras extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    if (barras.isEmpty) {
-      return Container(
-        height: 140,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        child:
-            Text(vacioTexto, style: TextStyle(color: scheme.onSurfaceVariant)),
-      );
-    }
+    // El panel del gráfico usa el mismo fondo que las cards del tema. Antes era
+    // `surfaceContainerHighest`, que en el tema claro (#E3DAF4) se veía como un
+    // rectángulo gris vacío, igual que un placeholder roto.
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: barras.isEmpty
+          ? _Vacio(texto: vacioTexto)
+          : SizedBox(
+              height: altura,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 12, 4),
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: BarrasPainter(
+                    barras: barras,
+                    colorBase: colorBase ?? scheme.primary,
+                    colorDestacado: colorDestacado,
+                    etiquetasMaximas: etiquetasMaximas,
+                    colorTexto: scheme.onSurfaceVariant,
+                    colorRejilla: scheme.outlineVariant,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
 
-    return Container(
-      height: altura,
-      padding: const EdgeInsets.fromLTRB(8, 12, 12, 4),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: BarrasPainter(
-          barras: barras,
-          colorBase: colorBase ?? scheme.primary,
-          colorDestacado: colorDestacado,
-          etiquetasMaximas: etiquetasMaximas,
-          colorTexto: scheme.onSurfaceVariant,
-          colorRejilla: scheme.outlineVariant,
+/// Estado vacío del gráfico: ícono + mensaje centrados sobre el fondo de la
+/// card (sin relleno gris), para que se lea como "acá no hubo ventas" y no
+/// como un cuadro roto.
+class _Vacio extends StatelessWidget {
+  const _Vacio({required this.texto});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 140,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.bar_chart_outlined,
+                size: 32, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                texto,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
         ),
       ),
     );

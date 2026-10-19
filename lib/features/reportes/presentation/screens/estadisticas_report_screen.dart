@@ -160,6 +160,8 @@ class _EstadisticasReportScreenState
           topCantidad: _topCantidad,
           tendencia: _tendencia,
           porHora: _porHora,
+          desde: _desde,
+          hasta: _hasta,
         ),
       ],
     );

@@ -16,6 +16,8 @@ class EstadisticasCuerpo extends StatelessWidget {
     required this.topCantidad,
     required this.tendencia,
     required this.porHora,
+    required this.desde,
+    required this.hasta,
   });
 
   /// KPIs agregados (ya excluidas las ventas anuladas en el repositorio).
@@ -30,6 +32,10 @@ class EstadisticasCuerpo extends StatelessWidget {
 
   /// Ventas `{hora, total}` de las horas que tuvieron ventas.
   final List<Map<String, dynamic>> porHora;
+
+  /// Rango consultado, solo para redactar el estado vacío de los gráficos.
+  final DateTime desde;
+  final DateTime hasta;
 
   @override
   Widget build(BuildContext context) {
@@ -60,14 +66,14 @@ class EstadisticasCuerpo extends StatelessWidget {
         Text('Monto facturado cada día · el mejor día va en verde',
             style: texto.bodySmall?.copyWith(color: variante)),
         const SizedBox(height: 16),
-        VentasPorDiaChart(datos: tendencia),
+        VentasPorDiaChart(datos: tendencia, vacioTexto: _vacioGrafico),
         const SizedBox(height: 32),
         Text('Ventas por Hora', style: texto.titleLarge),
         const SizedBox(height: 4),
         Text('Pic de venta a lo largo del día (0-23 h) · la hora pico, en verde',
             style: texto.bodySmall?.copyWith(color: variante)),
         const SizedBox(height: 16),
-        VentasPorHoraChart(datos: porHora),
+        VentasPorHoraChart(datos: porHora, vacioTexto: _vacioGrafico),
       ],
     );
   }
@@ -104,6 +110,15 @@ class EstadisticasCuerpo extends StatelessWidget {
         : '—';
     return (fecha: corta, total: (mejor['total'] as num?)?.toDouble() ?? 0);
   }
+
+  /// Mensaje del estado vacío de los gráficos: nombra el rango consultado para
+  /// que un gráfico sin barras se entienda y no parezca una sección rota.
+  String get _vacioGrafico =>
+      'No hubo ventas entre el ${_fecha(desde)} y el ${_fecha(hasta)}';
+
+  static String _fecha(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   static String _fmtMoneda(dynamic v) =>
       '\$${((v is num) ? v.toDouble() : 0).toStringAsFixed(2)}';

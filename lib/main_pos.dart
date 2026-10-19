@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/errors/error_widget_app.dart';
 import 'core/logging/log_bridge.dart';
 import 'features/pos/presentation/pos_app.dart';
 
@@ -13,6 +14,9 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Que un error de render se vea como un aviso legible en vez de un
+      // cuadro gris sin explicación (ver core/errors/error_widget_app.dart).
+      instalarErrorWidgetDeApp();
       await LogBridge.instance.start();
 
       // No se inicializa el pool acá a propósito: sin base configurada

@@ -7,13 +7,19 @@ import 'grafico_barras.dart';
 /// si el rango supera los 14 días, muestra solo los últimos 14 (con aviso),
 /// así cada barra entra con su monto impreso.
 class VentasPorDiaChart extends StatelessWidget {
-  const VentasPorDiaChart({super.key, required this.datos});
+  const VentasPorDiaChart({super.key, required this.datos, this.vacioTexto});
 
   /// Filas `{fecha, total}` ordenadas por fecha ascendente
   /// (de `getTendenciaVentas`; excluye anuladas).
   final List<Map<String, dynamic>> datos;
 
+  /// Mensaje del estado vacío (por defecto, el genérico del gráfico).
+  final String? vacioTexto;
+
   static const int _topeDias = 14;
+
+  /// Texto que explica por qué no hay barras.
+  String get _vacio => vacioTexto ?? 'Sin ventas en el período';
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +35,9 @@ class VentasPorDiaChart extends StatelessWidget {
           (f['total'] as num?)?.toDouble() ?? 0;
       fechas.add(fecha);
     }
-    if (fechas.isEmpty) return const GraficoBarras(barras: []);
+    if (fechas.isEmpty) {
+      return GraficoBarras(barras: const [], vacioTexto: _vacio);
+    }
 
     fechas.sort();
     var desde = fechas.first;
