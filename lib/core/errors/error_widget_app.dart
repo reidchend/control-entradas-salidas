@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Reemplaza el cuadro gris que Flutter dibuja cuando un widget falla.
