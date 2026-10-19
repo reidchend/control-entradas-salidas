@@ -116,8 +116,7 @@ class EntradaPendienteCard extends StatelessWidget {
                 _tieneMotivo
                     ? Icons.edit_note
                     : Icons.description_outlined,
-                size: 20,
-                color: _tieneMotivo ? scheme.tertiary : scheme.outline,
+                color: _tieneMotivo ? scheme.tertiary : scheme.primary,
               ),
               tooltip: _tieneMotivo
                   ? 'Ver o cambiar el motivo'

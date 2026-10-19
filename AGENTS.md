@@ -61,3 +61,33 @@ data/
 - `presentation/dialogs/movimiento_dialog.dart` → Diálogo registrar movimiento
 - `data/inventario_repository.dart` → Queries CRUD + movimientos + lista compra
 - `data/inventario_providers.dart` → Provider `inventarioRepoProvider` compartido
+
+## Estilo visual (UI)
+
+**Regla obligatoria:** toda UI nueva o modificada debe verse bien en el tema de la app. Antes de dar por terminado un cambio visual, revisar que **todos** los textos e iconos se lean tanto en tema **claro** como **oscuro** (la app trae los dos: `lib/core/theme/app_colors.dart`).
+
+**De dónde salen los colores**
+
+- Siempre del tema: `Theme.of(context).colorScheme` (`scheme`). Para `success` / `warning` / `info` usar `appColor(context, 'success' | 'warning' | 'info')` (`lib/core/theme/app_theme.dart`).
+- No inventar colores nuevos ni hex sueltos; reutilizar `AppColors` / el `ColorScheme`.
+- La paleta del tema (para juzgar contraste): claro → card `#FFFFFF`, borde `#D8CDEC`, acento `#7C4DFF`; oscuro → card `#1A1530`, borde `#2F2748`, acento `#BB86FC`.
+
+**Uso semántico (respetarlo)**
+
+| Rol del `ColorScheme` | Para qué | **No usar para** |
+| --- | --- | --- |
+| `primary` (acento) | acciones: iconos de acción en cards (editar/ver/agregar), `FilledButton`, `TextButton`, enlaces, foco | texto destructivo |
+| `error` | destructivo (eliminar/anular) y mensajes de error | acciones normales |
+| `tertiary` (fucsia) | estados y etiquetas destacadas (nota guardada, "Reservada", "PESABLE") | fondos de pantalla completa |
+| `onSurface` | texto principal | — |
+| `onSurfaceVariant` | texto secundario e **iconos neutros** | — |
+| `outline` (color de borde) | **solo** bordes/divisores y placeholders decorativos de empty states | **nunca** texto ni iconos accionables: es del color del borde y sobre la card queda casi invisible |
+| `outlineVariant` | bordes de inputs y tarjetas | texto |
+
+**Patrones de widgets**
+
+- Iconos de acción: `IconButton(icon: Icon(..., color: scheme.primary), tooltip: '...')`, con el **tamaño por defecto (24)**; no achicarlos. Botón destructivo: `scheme.error`.
+- Si un estado pinta distinto (con/sin nota, activo/inactivo), mantener **una sola paleta consistente** y comunicar el estado con color + ícono + texto, no solo con color.
+- Formas del tema (`app_theme.dart`): cards radio **16** (`Card` del tema), inputs **12**, chips **10**, botones **12**. Preferir `Card` / chips / `FilledButton` del tema antes que `Container` con bordes propios.
+- Textos secundarios: 11–13 px y `scheme.onSurfaceVariant`; títulos en negrita (`FontWeight.w600`/`w700`), como el resto de las cards.
+- `Colors.*` crudos solo si el archivo vecino ya lo hace por un estado puntual (ej. `Colors.green` para "Activo"); si existe `appColor(...)`, usarlo.
