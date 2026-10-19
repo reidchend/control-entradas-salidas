@@ -142,7 +142,6 @@ class _MotivosChipsState extends ConsumerState<MotivosChips> {
                 child: TextField(
                   controller: _nuevoCtrl,
                   autofocus: true,
-                  isDense: true,
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Ej: Falta factura del proveedor...',
