@@ -126,7 +126,12 @@ class _ProductosTabState extends ConsumerState<ProductosTab> {
                     decoration: const InputDecoration(labelText: 'Categoría', isDense: true, border: OutlineInputBorder()),
                     items: [
                       const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
-                      for (final c in cats) DropdownMenuItem(value: c.id, child: Text(c.nombre)),
+                      for (final c in cats)
+                        DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.activo
+                                ? c.nombre
+                                : '${c.nombre} (inactiva)')),
                     ],
                     onChanged: (v) => setState(() => _categoriaId = v),
                   ),
@@ -212,7 +217,11 @@ class _ProductoItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = producto;
     final esPesable = p.esPesable;
-    final catNombre = categoria?.nombre ?? 'N/A';
+    final catNombre = categoria == null
+        ? 'N/A'
+        : (categoria!.activo
+            ? categoria!.nombre
+            : '${categoria!.nombre} (inactiva)');
     final sku = p.codigo?.trim().isNotEmpty == true ? p.codigo!.trim() : 'Sin SKU';
     final tipoTxt = p.tipo.isEmpty ? 'ninguno' : p.tipo;
     final tipoTxtL = tipoTxt.toLowerCase();

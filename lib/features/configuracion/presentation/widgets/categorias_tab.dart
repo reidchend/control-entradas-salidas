@@ -79,19 +79,39 @@ class _CategoriasTabState extends ConsumerState<CategoriasTab> {
                 itemCount: filtered.length,
                 itemBuilder: (context, i) {
                   final c = filtered[i];
+                  final estadoTxt = c.activo ? 'Activa' : 'Inactiva';
+                  final estadoColor =
+                      c.activo ? Colors.green : scheme.onSurfaceVariant;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: _parseColor(c.color),
-                        child: const Icon(Icons.category, color: Colors.white),
+                        backgroundColor: c.activo
+                            ? _parseColor(c.color)
+                            : scheme.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.category,
+                          color: c.activo
+                              ? Colors.white
+                              : scheme.onSurfaceVariant,
+                        ),
                       ),
                       title: Text(c.nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(
-                        c.descripcion?.isNotEmpty == true ? c.descripcion! : 'Sin descripción',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (c.descripcion?.isNotEmpty == true)
+                            Text(
+                              c.descripcion!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                            ),
+                          Text(
+                            estadoTxt,
+                            style: TextStyle(fontSize: 11, color: estadoColor),
+                          ),
+                        ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

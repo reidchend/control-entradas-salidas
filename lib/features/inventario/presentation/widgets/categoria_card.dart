@@ -9,11 +9,16 @@ class CategoriaCard extends StatefulWidget {
     required this.nombre,
     required this.color,
     required this.onTap,
+    this.activo = true,
   });
 
   final String nombre;
   final String color;
   final VoidCallback onTap;
+
+  /// `false` cuando la categoría está desactivada (`activo = false`): sigue
+  /// mostrándose para poder llegar a sus productos, pero marcada como inactiva.
+  final bool activo;
 
   @override
   State<CategoriaCard> createState() => _CategoriaCardState();
@@ -60,7 +65,10 @@ class _CategoriaCardState extends State<CategoriaCard> {
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border(bottom: BorderSide(color: catColor, width: 3)),
+                border: Border(
+                    bottom: BorderSide(
+                        color: widget.activo ? catColor : colors.outlineVariant,
+                        width: 3)),
                 boxShadow: [
                   BoxShadow(
                     blurRadius: _scale > 1 ? 15 : 0,
@@ -78,7 +86,9 @@ class _CategoriaCardState extends State<CategoriaCard> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: catColor,
+                      color: widget.activo
+                          ? catColor
+                          : colors.surfaceContainerHighest,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -91,10 +101,12 @@ class _CategoriaCardState extends State<CategoriaCard> {
                     alignment: Alignment.center,
                     child: Text(
                       inicial,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: widget.activo
+                            ? Colors.white
+                            : colors.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -110,6 +122,17 @@ class _CategoriaCardState extends State<CategoriaCard> {
                       color: colors.onSurface,
                     ),
                   ),
+                  if (!widget.activo) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'INACTIVA',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

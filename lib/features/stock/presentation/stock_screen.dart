@@ -307,7 +307,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
               for (final c in _categorias)
                 DropdownMenuItem(
                   value: c.id.toString(),
-                  child: Text(c.nombre),
+                  child: Text(c.activo ? c.nombre : '${c.nombre} (inactiva)'),
                 ),
             ],
             onChanged: (v) {

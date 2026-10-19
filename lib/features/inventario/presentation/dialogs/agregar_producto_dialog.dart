@@ -34,7 +34,13 @@ Future<void> showAgregarProductoDialog(BuildContext context, WidgetRef ref) asyn
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: 'Categoría'),
                 initialValue: categoriaId,
-                items: categorias.map((c) => DropdownMenuItem(value: c.id, child: Text(c.nombre))).toList(),
+                items: categorias
+                    .map((c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.activo
+                            ? c.nombre
+                            : '${c.nombre} (inactiva)')))
+                    .toList(),
                 onChanged: (v) => categoriaId = v,
               ),
             TextField(

@@ -61,6 +61,7 @@ class _CategoriasGridState extends ConsumerState<CategoriasGrid> {
           itemBuilder: (context, i) => CategoriaCard(
             nombre: cats[i].nombre,
             color: cats[i].color,
+            activo: cats[i].activo,
             onTap: () => widget.onSelect(cats[i]),
           ),
         );

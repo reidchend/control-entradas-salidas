@@ -166,7 +166,10 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
                               value: null, child: Text('Sin categoría')),
                           for (final c in categorias)
                             DropdownMenuItem(
-                                value: c.id, child: Text(c.nombre)),
+                                value: c.id,
+                                child: Text(c.activo
+                                    ? c.nombre
+                                    : '${c.nombre} (inactiva)')),
                         ],
                         onChanged: (v) => setState(() => _categoriaId = v),
                       ),

@@ -21,9 +21,16 @@ final proveedoresConfigProvider = FutureProvider<List<Proveedor>>((ref) {
   return ref.watch(configuracionRepoProvider)!.getProveedores();
 });
 
-/// Categorías activas para dropdowns.
+/// Catálogo completo de categorías (activas e inactivas) para gestión y
+/// dropdowns.
+///
+/// Ojo: el borrado de categorías es lógico (`activo = false`), así que si aquí
+/// se filtraran las inactivas, una categoría desactivada desaparecería de
+/// Configuración y no habría forma de verla ni de reactivarla (el diálogo de
+/// edición tiene el switch "Activa"). Las pantallas que lo necesiten marcan
+/// las inactivas con la etiqueta "(inactiva)".
 final categoriasConfigProvider = FutureProvider<List<Categoria>>((ref) {
-  return ref.watch(configuracionRepoProvider)!.getCategorias();
+  return ref.watch(configuracionRepoProvider)!.getCategorias(soloActivos: false);
 });
 
 /// Almacenes disponibles (catálogo completo, para administración).

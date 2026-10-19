@@ -16,11 +16,16 @@ class StockRepository {
   StockRepository(this._db);
   final PostgresService _db;
 
+  /// Categorías para los filtros de stock.
+  ///
+  /// Devuelve **todas**, incluidas las inactivas: el borrado de categorías es
+  /// lógico (`activo = false`), así que un producto puede seguir apuntando a
+  /// una categoría desactivada. Si se filtraran aquí, ese producto mostraría
+  /// "S/C" en vez del nombre real. La UI marca las inactivas con "(inactiva)".
   Future<List<Categoria>> loadCategorias() async {
     final rows = await _db.fetchAll(
       'categorias',
       orderBy: 'nombre',
-      filters: {'activo': true},
     );
     return rows.map(Categoria.fromMap).toList();
   }

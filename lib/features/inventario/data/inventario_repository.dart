@@ -15,6 +15,11 @@ class InventarioRepository {
   // Categorías
   // ---------------------------------------------------------------------
 
+  /// Todas las categorías, incluidas las inactivas (`activo = false`).
+  ///
+  /// No se filtra a propósito: si una categoría se desactivó desde
+  /// Configuración (el borrado es lógico), sus productos seguirían existiendo y
+  /// hay que poder navegar hasta ellos. La UI las marca como "INACTIVA".
   Future<List<Categoria>> getAllCategorias() async {
     final rows = await _db.fetchAll('categorias', orderBy: 'nombre');
     return rows.map(Categoria.fromMap).toList();
