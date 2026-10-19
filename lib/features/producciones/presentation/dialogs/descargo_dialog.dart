@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/receta.dart';
+import '../../../../core/utils/cantidades.dart';
 import '../../data/producciones_providers.dart';
 import '../../data/producciones_repository.dart';
 
@@ -211,8 +212,7 @@ class _DescargoBodyState extends ConsumerState<_DescargoBody> {
   String _fmtSugerida(double v) => v.toStringAsFixed(3);
 
   String _fmtStock(double v) {
-    final s = v.toStringAsFixed(3);
-    return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
+    return formatearCantidad(v);
   }
 
   void _actualizarStock() async {
@@ -596,8 +596,7 @@ class _StockTextState extends State<_StockText> {
   }
 
   String _fmt(double v) {
-    final s = v.toStringAsFixed(3);
-    return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
+    return formatearCantidad(v);
   }
 }
 

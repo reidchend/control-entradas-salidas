@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/data/postgres_providers.dart';
+import '../../../../core/network/postgres_client.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../data/reportes_repository.dart';
+import '../widgets/aviso_error_banner.dart';
 import '../widgets/estadisticas_cuerpo.dart';
 import '../widgets/filtro_rango_fechas.dart';
 
@@ -30,6 +33,14 @@ class _EstadisticasReportScreenState
   List<Map<String, dynamic>> _porHora = [];
   bool _cargando = false;
 
+  /// Secciones que fallaron en la última carga; el banner persiste hasta que
+  /// el usuario reintente (en vez de un snackbar que desaparece y deja la
+  /// vista vacía sin explicación).
+  String? _error;
+
+  /// Detalle técnico del fallo, para poder copiarlo y reportarlo.
+  String _detalleError = '';
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +49,12 @@ class _EstadisticasReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    // Si la sesión con la base recién queda lista (arranque en frío) y la
+    // carga inicial falló por eso, se reintenta sola en vez de dejar la
+    // pantalla vacía esperando que el usuario apriete "Actualizar KPIs".
+    ref.listen(postgresServiceProvider, (prev, next) {
+      if (next != null && _error != null) _actualizar();
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('Estadísticas y KPIs'),
@@ -126,12 +143,25 @@ class _EstadisticasReportScreenState
   }
 
   Widget _cuerpo() {
-    return EstadisticasCuerpo(
-      kpis: _kpis,
-      topFacturacion: _topFacturacion,
-      topCantidad: _topCantidad,
-      tendencia: _tendencia,
-      porHora: _porHora,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_error != null) ...[
+          AvisoErrorBanner(
+            mensaje: _error!,
+            detalle: _detalleError,
+            onReintentar: _actualizar,
+          ),
+          const SizedBox(height: 16),
+        ],
+        EstadisticasCuerpo(
+          kpis: _kpis,
+          topFacturacion: _topFacturacion,
+          topCantidad: _topCantidad,
+          tendencia: _tendencia,
+          porHora: _porHora,
+        ),
+      ],
     );
   }
 
@@ -140,36 +170,125 @@ class _EstadisticasReportScreenState
   // -------------------------------------------------------------------------
 
   Future<void> _actualizar() async {
-    setState(() => _cargando = true);
-    try {
-      final repo = ref.read(reportesRepoProvider);
-      // Las cuatro consultas se disparan juntas y se esperan en paralelo.
-      final fKpis = repo.getKPIs(desde: _desde, hasta: _hasta);
-      final fTops =
-          repo.getTopProductosRankings(desde: _desde, hasta: _hasta, limit: 10);
-      final fTendencia = repo.getTendenciaVentas(desde: _desde, hasta: _hasta);
-      final fPorHora = repo.getVentasPorHora(desde: _desde, hasta: _hasta);
+    setState(() {
+      _cargando = true;
+      _error = null;
+      _detalleError = '';
+    });
 
-      final kpis = await fKpis;
-      final tops = await fTops;
-      final tendencia = await fTendencia;
-      final porHora = await fPorHora;
-
-      if (mounted) {
+    // La sesión con la base puede no estar lista todavía (arranque en frío:
+    // el pool consulta el túnel antes de abrir). Antes eso lanzaba
+    // 'PostgreSQL no configurado' y dejaba la vista entera vacía; ahora se
+    // espera al pool y, si falla, queda el banner con el detalle.
+    var candidato = _repo();
+    if (candidato == null) {
+      try {
+        await ref.read(postgresPoolProvider.future);
+      } catch (e) {
+        if (!mounted) return;
         setState(() {
-          _kpis = kpis;
-          _topFacturacion = tops.porFacturacion;
-          _topCantidad = tops.porCantidad;
-          _tendencia = tendencia;
-          _porHora = porHora;
           _cargando = false;
+          _error = 'la conexión con la base de datos';
+          _detalleError = 'No se pudo abrir la base de datos: $e';
         });
+        return;
       }
+      candidato = _repo();
+    }
+    final repo = candidato;
+    if (repo == null) {
+      if (!mounted) return;
+      setState(() {
+        _cargando = false;
+        _error = 'la conexión con la base de datos';
+        _detalleError = _detalleConexion();
+      });
+      return;
+    }
+
+    final fallos = <String>[];
+    final detalles = <String>[];
+
+    // Las cuatro consultas siguen corriendo en paralelo, pero cada una se
+    // protege por separado: si una falla, las demás se renderizan igual y el
+    // fallo queda en un banner persistente con "Reintentar". Antes un solo
+    // try/catch vaciaba toda la vista y solo dejaba un snackbar efímero.
+    await Future.wait([
+      _cargar(
+        'KPIs',
+        () => repo.getKPIs(desde: _desde, hasta: _hasta),
+        (v) => _kpis = v,
+        fallos,
+        detalles,
+      ),
+      _cargar(
+        'top de productos',
+        () => repo.getTopProductosRankings(
+            desde: _desde, hasta: _hasta, limit: 10),
+        (v) {
+          _topFacturacion = v.porFacturacion;
+          _topCantidad = v.porCantidad;
+        },
+        fallos,
+        detalles,
+      ),
+      _cargar(
+        'ventas por día',
+        () => repo.getTendenciaVentas(desde: _desde, hasta: _hasta),
+        (v) => _tendencia = v,
+        fallos,
+        detalles,
+      ),
+      _cargar(
+        'ventas por hora',
+        () => repo.getVentasPorHora(desde: _desde, hasta: _hasta),
+        (v) => _porHora = v,
+        fallos,
+        detalles,
+      ),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      if (fallos.isNotEmpty) {
+        _error = fallos.join(', ');
+        _detalleError = detalles.join('\n');
+      }
+    });
+  }
+
+  /// Repositorio de reportes, o `null` si la sesión todavía no está lista.
+  ReportesRepository? _repo() {
+    try {
+      return ref.read(reportesRepoProvider);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Detalle del estado de la sesión, para el botón «Copiar detalle».
+  String _detalleConexion() {
+    final ev = ref.read(postgresPoolProvider);
+    return ev.hasError
+        ? 'Pool de base de datos con error: ${ev.error}'
+        : 'La sesión con la base de datos todavía no estaba lista';
+  }
+
+  /// Ejecuta [consulta] y aplica el resultado con [aplicar]; si falla, anota
+  /// [etiqueta] en [fallos] (y el error en [detalles]) sin abortar el resto.
+  Future<void> _cargar<T>(
+    String etiqueta,
+    Future<T> Function() consulta,
+    void Function(T) aplicar,
+    List<String> fallos,
+    List<String> detalles,
+  ) async {
+    try {
+      aplicar(await consulta());
     } catch (e) {
-      if (mounted) {
-        setState(() => _cargando = false);
-        _snack('Error: $e');
-      }
+      fallos.add(etiqueta);
+      detalles.add('[$etiqueta] $e');
     }
   }
 

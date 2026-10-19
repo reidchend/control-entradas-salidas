@@ -2,6 +2,7 @@ import '../../../core/data/postgres_service.dart';
 import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/existencia.dart';
+import '../../../core/utils/cantidades.dart';
 
 /// Repositorio de inventario — CRUD de productos, movimientos y lista de compra.
 /// Opera directamente contra PostgreSQL.
@@ -130,11 +131,11 @@ class InventarioRepository {
             prev == null ? 0.0 : (prev['cantidad'] as num?)?.toDouble() ?? 0;
         final cantAMover =
             (item.esPesable && item.pesoTotal > 0) ? item.pesoTotal : item.cantidad;
-        if (cantAnterior < cantAMover) {
+        if (!stockSuficiente(cantAnterior, cantAMover)) {
           fallos.add('${item.nombre} (${item.almacen})');
           continue;
         }
-        final cantNueva = cantAnterior - cantAMover;
+        final cantNueva = restarStock(cantAnterior, cantAMover);
         final unidad = item.esPesable ? 'kg' : item.unidadMedida;
 
         movimientos.add({
@@ -229,8 +230,8 @@ class InventarioRepository {
     if (tipo == 'entrada' || tipo == 'entrada_produccion' || tipo == 'ajuste') {
       cantNueva = cantAnterior + cantAMover;
     } else {
-      if (cantAnterior < cantAMover) return false;
-      cantNueva = cantAnterior - cantAMover;
+      if (!stockSuficiente(cantAnterior, cantAMover)) return false;
+      cantNueva = restarStock(cantAnterior, cantAMover);
     }
 
     // Insertar movimiento

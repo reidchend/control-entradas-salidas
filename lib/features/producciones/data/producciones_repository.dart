@@ -1,6 +1,7 @@
 import '../../../core/data/postgres_service.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/receta.dart';
+import '../../../core/utils/cantidades.dart';
 import '../../../core/utils/supabase_cast.dart';
 
 /// Componente de receta con datos del producto para la UI.
@@ -734,11 +735,14 @@ class ProduccionesRepository {
           final k = '${item.productoId}|${item.almacen}';
           final prev = existencias[k];
           final cantAnterior = (prev?['cantidad'] as num?)?.toDouble() ?? 0;
-          if (cantAnterior < item.cantidadSugerida) {
+          // Tolerancia: existencias.cantidad es double precision con ruido de
+          // flotante (1.9999999999999996 en vez de 2); sin ella, teclear la
+          // cantidad exacta que muestra el modal daba "Stock insuficiente".
+          if (!stockSuficiente(cantAnterior, item.cantidadSugerida)) {
             errores.add('Stock insuficiente para ${item.nombre}');
             continue;
           }
-          final cantNueva = cantAnterior - item.cantidadSugerida;
+          final cantNueva = restarStock(cantAnterior, item.cantidadSugerida);
 
           movimientos.add({
             'producto_id': item.productoId,
@@ -882,8 +886,8 @@ class ProduccionesRepository {
         tipo == 'ajuste') {
       cantNueva = cantAnterior + cantAMover;
     } else {
-      if (cantAnterior < cantAMover) return null;
-      cantNueva = cantAnterior - cantAMover;
+      if (!stockSuficiente(cantAnterior, cantAMover)) return null;
+      cantNueva = restarStock(cantAnterior, cantAMover);
     }
 
     final movId = await _db.insert('movimientos', {
@@ -938,8 +942,8 @@ class ProduccionesRepository {
         tipo == 'ajuste') {
       cantNueva = cantAnterior + cantAMover;
     } else {
-      if (cantAnterior < cantAMover) return null;
-      cantNueva = cantAnterior - cantAMover;
+      if (!stockSuficiente(cantAnterior, cantAMover)) return null;
+      cantNueva = restarStock(cantAnterior, cantAMover);
     }
 
     final movId = await _db.insert('movimientos', {
