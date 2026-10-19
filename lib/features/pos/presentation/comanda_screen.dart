@@ -385,11 +385,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ref.invalidate(comandasActivasProvider);
       ref.invalidate(ventasProvider);
       ref.invalidate(ventasHoyProvider);
+      // Ticket de cocina: mismo contenido que la copia cliente (precios por
+      // producto, totales, cliente y corrección); solo cambia el rótulo.
       await _mostrarTicket(
         items: ticketItems,
         total: total,
         comandaId: comandaId,
         correlativo: correlativo,
+        correccionDe: anulada?.correlativo,
+        cliente: etiquetaCliente,
         esComandaCocina: true,
       );
       if (!mounted) return;
@@ -574,8 +578,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     await showTicketPreview(context, lineas: lineas);
   }
 
-  /// Imprime una copia de la comanda actual para cocina (sin totales),
-  /// desde cualquier momento sin tener que cobrar.
+  /// Imprime una copia de la comanda actual con el rótulo PARA COCINA, en
+  /// cualquier momento sin tener que cobrar. Mismo contenido que el ticket de
+  /// cobro: precios por producto, total en $ y total en Bs.
   Future<void> _imprimirComanda() async {
     if (_items.isEmpty || !mounted) return;
     final ticketItems = [for (final i in _items) _aTicketItem(i)];

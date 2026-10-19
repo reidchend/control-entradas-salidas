@@ -190,33 +190,29 @@ List<int> construirTicketEscpos({
   newline();
   newline();
 
+  // El precio por producto va en TODOS los tickets (también en el de cocina):
+  // los dos tickets de cobro deben ser idénticos y solo diferir en el rótulo
+  // (PARA COCINA / COPIA CLIENTE). Antes `esComandaCocina` lo ocultaba.
   for (final item in items) {
     final cantStr = '${_formatearCantidad(item.cantidad)}x ';
     final subtotal = item.precio * item.cantidad;
-    final precioStr = esComandaCocina ? '' : '\$${subtotal.toStringAsFixed(2)}';
-    var nombre =
-        item.nombre.substring(0, item.nombre.isNotEmpty ? item.nombre.length : 0);
-    final maxNombre = esComandaCocina
-        ? (ticketCols - cantStr.length)
-        : (ticketCols - precioStr.length - 1 - cantStr.length);
+    final precioStr = '\$${subtotal.toStringAsFixed(2)}';
+    var nombre = item.nombre;
+    final maxNombre = ticketCols - precioStr.length - 1 - cantStr.length;
     if (nombre.length > maxNombre && maxNombre > 0) {
       nombre = nombre.substring(0, maxNombre);
     }
     final izquierda = cantStr + nombre;
-    final relleno = esComandaCocina
-        ? 0
-        : (ticketCols - izquierda.length - precioStr.length);
+    final relleno = ticketCols - izquierda.length - precioStr.length;
 
     add([0x1b, 0x45, 0x01]);
     text(cantStr);
     add([0x1b, 0x45, 0x00]);
     text(nombre);
-    if (!esComandaCocina) {
-      add(List.filled(relleno > 0 ? relleno : 0, 0x20));
-      add([0x1b, 0x45, 0x01]);
-      text(precioStr);
-      add([0x1b, 0x45, 0x00]);
-    }
+    add(List.filled(relleno > 0 ? relleno : 0, 0x20));
+    add([0x1b, 0x45, 0x01]);
+    text(precioStr);
+    add([0x1b, 0x45, 0x00]);
     newline();
 
     for (final c in item.contornos) {
@@ -229,7 +225,8 @@ List<int> construirTicketEscpos({
   newline();
 
   // El total en $ se imprime siempre (también en la comanda de cocina) para
-  // que ambos tickets de cobro sean iguales: Bs ya salía incondicionalmente.
+  // que ambos tickets de cobro sean iguales: Bs ya salía incondicionalmente,
+  // igual que el precio por producto de arriba.
   if (total != null) {
     add([0x1b, 0x61, 0x02]); // derecha
     add([0x1b, 0x45, 0x01]);

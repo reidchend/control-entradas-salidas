@@ -84,9 +84,9 @@ void main() {
       expect(linea.trim().endsWith(r'$12345.67'), isTrue);
     });
 
-    test('comanda de cocina muestra total en $ y en Bs igual que la copia '
-        'cliente', () {
-      final b = construirTicketEscpos(
+    test('comanda de cocina imprime precios por producto y totales igual que '
+        'la copia cliente', () {
+      final cocina = String.fromCharCodes(construirTicketEscpos(
         items: items,
         total: 12.5,
         comandaId: 7,
@@ -94,10 +94,39 @@ void main() {
         tasa: 835.9482,
         header: header,
         esComandaCocina: true,
-      );
-      final s = String.fromCharCodes(b);
-      expect(s, contains('TOTAL: \$12.50'));
-      expect(s, contains('TOTAL Bs: 10.449,35'));
+      ));
+      final cliente = String.fromCharCodes(construirTicketEscpos(
+        items: items,
+        total: 12.5,
+        comandaId: 7,
+        correlativo: 3,
+        tasa: 835.9482,
+        header: header,
+        esCopiaCliente: true,
+      ));
+
+      // Totales en $ y Bs en ambos.
+      for (final s in [cocina, cliente]) {
+        expect(s, contains('TOTAL: \$12.50'));
+        expect(s, contains('TOTAL Bs: 10.449,35'));
+        // Precio por producto: 2x Arepa a $5.00 = $10.00 y Coca = $2.50.
+        expect(s, contains('\$10.00'));
+        expect(s, contains('\$2.50'));
+      }
+
+      // Los dos tickets deben diferir solo en el rótulo: las líneas de
+      // productos (con precio) son idénticas.
+      List<String> productos(String s) => s
+          .replaceAll(RegExp(r'\x1b..'), '')
+          .replaceAll('\u0000', '')
+          .split('\n')
+          .where((l) => RegExp(r'^\d+x ').hasMatch(l))
+          .toList();
+      expect(productos(cocina), isNotEmpty);
+      expect(productos(cocina), productos(cliente));
+
+      expect(cocina, contains('PARA COCINA'));
+      expect(cliente, contains('COPIA CLIENTE'));
     });
   });
 
