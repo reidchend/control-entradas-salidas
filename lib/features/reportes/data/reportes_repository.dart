@@ -110,7 +110,7 @@ class ReportesRepository {
     ]);
     // Normalizar campos numéricos (Postgres puede devolver `numeric` como String)
     return rows.map((v) {
-      return {
+      return <String, dynamic>{
         ...v,
         'total': _toDouble(v['total']),
         'tasa_bs': _toDouble(v['tasa_bs']),
@@ -170,7 +170,7 @@ class ReportesRepository {
     // Mapear producto_nombre desde el join
     return rows.map((m) {
       final nombre = m['__producto_nombre'] as String?;
-      return {
+      return <String, dynamic>{
         ...m,
         '__producto_nombre': null,
         'producto_nombre': nombre ?? 'Producto #${m['producto_id']}',
@@ -212,7 +212,7 @@ class ReportesRepository {
     final numComandas = _toInt(r?['num_comandas']);
     final productosVendidos = _toInt(r?['productos_vendidos']);
 
-    return {
+    return <String, dynamic>{
       'total_ventas': totalVentas,
       'ticket_promedio': numComandas > 0 ? totalVentas / numComandas : 0,
       'num_comandas': numComandas,
@@ -270,7 +270,7 @@ class ReportesRepository {
       limit,
     ]);
 
-    return rows.map((r) => {
+    return rows.map((r) => <String, dynamic>{
       'producto_id': int.tryParse('${r['producto_id']}') ?? 0,
       'nombre': r['nombre'] as String? ?? 'Producto #${r['producto_id']}',
       'cantidad': _toDouble(r['cantidad']),
@@ -296,7 +296,7 @@ class ReportesRepository {
       _finDiaLocal(hasta),
     ]);
 
-    return rows.map((r) => {
+    return rows.map((r) => <String, dynamic>{
       'fecha': r['fecha'] as String? ?? '',
       'total': _toDouble(r['total']),
     }).toList();
@@ -325,7 +325,7 @@ class ReportesRepository {
       _finDiaLocal(hasta),
     ]);
 
-    return rows.map((r) => {
+    return rows.map((r) => <String, dynamic>{
       'hora': _toInt(r['hora']),
       'total': _toDouble(r['total']),
       'num_ventas': _toInt(r['num_ventas']),
@@ -398,7 +398,7 @@ class ReportesRepository {
 
     // Normalizar campos numéricos (Postgres devuelve `numeric` como String)
     final ventasNorm = ventasRows.map((v) {
-      return {
+      return <String, dynamic>{
         ...v,
         'total': _toDouble(v['total']),
         'cantidad': _toDouble(v['cantidad']),
@@ -406,7 +406,7 @@ class ReportesRepository {
         'subtotal': _toDouble(v['subtotal']),
       };
     }).toList();
-    final movNorm = movRows.map((m) => {
+    final movNorm = movRows.map((m) => <String, dynamic>{
       ...m,
       'cantidad': _toDouble(m['cantidad']),
       'cantidad_anterior': _toDouble(m['cantidad_anterior']),
@@ -417,17 +417,23 @@ class ReportesRepository {
     // Calcular frecuencia de entradas (días promedio entre entradas)
     final entradas = movNorm.where((m) => m['tipo'] == 'entrada' || m['tipo'] == 'entrada_produccion').toList();
     double? frecuenciaEntradasDias;
-    if (entradas.length >= 2) {
-      final fechas = entradas.map((e) => DateTime.parse(e['fecha_movimiento'] as String)).toList();
+    // `fecha_movimiento` puede llegar como texto (proxy) o como DateTime
+    // (driver nativo, columna timestamptz): se normaliza con `tryParse`.
+    final fechas = entradas
+        .map((e) => DateTime.tryParse('${e['fecha_movimiento']}'))
+        .whereType<DateTime>()
+        .toList();
+    if (fechas.length >= 2) {
       fechas.sort();
       final intervalos = <int>[];
       for (int i = 1; i < fechas.length; i++) {
         intervalos.add(fechas[i].difference(fechas[i - 1]).inDays);
       }
-      frecuenciaEntradasDias = intervalos.reduce((a, b) => a + b) / intervalos.length;
+      frecuenciaEntradasDias =
+          intervalos.reduce((a, b) => a + b) / intervalos.length;
     }
 
-    return {
+    return <String, dynamic>{
       'ventas': ventasNorm,
       'movimientos': movNorm,
       'frecuencia_entradas_dias': frecuenciaEntradasDias,

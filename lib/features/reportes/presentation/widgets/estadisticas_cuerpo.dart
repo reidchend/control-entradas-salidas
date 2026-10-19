@@ -97,18 +97,28 @@ class EstadisticasCuerpo extends StatelessWidget {
   }
 
   /// Día con mayor facturación del período (de la tendencia ya cargada).
+  ///
+  /// Bucle explícito en vez de `reduce`: la tendencia es una lista de mapas
+  /// cuyo tipo en tiempo de ejecución es `Map<String, Object>` (los literales
+  /// que arma el repositorio), y `reduce` exige que su `combine` devuelva
+  /// justo ese tipo. Con el tipo declarado `Map<String, dynamic>` la
+  /// comprobación fallaba y tiraba abajo toda la vista de Estadísticas.
   ({String fecha, double total}) _mejorDia() {
     if (tendencia.isEmpty) return (fecha: '—', total: 0);
-    final mejor = tendencia.reduce((a, b) {
-      final ta = (a['total'] as num?)?.toDouble() ?? 0;
-      final tb = (b['total'] as num?)?.toDouble() ?? 0;
-      return tb > ta ? b : a;
-    });
+    var mejor = tendencia.first;
+    var mejorTotal = (mejor['total'] as num?)?.toDouble() ?? 0;
+    for (final dia in tendencia) {
+      final total = (dia['total'] as num?)?.toDouble() ?? 0;
+      if (total > mejorTotal) {
+        mejor = dia;
+        mejorTotal = total;
+      }
+    }
     final fecha = mejor['fecha'] as String? ?? '';
     final corta = fecha.length >= 10
         ? '${fecha.substring(8, 10)}/${fecha.substring(5, 7)}'
         : '—';
-    return (fecha: corta, total: (mejor['total'] as num?)?.toDouble() ?? 0);
+    return (fecha: corta, total: mejorTotal);
   }
 
   /// Mensaje del estado vacío de los gráficos: nombra el rango consultado para
