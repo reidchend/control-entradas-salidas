@@ -362,7 +362,7 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
     );
   }
 
-  Future<void> _guardar() async {
+  Future<void> _guardar({bool permitirReintento = true}) async {
     final nombre = _nombreCtrl.text.trim();
     if (nombre.isEmpty) return;
 
@@ -400,12 +400,66 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) {
+      if (!mounted) return;
+      // El código se autogenera, pero puede quedar ocupado por un producto
+      // inactivo (o escrito a mano): en vez del volcado del proxy SQL, se
+      // explica el caso y se ofrece el siguiente libre.
+      if (ConfiguracionRepository.esCodigoDuplicado(e)) {
+        if (!permitirReintento) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Ese código sigue en uso. Escribí otro distinto.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        await _resolverCodigoDuplicado();
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  Future<void> _resolverCodigoDuplicado() async {
+    final escrito = _codigoCtrl.text.trim();
+    final dueno = await widget.repo.productoCodigoDe(escrito);
+    final libre = await widget.repo.codigoLibreDesde(escrito);
+    if (!mounted) return;
+
+    final reemplazar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Código ya usado'),
+        content: Text(
+          dueno == null
+              ? 'El código $escrito ya está en uso en un producto '
+                  'desactivado. Los códigos no se reutilizan.\n\n'
+                  'Se puede usar $libre en su lugar.'
+              : 'El código $escrito ya lo usa "$dueno".\n\n'
+                  'Se puede usar $libre en su lugar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Escribir otro'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Usar $libre'),
+          ),
+        ],
+      ),
+    );
+
+    if (reemplazar == true && mounted) {
+      _codigoCtrl.text = libre;
+      await _guardar(permitirReintento: false);
     }
   }
 }

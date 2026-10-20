@@ -107,11 +107,14 @@ class ConfiguracionRepository {
   }
 
   /// Genera el siguiente código numérico (auto-incremental).
+  ///
+  /// Mira **todos** los productos, no solo los activos: `codigo` tiene una
+  /// restricción única global en la tabla, así que un producto desactivado
+  /// sigue reservando su número. Filtrar por `activo` hacía que el generador
+  /// propusiera un código ya tomado (p. ej. `0264` de un producto inactivo) y
+  /// el alta terminaba en "llave duplicada".
   Future<String> proximoCodigoProducto() async {
-    final rows = await _db.fetchAll(
-      'productos',
-      filters: {'activo': true},
-    );
+    final rows = await _db.fetchAll('productos');
     final numericos = <int>[];
     var longitud = 4;
     for (final r in rows) {
@@ -124,13 +127,58 @@ class ConfiguracionRepository {
     }
     if (numericos.isEmpty) return '0001';
     final siguiente = numericos.reduce((a, b) => a > b ? a : b) + 1;
-    return siguiente.toString().padLeft(longitud, '0');
+    // Si el propuesto ya existe (códigos no numéricos o con formato raro),
+    // se sigue avanzando hasta encontrar uno libre.
+    var candidato = siguiente;
+    while (numericos.contains(candidato)) {
+      candidato++;
+    }
+    return candidato.toString().padLeft(longitud, '0');
   }
 
   Future<int> createProducto(Map<String, dynamic> data) async {
     final id = await _db.insert('productos', data);
     _cache?.remove('${_k}_prods');
     return id;
+  }
+
+  /// `true` si [e] es el choque de `codigo` único de `productos`.
+  ///
+  /// Sirve para que el diálogo explique el caso ("ese código ya lo usa…") en
+  /// vez de mostrar el volcado crudo del proxy SQL.
+  static bool esCodigoDuplicado(Object e) {
+    final texto = e.toString().toLowerCase();
+    return texto.contains('llave duplicada') ||
+        texto.contains('duplicate key') ||
+        texto.contains('23505');
+  }
+
+  /// Nombre del producto que ya tiene [codigo], o `null` si está libre.
+  ///
+  /// Incluye los inactivos: siguen ocupando su código en la base.
+  Future<String?> productoCodigoDe(String codigo) async {
+    final c = codigo.trim();
+    if (c.isEmpty) return null;
+    final rows = await _db.fetchAll('productos', filters: {'codigo': c});
+    if (rows.isEmpty) return null;
+    return (rows.first['nombre'] as String?)?.trim();
+  }
+
+  /// Código numérico libre más cercano hacia arriba desde [desde].
+  Future<String> codigoLibreDesde(String desde) async {
+    final base = int.tryParse(desde.trim());
+    if (base == null) return desde.trim();
+    final rows = await _db.fetchAll('productos');
+    final ocupados = <int>{};
+    for (final r in rows) {
+      final n = int.tryParse((r['codigo'] as String? ?? '').trim());
+      if (n != null) ocupados.add(n);
+    }
+    var candidato = base;
+    while (ocupados.contains(candidato)) {
+      candidato++;
+    }
+    return candidato.toString().padLeft(desde.trim().length, '0');
   }
 
   Future<void> updateProducto(int id, Map<String, dynamic> data) async {
