@@ -12,7 +12,10 @@ class IaConfig {
   final FlutterSecureStorage _storage;
 
   /// Modelo multimodal por defecto (imagen + búsqueda de Google).
-  static const modeloPorDefecto = 'gemini-2.5-flash';
+  ///
+  /// 2.5 Flash ya no está disponible para proyectos nuevos; Google recomienda
+  /// 3.8 Flash. Si la cuenta sí tiene 2.5, se puede cambiar en Ajustes → IA.
+  static const modeloPorDefecto = 'gemini-3.8-flash';
 
   static const _kClave = 'ia_gemini_api_key';
   static const _kModelo = 'ia_gemini_modelo';

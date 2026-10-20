@@ -214,12 +214,12 @@ class _IdentificarDialogState extends State<_IdentificarDialog> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Buscando el artículo en internet…',
+                  'Analizando la foto…',
                   style: TextStyle(fontSize: 13, color: scheme.onSurface),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Puede tardar unos segundos.',
+                  'Puede tardar hasta un minuto.',
                   style: TextStyle(
                     fontSize: 12,
                     color: scheme.onSurfaceVariant,
