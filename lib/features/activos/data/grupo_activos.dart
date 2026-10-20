@@ -12,7 +12,10 @@ import 'activo.dart';
 class GrupoActivos {
   GrupoActivos(List<Activo> unidades)
       : unidades = List.unmodifiable(
-          [...unidades]..sort(_compararCodigo),
+          // El `<Activo>` explícito hace falta: `List.unmodifiable` declara su
+          // parámetro como `Iterable` (dinámico) y sin el tipo el literal se
+          // infiere `List<dynamic>`, con lo que `sort` rechaza la función.
+          <Activo>[...unidades]..sort(_compararCodigo),
         );
 
   /// Unidades del grupo, ordenadas por placa.

@@ -179,9 +179,10 @@ void main() {
       vision.cerrar();
 
       expect(lanzada, isNotNull);
-      expect(lanzada!.limiteCuota, 250);
-      expect(lanzada.modeloSaturado, isTrue);
-      expect(lanzada.mensaje, contains('250'));
+      final fallo = lanzada!;
+      expect(fallo.limiteCuota, 250);
+      expect(fallo.modeloSaturado, isTrue);
+      expect(fallo.mensaje, contains('250'));
       // El tope quedó guardado aunque la identificación haya fallado.
       expect(cuota.limite('gemini-3.8-flash'), 250);
     });
