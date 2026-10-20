@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'gemini_modelos.dart';
+
 /// Error del servicio de IA con un mensaje ya listo para mostrar al usuario.
 class IaException implements Exception {
   const IaException(
@@ -23,8 +25,10 @@ class IaException implements Exception {
   /// ejemplo, los 2.5 en proyectos nuevos): el llamador prueba el respaldo.
   final bool modeloNoDisponible;
 
-  /// `true` cuando Google devolvió 503 por saturación: el llamador prueba otro
-  /// modelo antes de rendirse.
+  /// `true` cuando Google respondió 503 (saturación) o 429 de cuota después
+  /// de reintentar sin la búsqueda web: el llamador salta a otro modelo antes
+  /// de rendirse. La cuota es por modelo, así que un 429 no significa que
+  /// todos los demás lo estén.
   final bool modeloSaturado;
 
   @override
@@ -36,8 +40,10 @@ class IaException implements Exception {
 /// Usa la API REST (`generateContent`) con la herramienta de búsqueda de
 /// Google cuando el plan la incluye: el modelo mira la foto, busca
 /// marca/modelo en la web y devuelve un texto (se le pide JSON). Si la
-/// búsqueda no está disponible, reintenta sin ella. No se agrega SDK: `http`
-/// ya está en el proyecto.
+/// búsqueda no está disponible, reintenta sin ella. Si el modelo se queda sin
+/// cuota o ya no existe, baja por la cadena de respaldo y después por todos
+/// los modelos que la API acepte para la clave. No se agrega SDK: `http` ya
+/// está en el proyecto.
 class GeminiVision {
   GeminiVision({http.Client? cliente})
       : _cliente = cliente ?? http.Client(),
@@ -51,11 +57,12 @@ class GeminiVision {
     if (_propio) _cliente.close();
   }
 
-  /// Cadena de modelos a probar si el configurado no existe para la cuenta o
-  /// Google lo tiene saturado.
+  /// Respaldos fijos, probados de entrada sin consultar a la API.
   ///
   /// Google cerró los 2.5 para proyectos nuevos y recomienda 3.8 Flash. Si ese
-  /// devuelve 503, Flash-Lite suele tener más disponibilidad y tarda lo mismo.
+  /// devuelve 503 o se le acaba la cuota, Flash-Lite suele tener más
+  /// disponibilidad y tarda lo mismo. Si tampoco alcanza, se consulta el
+  /// listado de modelos de la clave (ver [GeminiModelos]).
   static const _respaldo = [
     'gemini-3.8-flash',
     'gemini-3.5-flash-lite',
@@ -73,11 +80,69 @@ class GeminiVision {
     required Uint8List imagen,
     String mime = 'image/jpeg',
   }) async {
-    final modelos = <String>[modelo];
+    // Cadena rápida: el modelo elegido más los dos respaldos fijos.
+    final cadena = <String>[modelo];
     for (final m in _respaldo) {
-      if (!modelos.contains(m)) modelos.add(m);
+      if (!cadena.contains(m)) cadena.add(m);
     }
 
+    try {
+      return await _probarCadena(
+        cadena,
+        apiKey: apiKey,
+        prompt: prompt,
+        imagen: imagen,
+        mime: mime,
+      );
+    } on IaException catch (e) {
+      // Un 404 (modelo cerrado para cuentas nuevas), un 503 (saturación) o
+      // un 429 de cuota se resuelven probando otro modelo. Cualquier otro
+      // error (clave inválida, imagen bloqueada) se muestra tal cual.
+      if (!e.modeloNoDisponible && !e.modeloSaturado) rethrow;
+
+      // La cuota es por modelo: un 429 en el configurado no significa que
+      // el resto lo estén. Se le pide a la API qué modelos acepta esta
+      // clave y se prueban todos, del más conveniente al menos.
+      final extras = await GeminiModelos().disponibles(_cliente, apiKey);
+      final resto = <String>[
+        for (final m in extras)
+          if (!cadena.contains(m)) m,
+      ];
+      if (resto.isEmpty) rethrow;
+      try {
+        return await _probarCadena(
+          resto,
+          apiKey: apiKey,
+          prompt: prompt,
+          imagen: imagen,
+          mime: mime,
+          tolerarTodo: true,
+        );
+      } on IaException catch (ultimo) {
+        throw IaException(
+          '${ultimo.mensaje}\n\n'
+          'Se probaron ${cadena.length + resto.length} modelos de la cuenta '
+          'y ninguno respondió.',
+          modeloNoDisponible: ultimo.modeloNoDisponible,
+          modeloSaturado: ultimo.modeloSaturado,
+        );
+      }
+    }
+  }
+
+  /// Prueba los [modelos] en orden y devuelve el primero que responda.
+  ///
+  /// El que sobra se propaga: el que llama decide si hay más cadena (con
+  /// [tolerarTodo] se sigue probando igual, para no frenar la cadena
+  /// completa por un modelo que la cuenta no tiene habilitado).
+  Future<String> _probarCadena(
+    List<String> modelos, {
+    required String apiKey,
+    required String prompt,
+    required Uint8List imagen,
+    required String mime,
+    bool tolerarTodo = false,
+  }) async {
     IaException? ultimo;
     for (final m in modelos) {
       try {
@@ -90,9 +155,7 @@ class GeminiVision {
         );
       } on IaException catch (e) {
         ultimo = e;
-        // Un 404 (modelo cerrado para cuentas nuevas) o un 503 (saturación) se
-        // resuelven probando el siguiente modelo. Cualquier otro error (clave,
-        // cuota real, imagen bloqueada) se muestra tal cual.
+        if (tolerarTodo) continue;
         if (!e.modeloNoDisponible && !e.modeloSaturado) rethrow;
       }
     }
@@ -288,6 +351,9 @@ class GeminiVision {
           'revisá la facturación en AI Studio.'
           '${detalle.isEmpty ? '' : '\n\n$detalle'}',
           herramientaNoSoportada: sinHerramienta,
+          // Después de agotar el reintento sin búsqueda, esto es cuota de
+          // verdad: se prueban el resto de los modelos antes de rendirse.
+          modeloSaturado: !sinHerramienta,
         );
       case 503:
         return const IaException(
