@@ -115,6 +115,9 @@ class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
       },
       onCrearTipo: (t) => widget.repo.createTipo(t),
       onCrearEstado: (n) => widget.repo.createEstado(n),
+      onActualizarTipo: (t) => widget.repo.updateTipo(t.id, t),
+      onContarUnidades: (id) async =>
+          (await widget.repo.getUnidadesDeTipo(id)).length,
       ubicacionesSugeridas: ubicaciones,
     );
     if (mounted) await _recargar();

@@ -17,11 +17,16 @@ class UnidadesPanel extends ConsumerStatefulWidget {
     required this.repo,
     required this.tipo,
     required this.searchTerm,
+    this.onTipoActualizado,
   });
 
   final ActivosRepository repo;
   final ActivoTipo tipo;
   final String searchTerm;
+
+  /// Avisa al padre cuando la edición con IA renombró el tipo, para que el
+  /// encabezado no quede con el nombre viejo.
+  final ValueChanged<ActivoTipo>? onTipoActualizado;
 
   @override
   ConsumerState<UnidadesPanel> createState() => _UnidadesPanelState();
@@ -109,6 +114,12 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
       },
       onCrearTipo: (t) => widget.repo.createTipo(t),
       onCrearEstado: (n) => widget.repo.createEstado(n),
+      onActualizarTipo: (t) async {
+        await widget.repo.updateTipo(t.id, t);
+        widget.onTipoActualizado?.call(t);
+      },
+      onContarUnidades: (id) async =>
+          (await widget.repo.getUnidadesDeTipo(id)).length,
       ubicacionesSugeridas: ubicaciones,
     );
     if (mounted) await _recargar();

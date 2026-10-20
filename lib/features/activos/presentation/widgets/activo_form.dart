@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../data/activo.dart';
+import '../../data/activo_identificado.dart';
 import '../../data/activo_tipo.dart';
 import '../../data/activos_categoria.dart';
+import '../dialogs/aplicar_identificacion_dialog.dart';
+import '../dialogs/identificar_activo_dialog.dart';
 import '../dialogs/tipo_dialog.dart';
 import 'activo_form_campos.dart';
 import 'opciones_field.dart';
@@ -38,6 +41,8 @@ class ActivoForm extends StatefulWidget {
     this.onCrearTipo,
     this.onCrearEstado,
     this.onExisteUnidad,
+    this.onActualizarTipo,
+    this.onContarUnidades,
     this.ubicacionPreset,
     this.estadoPreset,
     this.tipoPreset,
@@ -77,6 +82,18 @@ class ActivoForm extends StatefulWidget {
   /// ¿Ya existe una unidad activa de este tipo en una ubicación? Solo se
   /// consulta al buscar un posible duplicado en el alta.
   final Future<bool> Function(int tipoId, String ubicacion)? onExisteUnidad;
+
+  /// Guarda los datos corregidos del tipo existente (nombre/grupo/modelo).
+  ///
+  /// Solo se usa al editar una unidad y con la identificación por foto: el
+  /// cambio se difiere hasta Guardar, para que cancelar la edición no lo deje
+  /// aplicado. Si es `null` el botón de cámara no aparece (caso del alta, que
+  /// ya tiene su propio flujo).
+  final Future<void> Function(ActivoTipo tipo)? onActualizarTipo;
+
+  /// Cuántas unidades comparten el tipo actual, para avisar a cuántas afecta
+  /// el cambio. Si falla o es `null` se asume una.
+  final Future<int> Function(int tipoId)? onContarUnidades;
   final String? ubicacionPreset;
   final String? estadoPreset;
 
@@ -101,6 +118,10 @@ class _ActivoFormState extends State<ActivoForm> {
 
   /// Tipo recién creado y todavía no persistido: se guarda junto con la unidad.
   ActivoTipo? _nuevo;
+
+  /// Datos del tipo que propuso la IA y el usuario aceptó aplicar. Se escriben
+  /// recién en [_guardar], junto con la unidad.
+  ActivoTipo? _tipoPendiente;
 
   /// Estados del catálogo; los recién creados se agregan acá.
   late final List<String> _estados = [...widget.estados];
@@ -220,6 +241,7 @@ class _ActivoFormState extends State<ActivoForm> {
     if (cambio) {
       _selected = null;
       _nuevo = null;
+      _tipoPendiente = null;
     }
     if (!cambio && _errorTipo == null) return;
     if (mounted) setState(() => _errorTipo = null);
@@ -236,6 +258,7 @@ class _ActivoFormState extends State<ActivoForm> {
     setState(() {
       _nuevo = nuevo;
       _selected = null;
+      _tipoPendiente = null;
       _errorTipo = null;
     });
     // Fuera del `setState`: asignar `text` dispara `_alEditarTipo`, que llama
@@ -245,9 +268,126 @@ class _ActivoFormState extends State<ActivoForm> {
 
   void _elegirTipo(ActivoTipo t) => setState(() {
         _nuevo = null;
+        _tipoPendiente = null;
         _selected = t.id;
         _errorTipo = null;
       });
+
+  ActivoTipo? _tipoPorId(int id) {
+    for (final t in _tipos) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  /// Identifica la unidad existente con una foto y propone moverla a otro
+  /// tipo, corregir el tipo actual o actualizar las observaciones.
+  ///
+  /// No escribe nada: lo aceptado queda en el formulario y se confirma recién
+  /// con Guardar, para que cancelar la edición no deje cambios a medias.
+  Future<void> _identificarConIa() async {
+    final unidad = widget.unidad;
+    final actual = unidad == null ? null : _tipoPorId(unidad.tipoId);
+    if (actual == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Elegí el tipo del activo antes de identificarlo.'),
+        ),
+      );
+      return;
+    }
+
+    final ActivoIdentificado? datos;
+    try {
+      datos = await identificarActivoConFoto(context);
+    } catch (e) {
+      if (mounted) _snack('No se pudo identificar: $e');
+      return;
+    }
+    if (datos == null || !mounted) return;
+
+    final nombre = datos.nombre.trim();
+    // Datos crudos de la IA: si se elige "tipo nuevo", no hereda grupo ni
+    // modelo del tipo actual (sería mezclar dos artículos distintos).
+    final identificado = ActivoTipo(
+      id: 0,
+      nombre: nombre.isEmpty ? actual.nombre : nombre,
+      grupo: datos.grupo.trim().isEmpty ? null : datos.grupo.trim(),
+      modelo: datos.modelo.trim().isEmpty ? null : datos.modelo.trim(),
+      categoriaId: datos.categoriaIdEn(widget.categorias) ?? actual.categoriaId,
+    );
+    final otros = [
+      for (final t in _tipos)
+        if (t.id != actual.id) t,
+    ];
+    final coincidente = datos.tipoCoincidenteEn(otros);
+
+    var unidades = 1;
+    final contar = widget.onContarUnidades;
+    if (contar != null) {
+      try {
+        unidades = await contar(actual.id);
+      } catch (_) {
+        unidades = 1;
+      }
+    }
+    if (!mounted) return;
+
+    final cambios = await showAplicarIdentificacionDialog(
+      context,
+      actual: actual,
+      identificado: identificado,
+      coincidente: coincidente,
+      unidades: unidades,
+      observacionesActuales: _obsCtrl.text,
+      observacionesPropuestas: datos.observaciones,
+    );
+    if (cambios == null || !mounted) return;
+
+    final destino = cambios.destino;
+    if (destino != null) {
+      setState(() {
+        if (cambios.accion == AccionTipo.corregirActual) {
+          _tipoPendiente = destino;
+          final i = _tipos.indexWhere((t) => t.id == actual.id);
+          if (i >= 0) _tipos[i] = destino;
+          _selected = actual.id;
+          _nuevo = null;
+        } else if (destino.id > 0) {
+          // Mover solo esta unidad a un tipo que ya existe.
+          _tipoPendiente = null;
+          if (!_tipos.any((t) => t.id == destino.id)) _tipos.add(destino);
+          _selected = destino.id;
+          _nuevo = null;
+        } else {
+          // Mover solo esta unidad a un tipo nuevo: se crea al guardar.
+          _tipoPendiente = null;
+          _selected = null;
+          _nuevo = destino;
+        }
+      });
+      // Fuera del `setState`: asignar `text` dispara `_alEditarTipo`, que llama
+      // `setState` por su cuenta. Como el destino ya quedó seleccionado, el
+      // listener no lo toma como texto editado a mano.
+      _tipoCtrl.text = textoTipo(destino);
+    }
+    if (cambios.observaciones) {
+      _obsCtrl.text = _combinarObservaciones(
+        _obsCtrl.text,
+        datos.observaciones,
+      );
+    }
+  }
+
+  /// Agrega la propuesta al final sin borrar notas escritas a mano.
+  static String _combinarObservaciones(String actual, String propuesta) {
+    final a = actual.trim();
+    final p = propuesta.trim();
+    if (p.isEmpty) return a;
+    if (a.isEmpty) return p;
+    if (a.contains(p)) return a;
+    return '$a\n\n$p';
+  }
 
   Future<void> _guardar() async {
     setState(() => _guardando = true);
@@ -270,6 +410,26 @@ class _ActivoFormState extends State<ActivoForm> {
             _errorTipo = 'No se pudo crear el tipo';
           });
           return;
+        }
+        if (!mounted) return;
+      }
+
+      // Corrección del tipo aceptada desde la foto: se aplica en el mismo
+      // Guardar, no al aceptar el diálogo, para que cancelar no la deje hecha.
+      final pendiente = _tipoPendiente;
+      if (pendiente != null && widget.onActualizarTipo != null) {
+        try {
+          await widget.onActualizarTipo!(pendiente);
+        } catch (e) {
+          // Un nombre que choca con otro tipo no debe impedir guardar la
+          // unidad: se descarta ese cambio y se avisa.
+          if (mounted) {
+            setState(() => _tipoPendiente = null);
+            _snack(
+              'No se pudo actualizar el tipo: $e\n'
+              'La unidad se guarda sin ese cambio.',
+            );
+          }
         }
         if (!mounted) return;
       }
@@ -317,6 +477,17 @@ class _ActivoFormState extends State<ActivoForm> {
         ),
       );
       if (!mounted) return;
+
+      if (widget.unidad != null && tipoId != widget.unidad!.tipoId) {
+        final destinoTipo = _nuevo ?? _tipoSeleccionado;
+        if (destinoTipo != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unidad movida a «${textoTipo(destinoTipo)}»'),
+            ),
+          );
+        }
+      }
 
       if (widget.unidad == null && _agregarOtro) {
         final codigo = guardado.codigo;
@@ -510,6 +681,7 @@ class _ActivoFormState extends State<ActivoForm> {
         onChanged: (v) => setState(() {
           _categoriaFiltro = v;
           _selected = null;
+          _tipoPendiente = null;
           _tipoCtrl.clear();
         }),
       ),
@@ -528,12 +700,30 @@ class _ActivoFormState extends State<ActivoForm> {
       );
     }
     return _campo(
-      TipoSelectorField(
-        controller: _tipoCtrl,
-        tipos: _tiposVisibles,
-        onSelected: _elegirTipo,
-        onCrearNuevo: widget.onCrearTipo == null ? null : _elegirNuevoTipo,
-        errorText: _errorTipo,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TipoSelectorField(
+            controller: _tipoCtrl,
+            tipos: _tiposVisibles,
+            onSelected: _elegirTipo,
+            onCrearNuevo: widget.onCrearTipo == null ? null : _elegirNuevoTipo,
+            errorText: _errorTipo,
+          ),
+          if (widget.unidad != null && widget.onActualizarTipo != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+                onPressed: _guardando ? null : _identificarConIa,
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: const Text('Identificar con IA'),
+              ),
+            ),
+        ],
       ),
     );
   }

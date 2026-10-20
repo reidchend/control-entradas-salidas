@@ -185,6 +185,10 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
             repo: repo,
             tipo: tipo,
             searchTerm: _search,
+            onTipoActualizado: (t) => setState(() {
+              _tipo = t;
+              _tick++;
+            }),
           ),
         ),
       ],
