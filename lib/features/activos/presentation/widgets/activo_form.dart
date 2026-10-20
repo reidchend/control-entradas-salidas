@@ -8,6 +8,7 @@ import '../dialogs/aplicar_identificacion_dialog.dart';
 import '../dialogs/identificar_activo_dialog.dart';
 import '../dialogs/tipo_dialog.dart';
 import 'activo_form_campos.dart';
+import 'cantidad_stepper.dart';
 import 'opciones_field.dart';
 import 'tipo_selector_field.dart';
 
@@ -31,6 +32,7 @@ class ActivoForm extends StatefulWidget {
     super.key,
     required this.tipos,
     required this.onGuardar,
+    this.onGuardarLote,
     required this.onCerrar,
     this.tipoIdFijo,
     this.unidad,
@@ -56,6 +58,13 @@ class ActivoForm extends StatefulWidget {
   /// que el modo "agregar otra" pueda mostrar la placa recién emitida. Un
   /// `await` acá deja el botón bloqueado; ante error debe lanzar excepción.
   final Future<Activo> Function(Activo activo) onGuardar;
+
+  /// Persiste varias unidades iguales de una sola vez (alta por cantidad).
+  ///
+  /// Si no se pasa, el formulario llama a [onGuardar] una vez por unidad. La
+  /// pantalla y los diálogos lo conectan a `ActivoRepository.createActivos`
+  /// para que la creación sea atómica.
+  final Future<List<Activo>> Function(List<Activo> activos)? onGuardarLote;
 
   /// Cierra el host (pantalla o diálogo) después de guardar o cancelar.
   final VoidCallback onCerrar;
@@ -131,6 +140,7 @@ class _ActivoFormState extends State<ActivoForm> {
 
   late final TextEditingController _tipoCtrl;
   late final TextEditingController _ubicacionCtrl;
+  late final TextEditingController _cantidadCtrl;
   late final TextEditingController _valorCtrl;
   late final TextEditingController _fechaCtrl;
   late final TextEditingController _obsCtrl;
@@ -179,6 +189,7 @@ class _ActivoFormState extends State<ActivoForm> {
     _ubicacionCtrl = TextEditingController(
       text: unidad?.ubicacion?.trim() ?? widget.ubicacionPreset ?? '',
     );
+    _cantidadCtrl = TextEditingController(text: '1');
     _estado = (unidad?.estado ?? widget.estadoPreset ?? 'Activo').trim();
     if (_estado.isEmpty) {
       _estado = 'Activo';
@@ -200,6 +211,7 @@ class _ActivoFormState extends State<ActivoForm> {
       ..removeListener(_alEditarTipo)
       ..dispose();
     _ubicacionCtrl.dispose();
+    _cantidadCtrl.dispose();
     _valorCtrl.dispose();
     _fechaCtrl.dispose();
     _obsCtrl.dispose();
@@ -220,6 +232,10 @@ class _ActivoFormState extends State<ActivoForm> {
     // Sin tipo todavía el campo arranca vacío: es el caso normal al agregar.
     return t == null ? '' : textoTipo(t);
   }
+
+  /// Cuántas unidades se crean en el alta (en edición siempre es 1).
+  int get _cantidad =>
+      (int.tryParse(_cantidadCtrl.text.trim()) ?? 1).clamp(1, 500);
 
   /// Tipos que el selector puede mostrar, acotados por el filtro de categoría.
   List<ActivoTipo> get _tiposVisibles {
@@ -450,7 +466,7 @@ class _ActivoFormState extends State<ActivoForm> {
             return;
           }
           if (yaExiste) {
-            final ok = await _confirmarDuplicado(ubi);
+            final ok = await _confirmarDuplicado(ubi, _cantidad);
             if (!mounted) {
               setState(() => _guardando = false);
               return;
@@ -465,18 +481,27 @@ class _ActivoFormState extends State<ActivoForm> {
       }
       if (!mounted) return;
 
-      final guardado = await widget.onGuardar(
-        Activo(
-          id: widget.unidad?.id ?? 0,
-          tipoId: tipoId,
-          ubicacion: ubi,
-          estado: _estado,
-          valor: double.tryParse(_valorCtrl.text.trim()) ?? 0,
-          fecha: _blanco(_fechaCtrl.text),
-          observaciones: _blanco(_obsCtrl.text),
-          activo: widget.unidad?.activo ?? true,
-        ),
+      final plantilla = Activo(
+        id: widget.unidad?.id ?? 0,
+        tipoId: tipoId,
+        ubicacion: ubi,
+        estado: _estado,
+        valor: double.tryParse(_valorCtrl.text.trim()) ?? 0,
+        fecha: _blanco(_fechaCtrl.text),
+        observaciones: _blanco(_obsCtrl.text),
+        activo: widget.unidad?.activo ?? true,
       );
+      final cantidad = widget.unidad == null ? _cantidad : 1;
+      final guardados = <Activo>[];
+      if (cantidad > 1 && widget.onGuardarLote != null) {
+        guardados.addAll(await widget.onGuardarLote!(
+          List<Activo>.generate(cantidad, (_) => plantilla),
+        ));
+      } else {
+        for (var i = 0; i < cantidad; i++) {
+          guardados.add(await widget.onGuardar(plantilla));
+        }
+      }
       if (!mounted) return;
 
       if (widget.unidad != null && tipoId != widget.unidad!.tipoId) {
@@ -491,12 +516,19 @@ class _ActivoFormState extends State<ActivoForm> {
       }
 
       if (widget.unidad == null && _agregarOtro) {
-        final codigo = guardado.codigo;
+        final codigos = [
+          for (final g in guardados)
+            if ((g.codigo ?? '').trim().isNotEmpty) g.codigo!.trim(),
+        ];
+        final detalle = guardados.length == 1
+            ? (codigos.isEmpty ? 'Unidad guardada' : 'Guardada: ${codigos.first}')
+            : '${guardados.length} unidades guardadas'
+                '${codigos.length > 1 ? ': ${codigos.first} … ${codigos.last}' : ''}';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(codigo == null ? 'Unidad guardada' : 'Guardada: $codigo'),
+          content: Text(detalle),
           duration: const Duration(seconds: 3),
         ));
+        _cantidadCtrl.text = '1';
         return;
       }
       widget.onCerrar();
@@ -514,14 +546,16 @@ class _ActivoFormState extends State<ActivoForm> {
     }
   }
 
-  Future<bool?> _confirmarDuplicado(String ubicacion) {
+  Future<bool?> _confirmarDuplicado(String ubicacion, int cantidad) {
+    final cuantas = cantidad == 1
+        ? '¿Agregar de todos modos? (Útil si son varias iguales)'
+        : '¿Agregar $cantidad unidades iguales de todos modos?';
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ya existe en esta ubicación'),
         content: Text(
-          'Ya hay una unidad de este tipo en «$ubicacion».\n\n'
-          '¿Agregar de todos modos? (Útil si son varias iguales)',
+          'Ya hay una unidad de este tipo en «$ubicacion».\n\n$cuantas',
         ),
         actions: [
           TextButton(
@@ -611,6 +645,7 @@ class _ActivoFormState extends State<ActivoForm> {
           _campoTipo(),
           _campoEstado(),
           _campoUbicacion(),
+          if (widget.unidad == null) _campoCantidad(),
           _campoValor(),
           _campoFecha(),
         ];
@@ -773,6 +808,14 @@ class _ActivoFormState extends State<ActivoForm> {
           opciones: widget.ubicacionesSugeridas,
           textoDe: (s) => s,
           icono: Icons.place_outlined,
+        ),
+      );
+
+  Widget _campoCantidad() => _campo(
+        CantidadStepper(
+          controller: _cantidadCtrl,
+          label: 'Cantidad de unidades',
+          helperText: 'Se crean con los mismos datos y ubicación',
         ),
       );
 

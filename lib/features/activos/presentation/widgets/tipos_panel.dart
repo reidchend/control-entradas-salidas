@@ -142,6 +142,7 @@ class _TiposPanelState extends ConsumerState<TiposPanel> {
       tipoIdFijo: tipo.id,
       estados: estados,
       onGuardar: (a) => widget.repo.createActivo(a),
+      onGuardarLote: (lista) => widget.repo.createActivos(lista),
       onCrearEstado: (n) => widget.repo.createEstado(n),
       onExisteUnidad: (t, u) => widget.repo.existeUnidad(t, u),
       ubicacionesSugeridas: ubicaciones,

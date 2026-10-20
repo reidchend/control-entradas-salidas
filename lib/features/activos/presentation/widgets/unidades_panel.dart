@@ -5,8 +5,10 @@ import '../../../../core/utils/orden_natural.dart';
 import '../../data/activo.dart';
 import '../../data/activo_tipo.dart';
 import '../../data/activos_repository.dart';
+import '../../data/grupo_activos.dart';
 import '../dialogs/unidad_dialog.dart';
-import 'activo_card.dart';
+import '../grupo_acciones.dart';
+import 'grupo_unidades_card.dart';
 import 'seccion_header.dart';
 
 /// Panel de unidades físicas de un tipo concreto, agrupadas por ubicación,
@@ -71,6 +73,7 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
       tipoIdFijo: widget.tipo.id,
       estados: estados,
       onGuardar: (a) => widget.repo.createActivo(a),
+      onGuardarLote: (lista) => widget.repo.createActivos(lista),
       onCrearEstado: (n) => widget.repo.createEstado(n),
       onExisteUnidad: (t, u) => widget.repo.existeUnidad(t, u),
       ubicacionesSugeridas: ubicaciones,
@@ -123,73 +126,6 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
       ubicacionesSugeridas: ubicaciones,
     );
     if (mounted) await _recargar();
-  }
-
-  Future<void> _desactivar(Activo activo) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Desactivar unidad'),
-        content: Text('¿Desactivar "${_ubicacion(activo)}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Desactivar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await widget.repo.deactivateActivo(activo.id);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error: $e');
-    }
-  }
-
-  Future<void> _eliminar(Activo activo) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar unidad'),
-        content: Text('¿Eliminar definitivamente "${_ubicacion(activo)}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await widget.repo.deleteActivo(activo.id);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error: $e');
-    }
-  }
-
-  String _ubicacion(Activo a) {
-    final u = (a.ubicacion ?? '').trim();
-    return u.isEmpty ? 'Sin ubicación' : u;
-  }
-
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
   }
 
   @override
@@ -257,7 +193,8 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
     );
   }
 
-  /// Unidades agrupadas por ubicación. Sin ubicación al final.
+  /// Unidades agrupadas por ubicación y, dentro de cada una, por datos
+  /// idénticos. Sin ubicación al final.
   List<Widget> _buildAgrupado(List<Activo> unidades, ColorScheme colors) {
     final porUbicacion = <String, List<Activo>>{};
     for (final a in unidades) {
@@ -271,6 +208,13 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
         return compararNatural(x, y);
       });
 
+    final acciones = GrupoAcciones(
+      context: context,
+      repo: widget.repo,
+      onRecargar: _recargar,
+      onEditarUnidad: _editar,
+    );
+
     final filas = <Widget>[];
     for (final u in llaves) {
       final items = porUbicacion[u]!;
@@ -280,16 +224,21 @@ class _UnidadesPanelState extends ConsumerState<UnidadesPanel> {
         color: colors.primary,
         conteo: items.length,
       ));
-      for (var i = 0; i < items.length; i++) {
-        final a = items[i];
-        filas.add(ActivoCard(
-          activo: a,
+      final grupos = agruparActivos(items);
+      for (var i = 0; i < grupos.length; i++) {
+        final g = grupos[i];
+        filas.add(GrupoUnidadesCard(
+          grupo: g,
           mostrarTipo: false,
-          onEdit: () => _editar(a),
-          onDeactivate: () => _desactivar(a),
-          onDelete: () => _eliminar(a),
+          onAgregar: () => acciones.agregar(g),
+          onQuitar: () => acciones.quitarUna(g),
+          onCantidad: () => acciones.cambiarCantidad(g),
+          onMover: () => acciones.mover(g),
+          onVerUnidades: () => acciones.verUnidades(g),
+          onEliminar: () => acciones.eliminarTodas(g),
+          onReactivar: () => acciones.reactivar(g),
         ));
-        if (i < items.length - 1) {
+        if (i < grupos.length - 1) {
           filas.add(const Divider(height: 1, indent: 60));
         }
       }

@@ -6,8 +6,10 @@ import '../../data/activo.dart';
 import '../../data/activo_tipo.dart';
 import '../../data/activos_filtro.dart';
 import '../../data/activos_repository.dart';
+import '../../data/grupo_activos.dart';
 import '../dialogs/unidad_dialog.dart';
-import 'activo_card.dart';
+import '../grupo_acciones.dart';
+import 'grupo_unidades_card.dart';
 import 'seccion_header.dart';
 
 /// Panel de unidades que cumplen un filtro (de cualquier tipo/categoría),
@@ -92,8 +94,7 @@ class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
     return [for (final m in maps) m['tipo'] as ActivoTipo];
   }
 
-  Future<void> _editar(Map<String, dynamic> row) async {
-    final activo = Activo.fromMap(row);
+  Future<void> _editar(Activo activo) async {
     final tipos = await _tipos();
     final categorias = await widget.repo.getCategorias();
     final ubicaciones = await widget.repo.getUbicaciones();
@@ -121,70 +122,6 @@ class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
       ubicacionesSugeridas: ubicaciones,
     );
     if (mounted) await _recargar();
-  }
-
-  Future<void> _desactivar(Map<String, dynamic> row) async {
-    final activo = Activo.fromMap(row);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Desactivar unidad'),
-        content: Text('¿Desactivar "${activo.nombre}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Desactivar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await widget.repo.deactivateActivo(activo.id);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error: $e');
-    }
-  }
-
-  Future<void> _eliminar(Map<String, dynamic> row) async {
-    final activo = Activo.fromMap(row);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar unidad'),
-        content: Text('¿Eliminar definitivamente "${activo.nombre}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await widget.repo.deleteActivo(activo.id);
-      if (mounted) await _recargar();
-    } catch (e) {
-      _snack('Error: $e');
-    }
-  }
-
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
   }
 
   @override
@@ -294,6 +231,13 @@ class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
     }
     final cats = porCategoria.keys.toList()..sort(compararNatural);
 
+    final acciones = GrupoAcciones(
+      context: context,
+      repo: widget.repo,
+      onRecargar: _recargar,
+      onEditarUnidad: _editar,
+    );
+
     final out = <Widget>[];
     for (final cat in cats) {
       final items = porCategoria[cat]!;
@@ -318,15 +262,20 @@ class _ActivosFiltradosPanelState extends ConsumerState<ActivosFiltradosPanel> {
           conteo: porTipo[t]!.length,
         ));
         final itemsTipo = porTipo[t]!;
-        for (var i = 0; i < itemsTipo.length; i++) {
-          final f = itemsTipo[i];
-          out.add(ActivoCard(
-            activo: Activo.fromMap(f),
-            onEdit: () => _editar(f),
-            onDeactivate: () => _desactivar(f),
-            onDelete: () => _eliminar(f),
+        final grupos = agruparActivos(itemsTipo.map(Activo.fromMap));
+        for (var i = 0; i < grupos.length; i++) {
+          final g = grupos[i];
+          out.add(GrupoUnidadesCard(
+            grupo: g,
+            onAgregar: () => acciones.agregar(g),
+            onQuitar: () => acciones.quitarUna(g),
+            onCantidad: () => acciones.cambiarCantidad(g),
+            onMover: () => acciones.mover(g),
+            onVerUnidades: () => acciones.verUnidades(g),
+            onEliminar: () => acciones.eliminarTodas(g),
+            onReactivar: () => acciones.reactivar(g),
           ));
-          if (i < itemsTipo.length - 1) {
+          if (i < grupos.length - 1) {
             out.add(const Divider(height: 1, indent: 60));
           }
         }

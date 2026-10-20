@@ -18,6 +18,7 @@ Future<void> showUnidadDialog(
   BuildContext context, {
   required List<ActivoTipo> tipos,
   required Future<Activo> Function(Activo activo) onGuardar,
+  Future<List<Activo>> Function(List<Activo> activos)? onGuardarLote,
   int? tipoIdFijo,
   Activo? unidad,
   List<ActivosCategoria> categorias = const [],
@@ -49,6 +50,7 @@ Future<void> showUnidadDialog(
           grupos: grupos,
           modelos: modelos,
           onGuardar: onGuardar,
+          onGuardarLote: onGuardarLote,
           onCrearTipo: onCrearTipo,
           onCrearEstado: onCrearEstado,
           onExisteUnidad: onExisteUnidad,

@@ -388,9 +388,11 @@ class ActivosRepository {
   /// Formato `PREFIJO-NNNNN`. El `ON CONFLICT ... ultimo + 1` es el punto
   /// único donde el contador avanza, así que dos altas simultáneas no pueden
   /// emitir la misma placa.
-  Future<String> nextCodigo(String prefijo) async {
+  Future<String> nextCodigo(String prefijo) => _nextCodigo(_db, prefijo);
+
+  Future<String> _nextCodigo(PostgresService db, String prefijo) async {
     final p = prefijo.trim().toUpperCase();
-    final filas = await _db.executeSql(
+    final filas = await db.executeSql(
       'INSERT INTO activos_codigos (prefijo, ultimo) VALUES (\$1, 1) '
       'ON CONFLICT (prefijo) DO UPDATE SET ultimo = activos_codigos.ultimo + 1 '
       'RETURNING ultimo',
@@ -402,8 +404,10 @@ class ActivosRepository {
 
   /// Prefijo de la categoría del tipo (con 'ACT' de respaldo cuando el tipo no
   /// tiene categoría o la categoría no tiene prefijo).
-  Future<String> _prefijoDeTipo(int tipoId) async {
-    final filas = await _db.executeSql(
+  Future<String> _prefijoDeTipo(int tipoId) => _prefijoDeTipoEn(_db, tipoId);
+
+  Future<String> _prefijoDeTipoEn(PostgresService db, int tipoId) async {
+    final filas = await db.executeSql(
       'SELECT COALESCE(c.prefijo, \'\') AS prefijo '
       'FROM activos_tipos t '
       'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
@@ -420,16 +424,63 @@ class ActivosRepository {
   /// Devuelve el [Activo] persistido (con `id` y `codigo`) para que la
   /// interface pueda mostrar la placa recién emitida.
   Future<Activo> createActivo(Activo activo) async {
-    final map = activo.toMap();
-    final prefijo = await _prefijoDeTipo(activo.tipoId ?? 0);
-    final codigo = await nextCodigo(prefijo);
-    map['codigo'] = codigo;
-    final id = await _db.insert('activos', map);
-    return Activo.fromMap({
-      ...map,
-      'id': id,
-      'codigo': codigo,
+    final creados = await createActivos([activo]);
+    return creados.first;
+  }
+
+  /// Da de alta varias unidades iguales en una sola transacción.
+  ///
+  /// Cada una recibe su propia placa. Si una inserción falla, no queda ninguna
+  /// unidad a medias: es el alta por cantidad del formulario (10 mesas, 20
+  /// sillas...).
+  Future<List<Activo>> createActivos(List<Activo> activos) async {
+    if (activos.isEmpty) return const [];
+    return _db.transaction((tx) async {
+      final creados = <Activo>[];
+      for (final activo in activos) {
+        final map = activo.toMap();
+        final prefijo = await _prefijoDeTipoEn(tx, activo.tipoId ?? 0);
+        final codigo = await _nextCodigo(tx, prefijo);
+        map['codigo'] = codigo;
+        final id = await tx.insert('activos', map);
+        creados.add(Activo.fromMap({
+          ...map,
+          'id': id,
+          'codigo': codigo,
+        }));
+      }
+      return creados;
     });
+  }
+
+  /// Elimina varias unidades en una sola operación.
+  Future<void> deleteActivos(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _db.executeCommand(
+      'DELETE FROM activos WHERE id = ANY(\$1::int[])',
+      params: [ids],
+    );
+  }
+
+  /// Mueve varias unidades a otra ubicación sin tocar sus demás datos.
+  Future<void> moverActivos(List<int> ids, String? ubicacion) async {
+    if (ids.isEmpty) return;
+    final u = (ubicacion ?? '').trim();
+    await _db.executeCommand(
+      'UPDATE activos SET ubicacion = \$1, updated_at = now() '
+      'WHERE id = ANY(\$2::int[])',
+      params: [u.isEmpty ? null : u, ids],
+    );
+  }
+
+  /// Activa o desactiva varias unidades a la vez.
+  Future<void> setActivosActivo(List<int> ids, bool activo) async {
+    if (ids.isEmpty) return;
+    await _db.executeCommand(
+      'UPDATE activos SET activo = \$1, updated_at = now() '
+      'WHERE id = ANY(\$2::int[])',
+      params: [activo, ids],
+    );
   }
 
   Future<void> updateActivo(int id, Activo activo) async {

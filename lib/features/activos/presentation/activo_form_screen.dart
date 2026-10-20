@@ -17,6 +17,7 @@ Future<void> showActivoFormScreen(
   BuildContext context, {
   required List<ActivoTipo> tipos,
   required Future<Activo> Function(Activo activo) onGuardar,
+  Future<List<Activo>> Function(List<Activo> activos)? onGuardarLote,
   int? tipoIdFijo,
   Activo? unidad,
   List<ActivosCategoria> categorias = const [],
@@ -47,6 +48,7 @@ Future<void> showActivoFormScreen(
         grupos: grupos,
         modelos: modelos,
         onGuardar: onGuardar,
+        onGuardarLote: onGuardarLote,
         onCrearTipo: onCrearTipo,
         onCrearEstado: onCrearEstado,
         onExisteUnidad: onExisteUnidad,
@@ -65,6 +67,7 @@ class ActivoFormScreen extends StatelessWidget {
     super.key,
     required this.tipos,
     required this.onGuardar,
+    this.onGuardarLote,
     this.tipoIdFijo,
     this.unidad,
     this.categorias = const [],
@@ -83,6 +86,7 @@ class ActivoFormScreen extends StatelessWidget {
 
   final List<ActivoTipo> tipos;
   final Future<Activo> Function(Activo activo) onGuardar;
+  final Future<List<Activo>> Function(List<Activo> activos)? onGuardarLote;
   final int? tipoIdFijo;
   final Activo? unidad;
   final List<ActivosCategoria> categorias;
@@ -119,6 +123,7 @@ class ActivoFormScreen extends StatelessWidget {
               grupos: grupos,
               modelos: modelos,
               onGuardar: onGuardar,
+              onGuardarLote: onGuardarLote,
               onCrearTipo: onCrearTipo,
               onCrearEstado: onCrearEstado,
               onExisteUnidad: onExisteUnidad,
