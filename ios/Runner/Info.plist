@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Se usa la cámara para fotografiar el artículo que querés registrar como activo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Se usa la galería para elegir la foto del artículo que querés registrar como activo.</string>
 </dict>
 </plist>

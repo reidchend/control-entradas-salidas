@@ -28,6 +28,12 @@ Future<void> showActivoFormScreen(
   Future<bool> Function(int tipoId, String ubicacion)? onExisteUnidad,
   String? ubicacionPreset,
   String? estadoPreset,
+  /// Tipo propuesto (por ejemplo, por la identificación con IA) que todavía no
+  /// existe en el catálogo: el formulario lo muestra como borrador y lo crea
+  /// recién al guardar la unidad.
+  ActivoTipo? tipoPreset,
+  /// Texto inicial para Observaciones cuando la unidad es nueva.
+  String? observacionesPreset,
   List<String> ubicacionesSugeridas = const [],
 }) {
   return Navigator.of(context).push<void>(
@@ -46,6 +52,8 @@ Future<void> showActivoFormScreen(
         onExisteUnidad: onExisteUnidad,
         ubicacionPreset: ubicacionPreset,
         estadoPreset: estadoPreset,
+        tipoPreset: tipoPreset,
+        observacionesPreset: observacionesPreset,
         ubicacionesSugeridas: ubicacionesSugeridas,
       ),
     ),
@@ -68,6 +76,8 @@ class ActivoFormScreen extends StatelessWidget {
     this.onExisteUnidad,
     this.ubicacionPreset,
     this.estadoPreset,
+    this.tipoPreset,
+    this.observacionesPreset,
     this.ubicacionesSugeridas = const [],
   });
 
@@ -84,6 +94,8 @@ class ActivoFormScreen extends StatelessWidget {
   final Future<bool> Function(int tipoId, String ubicacion)? onExisteUnidad;
   final String? ubicacionPreset;
   final String? estadoPreset;
+  final ActivoTipo? tipoPreset;
+  final String? observacionesPreset;
   final List<String> ubicacionesSugeridas;
 
   @override
@@ -112,6 +124,8 @@ class ActivoFormScreen extends StatelessWidget {
               onExisteUnidad: onExisteUnidad,
               ubicacionPreset: ubicacionPreset,
               estadoPreset: estadoPreset,
+              tipoPreset: tipoPreset,
+              observacionesPreset: observacionesPreset,
               ubicacionesSugeridas: ubicacionesSugeridas,
               onCerrar: () => Navigator.of(context).pop(),
             ),

@@ -11,6 +11,8 @@ import 'activo_form_screen.dart';
 import 'dialogs/activos_categoria_dialog.dart';
 import 'dialogs/activos_excel_dialog.dart';
 import 'dialogs/fusionar_tipos_dialog.dart';
+import 'dialogs/identificar_activo_dialog.dart';
+import 'dialogs/tipo_coincidente_dialog.dart';
 import 'dialogs/tipo_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
@@ -370,6 +372,12 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
             ),
           ),
           if (_categoria == null && _tipo == null && _valor == null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(Icons.photo_camera_outlined, color: colors.primary),
+              tooltip: 'Agregar activo por foto (IA)',
+              onPressed: () => _crearActivoPorFoto(repo),
+            ),
             if (_dim == 'tipo') ...[
               const SizedBox(width: 4),
               IconButton(
@@ -450,6 +458,67 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       ubicacionesSugeridas: ubicaciones,
     );
     if (mounted) setState(() {});
+  }
+
+  /// Alta por foto: la IA propone los datos del artículo y el formulario se
+  /// abre precargado para revisar antes de guardar.
+  ///
+  /// No escribe nada hasta que el usuario confirma el formulario; la foto solo
+  /// se usa para identificar y no se guarda.
+  Future<void> _crearActivoPorFoto(ActivosRepository repo) async {
+    try {
+      final datos = await identificarActivoConFoto(context);
+      if (datos == null || !mounted) return;
+
+      final filas = await repo.getTipos();
+      final tipos = [for (final m in filas) m['tipo'] as ActivoTipo];
+      final categorias = await repo.getCategorias();
+      final ubicaciones = await repo.getUbicaciones();
+      final estados = await repo.getEstados();
+      if (!mounted) return;
+
+      final propuesto = datos.aTipo(
+        categoriaId: datos.categoriaIdEn(categorias),
+      );
+
+      // Si el nombre coincide con un tipo del catálogo, preguntar antes de
+      // crear otro: lo habitual es que sea el mismo artículo en otra ubicación.
+      final existente = datos.tipoCoincidenteEn(tipos);
+      bool? usarExistente;
+      if (existente != null) {
+        var unidades = 0;
+        for (final m in filas) {
+          if ((m['tipo'] as ActivoTipo).id == existente.id) {
+            unidades = (m['unidades'] as int?) ?? 0;
+            break;
+          }
+        }
+        usarExistente = await showTipoCoincidenteDialog(
+          context,
+          existente: existente,
+          unidades: unidades,
+        );
+        if (usarExistente == null || !mounted) return;
+      }
+
+      await showActivoFormScreen(
+        context,
+        tipos: tipos,
+        categorias: categorias,
+        estados: estados,
+        onGuardar: (a) => repo.createActivo(a),
+        onCrearTipo: (t) => repo.createTipo(t),
+        onCrearEstado: (n) => repo.createEstado(n),
+        onExisteUnidad: (t, u) => repo.existeUnidad(t, u),
+        ubicacionesSugeridas: ubicaciones,
+        tipoIdFijo: usarExistente == true ? existente?.id : null,
+        tipoPreset: usarExistente == true ? null : propuesto,
+        observacionesPreset: datos.observaciones,
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) _snack('No se pudo identificar el artículo: $e');
+    }
   }
 
   Future<void> _crearCategoria(ActivosRepository repo) async {

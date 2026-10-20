@@ -40,6 +40,8 @@ class ActivoForm extends StatefulWidget {
     this.onExisteUnidad,
     this.ubicacionPreset,
     this.estadoPreset,
+    this.tipoPreset,
+    this.observacionesPreset,
     this.ubicacionesSugeridas = const [],
   });
 
@@ -77,6 +79,13 @@ class ActivoForm extends StatefulWidget {
   final Future<bool> Function(int tipoId, String ubicacion)? onExisteUnidad;
   final String? ubicacionPreset;
   final String? estadoPreset;
+
+  /// Tipo propuesto (por ejemplo, por la identificación con IA) que todavía no
+  /// existe en el catálogo: arranca como borrador y se crea al guardar.
+  final ActivoTipo? tipoPreset;
+
+  /// Texto inicial de Observaciones cuando la unidad es nueva.
+  final String? observacionesPreset;
   final List<String> ubicacionesSugeridas;
 
   @override
@@ -133,6 +142,14 @@ class _ActivoFormState extends State<ActivoForm> {
         ),
       );
     }
+    // Tipo propuesto desde afuera (identificación por foto): arranca como
+    // borrador, se muestra como elegido y se crea recién al guardar.
+    _nuevo = widget.tipoPreset;
+    final categoriaPreset = widget.tipoPreset?.categoriaId;
+    if (categoriaPreset != null &&
+        widget.categorias.any((c) => c.id == categoriaPreset)) {
+      _categoriaFiltro = categoriaPreset;
+    }
     _tipoCtrl = TextEditingController(text: _textoTipoActual);
     // Si la persona edita el texto a mano, lo que queda escrito ya no es el tipo
     // elegido: se suelta la selección para no guardar una unidad con el texto
@@ -151,7 +168,9 @@ class _ActivoFormState extends State<ActivoForm> {
           : '',
     );
     _fechaCtrl = TextEditingController(text: unidad?.fecha ?? '');
-    _obsCtrl = TextEditingController(text: unidad?.observaciones?.trim() ?? '');
+    _obsCtrl = TextEditingController(
+      text: unidad?.observaciones?.trim() ?? widget.observacionesPreset ?? '',
+    );
   }
 
   @override
@@ -196,8 +215,8 @@ class _ActivoFormState extends State<ActivoForm> {
   /// `TextEditingController.addListener` entrega un `VoidCallback` (sin
   /// argumentos), así que el texto se lee del controller en vez de recibirse.
   void _alEditarTipo() {
-    final sel = _tipoSeleccionado;
-    final cambio = sel != null && _tipoCtrl.text != textoTipo(sel);
+    final actual = _tipoSeleccionado ?? _nuevo;
+    final cambio = actual != null && _tipoCtrl.text != textoTipo(actual);
     if (cambio) {
       _selected = null;
       _nuevo = null;

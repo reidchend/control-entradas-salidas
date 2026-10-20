@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/session_controller.dart';
 import '../../pos/presentation/config_screen.dart';
 import 'widgets/categorias_tab.dart';
+import 'widgets/ia_tab.dart';
 import 'widgets/productos_tab.dart';
 import 'widgets/proveedores_tab.dart';
 import 'widgets/sistema_tab.dart';
@@ -43,9 +44,11 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
           'Proveedores', Icons.local_shipping_outlined, ProveedoresTab()),
       const _TabDef('Sistema', Icons.settings_outlined, SistemaTab()),
       const _TabDef('Periodos', Icons.calendar_month_outlined, PeriodosTab()),
-      if (esAdmin)
+      if (esAdmin) ...[
+        const _TabDef('IA', Icons.auto_awesome_outlined, IaTab()),
         const _TabDef(
             'Usuarios', Icons.manage_accounts_outlined, UsuariosTab()),
+      ],
     ];
 
     return DefaultTabController(

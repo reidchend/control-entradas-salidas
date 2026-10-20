@@ -35,6 +35,9 @@ dependencies:
   windows_printer: ^0.2.1
   # Decodificar/encodear imágenes (BMP→JPEG para WhatsApp)
   image: ^4.3.0
+  # Cámara del teléfono para identificar activos por foto (Android/iOS).
+  # En escritorio se elige una imagen con file_selector.
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
