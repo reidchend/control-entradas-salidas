@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'gemini_cuota.dart';
 import 'gemini_modelos.dart';
 
 /// Error del servicio de IA con un mensaje ya listo para mostrar al usuario.
@@ -13,6 +14,7 @@ class IaException implements Exception {
     this.herramientaNoSoportada = false,
     this.modeloNoDisponible = false,
     this.modeloSaturado = false,
+    this.limiteCuota,
   });
 
   final String mensaje;
@@ -31,6 +33,11 @@ class IaException implements Exception {
   /// todos los demás lo estén.
   final bool modeloSaturado;
 
+  /// Límite que Google reportó para el modelo en el 429, si lo trae (por
+  /// ejemplo 250 por día). No es "intentos restantes", es el tope total del
+  /// cupo; con el contador local da el saldo aproximado.
+  final int? limiteCuota;
+
   @override
   String toString() => mensaje;
 }
@@ -45,12 +52,17 @@ class IaException implements Exception {
 /// los modelos que la API acepte para la clave. No se agrega SDK: `http` ya
 /// está en el proyecto.
 class GeminiVision {
-  GeminiVision({http.Client? cliente})
+  GeminiVision({http.Client? cliente, this.cuota})
       : _cliente = cliente ?? http.Client(),
         _propio = cliente == null;
 
   final http.Client _cliente;
   final bool _propio;
+
+  /// Si se pasa, cada intento exitoso se suma al contador local de cuota y el
+  /// límite que Google reporte en un 429 queda guardado, para poder mostrar en
+  /// Ajustes → IA cuánto del cupo diario ya se usó.
+  final GeminiCuota? cuota;
 
   /// Libera el cliente HTTP si lo creó este objeto.
   void cerrar() {
@@ -146,14 +158,18 @@ class GeminiVision {
     IaException? ultimo;
     for (final m in modelos) {
       try {
-        return await _analizar(
+        final texto = await _analizar(
           apiKey: apiKey,
           modelo: m,
           prompt: prompt,
           imagen: imagen,
           mime: mime,
         );
+        await cuota?.registrarUso(m);
+        return texto;
       } on IaException catch (e) {
+        final limite = e.limiteCuota;
+        if (limite != null) await cuota?.registrarLimite(m, limite);
         ultimo = e;
         if (tolerarTodo) continue;
         if (!e.modeloNoDisponible && !e.modeloSaturado) rethrow;
@@ -343,18 +359,23 @@ class GeminiVision {
           '${detalle.isEmpty ? '' : '\n\n$detalle'}',
           modeloNoDisponible: true,
         );
-      case 429:
+      case 429: {
+        final datos = _cuotaDe(r.body);
         return IaException(
           'Gemini rechazó la solicitud por límite de uso (429). '
+          '${datos.limite == null ? '' : 'El tope es de ${datos.limite} por modelo al día. '}'
           'Si la cuenta es nueva, el plan gratuito puede no incluir este '
           'modelo o la búsqueda web; probá otro modelo en Ajustes → IA o '
           'revisá la facturación en AI Studio.'
+          '${datos.espera == null ? '' : '\n\nEsperá ${datos.espera!.inSeconds} s y volvé a intentar.'}'
           '${detalle.isEmpty ? '' : '\n\n$detalle'}',
           herramientaNoSoportada: sinHerramienta,
           // Después de agotar el reintento sin búsqueda, esto es cuota de
           // verdad: se prueban el resto de los modelos antes de rendirse.
           modeloSaturado: !sinHerramienta,
+          limiteCuota: datos.limite,
         );
+      }
       case 503:
         return const IaException(
           'Los modelos de IA están saturados en este momento. '
@@ -380,5 +401,53 @@ class GeminiVision {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Tope y espera que Google detalla en un 429.
+  ///
+  /// No son "intentos restantes" (Google nunca los publica), pero el tope es
+  /// el dato que hace falta para que el contador local de `GeminiCuota` muestre
+  /// "37 de 250 usadas hoy" en lugar de un número sin contexto.
+  ({int? limite, Duration? espera}) _cuotaDe(String cuerpo) {
+    int? limite;
+    Duration? espera;
+    try {
+      final data = jsonDecode(cuerpo) as Map<String, dynamic>;
+      final detalles = (data['error'] as Map<String, dynamic>?)?['details'];
+      for (final d in (detalles as List? ?? const [])) {
+        final m = d is Map<String, dynamic> ? d : null;
+        if (m == null) continue;
+        final tipo = m['@type'] as String? ?? '';
+        if (tipo.contains('QuotaFailure')) {
+          final violaciones = m['violations'] as List? ?? const [];
+          final v = violaciones.isNotEmpty ? violaciones.first : null;
+          if (v is Map<String, dynamic>) {
+            final tope = v['quotaLimit'];
+            if (tope is Map<String, dynamic>) {
+              final n = tope['limit'];
+              if (n is num) limite = n.toInt();
+            }
+            // A veces el tope viene solo en el texto de la descripción.
+            limite ??= _numeroDe(v['description'] as String?);
+          }
+        } else if (tipo.contains('RetryInfo')) {
+          final texto = m['retryDelay'] as String?;
+          final seg = texto == null
+              ? null
+              : num.tryParse(texto.replaceAll(RegExp('[^0-9.]'), ''));
+          if (seg != null) espera = Duration(seconds: seg.ceil());
+        }
+      }
+    } catch (_) {
+      // Cuerpo que no es JSON: se ignora, el mensaje base ya alcanza.
+    }
+    return (limite: limite, espera: espera);
+  }
+
+  /// Primer entero de un texto como «con un límite de 250 peticiones por día».
+  int? _numeroDe(String? texto) {
+    if (texto == null) return null;
+    final m = RegExp(r'\b(\d{2,9})\b').firstMatch(texto);
+    return m == null ? null : int.tryParse(m.group(1)!);
   }
 }

@@ -1,18 +1,23 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../../core/ia/gemini_cuota.dart';
 import '../../../core/ia/gemini_vision.dart';
 import 'activo_identificado.dart';
 
 /// Pide a Gemini que mire la foto del artículo y devuelva un JSON con lo
 /// necesario para precargar el alta de activo. Si el plan incluye la búsqueda
 /// web, además confirma marca/modelo/precio con Google Search.
+///
+/// Si se pasa [cuota], cada identificación se suma al contador local de uso
+/// por modelo (para mostrar cuánto del cupo diario ya se gastó).
 Future<ActivoIdentificado> identificarActivoDesdeFoto({
   required Uint8List imagen,
   required String apiKey,
   required String modelo,
+  GeminiCuota? cuota,
 }) async {
-  final vision = GeminiVision();
+  final vision = GeminiVision(cuota: cuota);
   final String texto;
   try {
     texto = await vision.analizarImagen(

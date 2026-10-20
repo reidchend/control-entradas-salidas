@@ -7,8 +7,10 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/config/ia_config.dart';
+import '../../../../core/ia/gemini_cuota.dart';
 import '../../../../core/ia/gemini_vision.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/cuota_gemini_linea.dart';
 import '../../data/activo_identificado.dart';
 import '../../data/identificar_activo.dart';
 
@@ -154,6 +156,9 @@ class _IdentificarDialogState extends State<_IdentificarDialog> {
   String? _error;
   bool _enviando = true;
 
+  /// Contador local de cuota: se abre una vez y se usa en cada reintento.
+  GeminiCuota? _cuota;
+
   @override
   void initState() {
     super.initState();
@@ -166,11 +171,13 @@ class _IdentificarDialogState extends State<_IdentificarDialog> {
       _error = null;
       _resultado = null;
     });
+    final cuota = _cuota ??= await GeminiCuota.abrir();
     try {
       final datos = await identificarActivoDesdeFoto(
         imagen: widget.foto,
         apiKey: widget.apiKey,
         modelo: widget.modelo,
+        cuota: cuota,
       );
       if (!mounted) return;
       setState(() {
@@ -186,9 +193,29 @@ class _IdentificarDialogState extends State<_IdentificarDialog> {
     }
   }
 
+  /// Línea de cupo que se ve bajo el resultado, para que no sorprenda el 429.
+  Widget? get _cupoHoy {
+    final cuota = _cuota;
+    if (cuota == null) return null;
+    final modelo = cuota.ultimoModelo();
+    if (modelo == null) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CuotaGeminiLinea(
+        modelo: modelo,
+        usadas: cuota.usadas(modelo),
+        limite: cuota.limite(modelo),
+        reinicio: cuota.proximoReinicio(),
+        compacta: true,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Se construye una sola vez por frame; el getter arma el widget.
+    final cupoHoy = _enviando ? null : _cupoHoy;
     return AlertDialog(
       title: const Text('Identificar con IA'),
       content: SizedBox(
@@ -249,6 +276,7 @@ class _IdentificarDialogState extends State<_IdentificarDialog> {
                 ),
               ] else if (_resultado != null)
                 _Resultado(datos: _resultado!),
+              if (cupoHoy != null) cupoHoy,
             ],
           ),
         ),

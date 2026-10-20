@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/config/ia_config.dart';
+import 'ia_cuota_card.dart';
 
 /// Pestaña de Ajustes para la clave de IA (Gemini) que usa el alta de activos
 /// por foto.
@@ -268,6 +269,13 @@ class _IaTabState extends State<IaTab> {
                 ),
               ),
             ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: const IaCuotaCard(),
           ),
         ),
       ],
