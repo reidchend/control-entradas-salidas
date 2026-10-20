@@ -287,7 +287,8 @@ class _ActivoFormState extends State<ActivoForm> {
   /// con Guardar, para que cancelar la edición no deje cambios a medias.
   Future<void> _identificarConIa() async {
     final unidad = widget.unidad;
-    final actual = unidad == null ? null : _tipoPorId(unidad.tipoId);
+    final tipoActual = unidad?.tipoId;
+    final actual = tipoActual == null ? null : _tipoPorId(tipoActual);
     if (actual == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
