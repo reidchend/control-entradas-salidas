@@ -44,8 +44,14 @@ final almacenesConfigProvider = FutureProvider<List<String>>((ref) {
 });
 
 /// Productos para la pestaña de configuración.
+///
+/// Ojo: el borrado de productos es lógico (`activo = false`), así que si aquí
+/// se filtraran los inactivos, un producto desactivado desaparecería de
+/// Configuración y no habría forma de verlo ni de reactivarlo (el diálogo de
+/// edición tiene el switch "Activo"). La lista marca los inactivos con el
+/// chip "INACTIVO".
 final productosConfigProvider = FutureProvider<List<Producto>>((ref) {
-  return ref.watch(configuracionRepoProvider)!.getProductos();
+  return ref.watch(configuracionRepoProvider)!.getProductos(soloActivos: false);
 });
 
 /// Configuración POS: permitir stock negativo.

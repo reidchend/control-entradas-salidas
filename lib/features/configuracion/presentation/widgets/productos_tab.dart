@@ -52,6 +52,7 @@ class _ProductosTabState extends ConsumerState<ProductosTab> {
               final filtered = productos.where((Producto p) {
                 if (_search.isNotEmpty && !p.nombre.toLowerCase().contains(_search.toLowerCase())) return false;
                 if (_categoriaId != null && p.categoriaId != _categoriaId) return false;
+                if (_almacen != null && p.almacenPredeterminado != _almacen) return false;
                 return true;
               }).toList();
 
@@ -238,6 +239,7 @@ class _ProductoItemCard extends StatelessWidget {
     }
 
     final skuChips = <Widget>[
+      if (!p.activo) _chip(scheme.error, Colors.white, 'INACTIVO'),
       _chip(scheme.primaryContainer, scheme.onPrimaryContainer, sku),
       _chip(tipoColor, Colors.white, tipoTxt.toUpperCase()),
       _chip(scheme.secondaryContainer, scheme.onSecondaryContainer, p.almacenPredeterminado.toUpperCase()),
