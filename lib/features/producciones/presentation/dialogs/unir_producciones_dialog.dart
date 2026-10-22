@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/receta.dart';
+import '../../../../core/models/receta.dart';
 import '../../data/producciones_providers.dart';
 import '../../data/producciones_repository.dart';
 

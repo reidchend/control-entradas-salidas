@@ -11,6 +11,7 @@ class PendienteCard extends StatelessWidget {
     required this.entradas,
     required this.onDescargar,
     required this.onCancelar,
+    this.onUnir,
   });
 
   final ProduccionInfo produccion;
