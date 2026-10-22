@@ -101,18 +101,31 @@ class StockRepository {
       String join;
       if (almacen != null) {
         params.add(almacen);
-        // Solo productos con existencias en ese almacén.
-        join = 'JOIN existencias e ON e.producto_id = p.id '
-            'AND e.almacen = \$${params.length}';
+        if (stockStatus != null) {
+          // Con filtro de estado, LEFT JOIN: un producto sin fila de
+          // existencias en ese almacén también está agotado ahí; el INNER
+          // lo dejaba fuera del filtro "Agotado".
+          join = 'LEFT JOIN existencias e ON e.producto_id = p.id '
+              'AND e.almacen = \$${params.length}';
+        } else {
+          // Solo almacén: productos con existencias en ese almacén.
+          join = 'JOIN existencias e ON e.producto_id = p.id '
+              'AND e.almacen = \$${params.length}';
+        }
       } else {
         join = 'LEFT JOIN existencias e ON e.producto_id = p.id';
       }
       const stockSum = 'COALESCE(SUM(e.cantidad), 0)';
+      // El orden de las cláusulas SQL es GROUP BY → HAVING → ORDER BY. El
+      // HAVING se concatenaba DESPUÉS del ORDER BY, que es un error de
+      // sintaxis: la consulta reventaba, el catch de la pantalla conservaba
+      // la lista anterior y el filtro "Agotado" parecía no hacer nada.
       var sql = 'SELECT p.*, $stockSum AS stock_prd FROM productos p '
-          '$join WHERE $where GROUP BY p.id ORDER BY p.nombre ASC';
+          '$join WHERE $where GROUP BY p.id';
       if (stockStatus == 'out') {
         sql += ' HAVING $stockSum <= 0';
       }
+      sql += ' ORDER BY p.nombre ASC';
       rows = await _db.executeSql(sql, params: params);
     } else {
       rows = await _db.executeSql(
