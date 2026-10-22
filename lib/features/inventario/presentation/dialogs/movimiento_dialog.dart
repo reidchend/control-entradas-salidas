@@ -9,8 +9,8 @@ import 'package:control_entradas_salidas/core/models/existencia.dart';
 import 'package:control_entradas_salidas/features/calculadora/presentation/calculadora.dart';
 import 'package:control_entradas_salidas/features/configuracion/data/configuracion_providers.dart';
 import 'package:control_entradas_salidas/features/inventario/data/inventario_providers.dart';
+import 'package:control_entradas_salidas/features/inventario/presentation/widgets/lote_selector_panel.dart';
 import 'package:control_entradas_salidas/features/producciones/data/producciones_providers.dart';
-import 'package:control_entradas_salidas/features/producciones/data/producciones_repository.dart';
 
 /// Diálogo para registrar movimiento (entrada/salida/ajuste) con soporte pesable.
 Future<void> showMovimientoDialog(BuildContext context, WidgetRef ref, Producto p) {
@@ -53,6 +53,15 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   Producto get _producto => widget.producto;
   bool get _esPesable => _producto.esPesable;
   bool get _esProduccion => _esProductoProduccion && _tipo == 'entrada';
+
+  /// El botón principal dice explícitamente qué va a pasar con la entrada:
+  /// refuerza la decisión de lote tomada arriba.
+  String get _textoBotonRegistrar {
+    if (!_esProduccion) return 'Registrar';
+    return _produccionId != null
+        ? 'Sumar al Lote #$_produccionId'
+        : 'Crear lote nuevo';
+  }
 
   @override
   void initState() {
@@ -366,6 +375,39 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
                   const SizedBox(height: 12),
                   _StockInfoPanel(existencias: existencias),
                   const SizedBox(height: 12),
+                  if (_esProduccion) ...[
+                    // La decisión de lote va ANTES de la cantidad: es lo primero
+                    // que el mesonero debe resolver, y con tarjetas grandes en
+                    // vez de un dropdown al final que nadie veía.
+                    if (_recetasQueProducen.length > 1)
+                      DropdownButtonFormField<int>(
+                        decoration: const InputDecoration(labelText: 'Receta'),
+                        initialValue: _recetaSeleccionada?.id,
+                        items: [
+                          for (final r in _recetasQueProducen)
+                            DropdownMenuItem(
+                                value: r.id, child: Text(r.nombre)),
+                        ],
+                        onChanged: (v) => setState(() {
+                          _recetaId = v;
+                          _produccionId = null;
+                        }),
+                      )
+                    else
+                      Text(
+                        'Receta: ${_recetaSeleccionada?.nombre ?? '—'}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    const SizedBox(height: 8),
+                    LoteSelectorPanel(
+                      key: ValueKey(_recetaSeleccionada?.id),
+                      repo: ref.read(produccionesRepoProvider)!,
+                      recetaId: _recetaSeleccionada?.id,
+                      produccionId: _produccionId,
+                      onChanged: (id) => setState(() => _produccionId = id),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (!_esPesable)
                     TextField(
                       controller: _cantCtrl,
@@ -405,36 +447,6 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _registrar(),
                   ),
-                  if (_esProduccion) ...[
-                    const SizedBox(height: 16),
-                    if (_recetasQueProducen.length > 1)
-                      DropdownButtonFormField<int>(
-                        decoration: const InputDecoration(labelText: 'Receta'),
-                        initialValue: _recetaSeleccionada?.id,
-                        items: [
-                          for (final r in _recetasQueProducen)
-                            DropdownMenuItem(
-                                value: r.id, child: Text(r.nombre)),
-                        ],
-                        onChanged: (v) => setState(() {
-                          _recetaId = v;
-                          _produccionId = null;
-                        }),
-                      )
-                    else
-                      Text(
-                        'Receta: ${_recetaSeleccionada?.nombre ?? '—'}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    const SizedBox(height: 8),
-                    _LoteSelector(
-                      key: ValueKey(_recetaSeleccionada?.id),
-                      repo: ref.read(produccionesRepoProvider)!,
-                      recetaId: _recetaSeleccionada?.id,
-                      produccionId: _produccionId,
-                      onChanged: (id) => setState(() => _produccionId = id),
-                    ),
-                  ],
                 ],
               ),
           ),
@@ -451,99 +463,9 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Registrar'),
+              : Text(_textoBotonRegistrar),
         ),
       ],
-    );
-  }
-}
-
-class _LoteSelector extends StatefulWidget {
-  const _LoteSelector({
-    super.key,
-    required this.repo,
-    required this.recetaId,
-    required this.produccionId,
-    required this.onChanged,
-  });
-
-  final ProduccionesRepository repo;
-  final int? recetaId;
-  final int? produccionId;
-  final ValueChanged<int?> onChanged;
-
-  @override
-  State<_LoteSelector> createState() => _LoteSelectorState();
-}
-
-class _LoteSelectorState extends State<_LoteSelector> {
-  late Future<List<ProduccionInfo>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _cargar();
-  }
-
-  @override
-  void didUpdateWidget(_LoteSelector old) {
-    super.didUpdateWidget(old);
-    if (old.recetaId != widget.recetaId) {
-      _future = _cargar();
-    }
-  }
-
-  Future<List<ProduccionInfo>> _cargar() async {
-    final recetaId = widget.recetaId;
-    if (recetaId == null) return [];
-    final pendientes = await widget.repo.getProduccionesPorEstado('pendiente');
-    return pendientes.where((p) => p.recetaId == recetaId).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final recetaId = widget.recetaId;
-    if (recetaId == null) return const SizedBox.shrink();
-
-    return FutureBuilder<List<ProduccionInfo>>(
-      future: _future,
-      builder: (context, snap) {
-        final lotes = snap.data ?? const <ProduccionInfo>[];
-        final tieneLotes = lotes.isNotEmpty;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<int?>(
-              decoration:
-                  const InputDecoration(labelText: 'Vincular a producción'),
-              initialValue: widget.produccionId ?? 0,
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: 0,
-                  child: Text('Nueva producción (crear lote)'),
-                ),
-                if (tieneLotes)
-                  for (final l in lotes)
-                    DropdownMenuItem<int?>(
-                      value: l.id,
-                      child: Text(
-                          'Lote #${l.id} · ${l.cantidad.toStringAsFixed(3)}'),
-                    ),
-              ],
-              onChanged: (v) => widget.onChanged(v == 0 ? null : v),
-            ),
-            if (tieneLotes)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Default: lote más reciente (#${lotes.first.id})',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }
