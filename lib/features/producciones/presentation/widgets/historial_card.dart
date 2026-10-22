@@ -34,6 +34,9 @@ class HistorialCard extends StatelessWidget {
     } else if (estado == 'pendiente') {
       estadoColor = Colors.orange;
       estadoIcon = Icons.pending_actions;
+    } else if (estado == 'unida') {
+      estadoColor = Colors.grey;
+      estadoIcon = Icons.link;
     } else {
       estadoColor = Colors.green;
       estadoIcon = Icons.check_circle_outline;

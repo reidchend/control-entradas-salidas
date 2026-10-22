@@ -852,6 +852,85 @@ class ProduccionesRepository {
     await _updateProduccionEstado(produccion.id, 'cancelada');
   }
 
+  /// Une dos producciones pendientes de la misma receta en una sola.
+  ///
+  /// `destinoId` se queda y absorbe a `origenId`: suma las cantidades, mueve
+  /// todos los detalles (entradas y salidas) de `origen` a `destino`,
+  /// combina las observaciones y marca `origen` como `unida`.
+  ///
+  /// **No revierte el stock:** las entradas de `origen` ya se sumaron al crear
+  /// la producción pendiente (etapa 1); al mover sus detalles a `destino` el
+  /// stock queda correcto porque `destino` queda con la cantidad total.
+  ///
+  /// Devuelve `(ok, mensajeError)`.
+  Future<(bool, String)> unirProducciones({
+    required int destinoId,
+    required int origenId,
+    String usuario = 'Sistema',
+  }) async {
+    final d = await _db.fetchById('producciones', destinoId);
+    final o = await _db.fetchById('producciones', origenId);
+    if (d == null) return (false, 'Producción destino #$destinoId no encontrada');
+    if (o == null) return (false, 'Producción origen #$origenId no encontrada');
+    if (d['estado'] != 'pendiente') {
+      return (false, 'La producción destino #$destinoId ya no está pendiente');
+    }
+    if (o['estado'] != 'pendiente') {
+      return (false, 'La producción origen #$origenId ya no está pendiente');
+    }
+    if (d['receta_id'] != o['receta_id']) {
+      return (false,
+          'Solo se pueden unir producciones de la misma receta');
+    }
+
+    final ahora = DateTime.now().toIso8601String();
+    final fechaCorto = _fechaCorto(DateTime.now());
+    final cantidadDestino = (d['cantidad'] as num?)?.toDouble() ?? 0;
+    final cantidadOrigen = (o['cantidad'] as num?)?.toDouble() ?? 0;
+    final usuarioOrigen = (o['usuario'] as String?) ?? 'Sistema';
+    final obsDestino = (d['observaciones'] as String?) ?? '';
+    final obsOrigen = (o['observaciones'] as String?) ?? '';
+
+    await _db.transaction((tx) async {
+      // Mover todos los detalles (entradas y salidas) de la origen a la destino.
+      await tx.executeSql(
+        'UPDATE produccion_detalles SET produccion_id = \$1 '
+        'WHERE produccion_id = \$2',
+        params: [destinoId, origenId],
+      );
+      // La destino se queda con la suma de ambas.
+      await tx.updateById('producciones', destinoId, {
+        'cantidad': cantidadDestino + cantidadOrigen,
+        'observaciones': _combinarObservaciones(
+            obsDestino, 'Unido de #$origenId ($usuarioOrigen) el $fechaCorto'),
+        'updated_at': ahora,
+      });
+      // La origen se marca como unida. No se revierte el stock: sus entradas
+      // ya se contabilizan en la destino tras mover los detalles.
+      await tx.updateById('producciones', origenId, {
+        'estado': 'unida',
+        'observaciones': _combinarObservaciones(
+            obsOrigen, 'Unida a producción #$destinoId el $fechaCorto'),
+        'updated_at': ahora,
+      });
+    });
+    return (true, '');
+  }
+
+  /// Combina dos textos de observaciones separados por ' | '.
+  String _combinarObservaciones(String actual, String extra) {
+    final e = extra.trim();
+    if (e.isEmpty) return actual.trim();
+    final a = actual.trim();
+    return a.isEmpty ? e : '$a | $e';
+  }
+
+  /// Fecha/hora corta para observar en auditoría (DD/MM/YYYY HH:MM).
+  String _fechaCorto(DateTime dt) {
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${p(dt.day)}/${p(dt.month)}/${dt.year} ${p(dt.hour)}:${p(dt.minute)}';
+  }
+
   // ---------------------------------------------------------------------
   // Internos
   // ---------------------------------------------------------------------

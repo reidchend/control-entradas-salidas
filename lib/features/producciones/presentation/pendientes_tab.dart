@@ -7,6 +7,7 @@ import '../data/producciones_providers.dart';
 import '../data/producciones_repository.dart';
 import 'dialogs/cancelar_produccion_dialog.dart';
 import 'dialogs/descargo_dialog.dart';
+import 'dialogs/unir_producciones_dialog.dart';
 import 'widgets/pendiente_card.dart';
 
 /// Tab En Producción: producciones pendientes con acciones Descargar/Cancelar.
@@ -53,6 +54,35 @@ class _PendientesTabState extends ConsumerState<PendientesTab> {
 
   void _refresh() {
     setState(() => _future = _cargar());
+  }
+
+  /// Une la producción `produccion` (destino) con otra pendiente de la misma
+  /// receta elegida por el usuario (origen).
+  Future<void> _unir(ProduccionInfo produccion, Receta receta) async {
+    final origenId = await showUnirProduccionesDialog(
+      context: context,
+      ref: ref,
+      produccionActual: produccion,
+      receta: receta,
+    );
+    if (origenId == null || !mounted) return;
+
+    final repo = ref.read(produccionesRepoProvider)!;
+    final (ok, err) = await repo.unirProducciones(
+        destinoId: produccion.id, origenId: origenId, usuario: 'Sistema');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Producciones unidas: #$origenId se unió a #${produccion.id}'
+                : 'No se pudieron unir: $err',
+          ),
+        ),
+      );
+      if (ok) _refresh();
+    }
   }
 
   @override
@@ -116,6 +146,7 @@ class _PendientesTabState extends ConsumerState<PendientesTab> {
                   d.receta,
                   onConfirmed: _refresh,
                 ),
+                onUnir: () => _unir(d.produccion, d.receta),
               );
             },
           ),

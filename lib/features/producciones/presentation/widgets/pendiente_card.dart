@@ -17,6 +17,7 @@ class PendienteCard extends StatelessWidget {
   final List<DetalleInfo> entradas;
   final VoidCallback onDescargar;
   final VoidCallback onCancelar;
+  final VoidCallback? onUnir;
 
   String _fmtFecha(DateTime? d) {
     if (d == null) return '';
@@ -107,6 +108,13 @@ class PendienteCard extends StatelessWidget {
                   label: const Text('Descargar'),
                   onPressed: onDescargar,
                 ),
+                const SizedBox(width: 8),
+                if (onUnir != null)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.merge_type, size: 18),
+                    label: const Text('Unir'),
+                    onPressed: onUnir,
+                  ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.cancel_outlined, size: 18),
