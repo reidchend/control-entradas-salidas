@@ -17,6 +17,7 @@ import '../../features/requisiciones/presentation/requisiciones_screen.dart';
 import '../../features/reportes/presentation/screens/reportes_screen.dart';
 import '../../features/stock/presentation/stock_screen.dart';
 import '../../features/validacion/presentation/validacion_screen.dart';
+import '../../features/validacion/data/validacion_providers.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
 import '../../features/whatsapp/presentation/bandeja_screen.dart';
 import '../theme/app_colors.dart';
@@ -117,6 +118,10 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
       if (db != null) {
         _pollingCancels = initPollingSubscriptions(ref, db: db);
       }
+      // Recordatorio de validaciones pendientes por WhatsApp: el servicio
+      // solo se crea (y arranca) al leer el provider; vive mientras la app
+      // esté abierta y se apaga desde Configuración > Sistema.
+      ref.read(recordatorioValidacionesProvider);
     });
   }
 

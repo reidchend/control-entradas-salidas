@@ -64,6 +64,12 @@ final almacenProduccionDefaultProvider = FutureProvider<String>((ref) {
   return ref.watch(configuracionRepoProvider)!.getAlmacenProduccionDefault();
 });
 
+/// Recordatorio de validaciones por WhatsApp (on/off). Lo cambia el switch de
+/// Configuración > Sistema; lo lee el servicio de recordatorios en cada poll.
+final recordatorioValidacionesConfigProvider = FutureProvider<bool>((ref) {
+  return ref.watch(configuracionRepoProvider)!.getRecordatorioValidaciones();
+});
+
 /// Periodos archivados.
 final periodosConfigProvider = FutureProvider<List<Periodo>>((ref) {
   return ref.watch(configuracionRepoProvider)!.getPeriodos();

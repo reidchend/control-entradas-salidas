@@ -11,7 +11,8 @@ import '../../data/configuracion_providers.dart'
         permitirStockNegativoProvider,
         almacenProduccionDefaultProvider,
         almacenesConfigProvider,
-        usuarioDispositivoProvider;
+        usuarioDispositivoProvider,
+        recordatorioValidacionesConfigProvider;
 import '../../data/configuracion_repository.dart';
 import '../dialogs/db_config_dialog.dart';
 import 'almacenes_panel.dart';
@@ -38,6 +39,7 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
     final almProdAsync = ref.watch(almacenProduccionDefaultProvider);
     final almacenesAsync = ref.watch(almacenesConfigProvider);
     final userAsync = ref.watch(usuarioDispositivoProvider);
+    final recordatorioAsync = ref.watch(recordatorioValidacionesConfigProvider);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -115,6 +117,47 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
               label: const Text('Habilitar Notificaciones'),
               style: FilledButton.styleFrom(backgroundColor: scheme.tertiary),
               onPressed: _solicitarNotificaciones,
+            ),
+          ],
+        ),
+        _sectionCard(
+          scheme,
+          title: 'Recordatorio de validaciones',
+          subtitle: 'Avisa por WhatsApp qué compras siguen sin validar y su '
+              'motivo: 30 min después de registrar la primera de la tanda, y '
+              'un recordatorio fijo a las 19:00 mientras queden pendientes.',
+          icon: Icons.schedule_send_outlined,
+          iconBg: scheme.tertiaryContainer,
+          children: [
+            recordatorioAsync.when(
+              data: (activo) => Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Enviar recordatorio de validaciones al grupo:',
+                      style: TextStyle(
+                          fontSize: 14, color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                  Switch(
+                    value: activo,
+                    onChanged: (v) => _setRecordatorioValidaciones(v),
+                  ),
+                ],
+              ),
+              loading: () => const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              error: (_, __) => const Text('Error cargando'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Solo llega si hay pendientes; si el bot está apagado, el aviso '
+              'se encola y se reintenta solo. Requiere la app abierta en '
+              'algún equipo del restaurante.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -344,6 +387,12 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
     final repo = ref.read(configuracionRepoProvider)!;
     await repo.setPermitirStockNegativo(v);
     ref.invalidate(permitirStockNegativoProvider);
+  }
+
+  Future<void> _setRecordatorioValidaciones(bool v) async {
+    final repo = ref.read(configuracionRepoProvider)!;
+    await repo.setRecordatorioValidaciones(v);
+    ref.invalidate(recordatorioValidacionesConfigProvider);
   }
 
   Future<void> _setAlmacenProduccion(String almacen) async {

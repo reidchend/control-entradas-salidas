@@ -378,8 +378,14 @@ class ConfiguracionRepository {
   }
 
   Future<void> setPosSetting(String key, String value) async {
-    await _db.upsert('pos_settings', {'key': key, 'value': value},
-        conflictColumn: 'key');
+    // pos_settings no tiene columna `id` (la PK es `key`): el upsert genérico
+    // hace `RETURNING id` y reventaría con "column id does not exist".
+    // Insert directo con ON CONFLICT, que además es una sola ida a la BD.
+    await _db.executeSql(
+      'INSERT INTO pos_settings (key, value) VALUES (\$1, \$2) '
+      'ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
+      params: [key, value],
+    );
     _cache?.remove('${_k}_setting_$key');
   }
 
@@ -390,6 +396,18 @@ class ConfiguracionRepository {
 
   Future<void> setPermitirStockNegativo(bool v) {
     return setPosSetting('permitir_stock_negativo', v ? '1' : '0');
+  }
+
+  /// Recordatorio de validaciones por WhatsApp (on/off). Lo lee el servicio
+  /// de recordatorios en cada revisión, así que el cambio aplica sin
+  /// reiniciar la app.
+  Future<bool> getRecordatorioValidaciones() async {
+    final v = await getPosSetting('recordatorio_validaciones', def: '1');
+    return v != '0' && v != 'false';
+  }
+
+  Future<void> setRecordatorioValidaciones(bool v) {
+    return setPosSetting('recordatorio_validaciones', v ? '1' : '0');
   }
 
   Future<String> getAlmacenProduccionDefault() async {
