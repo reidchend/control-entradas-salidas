@@ -67,21 +67,31 @@ class _PendientesTabState extends ConsumerState<PendientesTab> {
     );
     if (origenId == null || !mounted) return;
 
-    final repo = ref.read(produccionesRepoProvider)!;
-    final (ok, err) = await repo.unirProducciones(
-        destinoId: produccion.id, origenId: origenId, usuario: 'Sistema');
+    try {
+      final repo = ref.read(produccionesRepoProvider)!;
+      final (ok, err) = await repo.unirProducciones(
+          destinoId: produccion.id, origenId: origenId, usuario: 'Sistema');
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? 'Producciones unidas: #$origenId se unió a #${produccion.id}'
-                : 'No se pudieron unir: $err',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Producciones unidas: #$origenId se unió a #${produccion.id}'
+                  : 'No se pudieron unir: $err',
+            ),
           ),
-        ),
-      );
-      if (ok) _refresh();
+        );
+        if (ok) _refresh();
+      }
+    } catch (e) {
+      // Cualquier error de BD/transacción se muestra; antes fallaba en
+      // silencio y no se veía nada en la UI.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al unir producciones: $e')),
+        );
+      }
     }
   }
 

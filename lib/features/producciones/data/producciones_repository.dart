@@ -883,7 +883,6 @@ class ProduccionesRepository {
           'Solo se pueden unir producciones de la misma receta');
     }
 
-    final ahora = DateTime.now().toIso8601String();
     final fechaCorto = _fechaCorto(DateTime.now());
     final cantidadDestino = (d['cantidad'] as num?)?.toDouble() ?? 0;
     final cantidadOrigen = (o['cantidad'] as num?)?.toDouble() ?? 0;
@@ -903,7 +902,6 @@ class ProduccionesRepository {
         'cantidad': cantidadDestino + cantidadOrigen,
         'observaciones': _combinarObservaciones(
             obsDestino, 'Unido de #$origenId ($usuarioOrigen) el $fechaCorto'),
-        'updated_at': ahora,
       });
       // La origen se marca como unida. No se revierte el stock: sus entradas
       // ya se contabilizan en la destino tras mover los detalles.
@@ -911,7 +909,6 @@ class ProduccionesRepository {
         'estado': 'unida',
         'observaciones': _combinarObservaciones(
             obsOrigen, 'Unida a producción #$destinoId el $fechaCorto'),
-        'updated_at': ahora,
       });
     });
     return (true, '');
