@@ -48,6 +48,9 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
   bool _guardando = false;
   String? _codigoAuto;
 
+  /// Tipos del catálogo (Configuración > Tipos), activos.
+  List<String> _tiposCatalogo = const [];
+
   bool get _angosto => MediaQuery.of(context).size.width < 600;
 
   @override
@@ -74,6 +77,7 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
       _almacenPredeterminado = p.almacenPredeterminado;
       _activo = p.activo;
     }
+    _cargarTipos();
   }
 
   @override
@@ -95,6 +99,19 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
     if (!mounted) return;
     setState(() => _codigoAuto = codigo);
     _codigoCtrl.text = codigo;
+  }
+
+  /// Tipos del catálogo administrable. El tipo actual del producto se
+  /// agrega aunque esté inactivo en el catálogo: el producto lo conserva y
+  /// no debe perderse al guardar una edición.
+  Future<void> _cargarTipos() async {
+    final tipos = await widget.repo.getTiposProductoCatalogo(soloActivos: true);
+    final nombres = <String>[for (final t in tipos) t.nombre];
+    if (_tipo.isNotEmpty && !nombres.contains(_tipo)) {
+      nombres.add(_tipo);
+    }
+    if (!mounted) return;
+    setState(() => _tiposCatalogo = nombres);
   }
 
   @override
@@ -268,26 +285,15 @@ class _ProductoDialogState extends ConsumerState<_ProductoDialog> {
                                   labelText: 'Tipo',
                                   border: OutlineInputBorder(),
                                   isDense: true),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'ninguno',
-                                    child: Text('Ninguno')),
-                                DropdownMenuItem(
-                                    value: 'feria', child: Text('Feria')),
-                                DropdownMenuItem(
-                                    value: 'producción',
-                                    child: Text('Producción')),
-                                DropdownMenuItem(
-                                    value: 'productos para uso Interno',
-                                    child: Text(
-                                        'Productos para uso Interno')),
-                                DropdownMenuItem(
-                                    value: 'Consumo',
-                                    child: Text('Consumo')),
-                                DropdownMenuItem(
-                                    value: 'Productos para la venta',
-                                    child:
-                                        Text('Productos para la venta')),
+                              // Catálogo administrable (Configuración > Tipos).
+                              // El valor actual siempre aparece como item para
+                              // no perder un tipo inactivado al editar.
+                              items: [
+                                for (final t in _tiposCatalogo)
+                                  DropdownMenuItem(value: t, child: Text(t)),
+                                if (!_tiposCatalogo.contains(_tipo))
+                                  DropdownMenuItem(
+                                      value: _tipo, child: Text(_tipo)),
                               ],
                               onChanged: (v) =>
                                   setState(() => _tipo = v ?? 'ninguno'),

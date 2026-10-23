@@ -8,6 +8,7 @@ import 'widgets/ia_tab.dart';
 import 'widgets/productos_tab.dart';
 import 'widgets/proveedores_tab.dart';
 import 'widgets/sistema_tab.dart';
+import 'widgets/tipos_tab.dart';
 import 'widgets/periodos_tab.dart';
 import 'widgets/usuarios_tab.dart';
 
@@ -39,6 +40,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
 
     final tabs = <_TabDef>[
       const _TabDef('Categorías', Icons.category_outlined, CategoriasTab()),
+      const _TabDef('Tipos', Icons.label_outline, TiposTab()),
       const _TabDef('Productos', Icons.inventory_2_outlined, ProductosTab()),
       const _TabDef(
           'Proveedores', Icons.local_shipping_outlined, ProveedoresTab()),

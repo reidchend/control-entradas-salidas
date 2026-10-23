@@ -6,6 +6,7 @@ import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
 import '../../../core/models/periodo.dart';
+import '../../../core/models/tipo_producto.dart';
 import 'configuracion_repository.dart';
 
 /// Provider compartido del repositorio de configuracion.
@@ -68,6 +69,14 @@ final almacenProduccionDefaultProvider = FutureProvider<String>((ref) {
 /// Configuración > Sistema; lo lee el servicio de recordatorios en cada poll.
 final recordatorioValidacionesConfigProvider = FutureProvider<bool>((ref) {
   return ref.watch(configuracionRepoProvider)!.getRecordatorioValidaciones();
+});
+
+/// Catálogo de tipos de producto (Configuración > Tipos). `autoDispose` para
+/// que cada visita a la pestaña traiga los datos frescos (tras renombrar o
+/// inactivar se invalida a mano).
+final tiposProductoConfigProvider =
+    FutureProvider.autoDispose<List<TipoProducto>>((ref) {
+  return ref.watch(configuracionRepoProvider)!.getTiposProductoCatalogo();
 });
 
 /// Periodos archivados.

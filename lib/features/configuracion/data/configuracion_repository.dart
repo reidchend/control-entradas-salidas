@@ -10,6 +10,7 @@ import '../../../core/models/categoria.dart';
 import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
 import '../../../core/models/periodo.dart';
+import '../../../core/models/tipo_producto.dart';
 
 /// Callback de progreso para operaciones largas (archivo/recalculo).
 typedef ProgresoCallback = void Function(double progreso, String etapa);
@@ -190,6 +191,85 @@ class ConfiguracionRepository {
   Future<void> deleteProducto(int id) async {
     await _db.updateById('productos', id, {'activo': false});
     _cache?.remove('${_k}_prods');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Catálogo de tipos de producto
+  // ---------------------------------------------------------------------------
+
+  /// Lista el catálogo de tipos con cuántos productos usan cada uno.
+  ///
+  /// Si la migración de `tipos_producto` todavía no corrió, cae a la lista
+  /// histórica fija (la misma que tenía hardcodeada el dropdown de producto)
+  /// para que la app siga funcionando sin ella.
+  Future<List<TipoProducto>> getTiposProductoCatalogo(
+      {bool soloActivos = false}) async {
+    try {
+      final rows = await _db.executeSql(
+        "SELECT t.*, (SELECT COUNT(*) FROM productos p WHERE p.tipo = t.nombre) "
+        "AS en_uso FROM tipos_producto t "
+        "${soloActivos ? 'WHERE t.activo = TRUE ' : ''}"
+        "ORDER BY t.orden NULLS LAST, t.nombre",
+      );
+      return rows.map(TipoProducto.fromMap).toList();
+    } catch (_) {
+      const fijos = [
+        'ninguno',
+        'feria',
+        'producción',
+        'Consumo',
+        'productos para uso Interno',
+        'Productos para la venta',
+      ];
+      return [
+        for (var i = 0; i < fijos.length; i++)
+          TipoProducto(
+            id: -(i + 1),
+            nombre: fijos[i],
+            protegido: true,
+            activo: true,
+            orden: i + 1,
+          ),
+      ];
+    }
+  }
+
+  /// Crea un tipo nuevo (nunca protegido; eso es solo del sistema).
+  Future<int> crearTipoProducto(String nombre) async {
+    final orden = await _db.count('tipos_producto') + 1;
+    return _db.insert('tipos_producto', {
+      'nombre': nombre,
+      'protegido': false,
+      'activo': true,
+      'orden': orden,
+    });
+  }
+
+  /// Renombra un tipo (no protegido) y arrastra el cambio a todos los
+  /// productos que lo usan, en la misma transacción: renombrar un tipo no
+  /// puede dejar productos apuntando al nombre viejo.
+  Future<void> renombrarTipoProducto(
+      TipoProducto tipo, String nombreNuevo) async {
+    if (tipo.protegido) {
+      throw StateError('Los tipos del sistema no se pueden renombrar');
+    }
+    await _db.transaction((tx) async {
+      await tx.updateById('tipos_producto', tipo.id, {'nombre': nombreNuevo});
+      await tx.executeSql(
+        'UPDATE productos SET tipo = \$1 WHERE tipo = \$2',
+        params: [nombreNuevo, tipo.nombre],
+      );
+    });
+    _cache?.remove('${_k}_prods');
+  }
+
+  /// Activa/inactiva un tipo (no protegido). Los productos que ya lo usan lo
+  /// conservan; inactivar solo lo quita del alta de productos nuevos.
+  Future<void> setTipoProductoActivo(TipoProducto tipo, bool activo) async {
+    if (tipo.protegido) {
+      throw StateError('Los tipos del sistema no se pueden desactivar');
+    }
+    await _db.updateById('tipos_producto', tipo.id, {'activo': activo});
   }
 
   // ---------------------------------------------------------------------------

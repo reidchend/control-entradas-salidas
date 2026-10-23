@@ -10,3 +10,4 @@ export 'produccion.dart';
 export 'periodo.dart';
 export 'pos_models.dart';
 export 'mensaje_whatsapp.dart';
+export 'tipo_producto.dart';
