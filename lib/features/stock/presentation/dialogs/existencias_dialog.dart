@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 
+import '../../../../core/models/existencia.dart';
 import '../../../../core/models/producto.dart';
 import '../../../../core/utils/modal_sizing.dart';
 import '../../data/stock_repository.dart';
@@ -15,13 +16,31 @@ Future<void> showExistenciasDialog(
   Producto producto,
   StockRepository repo,
 ) async {
-  final existencias = await repo.getExistenciasProducto(producto.id);
+  var existencias = await repo.getExistenciasProducto(producto.id);
   if (!context.mounted) return;
+
+  // Un producto sin existencias registradas también debe poder ajustarse:
+  // es justo el caso de la primera toma de inventario, donde el producto está
+  // en 0 porque nunca tuvo movimientos y hay que asignarle el conteo físico
+  // real. Antes el diálogo se cerraba con un snackbar y no había forma.
+  // Se listan los almacenes conocidos con stock 0; `ajustarExistencia` ya
+  // crea la fila de existencia al confirmar.
   if (existencias.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Este producto no tiene existencias registradas')),
-    );
-    return;
+    final almacenes = await repo.getAlmacenes();
+    if (!context.mounted) return;
+    final nombres = <String>{...almacenes};
+    final predeterminado = producto.almacenPredeterminado;
+    if (predeterminado.isNotEmpty) nombres.add(predeterminado);
+    existencias = [
+      for (final a in nombres)
+        Existencia(
+          id: 0,
+          productoId: producto.id,
+          almacen: a,
+          cantidad: 0,
+          unidad: producto.unidadMedida,
+        ),
+    ];
   }
 
   final esPesable = producto.esPesable;
