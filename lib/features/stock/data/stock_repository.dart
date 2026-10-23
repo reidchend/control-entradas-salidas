@@ -148,8 +148,12 @@ class StockRepository {
       return productos
           .where((p) {
             final s = stock[p.id] ?? 0;
-            if (s <= 0) return true;
-            return s <= (p.stockMinimo > 0 ? p.stockMinimo : double.infinity);
+            // Misma definición que las estadísticas del encabezado: hay
+            // stock (> 0) y no supera el mínimo definido. Antes este filtro
+            // metía también a los agotados (s <= 0) y a los productos sin
+            // stock_minimo, que comparados contra infinito pasaban siempre:
+            // el botón decía 15 y la lista mostraba 59.
+            return s > 0 && p.stockMinimo > 0 && s <= p.stockMinimo;
           })
           .skip(offset)
           .take(limit)
@@ -271,9 +275,10 @@ class StockRepository {
     if (almacen == null) {
       sql = '''
         SELECT COUNT(DISTINCT p.id) AS total,
-          COUNT(DISTINCT p.id) FILTER (WHERE stock <= 0) AS agotado,
+          COUNT(DISTINCT p.id) FILTER (WHERE COALESCE(s.stock, 0) <= 0) AS agotado,
           COUNT(DISTINCT p.id) FILTER (
-            WHERE stock > 0 AND p.stock_minimo > 0 AND stock <= p.stock_minimo
+            WHERE COALESCE(s.stock, 0) > 0 AND p.stock_minimo > 0
+              AND COALESCE(s.stock, 0) <= p.stock_minimo
           ) AS bajo
         FROM productos p
         LEFT JOIN (
@@ -286,9 +291,10 @@ class StockRepository {
       params.add(almacen);
       sql = '''
         SELECT COUNT(DISTINCT p.id) AS total,
-          COUNT(DISTINCT p.id) FILTER (WHERE stock <= 0) AS agotado,
+          COUNT(DISTINCT p.id) FILTER (WHERE COALESCE(s.stock, 0) <= 0) AS agotado,
           COUNT(DISTINCT p.id) FILTER (
-            WHERE stock > 0 AND p.stock_minimo > 0 AND stock <= p.stock_minimo
+            WHERE COALESCE(s.stock, 0) > 0 AND p.stock_minimo > 0
+              AND COALESCE(s.stock, 0) <= p.stock_minimo
           ) AS bajo
         FROM productos p
         LEFT JOIN (
