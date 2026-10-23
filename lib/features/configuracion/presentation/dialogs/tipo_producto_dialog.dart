@@ -49,6 +49,18 @@ Future<String?> showTipoProductoDialog(
                         fontSize: 13,
                         color: Theme.of(ctx2).colorScheme.onSurfaceVariant),
                   ),
+                  if (tipo.esDelSistema && tipo.rol != 'ninguno')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Este tipo liga flujos del sistema por ROL: '
+                        'producción, colores y filtros siguen funcionando '
+                        'igual con el nombre nuevo.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(ctx2).colorScheme.tertiary),
+                      ),
+                    ),
                   const SizedBox(height: 8),
                 ],
                 TextField(

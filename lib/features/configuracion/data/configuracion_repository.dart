@@ -11,6 +11,7 @@ import '../../../core/models/producto.dart';
 import '../../../core/models/proveedor.dart';
 import '../../../core/models/periodo.dart';
 import '../../../core/models/tipo_producto.dart';
+import '../../../core/utils/roles_tipo_producto.dart';
 
 /// Callback de progreso para operaciones largas (archivo/recalculo).
 typedef ProgresoCallback = void Function(double progreso, String etapa);
@@ -199,11 +200,15 @@ class ConfiguracionRepository {
 
   /// Lista el catálogo de tipos con cuántos productos usan cada uno.
   ///
+  /// Cada consulta refresca el mapa nombre→rol que usa la lógica de la app
+  /// (flujo de producción, colores): ver [RolesTipoProducto].
+  ///
   /// Si la migración de `tipos_producto` todavía no corrió, cae a la lista
   /// histórica fija (la misma que tenía hardcodeada el dropdown de producto)
   /// para que la app siga funcionando sin ella.
   Future<List<TipoProducto>> getTiposProductoCatalogo(
       {bool soloActivos = false}) async {
+    List<TipoProducto> tipos;
     try {
       final rows = await _db.executeSql(
         "SELECT t.*, (SELECT COUNT(*) FROM productos p WHERE p.tipo = t.nombre) "
@@ -211,27 +216,32 @@ class ConfiguracionRepository {
         "${soloActivos ? 'WHERE t.activo = TRUE ' : ''}"
         "ORDER BY t.orden NULLS LAST, t.nombre",
       );
-      return rows.map(TipoProducto.fromMap).toList();
+      tipos = rows.map(TipoProducto.fromMap).toList();
     } catch (_) {
-      const fijos = [
-        'ninguno',
-        'feria',
-        'producción',
-        'Consumo',
-        'productos para uso Interno',
-        'Productos para la venta',
+      // Tabla inexistente: catálogo histórico fijo (pre-migración), con los
+      // roles que la lógica de la app siempre conoció por texto.
+      const historicos = [
+        ('ninguno', RolesTipoProducto.ninguno),
+        ('feria', RolesTipoProducto.feria),
+        ('producción', RolesTipoProducto.produccion),
+        ('Consumo', ''),
+        ('productos para uso Interno', ''),
+        ('Productos para la venta', RolesTipoProducto.venta),
       ];
-      return [
-        for (var i = 0; i < fijos.length; i++)
+      tipos = [
+        for (var i = 0; i < historicos.length; i++)
           TipoProducto(
             id: -(i + 1),
-            nombre: fijos[i],
+            nombre: historicos[i].$1,
+            rol: historicos[i].$2.isEmpty ? null : historicos[i].$2,
             protegido: true,
             activo: true,
             orden: i + 1,
           ),
       ];
     }
+    RolesTipoProducto.actualizar(tipos);
+    return tipos;
   }
 
   /// Crea un tipo nuevo (nunca protegido; eso es solo del sistema).
@@ -245,13 +255,18 @@ class ConfiguracionRepository {
     });
   }
 
-  /// Renombra un tipo (no protegido) y arrastra el cambio a todos los
-  /// productos que lo usan, en la misma transacción: renombrar un tipo no
-  /// puede dejar productos apuntando al nombre viejo.
+  /// Renombra un tipo y arrastra el cambio a todos los productos que lo
+  /// usan, en la misma transacción: renombrar un tipo no puede dejar
+  /// productos apuntando al nombre viejo.
+  ///
+  /// Los tipos con rol se pueden renombrar: la lógica de la app pregunta por
+  /// rol, no por texto. Solo 'ninguno' queda fijo, porque además es el
+  /// default del modelo `Producto` cuando un producto viene sin tipo.
   Future<void> renombrarTipoProducto(
       TipoProducto tipo, String nombreNuevo) async {
-    if (tipo.protegido) {
-      throw StateError('Los tipos del sistema no se pueden renombrar');
+    if (tipo.rol == RolesTipoProducto.ninguno) {
+      throw StateError(
+          "El tipo 'ninguno' es el default de la app y no se puede renombrar");
     }
     await _db.transaction((tx) async {
       await tx.updateById('tipos_producto', tipo.id, {'nombre': nombreNuevo});
@@ -260,13 +275,16 @@ class ConfiguracionRepository {
         params: [nombreNuevo, tipo.nombre],
       );
     });
+    RolesTipoProducto.actualizar([tipo.copyWithNombre(nombreNuevo)]);
     _cache?.remove('${_k}_prods');
   }
 
-  /// Activa/inactiva un tipo (no protegido). Los productos que ya lo usan lo
-  /// conservan; inactivar solo lo quita del alta de productos nuevos.
+  /// Activa/inactiva un tipo libre. Los tipos del sistema (con rol) no se
+  /// pueden inactivar: los flujos que dependen de ellos deben seguir
+  /// disponibles para dar de alta productos. Los productos que ya usan un
+  /// tipo inactivado lo conservan; solo desaparece del alta de nuevos.
   Future<void> setTipoProductoActivo(TipoProducto tipo, bool activo) async {
-    if (tipo.protegido) {
+    if (tipo.esDelSistema) {
       throw StateError('Los tipos del sistema no se pueden desactivar');
     }
     await _db.updateById('tipos_producto', tipo.id, {'activo': activo});

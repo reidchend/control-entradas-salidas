@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/tipo_producto.dart';
+import '../../../../core/utils/roles_tipo_producto.dart';
 import '../../data/configuracion_providers.dart';
 import '../dialogs/tipo_producto_dialog.dart';
 
 /// Pestaña Tipos: catálogo administrable de tipos de producto.
 ///
-/// Los tipos protegidos ('producción', 'feria', 'Productos para la venta',
-/// 'ninguno') son los de los que depende la lógica de la app (colores del
-/// stock, flujo de producción, default del modelo): solo se listan, no se
-/// editan. El resto se puede renombrar (el cambio arrastra a los productos
-/// que lo usan) e inactivar (desaparece del alta de productos; los
-/// existentes lo conservan).
+/// La lógica de la app (flujo de producción, colores) pregunta por ROL, no
+/// por el nombre: los tipos del sistema se pueden renombrar sin romper
+/// nada. Reglas:
+///
+/// - `'ninguno'` (default del modelo): fijo, no se toca.
+/// - Tipos con rol (producción, feria, venta…): renombrables, no
+///   inactivables (los flujos deben poder seguir dando de alta productos).
+/// - Tipos libres: renombrables, inactivables/reactivables.
 class TiposTab extends ConsumerWidget {
   const TiposTab({super.key});
 
@@ -29,8 +32,9 @@ class TiposTab extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Los tipos del sistema (🔒) no se editan para no romper '
-                  'los flujos que dependen de ellos.',
+                  'Los tipos con escudo (🛡) ligan flujos del sistema por '
+                  'ROL, no por nombre: se pueden renombrar sin romper nada. '
+                  'Solo no se pueden inactivar.',
                   style: TextStyle(
                       fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
@@ -65,8 +69,12 @@ class TiposTab extends ConsumerWidget {
                 itemBuilder: (context, i) => _TipoCard(
                   tipo: tipos[i],
                   scheme: scheme,
-                  onRename: () => _renombrar(context, ref, tipos, tipos[i]),
-                  onToggle: (v) => _setActivo(context, ref, tipos[i], v),
+                  onRename: tipos[i].rol == RolesTipoProducto.ninguno
+                      ? null
+                      : () => _renombrar(context, ref, tipos, tipos[i]),
+                  onToggle: tipos[i].esDelSistema
+                      ? null
+                      : (v) => _setActivo(context, ref, tipos[i], v),
                 ),
               );
             },
@@ -78,9 +86,8 @@ class TiposTab extends ConsumerWidget {
 
   Future<void> _crear(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(configuracionRepoProvider)!;
-    final tipos =
-        ref.read(tiposProductoConfigProvider).valueOrNull ??
-            const <TipoProducto>[];
+    final tipos = ref.read(tiposProductoConfigProvider).valueOrNull ??
+        const <TipoProducto>[];
     final nombre = await showTipoProductoDialog(
       context,
       nombresExistentes: [for (final t in tipos) t.nombre],
@@ -117,8 +124,8 @@ class TiposTab extends ConsumerWidget {
     }
   }
 
-  Future<void> _setActivo(
-      BuildContext context, WidgetRef ref, TipoProducto tipo, bool activo) async {
+  Future<void> _setActivo(BuildContext context, WidgetRef ref,
+      TipoProducto tipo, bool activo) async {
     final repo = ref.read(configuracionRepoProvider)!;
     try {
       await repo.setTipoProductoActivo(tipo, activo);
@@ -139,31 +146,40 @@ class _TipoCard extends StatelessWidget {
   const _TipoCard({
     required this.tipo,
     required this.scheme,
-    required this.onRename,
-    required this.onToggle,
+    this.onRename,
+    this.onToggle,
   });
 
   final TipoProducto tipo;
   final ColorScheme scheme;
-  final VoidCallback onRename;
-  final ValueChanged<bool> onToggle;
+  final VoidCallback? onRename;
+  final ValueChanged<bool>? onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final protegido = tipo.protegido;
+    final esDefault = tipo.rol == RolesTipoProducto.ninguno;
+    final delSistema = tipo.esDelSistema && !esDefault;
+
+    final icono = esDefault
+        ? Icons.lock_outline
+        : (delSistema ? Icons.shield_outlined : Icons.label_outline);
+    final colorIcono = esDefault
+        ? scheme.onSurfaceVariant
+        : (delSistema ? scheme.tertiary : scheme.primary);
+
+    final subtitulo = esDefault
+        ? 'Default del sistema · ${tipo.enUso} producto(s)'
+        : delSistema
+            ? 'Liga flujos del sistema (por rol) · ${tipo.enUso} producto(s)'
+            : '${tipo.enUso} producto(s) lo usan';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
         child: Row(
           children: [
-            Icon(
-              protegido ? Icons.lock_outline : Icons.label_outline,
-              size: 22,
-              color: protegido
-                  ? scheme.onSurfaceVariant
-                  : scheme.primary,
-            ),
+            Icon(icono, size: 22, color: colorIcono),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -177,9 +193,7 @@ class _TipoCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    protegido
-                        ? 'Tipo del sistema · ${tipo.enUso} producto(s)'
-                        : '${tipo.enUso} producto(s) lo usan',
+                    subtitulo,
                     style: TextStyle(
                         fontSize: 12, color: scheme.onSurfaceVariant),
                   ),
@@ -202,17 +216,17 @@ class _TipoCard extends StatelessWidget {
                       color: scheme.onErrorContainer),
                 ),
               ),
-            if (!protegido) ...[
+            if (onRename != null)
               IconButton(
                 icon: Icon(Icons.edit_outlined, color: scheme.primary),
                 tooltip: 'Renombrar',
                 onPressed: onRename,
               ),
+            if (onToggle != null)
               Switch(
                 value: tipo.activo,
                 onChanged: onToggle,
               ),
-            ],
           ],
         ),
       ),

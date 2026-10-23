@@ -6,6 +6,7 @@ import 'package:control_entradas_salidas/core/auth/session_controller.dart';
 import 'package:control_entradas_salidas/core/models/producto.dart';
 import 'package:control_entradas_salidas/core/models/receta.dart';
 import 'package:control_entradas_salidas/core/models/existencia.dart';
+import 'package:control_entradas_salidas/core/utils/roles_tipo_producto.dart';
 import 'package:control_entradas_salidas/features/calculadora/presentation/calculadora.dart';
 import 'package:control_entradas_salidas/features/configuracion/data/configuracion_providers.dart';
 import 'package:control_entradas_salidas/features/inventario/data/inventario_providers.dart';
@@ -66,7 +67,8 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   @override
   void initState() {
     super.initState();
-    _esProductoProduccion = _producto.tipo.toLowerCase().contains('producci');
+    _esProductoProduccion = RolesTipoProducto.rolDe(_producto.tipo) ==
+        RolesTipoProducto.produccion;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _cargarExistencias();

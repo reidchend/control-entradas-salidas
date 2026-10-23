@@ -19,6 +19,7 @@ import '../../features/stock/presentation/stock_screen.dart';
 import '../../features/validacion/presentation/validacion_screen.dart';
 import '../../features/validacion/data/validacion_providers.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
+import '../../features/configuracion/data/configuracion_providers.dart';
 import '../../features/whatsapp/presentation/bandeja_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
@@ -122,6 +123,15 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
       // solo se crea (y arranca) al leer el provider; vive mientras la app
       // esté abierta y se apaga desde Configuración > Sistema.
       ref.read(recordatorioValidacionesProvider);
+      // El catálogo de tipos refresca el mapa nombre→rol que usa la lógica
+      // de producción y los colores por tipo; si falla, la lógica cae a la
+      // equivalencia histórica por texto.
+      unawaited(() async {
+        try {
+          final cat = ref.read(configuracionRepoProvider);
+          if (cat != null) await cat.getTiposProductoCatalogo();
+        } catch (_) {}
+      }());
     });
   }
 

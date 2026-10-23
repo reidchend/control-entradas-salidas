@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/categoria.dart';
 import '../../../../core/models/producto.dart';
+import '../../../../core/utils/roles_tipo_producto.dart';
 import '../../data/configuracion_providers.dart'
     show
         configuracionRepoProvider,
@@ -225,14 +226,14 @@ class _ProductoItemCard extends StatelessWidget {
             : '${categoria!.nombre} (inactiva)');
     final sku = p.codigo?.trim().isNotEmpty == true ? p.codigo!.trim() : 'Sin SKU';
     final tipoTxt = p.tipo.isEmpty ? 'ninguno' : p.tipo;
-    final tipoTxtL = tipoTxt.toLowerCase();
+    final rolTipo = RolesTipoProducto.rolDe(tipoTxt);
 
     Color tipoColor;
-    if (tipoTxtL == 'feria') {
+    if (rolTipo == RolesTipoProducto.feria) {
       tipoColor = scheme.tertiary;
-    } else if (tipoTxtL.contains('producci')) {
+    } else if (rolTipo == RolesTipoProducto.produccion) {
       tipoColor = scheme.error;
-    } else if (tipoTxtL.contains('venta')) {
+    } else if (rolTipo == RolesTipoProducto.venta) {
       tipoColor = Colors.green;
     } else {
       tipoColor = scheme.secondary;
