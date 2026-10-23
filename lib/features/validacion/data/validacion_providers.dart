@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/postgres_providers.dart';
-import '../../whatsapp/data/whatsapp_providers.dart';
 import 'motivos_no_validacion_repository.dart';
-import 'recordatorio_validaciones_service.dart';
 import 'temporales_repository.dart';
 import 'validacion_repository.dart';
 
@@ -73,19 +71,4 @@ final entradasPendientesProvider = FutureProvider.autoDispose
     .family<List<EntradaPendiente>, String>((ref, search) async {
   final repo = ref.watch(validacionRepoProvider)!;
   return repo.getEntradasPendientes(search: search);
-});
-
-/// Servicio de recordatorios de validación por WhatsApp. Se crea al leerlo
-/// (lo hace el shell tras el login) y vive mientras la app esté abierta:
-/// vigila si aparecen entradas nuevas y manda el "HAY COMPRAS SIN VALIDAR"
-/// tras 30 min, más el recordatorio fijo de las 19:00.
-final recordatorioValidacionesProvider =
-    Provider<RecordatorioValidacionesService?>((ref) {
-  final db = ref.watch(postgresServiceProvider);
-  final wa = ref.watch(whatsappRepoProvider);
-  if (db == null || wa == null) return null;
-  final svc = RecordatorioValidacionesService(db, wa);
-  svc.iniciar();
-  ref.onDispose(svc.detener);
-  return svc;
 });

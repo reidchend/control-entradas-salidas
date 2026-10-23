@@ -54,6 +54,94 @@
             <div id="report-group-detail" class="hidden mt-4 bg-purple-950/30 border border-purple-800/50 rounded-lg p-3 text-sm"></div>
         </section>
 
+        <!-- Recordatorio de compras sin validar -->
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <h2 class="text-lg font-semibold text-gray-200 flex items-center gap-2">🔔 Recordatorio de compras sin validar</h2>
+                <span class="bg-green-900/40 text-green-400 text-xs font-mono px-2 py-0.5 rounded border border-green-800/60">GET /recordatorio · POST /set-recordatorio · POST /set-recordatorio-texto · POST /send-recordatorio</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">
+                Avisa al grupo qué compras siguen sin validar y su motivo: 30 min después
+                de la primera entrada de la tanda y un recordatorio fijo a las 19:00.
+                Lo envía este bot, aunque la app esté cerrada.
+            </p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <label class="inline-flex items-center gap-3 cursor-pointer select-none">
+                    <input id="recordatorioSwitch" type="checkbox" disabled
+                        onchange="cambiarRecordatorio(this.checked)"
+                        class="w-5 h-5 accent-green-500 cursor-pointer disabled:cursor-not-allowed">
+                    <span id="recordatorioEstado" class="text-sm text-gray-400">Consultando...</span>
+                </label>
+                <button id="recordatorioEnviarBtn" type="button" disabled
+                    onclick="enviarRecordatorioAhora()"
+                    class="bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                    📤 Enviar ahora
+                </button>
+            </div>
+            <p id="recordatorioInfo" class="text-xs text-gray-500 mt-2"></p>
+
+            <details class="mt-4 border-t border-gray-700 pt-4">
+                <summary class="text-sm text-gray-300 cursor-pointer select-none">✏️ Editar el mensaje</summary>
+                <p class="text-xs text-gray-500 mt-2 mb-3">
+                    Placeholders: <code class="text-green-400">{cantidad}</code>,
+                    <code class="text-green-400">{detalle}</code>,
+                    <code class="text-green-400">{nota}</code>,
+                    <code class="text-green-400">{fecha}</code>,
+                    <code class="text-green-400">{hora}</code>.
+                    En el formato de cada compra: <code class="text-green-400">{producto}</code>,
+                    <code class="text-green-400">{cantidad}</code>,
+                    <code class="text-green-400">{motivo}</code>,
+                    <code class="text-green-400">{almacen}</code>.
+                    Se aceptan emojis. Podés dejar una nota vacía para omitirla.
+                </p>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1" for="recordatorioPlantilla">Plantilla del mensaje</label>
+                        <textarea id="recordatorioPlantilla" rows="7" oninput="actualizarPreviewRecordatorio()"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 font-mono"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1" for="recordatorioFormatoItem">Formato de cada compra</label>
+                        <textarea id="recordatorioFormatoItem" rows="2" oninput="actualizarPreviewRecordatorio()"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 font-mono"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1" for="recordatorioNotaTanda">Nota de tanda (30 min)</label>
+                            <textarea id="recordatorioNotaTanda" rows="2" oninput="actualizarPreviewRecordatorio()"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 font-mono"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1" for="recordatorioNotaFija">Nota de cierre (19:00)</label>
+                            <textarea id="recordatorioNotaFija" rows="2" oninput="actualizarPreviewRecordatorio()"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 font-mono"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1" for="recordatorioNotaManual">Nota de envío manual</label>
+                            <textarea id="recordatorioNotaManual" rows="2" oninput="actualizarPreviewRecordatorio()"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 font-mono"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <button id="recordatorioGuardarBtn" type="button" disabled
+                            onclick="guardarTextoRecordatorio()"
+                            class="bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                            💾 Guardar mensaje
+                        </button>
+                        <button type="button" onclick="restaurarTextoRecordatorio()"
+                            class="bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                            ↺ Restaurar
+                        </button>
+                        <span id="recordatorioTextoEstado" class="text-xs text-gray-500"></span>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-400 mb-1">Vista previa (datos de ejemplo)</div>
+                        <pre id="recordatorioPreview" class="bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 whitespace-pre-wrap break-words min-h-[6rem]"></pre>
+                    </div>
+                </div>
+            </details>
+        </section>
+
         <!-- Configuración del servidor -->
         <section class="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-8 shadow-lg">
             <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -191,6 +279,7 @@
 
     <script>
         let cachedGroups = [];
+        let recordatorioDefaults = null;
 
         // El panel lo sirve el propio bot, así que su dirección (location.origin)
         // ES la del bot: no hace falta pegarla. El token lo deja en el #fragmento
@@ -249,6 +338,7 @@
                 history.replaceState(null, '', location.pathname + location.search);
             }
             refreshAll();
+            cargarRecordatorio();
         });
 
         function getCredentials() {
@@ -298,6 +388,214 @@
             await Promise.all([cargarEstado(), cargarGrupos()]);
             spin.classList.remove('animate-spin');
             actualizarEstatus("Estado actualizado");
+        }
+
+        const CAMPOS_RECORDATORIO = {
+            plantilla: 'recordatorioPlantilla',
+            formatoItem: 'recordatorioFormatoItem',
+            notaTanda: 'recordatorioNotaTanda',
+            notaFija: 'recordatorioNotaFija',
+            notaManual: 'recordatorioNotaManual',
+        };
+
+        function leerCamposRecordatorio() {
+            const texto = {};
+            for (const [clave, id] of Object.entries(CAMPOS_RECORDATORIO)) {
+                texto[clave] = document.getElementById(id).value;
+            }
+            return texto;
+        }
+
+        function setCamposRecordatorio(texto) {
+            for (const [clave, id] of Object.entries(CAMPOS_RECORDATORIO)) {
+                if (typeof texto[clave] === 'string') {
+                    document.getElementById(id).value = texto[clave];
+                }
+            }
+        }
+
+        function reemplazarPlaceholders(texto, valores) {
+            let salida = texto || '';
+            for (const [clave, valor] of Object.entries(valores)) {
+                salida = salida.split(`{${clave}}`).join(valor == null ? '' : valor);
+            }
+            return salida;
+        }
+
+        function actualizarPreviewRecordatorio() {
+            const texto = leerCamposRecordatorio();
+            const ahora = new Date();
+            const dos = (n) => String(n).padStart(2, '0');
+            const muestra = [
+                { producto: 'TOCINETA REBANADAS', cantidad: '61 unidad',
+                  motivo: 'falta factura', almacen: 'principal' },
+                { producto: 'CARNE MOLIDA', cantidad: '2.150 kg',
+                  motivo: 'sin motivo anotado', almacen: 'restaurante' },
+            ];
+            const detalle = muestra
+                .map((e) => reemplazarPlaceholders(texto.formatoItem, e))
+                .join('\n');
+            const mensaje = reemplazarPlaceholders(texto.plantilla, {
+                cantidad: String(muestra.length),
+                detalle,
+                nota: texto.notaTanda,
+                fecha: `${ahora.getFullYear()}-${dos(ahora.getMonth() + 1)}-${dos(ahora.getDate())}`,
+                hora: `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`,
+            });
+            document.getElementById('recordatorioPreview').textContent = mensaje;
+        }
+
+        function bloquearTextoRecordatorio(bloqueado) {
+            for (const id of Object.values(CAMPOS_RECORDATORIO)) {
+                document.getElementById(id).disabled = bloqueado;
+            }
+            document.getElementById('recordatorioGuardarBtn').disabled = bloqueado;
+            document.getElementById('recordatorioEnviarBtn').disabled = bloqueado;
+        }
+
+        async function cargarRecordatorio() {
+            const sw = document.getElementById('recordatorioSwitch');
+            const estado = document.getElementById('recordatorioEstado');
+            const info = document.getElementById('recordatorioInfo');
+            const textoEstado = document.getElementById('recordatorioTextoEstado');
+            try {
+                const r = await apiGET('/recordatorio');
+                if (!r.ok) {
+                    sw.disabled = true;
+                    sw.checked = false;
+                    bloquearTextoRecordatorio(true);
+                    estado.textContent = 'No disponible';
+                    estado.className = 'text-sm text-yellow-400';
+                    info.textContent = (r.data && r.data.error) ||
+                        `HTTP ${r.status}: no se pudo consultar el recordatorio.`;
+                    textoEstado.textContent = '';
+                    return;
+                }
+                sw.disabled = false;
+                sw.checked = r.data.enabled === true;
+                estado.textContent = sw.checked ? 'Activo' : 'Desactivado';
+                estado.className = sw.checked
+                    ? 'text-sm font-medium text-green-400'
+                    : 'text-sm font-medium text-gray-400';
+                info.textContent = sw.checked
+                    ? 'Se enviará la próxima tanda y el aviso fijo de las 19:00 si quedan pendientes.'
+                    : 'No se enviará ningún recordatorio automático mientras esté desactivado (el envío manual sí funciona).';
+                bloquearTextoRecordatorio(false);
+                if (r.data.textoDefault) recordatorioDefaults = r.data.textoDefault;
+                setCamposRecordatorio(r.data.texto || {});
+                actualizarPreviewRecordatorio();
+            } catch (e) {
+                sw.disabled = true;
+                sw.checked = false;
+                bloquearTextoRecordatorio(true);
+                estado.textContent = 'Fallo de red';
+                estado.className = 'text-sm text-red-400';
+                info.textContent = `No se pudo contactar el bot: ${e.message}`;
+            }
+        }
+
+        async function cambiarRecordatorio(habilitado) {
+            const sw = document.getElementById('recordatorioSwitch');
+            const estado = document.getElementById('recordatorioEstado');
+            const info = document.getElementById('recordatorioInfo');
+            sw.disabled = true;
+            estado.textContent = 'Guardando...';
+            estado.className = 'text-sm text-gray-400';
+            try {
+                const r = await ejecutarPostRaw('/set-recordatorio', { enabled: habilitado });
+                if (!r.ok) {
+                    sw.checked = !habilitado;
+                    estado.textContent = 'No se pudo guardar';
+                    estado.className = 'text-sm text-red-400';
+                    info.textContent = (r.data && r.data.error) || `HTTP ${r.status}`;
+                    actualizarEstatus(`Error ${r.status}`, true);
+                    return;
+                }
+                sw.checked = r.data.enabled === true;
+                estado.textContent = sw.checked ? 'Activo' : 'Desactivado';
+                estado.className = sw.checked
+                    ? 'text-sm font-medium text-green-400'
+                    : 'text-sm font-medium text-gray-400';
+                info.textContent = sw.checked
+                    ? 'Se enviará la próxima tanda y el aviso fijo de las 19:00 si quedan pendientes.'
+                    : 'No se enviará ningún recordatorio automático mientras esté desactivado (el envío manual sí funciona).';
+                actualizarEstatus(sw.checked ? 'Recordatorio activado' : 'Recordatorio desactivado');
+            } catch (e) {
+                sw.checked = !habilitado;
+                estado.textContent = 'Fallo de red';
+                estado.className = 'text-sm text-red-400';
+                info.textContent = `No se pudo contactar el bot: ${e.message}`;
+            } finally {
+                sw.disabled = false;
+            }
+        }
+
+        async function guardarTextoRecordatorio() {
+            const btn = document.getElementById('recordatorioGuardarBtn');
+            const estado = document.getElementById('recordatorioTextoEstado');
+            btn.disabled = true;
+            estado.textContent = 'Guardando...';
+            estado.className = 'text-xs text-gray-400';
+            try {
+                const r = await ejecutarPostRaw('/set-recordatorio-texto', leerCamposRecordatorio());
+                if (!r.ok) {
+                    estado.textContent = (r.data && r.data.error) || `Error ${r.status}`;
+                    estado.className = 'text-xs text-red-400';
+                    actualizarEstatus(`Error ${r.status}`, true);
+                    return;
+                }
+                setCamposRecordatorio(r.data.texto || {});
+                actualizarPreviewRecordatorio();
+                estado.textContent = 'Guardado ✓';
+                estado.className = 'text-xs text-green-400';
+                actualizarEstatus('Mensaje del recordatorio guardado');
+            } catch (e) {
+                estado.textContent = `Fallo de red: ${e.message}`;
+                estado.className = 'text-xs text-red-400';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function restaurarTextoRecordatorio() {
+            const estado = document.getElementById('recordatorioTextoEstado');
+            if (!recordatorioDefaults) {
+                estado.textContent = 'Todavía no se cargaron los textos por defecto.';
+                estado.className = 'text-xs text-yellow-400';
+                return;
+            }
+            setCamposRecordatorio(recordatorioDefaults);
+            actualizarPreviewRecordatorio();
+            estado.textContent = 'Textos por defecto (falta guardar)';
+            estado.className = 'text-xs text-yellow-400';
+        }
+
+        async function enviarRecordatorioAhora() {
+            if (!confirm('¿Enviar el recordatorio ahora al grupo de WhatsApp?')) return;
+            const btn = document.getElementById('recordatorioEnviarBtn');
+            const info = document.getElementById('recordatorioInfo');
+            btn.disabled = true;
+            info.textContent = 'Enviando...';
+            info.className = 'text-xs text-gray-400 mt-2';
+            try {
+                const r = await ejecutarPostRaw('/send-recordatorio', {});
+                if (!r.ok) {
+                    info.textContent = (r.data && r.data.error) || `HTTP ${r.status}`;
+                    info.className = r.status === 409
+                        ? 'text-xs text-yellow-400 mt-2'
+                        : 'text-xs text-red-400 mt-2';
+                    actualizarEstatus(`Error ${r.status}`, r.status !== 409);
+                    return;
+                }
+                info.textContent = r.data.message || 'Recordatorio enviado.';
+                info.className = 'text-xs text-green-400 mt-2';
+                actualizarEstatus('Recordatorio enviado');
+            } catch (e) {
+                info.textContent = `No se pudo contactar el bot: ${e.message}`;
+                info.className = 'text-xs text-red-400 mt-2';
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function cargarEstado() {

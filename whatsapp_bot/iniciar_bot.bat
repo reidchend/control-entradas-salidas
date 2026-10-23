@@ -29,7 +29,7 @@ if not exist "cloudflared.exe" (
     echo   Descargalo de https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
     exit /b 1
 )
-if not exist "node_modules" (
+if not exist "node_modules\pg" (
     echo [bot] Instalando dependencias...
     call npm install --production
     if errorlevel 1 (

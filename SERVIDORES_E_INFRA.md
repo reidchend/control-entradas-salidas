@@ -221,6 +221,9 @@ del proxy SQL.
   del bot. Escucha en `process.env.PORT` o **3000**.
 - `whatsapp_bot/bot.js`: la lógica de WhatsApp (Baileys). `server.js` la importa.
   Acá viven el envío, la reintentar de cola y la lectura de `config.json`.
+- `whatsapp_bot/recordatorio_validaciones.js`: recordatorio de compras sin
+  validar (30 min por tanda y fijo a las 19:00). Corre dentro del bot, no en la
+  app; consulta PostgreSQL con `pg` y `DATABASE_URL`.
 - `whatsapp_bot/panel_bot.html`: el panel que se sirve en `/panel` y `/qr`.
 - `whatsapp_bot/config.json`: solo `groupId` y `reportGroupId`. **No contiene
   secretos** (el token va por header). Sí se versiona.
@@ -290,6 +293,44 @@ barra de direcciones después de cargar.
 2. Construye JSON y hace `POST <bot_url>/send` (o `/send-image`, `/send-report`) con header `x-auth-token`
 3. Bot recibe, valida el token, envía por WhatsApp (Baileys) y responde `{ok, ...}`
 4. Si falla, el repositorio devuelve `false` y **no loguea a stdout**: usa `debugPrint`, que no aparece en release. Los reintentos corren con `_retryTimer` (1 min).
+
+### Recordatorio de compras sin validar
+
+El aviso "HAY COMPRAS SIN VALIDAR" lo envía el **bot**, no la app. Antes eran
+timers de Flutter que solo corrían con la app abierta, así que el aviso se
+perdía si nadie la tenía abierta a esa hora. Ahora vive en
+`whatsapp_bot/recordatorio_validaciones.js`, dentro del proceso que ya está
+siempre encendido para poder mandar por WhatsApp:
+
+- Cada 2 min consulta `movimientos` (`tipo='entrada' AND factura_id IS NULL`).
+- Tanda nueva: espera 30 min desde la primera entrada y avisa una sola vez con
+  todo lo pendiente, incluyendo `motivo_no_validacion`.
+- Aviso fijo: desde las 19:00, una vez por día mientras queden pendientes.
+- El switch vive en el **panel del bot** (`GET /recordatorio` y
+  `POST /set-recordatorio`), que escribe `recordatorio_validaciones` en
+  `pos_settings`; el bot lo relee en cada poll. Ya no se administra desde la
+  app: el bot es el único emisor.
+- El texto y el formato también se editan desde el panel
+  (`POST /set-recordatorio-texto`), con vista previa. Se guardan en
+  `pos_settings`: `..._plantilla`, `..._formato_item`, `..._nota_tanda`,
+  `..._nota_fija` y `..._nota_manual`. Placeholders del mensaje:
+  `{cantidad}`, `{detalle}`, `{nota}`, `{fecha}`, `{hora}`; en cada compra:
+  `{producto}`, `{cantidad}`, `{motivo}`, `{almacen}`. Si una clave no existe
+  se usa el texto por defecto; si está vacía se respeta el vacío (ej. sin
+  nota). Se aceptan emojis.
+- Botón **Enviar ahora** (`POST /send-recordatorio`): manda el aviso al
+  instante con lo que esté pendiente, sin mirar el switch ni el guard de
+  duplicados, y sin actualizar `..._ultimo_ts` (el flujo automático sigue
+  igual). Si no hay pendientes responde 409.
+- Si el envío falla (bot desconectado, error de red) no marca nada y reintenta
+  a los 10 min. Las marcas (`..._ultimo_ts`, `..._fijo_fecha`) se comparten con
+  versiones viejas de la app para no duplicar el mensaje.
+
+Necesita `DATABASE_URL` en el entorno. La toma de `whatsapp_bot/.env` o, si no
+está, del `.env.local` de la raíz (el mismo que usa `tool/server.py`). Si falta
+o no está instalado `pg`, el recordatorio se desactiva con un log y el bot
+sigue funcionando para los demás envíos.
+
 
 ### Arranque (PC servidor)
 

@@ -503,18 +503,6 @@ class ConfiguracionRepository {
     return setPosSetting('permitir_stock_negativo', v ? '1' : '0');
   }
 
-  /// Recordatorio de validaciones por WhatsApp (on/off). Lo lee el servicio
-  /// de recordatorios en cada revisión, así que el cambio aplica sin
-  /// reiniciar la app.
-  Future<bool> getRecordatorioValidaciones() async {
-    final v = await getPosSetting('recordatorio_validaciones', def: '1');
-    return v != '0' && v != 'false';
-  }
-
-  Future<void> setRecordatorioValidaciones(bool v) {
-    return setPosSetting('recordatorio_validaciones', v ? '1' : '0');
-  }
-
   Future<String> getAlmacenProduccionDefault() async {
     final v = await getPosSetting('almacen_produccion', def: 'restaurante');
     return v ?? 'restaurante';

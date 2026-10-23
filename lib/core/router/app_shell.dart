@@ -17,7 +17,6 @@ import '../../features/requisiciones/presentation/requisiciones_screen.dart';
 import '../../features/reportes/presentation/screens/reportes_screen.dart';
 import '../../features/stock/presentation/stock_screen.dart';
 import '../../features/validacion/presentation/validacion_screen.dart';
-import '../../features/validacion/data/validacion_providers.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
 import '../../features/configuracion/data/configuracion_providers.dart';
 import '../../features/whatsapp/presentation/bandeja_screen.dart';
@@ -119,10 +118,9 @@ class _ShellAutenticadoState extends ConsumerState<_ShellAutenticado> {
       if (db != null) {
         _pollingCancels = initPollingSubscriptions(ref, db: db);
       }
-      // Recordatorio de validaciones pendientes por WhatsApp: el servicio
-      // solo se crea (y arranca) al leer el provider; vive mientras la app
-      // esté abierta y se apaga desde Configuración > Sistema.
-      ref.read(recordatorioValidacionesProvider);
+      // Recordatorio de validaciones pendientes por WhatsApp: lo envía el
+      // bot (proceso siempre encendido en la PC servidor), no la app. Se
+      // administra desde el panel del bot, que guarda en pos_settings.
       // El catálogo de tipos refresca el mapa nombre→rol que usa la lógica
       // de producción y los colores por tipo; si falla, la lógica cae a la
       // equivalencia histórica por texto.

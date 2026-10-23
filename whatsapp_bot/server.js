@@ -8,6 +8,7 @@ const cors = require('cors');
 const path = require('path');
 const bot = require('./bot');
 const descargarImagen = require('./descargar_imagen');
+const { iniciarRecordatorioValidaciones } = require('./recordatorio_validaciones');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,11 @@ if (!process.env.WHATSAPP_BOT_TOKEN) {
     process.exit(1);
 }
 const AUTH_TOKEN = process.env.WHATSAPP_BOT_TOKEN;
+
+// Servicio de recordatorio de compras sin validar (lo arranca startServer).
+// Puede quedar en null si falta DATABASE_URL o el paquete `pg`; en ese caso
+// los endpoints /recordatorio responden 503 con el motivo.
+let recordatorio = null;
 
 // Middleware
 app.use(cors());
@@ -201,6 +207,10 @@ app.get('/qr', (req, res) => {
             POST /set-report-group → Configurar grupo reportes<br>
             POST /send-report   → Enviar reporte (texto)      <br>
             POST /send-document → Enviar documento .txt       <br>
+            GET  /recordatorio  → Estado del recordatorio     <br>
+            POST /set-recordatorio → Activar/desactivar       <br>
+            POST /set-recordatorio-texto → Editar el mensaje  <br>
+            POST /send-recordatorio → Enviar ahora            <br>
         </div>
     </div>
 </body>
@@ -411,8 +421,7 @@ app.post('/send-document', async (req, res) => {
 });
 
 // Endpoint para obtener la configuración actual
-app.get('/config', async (req, res) => {
-    const groupId = bot.getGroupId();
+app.get('/config', async (req, res) => {    const groupId = bot.getGroupId();
     let group = null;
     if (groupId && bot.isConnected()) {
         group = await bot.getGroupMetadata(groupId);
@@ -430,6 +439,113 @@ app.get('/config', async (req, res) => {
         report_group_name: reportGroup ? reportGroup.name : null,
         whatsapp_connected: bot.isConnected()
     });
+});
+
+// Estado del recordatorio de compras sin validar (lo administra este panel).
+app.get('/recordatorio', async (req, res) => {
+    if (!recordatorio) {
+        return res.status(503).json({
+            error: 'Recordatorio no disponible: falta DATABASE_URL o el paquete pg.'
+        });
+    }
+    try {
+        res.json({
+            enabled: await recordatorio.estaHabilitado(),
+            hora_fija: 19,
+            debounce_min: 30,
+            texto: await recordatorio.obtenerTexto(),
+            textoDefault: recordatorio.textosPorDefecto()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Activa o desactiva el recordatorio desde el panel.
+app.post('/set-recordatorio', async (req, res) => {
+    if (!recordatorio) {
+        return res.status(503).json({
+            error: 'Recordatorio no disponible: falta DATABASE_URL o el paquete pg.'
+        });
+    }
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'El campo "enabled" (boolean) es requerido' });
+    }
+    try {
+        await recordatorio.definirHabilitado(enabled);
+        res.json({
+            success: true,
+            enabled: enabled,
+            message: enabled
+                ? 'Recordatorio activado'
+                : 'Recordatorio desactivado'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Textos editables del aviso (plantilla + formato de cada compra + notas).
+app.post('/set-recordatorio-texto', async (req, res) => {
+    if (!recordatorio) {
+        return res.status(503).json({
+            error: 'Recordatorio no disponible: falta DATABASE_URL o el paquete pg.'
+        });
+    }
+    const campos = ['plantilla', 'formatoItem', 'notaTanda', 'notaFija', 'notaManual'];
+    const body = req.body || {};
+    for (const campo of campos) {
+        if (typeof body[campo] !== 'string') {
+            return res.status(400).json({
+                error: `El campo "${campo}" (texto) es requerido`
+            });
+        }
+        if (body[campo].length > 4000) {
+            return res.status(400).json({
+                error: `El campo "${campo}" supera los 4000 caracteres`
+            });
+        }
+    }
+    try {
+        const texto = await recordatorio.guardarTexto({
+            plantilla: body.plantilla,
+            formatoItem: body.formatoItem,
+            notaTanda: body.notaTanda,
+            notaFija: body.notaFija,
+            notaManual: body.notaManual
+        });
+        res.json({ success: true, texto });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Envía el recordatorio ahora mismo (ignora el switch y el guard de duplicados).
+app.post('/send-recordatorio', async (req, res) => {
+    if (!recordatorio) {
+        return res.status(503).json({
+            error: 'Recordatorio no disponible: falta DATABASE_URL o el paquete pg.'
+        });
+    }
+    try {
+        if (!bot.isConnected()) {
+            return res.status(503).json({ error: 'WhatsApp no está conectado.' });
+        }
+        const { enviadas } = await recordatorio.enviarAhora();
+        if (enviadas === 0) {
+            return res.status(409).json({
+                error: 'No hay compras sin validar para avisar.'
+            });
+        }
+        res.json({
+            success: true,
+            enviadas,
+            message: `Recordatorio enviado (${enviadas} pendientes).`
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Handler de errores de alcance general. Tiene que ir DESPUÉS de las rutas:
@@ -470,6 +586,9 @@ async function startServer() {
     
     // Iniciar servidor HTTP inmediatamente en todas las interfaces
     app.listen(PORT, '0.0.0.0', () => {
+        // Recordatorio de compras sin validar: como este proceso queda
+        // encendido, es el único emisor (la app ya no lo dispara).
+        recordatorio = iniciarRecordatorioValidaciones(bot);
         console.log(`
 ╔══════════════════════════════════════════════════╗
 ║           🤖 SERVIDOR DE BOT WHATSAPP              ║
