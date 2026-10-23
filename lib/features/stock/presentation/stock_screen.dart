@@ -33,8 +33,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   int? _categoriaId;
   String? _almacen;
   String? _stockStatus;
+  String? _tipo;
   List<Categoria> _categorias = [];
   List<String> _almacenes = [];
+  List<String> _tipos = [];
   Map<int, String> _categoriasMap = {};
 
   StockStats _stats = const StockStats();
@@ -80,10 +82,12 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     final repo = ref.read(stockRepoProvider)!;
     final cats = await repo.loadCategorias();
     final alm = await repo.getAlmacenes();
+    final tipos = await repo.getTiposProducto();
     if (mounted) {
       setState(() {
         _categorias = cats;
         _almacenes = alm;
+        _tipos = tipos;
         _categoriasMap = {for (final c in cats) c.id: c.nombre};
       });
     }
@@ -111,6 +115,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         categoriaId: _categoriaId,
         almacen: _almacen,
         stockStatus: _stockStatus,
+        tipo: _tipo,
         limit: volver,
       );
       final ids = [for (final p in productos) p.id];
@@ -147,6 +152,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         categoriaId: _categoriaId,
         almacen: _almacen,
         stockStatus: _stockStatus,
+        tipo: _tipo,
         limit: _pageSize,
         offset: offset,
       );
@@ -270,7 +276,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Widget _buildFiltros() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: LayoutBuilder(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LayoutBuilder(
         builder: (context, constraints) {
           final busqueda = TextField(
             decoration: const InputDecoration(
@@ -363,8 +372,48 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             ],
           );
         },
+          ),
+          // Filtro por tipo: fila deslizable (como las tarjetas del
+          // encabezado) para que en móvil no colapse el panel de filtros.
+          if (_tipos.isNotEmpty) _buildTiposChips(),
+        ],
       ),
     );
+  }
+
+  Widget _buildTiposChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: const Text('Todos'),
+            selected: _tipo == null,
+            showCheckmark: false,
+            onSelected: (_) => _setTipo(null),
+          ),
+          const SizedBox(width: 6),
+          for (final t in _tipos) ...[
+            ChoiceChip(
+              label: Text(t),
+              selected: _tipo == t,
+              showCheckmark: false,
+              // Tocar el tipo ya seleccionado lo quita (vuelve a Todos).
+              onSelected: (_) => _setTipo(_tipo == t ? null : t),
+            ),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _setTipo(String? tipo) {
+    if (_tipo == tipo) return;
+    setState(() => _tipo = tipo);
+    _irAlInicio();
+    _reload();
   }
 
   void _irAlInicio() {

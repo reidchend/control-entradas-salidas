@@ -37,6 +37,28 @@ class StockRepository {
     return rows.map((r) => r['almacen'] as String).toList();
   }
 
+  /// Tipos de producto reales (DISTINCT de la tabla) para el filtro de la
+  /// vista de stock. Solo trae los no vacíos: "Todos" los incluye igual.
+  ///
+  /// Agrupa por mayúsculas/minúsculas: en la BD conviven "PRODUCTO PARA USO
+  /// INTERNO" y "productos para uso Interno" como tipos distintos, y
+  /// mostrarlos por separado confundiría (filtrar uno dejaría fuera al
+  /// otro). Devuelve el representante más frecuente de cada grupo; el
+  /// filtro de `filterProductos` compara en LOWER para atrapar todas las
+  /// variantes de escritura.
+  Future<List<String>> getTiposProducto() async {
+    final rows = await _db.executeSql(
+      "SELECT tipo FROM ("
+      "  SELECT tipo, ROW_NUMBER() OVER ("
+      "    PARTITION BY LOWER(tipo) ORDER BY COUNT(*) DESC, tipo) AS rn"
+      "  FROM productos"
+      "  WHERE activo = TRUE AND COALESCE(tipo, '') <> ''"
+      "  GROUP BY tipo"
+      ") t WHERE rn = 1 ORDER BY LOWER(tipo)",
+    );
+    return rows.map((r) => r['tipo'] as String).toList();
+  }
+
   Future<List<Producto>> loadProductos({int limit = 50}) async {
     final rows = await _db.fetchAll(
       'productos',
@@ -78,10 +100,11 @@ class StockRepository {
     int? categoriaId,
     String? almacen,
     String? stockStatus,
+    String? tipo,
     int limit = 50,
     int offset = 0,
   }) async {
-    // Filtros de activo/categoría/búsqueda se aplican en SQL para que el
+    // Filtros de activo/categoría/búsqueda/tipo se aplican en SQL para que el
     // LIMIT no corte productos de la categoría seleccionada.
     final params = <dynamic>[];
     final conds = <String>['p.activo = TRUE'];
@@ -92,6 +115,13 @@ class StockRepository {
     if (search.isNotEmpty) {
       params.add('%${search.toLowerCase()}%');
       conds.add('LOWER(p.nombre) LIKE \$${params.length}');
+    }
+    if (tipo != null) {
+      params.add(tipo);
+      // LOWER de ambos lados: los tipos conviven con mayúsculas
+      // inconsistentes en la BD ("PRODUCTO PARA USO INTERNO" vs
+      // "productos para uso Interno") y el filtro debe atrapar todas.
+      conds.add('LOWER(p.tipo) = LOWER(\$${params.length})');
     }
     final where = conds.join(' AND ');
 
