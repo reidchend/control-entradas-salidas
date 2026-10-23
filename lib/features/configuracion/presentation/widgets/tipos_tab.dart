@@ -75,6 +75,7 @@ class TiposTab extends ConsumerWidget {
                   onToggle: tipos[i].esDelSistema
                       ? null
                       : (v) => _setActivo(context, ref, tipos[i], v),
+                  onEsInsumo: (v) => _setEsInsumo(context, ref, tipos[i], v),
                 ),
               );
             },
@@ -136,6 +137,18 @@ class TiposTab extends ConsumerWidget {
     }
   }
 
+  Future<void> _setEsInsumo(BuildContext context, WidgetRef ref,
+      TipoProducto tipo, bool esInsumo) async {
+    final repo = ref.read(configuracionRepoProvider)!;
+    try {
+      await repo.setTipoProductoEsInsumo(tipo, esInsumo);
+      ref.invalidate(tiposProductoConfigProvider);
+    } catch (e) {
+      ref.invalidate(tiposProductoConfigProvider); // revierte el switch
+      _snack(context, 'No se pudo cambiar: $e');
+    }
+  }
+
   void _snack(BuildContext context, String msg) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -146,12 +159,14 @@ class _TipoCard extends StatelessWidget {
   const _TipoCard({
     required this.tipo,
     required this.scheme,
+    required this.onEsInsumo,
     this.onRename,
     this.onToggle,
   });
 
   final TipoProducto tipo;
   final ColorScheme scheme;
+  final ValueChanged<bool> onEsInsumo;
   final VoidCallback? onRename;
   final ValueChanged<bool>? onToggle;
 
@@ -176,57 +191,76 @@ class _TipoCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icono, size: 22, color: colorIcono),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tipo.nombre,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                Icon(icono, size: 22, color: colorIcono),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tipo.nombre,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        subtitulo,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
                   ),
-                  Text(
-                    subtitulo,
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+                if (!tipo.activo)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'INACTIVO',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onErrorContainer),
+                    ),
                   ),
-                ],
-              ),
+                if (onRename != null)
+                  IconButton(
+                    icon: Icon(Icons.edit_outlined, color: scheme.primary),
+                    tooltip: 'Renombrar',
+                    onPressed: onRename,
+                  ),
+                if (onToggle != null)
+                  Switch(
+                    value: tipo.activo,
+                    onChanged: onToggle,
+                  ),
+              ],
             ),
-            if (!tipo.activo)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: scheme.errorContainer,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'INACTIVO',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: scheme.onErrorContainer),
-                ),
+            // Capability administrable: define qué tipos alimentan el
+            // selector de ingredientes de los platos del POS.
+            SwitchListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.trailing,
+              title: Text(
+                'Puede ser ingrediente de platos',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
-            if (onRename != null)
-              IconButton(
-                icon: Icon(Icons.edit_outlined, color: scheme.primary),
-                tooltip: 'Renombrar',
-                onPressed: onRename,
-              ),
-            if (onToggle != null)
-              Switch(
-                value: tipo.activo,
-                onChanged: onToggle,
-              ),
+              value: tipo.esInsumo,
+              onChanged: onEsInsumo,
+            ),
           ],
         ),
       ),

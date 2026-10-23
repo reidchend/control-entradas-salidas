@@ -6,6 +6,10 @@
 /// los tipos con rol se puede renombrar sin romper nada — salvo 'ninguno',
 /// que además es el default del modelo `Producto`.
 ///
+/// [esInsumo] dice si los productos de este tipo pueden usarse como
+/// ingrediente de platos del POS (regla de negocio administrable desde
+/// Configuración > Tipos).
+///
 /// [enUso] es cuántos productos usan el tipo (calculado con un subquery al
 /// listar el catálogo).
 class TipoProducto {
@@ -15,6 +19,7 @@ class TipoProducto {
     this.rol,
     this.protegido = false,
     this.activo = true,
+    this.esInsumo = false,
     this.orden = 0,
     this.enUso = 0,
   });
@@ -24,6 +29,7 @@ class TipoProducto {
   final String? rol;
   final bool protegido;
   final bool activo;
+  final bool esInsumo;
   final int orden;
   final int enUso;
 
@@ -37,6 +43,19 @@ class TipoProducto {
         rol: rol,
         protegido: protegido,
         activo: activo,
+        esInsumo: esInsumo,
+        orden: orden,
+        enUso: enUso,
+      );
+
+  /// Copia con otro valor de esInsumo (tras el switch de la pestaña Tipos).
+  TipoProducto copyWithEsInsumo(bool esInsumo) => TipoProducto(
+        id: id,
+        nombre: nombre,
+        rol: rol,
+        protegido: protegido,
+        activo: activo,
+        esInsumo: esInsumo,
         orden: orden,
         enUso: enUso,
       );
@@ -47,6 +66,7 @@ class TipoProducto {
         rol: m['rol'] as String?,
         protegido: m['protegido'] == true,
         activo: m['activo'] == true,
+        esInsumo: m['es_insumo'] == true,
         orden: (m['orden'] as num?)?.toInt() ?? 0,
         enUso: (m['en_uso'] as num?)?.toInt() ?? 0,
       );

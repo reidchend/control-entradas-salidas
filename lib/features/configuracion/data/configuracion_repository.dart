@@ -290,6 +290,13 @@ class ConfiguracionRepository {
     await _db.updateById('tipos_producto', tipo.id, {'activo': activo});
   }
 
+  /// Marca si los productos de este tipo pueden usarse como ingrediente de
+  /// platos del POS (regla de negocio, switch en Configuración > Tipos).
+  Future<void> setTipoProductoEsInsumo(TipoProducto tipo, bool esInsumo) async {
+    await _db.updateById('tipos_producto', tipo.id, {'es_insumo': esInsumo});
+    RolesTipoProducto.actualizar([tipo.copyWithEsInsumo(esInsumo)]);
+  }
+
   // ---------------------------------------------------------------------------
   // Proveedores
   // ---------------------------------------------------------------------------

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/pos_models.dart';
 import '../../../../core/models/producto.dart' as domain;
 import '../../../../core/utils/modal_sizing.dart';
+import '../../../../core/utils/roles_tipo_producto.dart';
+import '../../../configuracion/data/configuracion_providers.dart'
+    show configuracionRepoProvider;
 import '../../../../features/inventario/data/inventario_providers.dart';
 import '../../data/pos_providers.dart';
 import '../widgets/producto_selector_field.dart';
@@ -16,18 +19,6 @@ Future<bool> showPlatoConfigDialog(BuildContext context, {PosPlato? plato}) asyn
     builder: (_) => _PlatoConfigDialog(plato: plato),
   );
   return ok ?? false;
-}
-
-/// ¿El producto puede usarse como ingrediente de un plato?
-///
-/// Se aceptan los tipos "para uso interno" e "insumo". La comparación ignora
-/// mayúsculas y espacios porque el tipo se cargó a mano durante años y en la
-/// base conviven variantes ('productos para uso Interno',
-/// 'PRODUCTO PARA USO INTERNO', ...). Con la igualdad exacta anterior, esos
-/// productos no aparecían y la lista de ingredientes quedaba vacía.
-bool _esInsumo(String tipo) {
-  final t = tipo.trim().toLowerCase();
-  return t.contains('uso interno') || t == 'insumo' || t == 'insumos';
 }
 
 class _IngRow {
@@ -95,11 +86,20 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
   Future<void> _cargarDatos() async {
     final posRepo = ref.read(posRepoProvider)!;
     final invRepo = ref.read(inventarioRepoProvider)!;
+    // Refresca el mapa nombre→rol/es_insumo desde el catálogo: el POS no
+    // pasa por el shell del inventario, así que acá es donde se entera de
+    // renombrados y de cambios de "puede ser ingrediente".
+    try {
+      await ref.read(configuracionRepoProvider)?.getTiposProductoCatalogo();
+    } catch (_) {}
     final cats = await posRepo.getPlatosCategorias();
     final productos = await invRepo.getAllProductos();
+    // Ingredientes posibles: los productos cuyo tipo está marcado como
+    // insumo en Configuración > Tipos (uso interno, producción, feria...).
+    // Los "para la venta", "Consumo" y "ninguno" no se ofrecen.
     final insumos = [
       for (final pr in productos)
-        if (_esInsumo(pr.tipo)) pr,
+        if (RolesTipoProducto.puedeSerIngrediente(pr.tipo)) pr,
     ];
     if (_esEdicion) {
       final ings = await posRepo.getIngredientes(widget.plato!.id);
