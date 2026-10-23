@@ -102,13 +102,31 @@ class _Grupo extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 8, top: 2),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      v.nombre,
-                      style: const TextStyle(fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          v.nombre,
+                          style: const TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        // Desglose por almacén: muestra dónde está el stock
+                        // incluso cuando la lista está filtrada por uno solo.
+                        if (v.stockPorAlmacen.isNotEmpty)
+                          Text(
+                            _desglose(v),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -127,4 +145,17 @@ class _Grupo extends StatelessWidget {
       ),
     );
   }
+
+  /// Texto con el stock de cada almacén, ej. "Principal: 5 · Restaurante: 2".
+  String _desglose(VinculoProducto v) {
+    return [
+      for (final e in v.stockPorAlmacen.entries)
+        '${e.key.capitalize()}: ${fmt(e.value)}',
+    ].join(' · ');
+  }
+}
+
+extension _StringCapitalize on String {
+  String capitalize() =>
+      isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }

@@ -162,24 +162,6 @@ class StockRepository {
     return productos.skip(offset).take(limit).toList();
   }
 
-  Future<Map<int, double>> getStockTotalAlmacenBase(
-      List<int> productoIds, String? almacen) async {
-    if (productoIds.isEmpty) return {};
-    final conds = <String>['producto_id = ANY(\$1)'];
-    final params = <dynamic>[productoIds];
-    if (almacen != null) {
-      conds.add('almacen = \$2');
-      params.add(almacen);
-    }
-    final sql = 'SELECT producto_id, SUM(cantidad) AS stock '
-        'FROM existencias WHERE ${conds.join(' AND ')} GROUP BY producto_id';
-    final rows = await _db.executeSql(sql, params: params);
-    return {
-      for (final r in rows)
-        r['producto_id'] as int: (r['stock'] as num).toDouble(),
-    };
-  }
-
   /// Vínculos de producción de varios productos en una sola consulta.
   ///
   /// Devuelve, por cada producto pedido, la lista de productos relacionados por
@@ -249,20 +231,30 @@ class StockRepository {
       for (final r in rows)
         if (r['vinculado_id'] != null) r['vinculado_id'] as int,
     };
-    final stockMap =
-        await getStockTotalAlmacenBase(linkedIds.toList(), almacen);
+    // Existencias por producto y almacén en una sola consulta: alimenta el
+    // stock destacado (total o del almacén filtrado) y el desglose por
+    // almacén que muestra el tile de vínculos.
+    final exMap = await getExistenciasDeProductos(linkedIds.toList());
 
     for (final r in rows) {
       final origenId = r['origen_id'] as int;
       final vinculadoId = r['vinculado_id'] as int;
+      final exis = exMap[vinculadoId] ?? const <Existencia>[];
+      final porAlmacen = <String, double>{
+        for (final e in exis) e.almacen: e.cantidad,
+      };
+      final stock = almacen == null
+          ? porAlmacen.values.fold<double>(0, (a, b) => a + b)
+          : (porAlmacen[almacen] ?? 0);
       result.putIfAbsent(origenId, () => []).add(
             VinculoProducto(
               productoId: vinculadoId,
               nombre: r['nombre'] as String,
               tipo: (r['tipo'] as String?) ?? '',
               unidad: (r['unidad'] as String?) ?? '',
-              stock: stockMap[vinculadoId] ?? 0,
+              stock: stock,
               esDerivado: r['direccion'] == 'derivado',
+              stockPorAlmacen: porAlmacen,
             ),
           );
     }
