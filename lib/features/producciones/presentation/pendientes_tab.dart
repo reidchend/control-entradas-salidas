@@ -33,7 +33,7 @@ class _PendientesTabState extends ConsumerState<PendientesTab> {
       throw Exception('Supabase no configurado. Verifica la conexion.');
     }
     final pendientes = await repo.getProduccionesPorEstado('pendiente');
-    final recetas = await repo.getRecetas();
+    final recetas = await repo.getRecetas(activo: false);
     final recetaPorId = {for (final r in recetas) r.id: r};
 
     final datos = <PendienteCardData>[];

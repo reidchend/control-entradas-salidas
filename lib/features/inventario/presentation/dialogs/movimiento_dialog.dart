@@ -220,18 +220,26 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
         return;
       }
       final prodRepo = ref.read(produccionesRepoProvider)!;
-      final res = await prodRepo.registrarProduccionPendienteRaw(
-        productoId: _producto.id,
-        esPesable: _esPesable,
-        unidadMedida: _producto.unidadMedida,
-        receta: receta,
-        cantidad: _esPesable ? pesoTotal : cantidad,
-        pesoTotal: pesoTotal,
-        almacen: almacenSel,
-        produccionId: _produccionId,
-        usuario: usuario,
-        observaciones: observaciones,
-      );
+      ({int? produccionId, int? movimientoId}) res;
+      try {
+        res = await prodRepo.registrarProduccionPendienteRaw(
+          productoId: _producto.id,
+          esPesable: _esPesable,
+          unidadMedida: _producto.unidadMedida,
+          receta: receta,
+          cantidad: _esPesable ? pesoTotal : cantidad,
+          pesoTotal: pesoTotal,
+          almacen: almacenSel,
+          produccionId: _produccionId,
+          usuario: usuario,
+          observaciones: observaciones,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        _mostrarError('No se pudo registrar la entrada de producción. '
+            'No se aplicó ningún cambio. Detalle: $e');
+        return;
+      }
       if (!mounted) return;
       if (res.movimientoId == null) {
         _mostrarError('No se pudo registrar la entrada de producción');

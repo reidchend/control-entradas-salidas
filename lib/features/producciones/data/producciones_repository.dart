@@ -368,8 +368,12 @@ class ProduccionesRepository {
     };
   }
 
-  Future<double> getExistencia(int productoId, String almacen) async {
-    final e = await _db.fetchByTwoFields(
+  Future<double> getExistencia(
+    int productoId,
+    String almacen, {
+    PostgresService? db,
+  }) async {
+    final e = await (db ?? _db).fetchByTwoFields(
         'existencias', 'producto_id', productoId, 'almacen', almacen);
     return (e?['cantidad'] as num?)?.toDouble() ?? 0;
   }
@@ -439,8 +443,21 @@ class ProduccionesRepository {
 
   /// Producciones de un estado (porta `load_pendientes`).
   Future<List<ProduccionInfo>> getProduccionesPorEstado(String estado) async {
-    final all = await getProducciones(limit: 200);
-    return all.where((p) => p.estado == estado).toList();
+    final rows = await _db.fetchAll('producciones',
+        orderBy: 'fecha_produccion',
+        ascending: false,
+        filters: {'estado': estado});
+    final recetas = await _recetasPorIds(
+      rows.map((r) => r['receta_id'] as int).toList(),
+    );
+    return rows.map((p) {
+      final rec = recetas[p['receta_id'] as int];
+      return ProduccionInfo.fromMap(
+        p,
+        (rec?['nombre'] as String?) ?? '',
+        (rec?['tipo'] as String?) ?? '',
+      );
+    }).toList();
   }
 
   Future<ProduccionInfo?> getProduccion(int id) async {
@@ -563,51 +580,60 @@ class ProduccionesRepository {
         ? obsAuto
         : '$obsAuto | $obsExtra';
 
-    final movimientoId = await _registrarMovimientoRaw(
-      productoId: productoId,
-      esPesable: esPesable,
-      unidadMedida: unidadMedida,
-      tipo: 'entrada_produccion',
-      cantidad: cantidad,
-      pesoTotal: pesoTotal,
-      almacen: almacen,
-      observaciones: obs,
-      registradoPor: usuario,
-    );
-    if (movimientoId == null) return (produccionId: null, movimientoId: null);
-
-    int pid;
-    if (produccionId == null) {
-      pid = await _insertProduccion(
-        recetaId: receta.id,
+    return _db.transaction<({int? produccionId, int? movimientoId})>((tx) async {
+      final movimientoId = await _registrarMovimientoRaw(
+        productoId: productoId,
+        esPesable: esPesable,
+        unidadMedida: unidadMedida,
+        tipo: 'entrada_produccion',
         cantidad: cantidad,
-        estado: 'pendiente',
-        usuario: usuario,
+        pesoTotal: pesoTotal,
+        almacen: almacen,
         observaciones: obs,
-        fechaProduccion: DateTime.now(),
+        registradoPor: usuario,
+        db: tx,
       );
-    } else {
-      pid = produccionId;
-      final entradas =
-          (await getDetalles(pid)).where((d) => d.tipo == 'entrada');
-      var total = cantidad;
-      for (final d in entradas) {
-        total += d.cantidad;
+      if (movimientoId == null) {
+        return (produccionId: null, movimientoId: null);
       }
-      await _updateProduccionCantidad(pid, total);
-      _appendProduccionObservaciones(pid, obsExtra);
-    }
 
-    await _insertProduccionDetalle(
-      produccionId: pid,
-      productoId: productoId,
-      tipo: 'entrada',
-      cantidad: cantidad,
-      unidad: (pesoTotal > 0 || esPesable) ? 'kg' : unidadMedida,
-      movimientoId: movimientoId,
-    );
+      int pid;
+      if (produccionId == null) {
+        pid = await _insertProduccion(
+          recetaId: receta.id,
+          cantidad: cantidad,
+          estado: 'pendiente',
+          usuario: usuario,
+          observaciones: obs,
+          fechaProduccion: DateTime.now(),
+          db: tx,
+        );
+      } else {
+        pid = produccionId;
+        final rows = await tx.executeSql(
+          "SELECT COALESCE(SUM(cantidad), 0) AS total "
+          "FROM produccion_detalles "
+          "WHERE produccion_id = \$1 AND tipo = 'entrada'",
+          params: [pid],
+        );
+        final totalDet =
+            (rows.first['total'] as num?)?.toDouble() ?? 0;
+        await _updateProduccionCantidad(pid, cantidad + totalDet, db: tx);
+        await _appendProduccionObservaciones(pid, obsExtra, db: tx);
+      }
 
-    return (produccionId: pid, movimientoId: movimientoId);
+      await _insertProduccionDetalle(
+        produccionId: pid,
+        productoId: productoId,
+        tipo: 'entrada',
+        cantidad: cantidad,
+        unidad: (pesoTotal > 0 || esPesable) ? 'kg' : unidadMedida,
+        movimientoId: movimientoId,
+        db: tx,
+      );
+
+      return (produccionId: pid, movimientoId: movimientoId);
+    });
   }
 
   /// Calcula los ingredientes a descargar (porta `planificar_descargo`).
@@ -1000,12 +1026,15 @@ class ProduccionesRepository {
     String? almacen,
     String? observaciones,
     String registradoPor = 'Sistema',
+    PostgresService? db,
   }) async {
     final almacenSel = (almacen ?? '').trim().isNotEmpty
         ? almacen!.trim()
         : 'principal';
+    final conn = db ?? _db;
 
-    final existActual = await getExistencia(productoId, almacenSel);
+    final existActual =
+        await getExistencia(productoId, almacenSel, db: conn);
     final cantAnterior = existActual;
 
     final esPorPeso = esPesable && pesoTotal > 0;
@@ -1022,7 +1051,7 @@ class ProduccionesRepository {
       cantNueva = restarStock(cantAnterior, cantAMover);
     }
 
-    final movId = await _db.insert('movimientos', {
+    final movId = await conn.insert('movimientos', {
       'producto_id': productoId,
       'tipo': tipo,
       'cantidad': cantidad,
@@ -1040,6 +1069,7 @@ class ProduccionesRepository {
       almacen: almacenSel,
       cantidad: cantNueva,
       unidad: unidad,
+      db: conn,
     );
 
     return movId;
@@ -1051,16 +1081,18 @@ class ProduccionesRepository {
     required String almacen,
     required double cantidad,
     required String unidad,
+    PostgresService? db,
   }) async {
-    final rows = await _db.fetchAll('existencias',
+    final conn = db ?? _db;
+    final rows = await conn.fetchAll('existencias',
         filters: {'producto_id': productoId, 'almacen': almacen});
     if (rows.isNotEmpty) {
-      await _db.updateById('existencias', rows.first['id'] as int, {
+      await conn.updateById('existencias', rows.first['id'] as int, {
         'cantidad': cantidad,
         'unidad': unidad,
       });
     } else {
-      await _db.insert('existencias', {
+      await conn.insert('existencias', {
         'producto_id': productoId,
         'almacen': almacen,
         'cantidad': cantidad,
@@ -1076,8 +1108,9 @@ class ProduccionesRepository {
     required String usuario,
     required String observaciones,
     required DateTime fechaProduccion,
+    PostgresService? db,
   }) async {
-    return _db.insert('producciones', {
+    return (db ?? _db).insert('producciones', {
       'receta_id': recetaId,
       'cantidad': cantidad,
       'estado': estado,
@@ -1088,22 +1121,31 @@ class ProduccionesRepository {
     });
   }
 
-  Future<void> _updateProduccionCantidad(int id, double cantidad) async {
-    await _db.updateById('producciones', id, {'cantidad': cantidad});
+  Future<void> _updateProduccionCantidad(
+    int id,
+    double cantidad, {
+    PostgresService? db,
+  }) async {
+    await (db ?? _db).updateById('producciones', id, {'cantidad': cantidad});
   }
 
   /// Agrega las observaciones del usuario a una producción existente
   /// (sin duplicar texto ya presente).
-  Future<void> _appendProduccionObservaciones(int id, String texto) async {
+  Future<void> _appendProduccionObservaciones(
+    int id,
+    String texto, {
+    PostgresService? db,
+  }) async {
     if (texto.trim().isEmpty) return;
-    final p = await _db.fetchById('producciones', id);
+    final conn = db ?? _db;
+    final p = await conn.fetchById('producciones', id);
     if (p == null) return;
     final actual = (p['observaciones'] as String?) ?? '';
     if (actual.contains(texto.trim())) return;
     final combinado = actual.trim().isEmpty
         ? texto.trim()
         : '$actual | ${texto.trim()}';
-    await _db.updateById('producciones', id, {'observaciones': combinado});
+    await conn.updateById('producciones', id, {'observaciones': combinado});
   }
 
   Future<void> _updateProduccionEstado(
@@ -1129,8 +1171,9 @@ class ProduccionesRepository {
     required double cantidad,
     required String unidad,
     int? movimientoId,
+    PostgresService? db,
   }) async {
-    return _db.insert('produccion_detalles', {
+    return (db ?? _db).insert('produccion_detalles', {
       'produccion_id': produccionId,
       'producto_id': productoId,
       'tipo': tipo,
