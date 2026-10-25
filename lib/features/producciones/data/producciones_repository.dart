@@ -1164,6 +1164,29 @@ class ProduccionesRepository {
     });
   }
 
+  /// Recetas que producen el producto dado (como producto final o como
+  /// componente RESULTADO de una receta compuesta). Usado para decidir si al
+  /// hacer una entrada de producción hay lotes pendientes a los que vincular.
+  Future<List<Receta>> getRecetasQueProducenProducto(int productoId) async {
+    final all = await getRecetas();
+    final porFinal =
+        all.where((r) => r.productoFinalId == productoId).toList();
+    final componentes = await getAllComponentes();
+    final recetaIds = componentes
+        .where((c) =>
+            c.productoId == productoId &&
+            c.tipoComponente.toUpperCase() == 'RESULTADO')
+        .map((c) => c.recetaId)
+        .toSet();
+    final porResultado = all.where((r) => recetaIds.contains(r.id)).toList();
+    final ids = <int>{};
+    final result = <Receta>[];
+    for (final r in [...porFinal, ...porResultado]) {
+      if (ids.add(r.id)) result.add(r);
+    }
+    return result;
+  }
+
   Future<int> _insertProduccionDetalle({
     required int produccionId,
     required int productoId,

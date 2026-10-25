@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:control_entradas_salidas/core/models/producto.dart';
+import 'package:control_entradas_salidas/core/models/receta.dart';
 import 'package:control_entradas_salidas/features/inventario/data/inventario_repository.dart';
 import 'package:control_entradas_salidas/features/inventario/data/inventario_providers.dart';
+import 'package:control_entradas_salidas/features/producciones/data/producciones_providers.dart';
+import 'package:control_entradas_salidas/features/producciones/data/producciones_repository.dart';
 import '../dialogs/movimiento_dialog.dart';
+import '../dialogs/seleccionar_lote_produccion_dialog.dart';
 import 'producto_card.dart';
 
 /// Panel derecho: productos filtrados por categoría o búsqueda.
@@ -73,12 +77,93 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
     _listaFocus.requestFocus();
   }
 
-  /// Abre el modal de movimiento del producto seleccionado.
-  void abrirSeleccion() {
+  /// Abre el modal de movimiento del producto seleccionado. Si es una
+  /// producción, primero verifica si hay lotes pendientes de la receta para
+  /// ofrecer vincular a uno existente o crear uno nuevo.
+  Future<void> abrirSeleccion() async {
     final prods = _prods;
     if (prods == null || prods.isEmpty) return;
     final i = _selectedIndex.clamp(0, prods.length - 1);
-    _showMovimientoDialog(prods[i]);
+    await _showMovimientoDialogConValidacion(prods[i]);
+  }
+
+  /// Abre el modal de movimiento del producto. Si el producto es de
+  /// producción, valida antes si hay producciones pendientes de su receta:
+  /// - Si hay lotes, ofrece vincular a uno existente o crear uno nuevo.
+  /// - Si no hay, va directo al modal con "lote nuevo".
+  Future<void> _showMovimientoDialogConValidacion(Producto p) async {
+    final esProduccion =
+        p.tipo.toLowerCase().contains('producci');
+    if (!esProduccion) {
+      await showMovimientoDialog(context, ref, p);
+      return;
+    }
+
+    final prodRepo = ref.read(produccionesRepoProvider)!;
+    final recetas = await prodRepo.getRecetasQueProducenProducto(p.id);
+    if (!mounted) return;
+    if (recetas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este producto es de producción pero no tiene recetas asociadas. '
+            'Créala primero en Producciones > Recetas.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Receta recetaSeleccionada;
+    if (recetas.length == 1) {
+      recetaSeleccionada = recetas.first;
+    } else {
+      recetaSeleccionada = await showDialog<Receta>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Seleccionar receta'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final r in recetas)
+                ListTile(
+                  title: Text(r.nombre),
+                  onTap: () => Navigator.pop(ctx, r),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar')),
+          ],
+        ),
+      );
+      if (!mounted || recetaSeleccionada == null) return;
+    }
+
+    final pendientes = await prodRepo.getProduccionesPorEstado('pendiente');
+    if (!mounted) return;
+    final lotes =
+        pendientes.where((p) => p.recetaId == recetaSeleccionada.id).toList();
+
+    int? produccionIdInicial;
+    if (lotes.isNotEmpty) {
+      produccionIdInicial =
+          await showSeleccionarLoteProduccionDialog(
+            context: context,
+            ref: ref,
+            receta: recetaSeleccionada,
+          );
+      if (!mounted) return;
+    }
+
+    await showMovimientoDialog(
+      context,
+      ref,
+      p,
+      produccionIdInicial: produccionIdInicial,
+    );
   }
 
   void _navegar(int delta) {
@@ -151,7 +236,7 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
                   itemBuilder: (context, i) => ProductoCard(
                     producto: prods[i],
                     seleccionado: i == _selectedIndex,
-                    onMovimiento: _showMovimientoDialog,
+                    onMovimiento: _showMovimientoDialogConValidacion,
                     onToggleLista: _toggleListaCompra,
                     onCorregir: _showCorreccionDialog,
                   ),
@@ -162,10 +247,6 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
         ),
       ],
     );
-  }
-
-  Future<void> _showMovimientoDialog(Producto p) async {
-    await showMovimientoDialog(context, ref, p);
   }
 
   Future<void> _toggleListaCompra(Producto p) async {

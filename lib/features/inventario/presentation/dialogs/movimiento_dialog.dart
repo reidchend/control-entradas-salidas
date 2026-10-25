@@ -14,17 +14,28 @@ import 'package:control_entradas_salidas/features/inventario/presentation/widget
 import 'package:control_entradas_salidas/features/producciones/data/producciones_providers.dart';
 
 /// Diálogo para registrar movimiento (entrada/salida/ajuste) con soporte pesable.
-Future<void> showMovimientoDialog(BuildContext context, WidgetRef ref, Producto p) {
+Future<void> showMovimientoDialog(BuildContext context, WidgetRef ref, Producto p,
+    {int? produccionIdInicial}) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _MovimientoDialog(producto: p),
+    builder: (_) => _MovimientoDialog(
+      producto: p,
+      produccionIdInicial: produccionIdInicial,
+    ),
   );
 }
 
 class _MovimientoDialog extends ConsumerStatefulWidget {
-  const _MovimientoDialog({required this.producto});
+  const _MovimientoDialog({
+    required this.producto,
+    this.produccionIdInicial,
+  });
 
   final Producto producto;
+
+  /// Producción destino preseleccionada (lote existente). Si es null, se
+  /// creará un lote nuevo al registrar.
+  final int? produccionIdInicial;
 
   @override
   ConsumerState<_MovimientoDialog> createState() => _MovimientoDialogState();
@@ -37,7 +48,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   String _almacen = 'principal';
   List<String> _almacenes = ['principal'];
   int? _recetaId;
-  int? _produccionId;
+  int? _produccionId = widget.produccionIdInicial;
 
   final _cantCtrl = TextEditingController(text: '1');
   final _pesoTotalCtrl = TextEditingController();
