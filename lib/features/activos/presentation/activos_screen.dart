@@ -398,6 +398,14 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
               onPressed: () => showActivosExcelDialog(context),
             ),
           ],
+          if (_valor != null && _dim == 'ubicacion') ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(Icons.photo_camera_outlined, color: colors.primary),
+              tooltip: 'Agregar activo por foto (IA) en $_valor',
+              onPressed: () => _crearActivoPorFoto(repo, ubicacionPreset: _valor),
+            ),
+          ],
         ],
       ),
     );
@@ -471,7 +479,8 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
   ///
   /// No escribe nada hasta que el usuario confirma el formulario; la foto solo
   /// se usa para identificar y no se guarda.
-  Future<void> _crearActivoPorFoto(ActivosRepository repo) async {
+  Future<void> _crearActivoPorFoto(ActivosRepository repo,
+      {String? ubicacionPreset}) async {
     try {
       final datos = await identificarActivoConFoto(context);
       if (datos == null || !mounted) return;
@@ -544,6 +553,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         tipoIdFijo: tipoExistenteElegido?.id,
         tipoPreset: tipoExistenteElegido == null ? propuesto : null,
         observacionesPreset: datos.observaciones,
+        ubicacionPreset: ubicacionPreset,
       );
       if (mounted) setState(() {});
     } catch (e) {

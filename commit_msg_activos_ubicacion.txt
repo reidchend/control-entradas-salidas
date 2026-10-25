@@ -1,0 +1,13 @@
+feat(activos): identificar con IA desde una ubicación específica
+
+El botón "Agregar activo por foto (IA)" ahora también aparece cuando el
+usuario está dentro de una ubicación (o grupo/modelo/estado) en la pantalla
+de Activos, no solo en la raíz. Al abrirse el formulario desde una
+ubicación, esa ubicación viene preseleccionada en el campo "Ubicación",
+así el usuario no tiene que volver a elegirla al guardar el activo
+identificado por foto.
+
+- _buildHeader: muestra el botón de cámara cuando hay un valor seleccionado
+  (ubicación/grupo/modelo/estado), no solo en la raíz.
+- _crearActivoPorFoto: acepta ubicacionPreset opcional y lo pasa al formulario
+  de alta para que el activo nuevo quede con esa ubicación desde el inicio.
