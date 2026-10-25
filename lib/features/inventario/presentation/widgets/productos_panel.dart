@@ -114,7 +114,7 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
       return;
     }
 
-    Receta recetaSeleccionada;
+    Receta? recetaSeleccionada;
     if (recetas.length == 1) {
       recetaSeleccionada = recetas.first;
     } else {

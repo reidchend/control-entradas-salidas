@@ -6,7 +6,7 @@ import '../../../core/utils/supabase_cast.dart';
 /// categoría). Las unidades físicas (`activos`) apuntan aquí con `tipo_id`,
 /// de modo que al agregar existencias nunca se reescribe la especificación.
 class ActivoTipo {
-  const ActivoTipo({
+  ActivoTipo({
     required this.id,
     required this.nombre,
     this.grupo,
@@ -23,7 +23,7 @@ class ActivoTipo {
   final bool activo;
 
   /// Puntaje de coincidencia interno (usado solo en `buscarTiposSimilares`).
-  int? _puntaje;
+  int? puntaje;
 
   factory ActivoTipo.fromMap(Map<String, dynamic> m) => ActivoTipo(
         id: m['id'] as int,
@@ -43,4 +43,18 @@ class ActivoTipo {
         'categoria_id': categoriaId,
         'activo': activo ? 1 : 0,
       };
+
+  /// Copia con otro valor de puntaje.
+  ActivoTipo copyWithPuntaje(int? puntaje) {
+    final copia = ActivoTipo(
+      id: id,
+      nombre: nombre,
+      grupo: grupo,
+      modelo: modelo,
+      categoriaId: categoriaId,
+      activo: activo,
+    );
+    copia.puntaje = puntaje;
+    return copia;
+  }
 }

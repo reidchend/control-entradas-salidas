@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/receta.dart';
-import '../../data/producciones_providers.dart';
-import '../../data/producciones_repository.dart';
+import '../../../../core/models/receta.dart';
+import '../../../producciones/data/producciones_providers.dart';
+import '../../../producciones/data/producciones_repository.dart';
 
 /// Diálogo para elegir a qué lote pendiente vincular una nueva entrada de
 /// producción, o crear uno nuevo.

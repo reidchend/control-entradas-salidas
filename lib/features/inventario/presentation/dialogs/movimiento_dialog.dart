@@ -48,7 +48,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   String _almacen = 'principal';
   List<String> _almacenes = ['principal'];
   int? _recetaId;
-  int? _produccionId = widget.produccionIdInicial;
+  int? _produccionId;
 
   final _cantCtrl = TextEditingController(text: '1');
   final _pesoTotalCtrl = TextEditingController();
@@ -78,6 +78,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   @override
   void initState() {
     super.initState();
+    _produccionId = widget.produccionIdInicial;
     _esProductoProduccion = RolesTipoProducto.rolDe(_producto.tipo) ==
         RolesTipoProducto.produccion;
     WidgetsBinding.instance.addPostFrameCallback((_) {

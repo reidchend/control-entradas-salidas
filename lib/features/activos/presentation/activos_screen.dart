@@ -501,7 +501,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       //    "minibar", "nevera") para el mismo artículo; si ya existe uno
       //    parecido, ofrecer vincular en vez de crear un tipo duplicado.
       final similares = await repo.buscarTiposSimilares(
-        datos.nombre,
+        nombre: datos.nombre,
         marca: datos.marca,
         modelo: datos.modelo,
       );

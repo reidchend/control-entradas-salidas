@@ -116,7 +116,8 @@ Future<AccionTipoExistente?> showTipoCoincidenteDialog(
                   'Se suma una unidad al tipo tal cual está.',
                   style: TextStyle(fontSize: 11, color: Colors.onSurfaceVariant),
                 ),
-                onTap: () => Navigator.pop(ctx, AccionTipoExistente.usarExistente),
+                onTap: () =>
+                    Navigator.pop(ctx, AccionTipoExistente.usarExistente),
               ),
               ListTile(
                 dense: true,
@@ -150,7 +151,7 @@ Future<AccionTipoExistente?> showTipoCoincidenteDialog(
                 onTap: () => Navigator.pop(ctx, AccionTipoExistente.crearNuevo),
               ),
             ],
-          ],
+          ),
         ),
         actions: [
           TextButton(

@@ -337,12 +337,12 @@ class ActivosRepository {
           (t.modelo ?? '').trim().toLowerCase().contains(modelo!.trim().toLowerCase());
       final puntaje = coincide + (marcaCoincide ? 5 : 0) + (modeloCoincide ? 5 : 0);
       if (puntaje > 0) {
-        tipos.add(t.._puntaje = puntaje);
+        tipos.add(t.copyWithPuntaje(puntaje));
       }
     }
 
     // Ordenar por puntaje descendente
-    tipos.sort((a, b) => (b._puntaje ?? 0).compareTo(a._puntaje ?? 0));
+    tipos.sort((a, b) => (b.puntaje ?? 0).compareTo(a.puntaje ?? 0));
     return tipos;
   }
 
