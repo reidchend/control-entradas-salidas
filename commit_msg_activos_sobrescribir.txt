@@ -1,0 +1,14 @@
+feat(activos): sobrescribir tipo existente al identificar con IA
+
+Al identificar un activo por foto que ya existe en el catálogo, el diálogo
+ahora ofrece tres opciones:
+
+1. Usar tipo existente (sin cambios) - como antes.
+2. Sobrescribir existente con datos de la foto - actualiza nombre, grupo,
+   modelo y categoría del tipo existente; todas sus unidades heredan los
+   cambios porque apuntan al mismo tipo_id.
+3. Crear tipo nuevo - como antes.
+
+Esto evita tener tipos duplicados como "frigorífico", "minibar", "nevera
+ejecutiva" para el mismo artículo, y permite corregir el catálogo con los
+datos más exactos de la foto sin crear tipos nuevos.

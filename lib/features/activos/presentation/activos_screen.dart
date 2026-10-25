@@ -520,6 +520,7 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
       // Si el nombre coincide exactamente con un tipo del catálogo (nombre
       // normalizado igual), también ofrecer vincular.
       ActivoTipo? exacto = datos.tipoCoincidenteEn(tipos);
+      ActivoTipo? tipoParaSobrescribir;
       if (tipoExistenteElegido == null && exacto != null) {
         var unidades = 0;
         for (final m in filas) {
@@ -528,13 +529,31 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
             break;
           }
         }
-        final usarExistente = await showTipoCoincidenteDialog(
+        final accion = await showTipoCoincidenteDialog(
           context,
           existente: exacto,
           unidades: unidades,
         );
-        if (usarExistente == null || !mounted) return;
-        if (usarExistente == true) {
+        if (!mounted) return;
+        if (accion == AccionTipoExistente.crearNuevo) {
+          // Se crea tipo nuevo con los datos de la IA.
+          tipoExistenteElegido = null;
+        } else if (accion == AccionTipoExistente.sobrescribirExistente) {
+          // Actualizar el tipo existente con los datos de la IA; todas sus
+          // unidades heredan los cambios porque apuntan al mismo tipo_id.
+          await repo.updateTipo(
+            exacto.id,
+            ActivoTipo(
+              id: exacto.id,
+              nombre: datos.nombre,
+              grupo: datos.grupo.isEmpty ? null : datos.grupo,
+              modelo: datos.modelo.isEmpty ? null : datos.modelo,
+              categoriaId: datos.categoriaIdEn(categorias),
+              activo: exacto.activo,
+            ),
+          );
+          tipoExistenteElegido = exacto;
+        } else {
           tipoExistenteElegido = exacto;
         }
       }
