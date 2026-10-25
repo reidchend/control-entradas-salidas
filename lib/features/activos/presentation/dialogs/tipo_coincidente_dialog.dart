@@ -112,9 +112,9 @@ Future<AccionTipoExistente?> showTipoCoincidenteDialog(
                   'Usar tipo existente',
                   style: TextStyle(fontSize: 13),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Se suma una unidad al tipo tal cual está.',
-                  style: TextStyle(fontSize: 11, color: Colors.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
                 onTap: () =>
                     Navigator.pop(ctx, AccionTipoExistente.usarExistente),
@@ -127,9 +127,9 @@ Future<AccionTipoExistente?> showTipoCoincidenteDialog(
                   'Sobrescribir con datos de la foto',
                   style: TextStyle(fontSize: 13),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Actualiza nombre, grupo y modelo del tipo; todas sus unidades heredan los cambios.',
-                  style: TextStyle(fontSize: 11, color: Colors.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
                 onTap: () => Navigator.pop(
                   ctx,
@@ -144,9 +144,9 @@ Future<AccionTipoExistente?> showTipoCoincidenteDialog(
                   'Crear tipo nuevo',
                   style: TextStyle(fontSize: 13),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'El tipo existente no cambia.',
-                  style: TextStyle(fontSize: 11, color: Colors.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
                 onTap: () => Navigator.pop(ctx, AccionTipoExistente.crearNuevo),
               ),

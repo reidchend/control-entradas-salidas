@@ -144,8 +144,9 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
 
     final pendientes = await prodRepo.getProduccionesPorEstado('pendiente');
     if (!mounted) return;
+    final recetaId = recetaSeleccionada?.id;
     final lotes =
-        pendientes.where((p) => p.recetaId == recetaSeleccionada.id).toList();
+        pendientes.where((p) => p.recetaId == recetaId).toList();
 
     int? produccionIdInicial;
     if (lotes.isNotEmpty) {

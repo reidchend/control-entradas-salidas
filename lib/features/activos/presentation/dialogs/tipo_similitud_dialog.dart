@@ -78,8 +78,8 @@ Future<ActivoTipo?> showTipoSimilarDialog({
                     if ((t.modelo ?? '').trim().isNotEmpty)
                       t.modelo!.trim(),
                   ].join(' · '),
-                  style: const TextStyle(fontSize: 11,
-                      color: Colors.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11,
+                      color: scheme.onSurfaceVariant),
                 ),
                 trailing: const Icon(Icons.link, size: 18),
                 onTap: () => Navigator.pop(ctx, t),
@@ -95,8 +95,8 @@ Future<ActivoTipo?> showTipoSimilarDialog({
                 ),
                 subtitle: Text(
                   '«${identificado.nombre}»',
-                  style: const TextStyle(fontSize: 11,
-                      color: Colors.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11,
+                      color: scheme.onSurfaceVariant),
                 ),
                 onTap: () => Navigator.pop(ctx),
               ),

@@ -1,0 +1,9 @@
+fix: Colors.onSurfaceVariant no existe; usar scheme.onSurfaceVariant
+
+- tipo_coincidente_dialog.dart: 3 subtitulos usaban Colors.onSurfaceVariant
+  (que no existe como constante); ahora usan scheme.onSurfaceVariant del
+  ColorScheme del builder (sin const en el TextStyle).
+- tipo_similitud_dialog.dart: 2 TextStyle usaban Colors.onSurfaceVariant;
+  ahora usan scheme.onSurfaceVariant (sin const).
+- productos_panel.dart: recetaSeleccionada es nullable; usar null-aware access
+  para obtener .id de forma segura.
