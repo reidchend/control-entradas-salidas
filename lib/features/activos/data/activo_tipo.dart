@@ -22,6 +22,9 @@ class ActivoTipo {
   final int? categoriaId;
   final bool activo;
 
+  /// Puntaje de coincidencia interno (usado solo en `buscarTiposSimilares`).
+  int? _puntaje;
+
   factory ActivoTipo.fromMap(Map<String, dynamic> m) => ActivoTipo(
         id: m['id'] as int,
         nombre: (m['nombre'] as String?) ?? '',

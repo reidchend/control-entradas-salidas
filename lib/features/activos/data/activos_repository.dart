@@ -267,6 +267,97 @@ class ActivosRepository {
     });
   }
 
+  /// Busca tipos existentes que podrían ser el mismo artículo que el identificado
+  /// por la IA. Compara por:
+  /// 1. Nombre: si el tipo existente contiene alguna palabra clave del nombre
+  ///    de la IA (o viceversa), después de normalizar.
+  /// 2. Marca + modelo: si la IA devolvió ambos y el tipo existente los tiene.
+  ///
+  /// Devuelve los candidatos ordenados por relevancia (mejor coincidencia
+  /// primero), para ofrecer al usuario "vincular a existente o crear nuevo".
+  Future<List<ActivoTipo>> buscarTiposSimilares({
+    required String nombre,
+    String? marca,
+    String? modelo,
+  }) async {
+    final nombreNorm = _normalizarNombre(nombre);
+    if (nombreNorm.isEmpty) return [];
+
+    // Extraer palabras clave del nombre (3+ caracteres, sin artículos comunes)
+    final stopWords = {'de', 'del', 'la', 'las', 'los', 'un', 'una', 'y', 'o',
+        'con', 'para', 'por', 'en', 'el', 'a', 'e'};
+    final palabras = nombreNorm
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 3 && !stopWords.contains(w))
+        .toSet()
+        .toList();
+
+    if (palabras.isEmpty) return [];
+
+    // Construir condiciones: nombre contiene al menos una palabra clave
+    final condiciones = <String>[];
+    final params = <dynamic>[];
+    var i = 0;
+    for (final p in palabras.take(6)) {
+      params.add('%$p%');
+      condiciones.add('LOWER(nombre) LIKE \$${++i}');
+    }
+
+    // Si hay marca y modelo, también buscar por esos campos
+    if ((marca ?? '').trim().isNotEmpty) {
+      params.add('%${marca!.trim()}%');
+      condiciones.add('LOWER(COALESCE(marca, \'\')) LIKE \$${++i}');
+    }
+    if ((modelo ?? '').trim().isNotEmpty) {
+      params.add('%${modelo!.trim()}%');
+      condiciones.add('LOWER(COALESCE(modelo, \'\')) LIKE \$${++i}');
+    }
+
+    if (condiciones.isEmpty) return [];
+
+    final rows = await _db.executeSql(
+      'SELECT * FROM activos_tipos '
+      'WHERE activo = TRUE AND (${condiciones.join(' OR ')}) '
+      'ORDER BY id LIMIT 20',
+      params: params,
+    );
+
+    final tipos = <ActivoTipo>[];
+    for (final r in rows) {
+      final t = ActivoTipo.fromMap(r);
+      // Calcular puntuación simple: cuántas palabras clave coinciden en el nombre
+      final tNorm = _normalizarNombre(t.nombre);
+      final coincide = palabras.where((p) => tNorm.contains(p)).length;
+      // Si coincide por marca+modelo exacto, subir puntuación
+      final marcaCoincide = marca != null &&
+          marca!.trim().isNotEmpty &&
+          (t.modelo ?? '').trim().toLowerCase().contains(marca!.trim().toLowerCase());
+      final modeloCoincide = modelo != null &&
+          modelo!.trim().isNotEmpty &&
+          (t.modelo ?? '').trim().toLowerCase().contains(modelo!.trim().toLowerCase());
+      final puntaje = coincide + (marcaCoincide ? 5 : 0) + (modeloCoincide ? 5 : 0);
+      if (puntaje > 0) {
+        tipos.add(t.._puntaje = puntaje);
+      }
+    }
+
+    // Ordenar por puntaje descendente
+    tipos.sort((a, b) => (b._puntaje ?? 0).compareTo(a._puntaje ?? 0));
+    return tipos;
+  }
+
+  /// Normaliza un nombre para comparación: minúsculas, sin acentos, espacios simples.
+  static String _normalizarNombre(String s) => s
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp('[áàäâ]'), 'a')
+      .replaceAll(RegExp('[éèëê]'), 'e')
+      .replaceAll(RegExp('[íìïî]'), 'i')
+      .replaceAll(RegExp('[óòöô]'), 'o')
+      .replaceAll(RegExp('[úùüû]'), 'u')
+      .replaceAll('ñ', 'n');
+
   Future<void> updateTipo(int id, ActivoTipo tipo) async {
     final nombre = tipo.nombre.trim();
     if (nombre.isEmpty) {

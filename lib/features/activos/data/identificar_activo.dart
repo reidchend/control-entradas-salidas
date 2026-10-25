@@ -62,6 +62,9 @@ Reglas:
 - "confianza": número entre 0 y 1 sobre la identificación.
 - No inventes datos. Si no reconocés el artículo, usá el nombre
   "Artículo sin identificar", confianza 0 y explicá en "descripcion" qué se ve.
+- El nombre debe ser corto y directo: usá el nombre comercial estándar del
+  artículo (ej. "Nevera ejecutiva", "Aire acondicionado", "Silla de oficina"),
+  no sinónimos ni variantes. No inventes tipos nuevos.
 ''';
 
 /// Extrae el primer objeto JSON del texto del modelo.

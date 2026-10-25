@@ -14,6 +14,7 @@ import 'dialogs/fusionar_tipos_dialog.dart';
 import 'dialogs/identificar_activo_dialog.dart';
 import 'dialogs/tipo_coincidente_dialog.dart';
 import 'dialogs/tipo_dialog.dart';
+import 'dialogs/tipo_similitud_dialog.dart';
 import 'widgets/activos_categorias_grid.dart';
 import 'widgets/activos_filtrados_panel.dart';
 import 'widgets/activos_tipos_grid.dart';
@@ -486,24 +487,47 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         categoriaId: datos.categoriaIdEn(categorias),
       );
 
-      // Si el nombre coincide con un tipo del catálogo, preguntar antes de
-      // crear otro: lo habitual es que sea el mismo artículo en otra ubicación.
-      final existente = datos.tipoCoincidenteEn(tipos);
-      bool? usarExistente;
-      if (existente != null) {
+      // 1) Primero buscar tipos existentes similares por nombre, marca y
+      //    modelo. La IA a veces usa sinónimos distintos ("frigorífico",
+      //    "minibar", "nevera") para el mismo artículo; si ya existe uno
+      //    parecido, ofrecer vincular en vez de crear un tipo duplicado.
+      final similares = await repo.buscarTiposSimilares(
+        datos.nombre,
+        marca: datos.marca,
+        modelo: datos.modelo,
+      );
+      if (!mounted) return;
+
+      ActivoTipo? tipoExistenteElegido;
+      if (similares.isNotEmpty) {
+        tipoExistenteElegido = await showTipoSimilarDialog(
+          context: context,
+          similares: similares,
+          identificado: datos,
+        );
+        if (!mounted) return;
+      }
+
+      // Si el nombre coincide exactamente con un tipo del catálogo (nombre
+      // normalizado igual), también ofrecer vincular.
+      ActivoTipo? exacto = datos.tipoCoincidenteEn(tipos);
+      if (tipoExistenteElegido == null && exacto != null) {
         var unidades = 0;
         for (final m in filas) {
-          if ((m['tipo'] as ActivoTipo).id == existente.id) {
+          if ((m['tipo'] as ActivoTipo).id == exacto.id) {
             unidades = (m['unidades'] as int?) ?? 0;
             break;
           }
         }
-        usarExistente = await showTipoCoincidenteDialog(
+        final usarExistente = await showTipoCoincidenteDialog(
           context,
-          existente: existente,
+          existente: exacto,
           unidades: unidades,
         );
         if (usarExistente == null || !mounted) return;
+        if (usarExistente == true) {
+          tipoExistenteElegido = exacto;
+        }
       }
 
       await showActivoFormScreen(
@@ -517,8 +541,8 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
         onCrearEstado: (n) => repo.createEstado(n),
         onExisteUnidad: (t, u) => repo.existeUnidad(t, u),
         ubicacionesSugeridas: ubicaciones,
-        tipoIdFijo: usarExistente == true ? existente?.id : null,
-        tipoPreset: usarExistente == true ? null : propuesto,
+        tipoIdFijo: tipoExistenteElegido?.id,
+        tipoPreset: tipoExistenteElegido == null ? propuesto : null,
         observacionesPreset: datos.observaciones,
       );
       if (mounted) setState(() {});

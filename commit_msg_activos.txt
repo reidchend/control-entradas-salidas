@@ -1,0 +1,15 @@
+feat(activos): evitar tipos duplicados al identificar con IA
+
+Antes de crear un tipo nuevo a partir de una foto, el sistema ahora busca
+tipos existentes similares por nombre (palabras clave), marca y modelo, y
+ofrece al usuario vincular a uno existente en vez de crear un duplicado.
+
+- Mejorado el prompt de Gemini: nombres más consistentes y directos
+  ("Nevera ejecutiva" en lugar de "frigorífico" o "minibar").
+- Nuevo método buscarTiposSimilares en activos_repository: busca por nombre
+  (palabras clave), marca y modelo, ordenado por relevancia.
+- Nuevo diálogo tipo_similitud_dialog: muestra los tipos similares
+  encontrados y ofrece vincular o crear nuevo.
+- Integracion en _crearActivoPorFoto: valida antes de abrir el formulario
+  de alta, para evitar tipos duplicados con nombres distintos para el
+  mismo articulo.
