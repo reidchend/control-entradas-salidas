@@ -303,10 +303,15 @@ class ActivosRepository {
       condiciones.add('LOWER(nombre) LIKE \$${++i}');
     }
 
-    // Si hay marca y modelo, también buscar por esos campos
+    // Si hay modelo, también buscar por ese campo. La "marca" de la IA no
+    // es una columna de activos_tipos; suele estar dentro del nombre del
+    // tipo, así que se agrega como palabra clave extra del nombre.
     if ((marca ?? '').trim().isNotEmpty) {
-      params.add('%${marca!.trim()}%');
-      condiciones.add('LOWER(COALESCE(marca, \'\')) LIKE \$${++i}');
+      final m = marca!.trim().toLowerCase();
+      if (!palabras.contains(m) && m.length >= 3) {
+        params.add('%$m%');
+        condiciones.add('LOWER(nombre) LIKE \$${++i}');
+      }
     }
     if ((modelo ?? '').trim().isNotEmpty) {
       params.add('%${modelo!.trim()}%');
