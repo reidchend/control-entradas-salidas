@@ -61,14 +61,6 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
     if (recetaId == null) return [];
     final pendientes = await widget.repo.getProduccionesPorEstado('pendiente');
     final lotes = pendientes.where((p) => p.recetaId == recetaId).toList();
-    // Si hay lotes abiertos, se pre-selecciona el más reciente (la consulta ya
-    // viene ordenada por fecha desc). Así "sumar al lote en curso" es el
-    // camino por defecto y crear un lote nuevo pasa a ser una elección
-    // consciente del usuario.
-    if (!_autoAplicado && lotes.isNotEmpty && widget.produccionId == null) {
-      _autoAplicado = true;
-      widget.onChanged(lotes.first.id);
-    }
     return lotes;
   }
 
