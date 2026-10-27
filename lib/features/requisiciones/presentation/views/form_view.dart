@@ -31,6 +31,7 @@ class _FormViewState extends ConsumerState<FormView> {
   String? _origen;
   String? _destino;
   final _obsCtrl = TextEditingController();
+  final _focusNode = FocusNode();
   bool _guardando = false;
   bool _cargado = false;
 
@@ -46,6 +47,7 @@ class _FormViewState extends ConsumerState<FormView> {
   @override
   void dispose() {
     _obsCtrl.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -179,14 +181,28 @@ class _FormViewState extends ConsumerState<FormView> {
     );
   }
 
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.f1 &&
+        !_guardando) {
+      _agregarProducto();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (!_cargado) {
       return const Center(child: CircularProgressIndicator());
     }
-    return Stack(
-      children: [
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _onKeyEvent,
+      child: Stack(
+        children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -249,11 +265,12 @@ class _FormViewState extends ConsumerState<FormView> {
               backgroundColor: scheme.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add),
-              label: const Text('Agregar Producto'),
+              label: const Text('Agregar Producto (F1)'),
             ),
           ),
         ),
       ],
+      ),
     );
   }
 
