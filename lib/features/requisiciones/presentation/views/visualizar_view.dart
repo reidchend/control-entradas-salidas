@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/models/requisicion.dart';
-import '../../../../core/utils/web_utils.dart';
 import '../../../../core/widgets/error_display.dart';
 import '../../data/requisiciones_providers.dart';
 
@@ -78,10 +78,20 @@ class _VisualizarViewState extends ConsumerState<VisualizarView> {
 
   Future<void> _compartirWhatsApp() async {
     final msg = _mensaje();
-    final url =
-        'https://wa.me/?text=${Uri.encodeComponent(msg)}';
-    openInNewTab(url);
-    _snack('Abriendo WhatsApp...');
+    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(msg)}');
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) {
+        _snack('Abriendo WhatsApp...');
+      } else if (mounted) {
+        _snack('No se pudo abrir WhatsApp');
+      }
+    } catch (e) {
+      if (mounted) _snack('No se pudo abrir WhatsApp: $e');
+    }
   }
 
   Future<void> _copiar() async {
