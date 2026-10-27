@@ -808,4 +808,22 @@ class ActivosRepository {
       'ORDER BY categoria_nombre, t.grupo',
     );
   }
+
+  /// Totales por tipo: nº de unidades y valor total agrupados por
+  /// categoría, grupo, tipo y modelo.
+  Future<List<Map<String, dynamic>>> getTotalesPorTipo() async {
+    return _db.executeSql(
+      'SELECT COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre, '
+      'COALESCE(NULLIF(t.grupo, \'\'), \'Sin grupo\') AS grupo, '
+      't.nombre AS tipo, '
+      'COALESCE(t.modelo, \'\') AS modelo, '
+      'COUNT(a.id) AS unidades, '
+      'COALESCE(SUM(a.valor), 0) AS valor_total '
+      'FROM activos a '
+      'JOIN activos_tipos t ON t.id = a.tipo_id '
+      'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
+      'GROUP BY c.nombre, t.grupo, t.nombre, t.modelo '
+      'ORDER BY categoria_nombre, t.grupo, t.nombre',
+    );
+  }
 }

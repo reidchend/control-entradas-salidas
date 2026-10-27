@@ -9,8 +9,9 @@ import '../../data/activos_providers.dart';
 
 /// Diálogo de exportación de activos a Excel.
 ///
-/// Genera un XLSX con dos hojas: "Activos" (todos) y "Totales por Grupo"
-/// (conteo, unidades y valor total por categoría+grupo).
+/// Genera un XLSX con tres hojas: "Activos" (todos), "Totales por Grupo"
+/// (conteo, unidades y valor total por categoría+grupo) y "Totales por Tipo"
+/// (unidades y valor total por categoría+grupo+tipo).
 Future<void> showActivosExcelDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
@@ -42,13 +43,15 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Se generará un archivo con dos hojas:',
+              'Se generará un archivo con tres hojas:',
               style: TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 8),
             const Text('• Activos: lista completa con todos sus parámetros.'),
-            const Text('• Totales por Grupo: cantidad, unidades y valor '
-                'total agrupados por categoría y grupo.'),
+            const Text('• Totales por Grupo: unidades y valor total '
+                'agrupados por categoría y grupo.'),
+            const Text('• Totales por Tipo: unidades y valor total '
+                'agrupados por categoría, grupo y tipo.'),
             const SizedBox(height: 8),
             Text(
               'Incluye también los activos desactivados.',
@@ -83,7 +86,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     try {
       final repo = ref.read(activosRepoProvider)!;
       final activos = await repo.getActivosParaExportar();
-      final totales = await repo.getTotalesPorGrupo();
+      final totalesGrupo = await repo.getTotalesPorGrupo();
+      final totalesTipo = await repo.getTotalesPorTipo();
 
       if (activos.isEmpty) {
         messenger.showSnackBar(
@@ -101,7 +105,7 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
       // directorio de trabajo del proceso (el directorio del .exe, dentro de la
       // carpeta del programa): el archivo se guardaba pero el usuario no sabia
       // donde buscarlo, porque el mensaje solo decia el nombre del archivo.
-      final excel = _armarExcel(activos, totales);
+      final excel = _armarExcel(activos, totalesGrupo, totalesTipo);
 
       // En movil y web esto no abre dialogo: en movil se guarda en la carpeta
       // de la app y en web el navegador gestiona la descarga. El spinner se
@@ -149,7 +153,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
 
   Excel _armarExcel(
     List<Map<String, dynamic>> activos,
-    List<Map<String, dynamic>> totales,
+    List<Map<String, dynamic>> totalesGrupo,
+    List<Map<String, dynamic>> totalesTipo,
   ) {
     final excel = Excel.createExcel();
     final headerStyle = CellStyle(
@@ -162,7 +167,8 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
     );
 
     _hojaActivos(excel, headerStyle, activos);
-    _hojaTotales(excel, headerStyle, totales);
+    _hojaTotales(excel, headerStyle, totalesGrupo);
+    _hojaTotalesPorTipo(excel, headerStyle, totalesTipo);
 
     return excel;
   }
@@ -237,6 +243,41 @@ class _ActivosExcelDialogState extends ConsumerState<_ActivosExcelDialog> {
         TextCellValue((t['categoria_nombre'] as String?) ?? 'Sin categoría'),
         TextCellValue((t['grupo'] as String?) ?? 'Sin grupo'),
         DoubleCellValue(_toDouble(t['n_activos'])),
+        DoubleCellValue(_toDouble(t['unidades'])),
+        DoubleCellValue(_toDouble(t['valor_total'])),
+      ]);
+    }
+  }
+
+  void _hojaTotalesPorTipo(
+    Excel excel,
+    CellStyle headerStyle,
+    List<Map<String, dynamic>> totales,
+  ) {
+    final sheet = excel['Totales por Tipo'];
+    const headers = [
+      'Categoría',
+      'Grupo',
+      'Tipo',
+      'Modelo',
+      'Unidades',
+      'Valor Total (Bs)',
+    ];
+    sheet.appendRow([for (final h in headers) TextCellValue(h)]);
+    for (var c = 0; c < headers.length; c++) {
+      sheet.updateCell(
+        CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0),
+        TextCellValue(headers[c]),
+        cellStyle: headerStyle,
+      );
+    }
+
+    for (final t in totales) {
+      sheet.appendRow([
+        TextCellValue((t['categoria_nombre'] as String?) ?? 'Sin categoría'),
+        TextCellValue((t['grupo'] as String?) ?? 'Sin grupo'),
+        TextCellValue((t['tipo'] as String?) ?? ''),
+        TextCellValue((t['modelo'] as String?) ?? ''),
         DoubleCellValue(_toDouble(t['unidades'])),
         DoubleCellValue(_toDouble(t['valor_total'])),
       ]);
