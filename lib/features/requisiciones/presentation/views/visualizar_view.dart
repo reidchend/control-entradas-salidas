@@ -85,12 +85,14 @@ class _VisualizarViewState extends ConsumerState<VisualizarView> {
         mode: LaunchMode.externalApplication,
       );
       if (launched) {
-        _snack('Abriendo WhatsApp...');
-      } else if (mounted) {
-        _snack('No se pudo abrir WhatsApp');
+        if (mounted) _snack('Abriendo WhatsApp...');
+        return;
       }
-    } catch (e) {
-      if (mounted) _snack('No se pudo abrir WhatsApp: $e');
+    } catch (_) {}
+    // Fallback: copiar al portapapeles si no se puede abrir la app
+    await Clipboard.setData(ClipboardData(text: msg));
+    if (mounted) {
+      _snack('No se pudo abrir WhatsApp. Mensaje copiado al portapapeles');
     }
   }
 
