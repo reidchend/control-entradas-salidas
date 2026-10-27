@@ -38,7 +38,7 @@ class LoteSelectorPanel extends StatefulWidget {
 
 class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
   late Future<List<ProduccionInfo>> _future;
-  bool _autoAplicado = false;
+  bool _expandido = false;
 
   @override
   void initState() {
@@ -51,8 +51,12 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
     super.didUpdateWidget(old);
     if (old.recetaId != widget.recetaId) {
       // Cambió la receta: los lotes a ofrecer son otros.
-      _autoAplicado = false;
+      _expandido = false;
       _future = _cargar();
+    }
+    if (old.produccionId != widget.produccionId) {
+      // Si viene preseleccionado/cambiado desde fuera, volver a compacto.
+      _expandido = false;
     }
   }
 
@@ -73,8 +77,96 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
       builder: (context, snap) {
         final lotes = snap.data ?? const <ProduccionInfo>[];
         if (lotes.isEmpty) return _avisoSinLotes(context);
+        if (!_expandido) {
+          return _resumenCompacto(context, lotes);
+        }
         return _opciones(context, lotes);
       },
+    );
+  }
+
+  Widget _resumenCompacto(BuildContext context, List<ProduccionInfo> lotes) {
+    final scheme = Theme.of(context).colorScheme;
+    final texto = Theme.of(context).textTheme;
+    ProduccionInfo? loteSeleccionado;
+    if (widget.produccionId != null) {
+      for (final l in lotes) {
+        if (l.id == widget.produccionId) {
+          loteSeleccionado = l;
+          break;
+        }
+      }
+    }
+
+    final esNuevo = widget.produccionId == null;
+    final icono = esNuevo ? Icons.add_circle_outline : Icons.link;
+    final titulo = esNuevo
+        ? 'Creando producción nueva'
+        : 'Sumando al Lote #${widget.produccionId}';
+    String subtitulo = '';
+    if (!esNuevo && loteSeleccionado != null) {
+      subtitulo =
+          '${formatearCantidad(loteSeleccionado.cantidad)} en el lote · abierto ${_fmtFecha(loteSeleccionado.fechaProduccion)}';
+      if ((loteSeleccionado.usuario ?? '').isNotEmpty) {
+        subtitulo += ' · ${loteSeleccionado.usuario}';
+      }
+    } else if (esNuevo) {
+      subtitulo = 'Se abrirá un lote aparte con esta entrada';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Destino de la entrada',
+          style: texto.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              Icon(icono, size: 20, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    if (subtitulo.isNotEmpty)
+                      Text(
+                        subtitulo,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _expandido = true),
+                child: const Text('Cambiar'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -111,11 +203,21 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '¿Sumar a un lote abierto o crear uno nuevo?',
-          style: texto.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Destino de la entrada',
+                style: texto.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _expandido = false),
+              child: const Text('Cerrar'),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         for (final l in lotes)
           _tarjeta(
             context: context,
@@ -126,7 +228,10 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
             subtitulo: '${formatearCantidad(l.cantidad)} en el lote'
                 ' · abierto ${_fmtFecha(l.fechaProduccion)}'
                 ' · ${l.usuario ?? 'Sistema'}',
-            onTap: () => widget.onChanged(l.id),
+            onTap: () {
+              widget.onChanged(l.id);
+              if (mounted) setState(() => _expandido = false);
+            },
           ),
         _tarjeta(
           context: context,
@@ -135,7 +240,10 @@ class _LoteSelectorPanelState extends State<LoteSelectorPanel> {
           icono: Icons.add_circle_outline,
           titulo: 'Producción nueva',
           subtitulo: 'Crear un lote aparte con esta entrada',
-          onTap: () => widget.onChanged(null),
+          onTap: () {
+            widget.onChanged(null);
+            if (mounted) setState(() => _expandido = false);
+          },
         ),
       ],
     );
