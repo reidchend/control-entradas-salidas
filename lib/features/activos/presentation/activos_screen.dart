@@ -509,12 +509,29 @@ class _ActivosScreenState extends ConsumerState<ActivosScreen> {
 
       ActivoTipo? tipoExistenteElegido;
       if (similares.isNotEmpty) {
-        tipoExistenteElegido = await showTipoSimilarDialog(
+        final selSimilar = await showTipoSimilarDialog(
           context: context,
           similares: similares,
           identificado: datos,
         );
         if (!mounted) return;
+        if (selSimilar != null) {
+          if (selSimilar.sobrescribir) {
+            await repo.updateTipo(
+              selSimilar.tipo.id,
+              ActivoTipo(
+                id: selSimilar.tipo.id,
+                nombre: datos.nombre,
+                grupo: datos.grupo.isEmpty ? null : datos.grupo,
+                modelo: datos.modelo.isEmpty ? null : datos.modelo,
+                categoriaId: datos.categoriaIdEn(categorias),
+                activo: selSimilar.tipo.activo,
+              ),
+            );
+          }
+          tipoExistenteElegido = selSimilar.tipo;
+        }
+        // Si es null -> crear tipo nuevo con los datos de la IA
       }
 
       // Si el nombre coincide exactamente con un tipo del catálogo (nombre
