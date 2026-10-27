@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/models/requisicion.dart';
+import '../../../../core/utils/web_utils.dart';
 import '../../../../core/widgets/error_display.dart';
 import '../../data/requisiciones_providers.dart';
 
@@ -78,21 +78,15 @@ class _VisualizarViewState extends ConsumerState<VisualizarView> {
 
   Future<void> _compartirWhatsApp() async {
     final msg = _mensaje();
-    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(msg)}');
+    final url = 'https://wa.me/?text=${Uri.encodeComponent(msg)}';
     try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (launched) {
-        if (mounted) _snack('Abriendo WhatsApp...');
-        return;
+      openInNewTab(url);
+      if (mounted) _snack('Abriendo WhatsApp...');
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: msg));
+      if (mounted) {
+        _snack('No se pudo abrir WhatsApp. Mensaje copiado al portapapeles');
       }
-    } catch (_) {}
-    // Fallback: copiar al portapapeles si no se puede abrir la app
-    await Clipboard.setData(ClipboardData(text: msg));
-    if (mounted) {
-      _snack('No se pudo abrir WhatsApp. Mensaje copiado al portapapeles');
     }
   }
 
