@@ -9,6 +9,7 @@ import 'widgets/categorias_grid.dart';
 import 'widgets/productos_panel.dart';
 import 'widgets/lista_compra_panel.dart';
 import 'widgets/descargo_consumibles_panel.dart';
+import 'dialogs/libro_inventario_dialog.dart';
 
 /// Pantalla de Inventario (porta `usr/views/inventario_view.py`).
 ///
@@ -211,6 +212,11 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                 _vistaDescargo = true;
                 _vistaListaCompra = false;
               }),
+            ),
+            IconButton(
+              icon: const Icon(Icons.menu_book_outlined),
+              tooltip: 'Libro de Inventario Mensual',
+              onPressed: () => showLibroInventarioMensualDialog(context),
             ),
             IconButton(
               icon: const Icon(Icons.shopping_cart_outlined),
