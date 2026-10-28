@@ -382,6 +382,15 @@ class ActivosRepository {
     await _db.updateById('activos_tipos', id, tipo.toMap());
   }
 
+  Future<void> updatePrecioReferencia(
+      int id, double precio, String origen) async {
+    await _db.updateById('activos_tipos', id, {
+      'precio_referencia': precio,
+      'precio_origen': origen,
+      'precio_actualizado_at': DateTime.now().toIso8601String(),
+    });
+  }
+
   /// La escritura canónica (menor id) de un grupo/modelo, para reutilizarla en
   /// vez de crear una variante de mayúsculas. Devuelve [valor] si no hay
   /// ninguna registrada todavía.

@@ -13,6 +13,9 @@ class ActivoTipo {
     this.modelo,
     this.categoriaId,
     this.activo = true,
+    this.precioReferencia,
+    this.precioOrigen,
+    this.precioActualizadoAt,
   });
 
   final int id;
@@ -21,6 +24,9 @@ class ActivoTipo {
   final String? modelo;
   final int? categoriaId;
   final bool activo;
+  final double? precioReferencia;
+  final String? precioOrigen;
+  final DateTime? precioActualizadoAt;
 
   /// Puntaje de coincidencia interno (usado solo en `buscarTiposSimilares`).
   int? puntaje;
@@ -34,6 +40,13 @@ class ActivoTipo {
             ? null
             : (m['categoria_id'] as num).toInt(),
         activo: toBool(m['activo'], fallback: true),
+        precioReferencia: m['precio_referencia'] == null
+            ? null
+            : (m['precio_referencia'] as num).toDouble(),
+        precioOrigen: m['precio_origen'] as String?,
+        precioActualizadoAt: m['precio_actualizado_at'] == null
+            ? null
+            : DateTime.tryParse(m['precio_actualizado_at'].toString()),
       );
 
   Map<String, dynamic> toMap() => {
@@ -42,6 +55,9 @@ class ActivoTipo {
         'modelo': modelo,
         'categoria_id': categoriaId,
         'activo': activo ? 1 : 0,
+        'precio_referencia': precioReferencia,
+        'precio_origen': precioOrigen,
+        'precio_actualizado_at': precioActualizadoAt?.toIso8601String(),
       };
 
   /// Copia con otro valor de puntaje.
@@ -53,6 +69,9 @@ class ActivoTipo {
       modelo: modelo,
       categoriaId: categoriaId,
       activo: activo,
+      precioReferencia: precioReferencia,
+      precioOrigen: precioOrigen,
+      precioActualizadoAt: precioActualizadoAt,
     );
     copia.puntaje = puntaje;
     return copia;
