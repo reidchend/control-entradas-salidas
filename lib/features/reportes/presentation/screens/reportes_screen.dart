@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../inventario/presentation/dialogs/libro_inventario_dialog.dart';
 import 'ventas_report_screen.dart';
 import 'movimientos_report_screen.dart';
 import 'estadisticas_report_screen.dart';
@@ -93,6 +94,13 @@ class ReportesScreen extends ConsumerWidget {
                           context,
                           MaterialPageRoute(builder: (_) => const ProductoDetalleReportScreen()),
                         ),
+                      ),
+                      _ReporteCard(
+                        icon: Icons.menu_book_outlined,
+                        titulo: 'Libro de Inventario',
+                        subtitulo: 'Kardex mensual por periodo,\nentradas, ventas, salidas, ajustes y saldo',
+                        color: Colors.indigo.shade700,
+                        onTap: () => showLibroInventarioMensualDialog(context),
                       ),
                     ],
                   ),
