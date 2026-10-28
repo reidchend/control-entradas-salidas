@@ -359,6 +359,78 @@ class InventarioRepository {
       await _db.deleteById('compras_lista', r['id'] as int);
     }
   }
+
+  /// Libro de Inventario Mensual / Kardex por periodo
+  Future<List<Map<String, dynamic>>> getLibroInventarioMensual({
+    required DateTime fechaInicio,
+    required DateTime fechaFin,
+    String? almacen,
+  }) async {
+    final inicio = DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day);
+    final fin = DateTime(fechaFin.year, fechaFin.month, fechaFin.day, 23, 59, 59);
+
+    final params = <dynamic>[inicio.toIso8601String(), fin.toIso8601String()];
+    var paramIdx = 3;
+    String almacenFilter = '';
+    if (almacen != null && almacen.trim().isNotEmpty) {
+      almacenFilter = ' AND m.almacen = \$${paramIdx++} ';
+      params.add(almacen.trim());
+    }
+
+    final sql = '''
+WITH saldo_inicial AS (
+  SELECT m.producto_id,
+         COALESCE(SUM(
+           CASE
+             WHEN m.tipo IN ('entrada', 'entrada_produccion') THEN m.cantidad
+             WHEN m.tipo = 'venta' THEN -m.cantidad
+             WHEN m.tipo IN ('salida', 'consumo', 'traslado_salida') THEN -m.cantidad
+             WHEN m.tipo = 'ajuste' THEN m.cantidad
+             ELSE 0
+           END
+         ), 0) AS saldo_inicial
+  FROM movimientos m
+  WHERE m.fecha_movimiento < \$1
+    $almacenFilter
+  GROUP BY m.producto_id
+),
+periodo AS (
+  SELECT m.producto_id,
+         COALESCE(SUM(CASE WHEN m.tipo IN ('entrada', 'entrada_produccion') THEN m.cantidad ELSE 0 END), 0) AS entradas,
+         COALESCE(SUM(CASE WHEN m.tipo = 'venta' THEN m.cantidad ELSE 0 END), 0) AS ventas,
+         COALESCE(SUM(CASE WHEN m.tipo IN ('salida', 'consumo', 'traslado_salida') THEN m.cantidad ELSE 0 END), 0) AS salidas,
+         COALESCE(SUM(CASE WHEN m.tipo = 'ajuste' AND m.cantidad > 0 THEN m.cantidad ELSE 0 END), 0) AS ajustes_pos,
+         COALESCE(SUM(CASE WHEN m.tipo = 'ajuste' AND m.cantidad < 0 THEN ABS(m.cantidad) ELSE 0 END), 0) AS ajustes_neg
+  FROM movimientos m
+  WHERE m.fecha_movimiento >= \$1 AND m.fecha_movimiento <= \$2
+    $almacenFilter
+  GROUP BY m.producto_id
+)
+SELECT 
+  p.id AS producto_id,
+  p.codigo,
+  p.nombre AS producto,
+  c.nombre AS categoria,
+  p.unidad_medida AS unidad,
+  COALESCE(si.saldo_inicial, 0) AS saldo_inicial,
+  COALESCE(pe.entradas, 0) AS entradas,
+  COALESCE(pe.ventas, 0) AS ventas,
+  COALESCE(pe.salidas, 0) AS salidas,
+  COALESCE(pe.ajustes_pos, 0) AS ajustes_pos,
+  COALESCE(pe.ajustes_neg, 0) AS ajustes_neg,
+  (COALESCE(si.saldo_inicial, 0) + COALESCE(pe.entradas, 0) - COALESCE(pe.ventas, 0) - COALESCE(pe.salidas, 0) + COALESCE(pe.ajustes_pos, 0) - COALESCE(pe.ajustes_neg, 0)) AS saldo_final
+FROM productos p
+LEFT JOIN categorias c ON c.id = p.categoria_id
+LEFT JOIN saldo_inicial si ON si.producto_id = p.id
+LEFT JOIN periodo pe ON pe.producto_id = p.id
+WHERE p.activo = TRUE
+  AND (COALESCE(si.saldo_inicial, 0) <> 0 OR COALESCE(pe.entradas,0)<>0 OR COALESCE(pe.ventas,0)<>0 OR COALESCE(pe.salidas,0)<>0 OR COALESCE(pe.ajustes_pos,0)<>0 OR COALESCE(pe.ajustes_neg,0)<>0)
+ORDER BY c.nombre, p.nombre
+''';
+
+    final rows = await _db.executeSql(sql, params: params);
+    return rows;
+  }
 }
 
 /// Item para la UI de lista de compra (join Producto + Categoría).
