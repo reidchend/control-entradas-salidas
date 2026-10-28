@@ -794,6 +794,7 @@ class ActivosRepository {
   Future<List<Map<String, dynamic>>> getActivosParaExportar() async {
     return _db.executeSql(
       'SELECT a.*, t.nombre, t.grupo, t.modelo, t.categoria_id, '
+      't.precio_referencia, t.precio_origen, t.precio_actualizado_at, '
       'COALESCE(c.nombre, \'Sin categoría\') AS categoria_nombre '
       'FROM activos a '
       'JOIN activos_tipos t ON t.id = a.tipo_id '
@@ -826,12 +827,13 @@ class ActivosRepository {
       'COALESCE(NULLIF(t.grupo, \'\'), \'Sin grupo\') AS grupo, '
       't.nombre AS tipo, '
       'COALESCE(t.modelo, \'\') AS modelo, '
+      't.precio_referencia, '
       'COUNT(a.id) AS unidades, '
       'COALESCE(SUM(a.valor), 0) AS valor_total '
       'FROM activos a '
       'JOIN activos_tipos t ON t.id = a.tipo_id '
       'LEFT JOIN activos_categorias c ON c.id = t.categoria_id '
-      'GROUP BY c.nombre, t.grupo, t.nombre, t.modelo '
+      'GROUP BY c.nombre, t.grupo, t.nombre, t.modelo, t.precio_referencia '
       'ORDER BY categoria_nombre, t.grupo, t.nombre',
     );
   }
