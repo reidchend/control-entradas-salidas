@@ -194,8 +194,11 @@ List<int> construirTicketEscpos({
   // los dos tickets de cobro deben ser idénticos y solo diferir en el rótulo
   // (PARA COCINA / COPIA CLIENTE). Antes `esComandaCocina` lo ocultaba.
   for (final item in items) {
-    final cantStr = '${_formatearCantidad(item.cantidad)}x ';
-    final subtotal = item.precio * item.cantidad;
+    final cant = item.cantidad;
+    final cantStr = '${_formatearCantidad(cant)}x ';
+    final precioUnitario = item.precio;
+    // Asegurar que siempre se muestre el total por línea (cantidad * precio unitario)
+    final subtotal = cant <= 0 ? precioUnitario : precioUnitario * cant;
     final precioStr = '\$${subtotal.toStringAsFixed(2)}';
     var nombre = item.nombre;
     final maxNombre = ticketCols - precioStr.length - 1 - cantStr.length;
@@ -210,9 +213,12 @@ List<int> construirTicketEscpos({
     add([0x1b, 0x45, 0x00]);
     text(nombre);
     add(List.filled(relleno > 0 ? relleno : 0, 0x20));
+    // Hacer el precio más visible (doble altura + doble ancho)
+    add([0x1b, 0x21, 0x30]);
     add([0x1b, 0x45, 0x01]);
     text(precioStr);
     add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x21, 0x00]); // reset
     newline();
 
     for (final c in item.contornos) {
@@ -329,12 +335,14 @@ List<String> construirTicketPreview({
   lineas.add('-' * ticketCols);
 
   for (final item in items) {
-    final cantStr = '${_formatearCantidad(item.cantidad)}x ';
-    final subtotal = item.precio * item.cantidad;
+    final cant = item.cantidad;
+    final cantStr = '${_formatearCantidad(cant)}x ';
+    final precioUnitario = item.precio;
+    final subtotal = cant <= 0 ? precioUnitario : precioUnitario * cant;
     final precioStr = '\$${subtotal.toStringAsFixed(2)}';
     var nombre = item.nombre;
     final maxNombre = ticketCols - precioStr.length - 1 - cantStr.length;
-    if (nombre.length > maxNombre) nombre = nombre.substring(0, maxNombre);
+    if (nombre.length > maxNombre && maxNombre > 0) nombre = nombre.substring(0, maxNombre);
     final izquierda = cantStr + nombre;
     final relleno = ticketCols - izquierda.length - precioStr.length;
     lineas.add('$izquierda${' ' * relleno}$precioStr');
