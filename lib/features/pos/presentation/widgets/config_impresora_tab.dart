@@ -28,6 +28,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
   final _deviceCtrl = TextEditingController();
 
   String _size = 'large';
+  String _precioSize = 'doble_altura';
   int _correlativoActual = 0;
   bool _guardando = false;
   bool _nativo = false;
@@ -65,6 +66,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
       _direccionCtrl.text = header.direccion;
       _telefonoCtrl.text = header.telefono;
       _size = header.size;
+      _precioSize = header.precioSize;
       _correlativoActual = corr;
       _correlativoCtrl.text = corr.toString();
       _deviceCtrl.text = device ?? '';
@@ -105,6 +107,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
         direccion: _direccionCtrl.text.trim(),
         telefono: _telefonoCtrl.text.trim(),
         size: _size,
+        precioSize: _precioSize,
       );
       _snack('Membrete guardado');
     } catch (e) {
@@ -251,6 +254,35 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                   ],
                   onChanged: (v) {
                     if (v != null) setState(() => _size = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _precioSize,
+                  decoration: const InputDecoration(
+                    labelText: 'Tamaño del precio en tickets',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'normal',
+                      child: Text('Normal'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'doble_altura',
+                      child: Text('Doble altura'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'doble_ancho',
+                      child: Text('Doble ancho'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'grande',
+                      child: Text('Grande (doble alto + ancho)'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _precioSize = v);
                   },
                 ),
               ],

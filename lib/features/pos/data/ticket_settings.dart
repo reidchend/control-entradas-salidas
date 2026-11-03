@@ -13,10 +13,18 @@ const String kComandaHeaderDireccion = 'comanda_header_direccion';
 const String kComandaHeaderTelefono = 'comanda_header_telefono';
 const String kComandaCorrelativo = 'comanda_correlativo';
 const String kComandaHeaderSize = 'comanda_header_size';
+const String kComandaPrecioSize = 'comanda_precio_size';
 
 /// Valida el tamaño del membrete ('small'|'normal'|'large').
 String _sizeValido(String? size) {
   return (size == 'small' || size == 'normal' || size == 'large') ? size! : 'large';
+}
+
+/// Valida el tamaño del precio ('normal'|'doble_altura'|'doble_ancho'|'grande').
+String _precioSizeValido(String? size) {
+  return (size == 'normal' || size == 'doble_altura' || size == 'doble_ancho' || size == 'grande')
+      ? size!
+      : 'doble_altura';
 }
 
 Future<TicketHeader> cargarMembrete(PosRepository repo) async {
@@ -26,6 +34,7 @@ Future<TicketHeader> cargarMembrete(PosRepository repo) async {
     direccion: (await repo.getSetting(kComandaHeaderDireccion)) ?? '',
     telefono: (await repo.getSetting(kComandaHeaderTelefono)) ?? '',
     size: _sizeValido(await repo.getSetting(kComandaHeaderSize)),
+    precioSize: _precioSizeValido(await repo.getSetting(kComandaPrecioSize)),
   );
 }
 
@@ -36,12 +45,22 @@ Future<void> guardarMembrete(
   String direccion = '',
   String telefono = '',
   String size = 'large',
+  String precioSize = 'doble_altura',
 }) async {
   await repo.setSetting(kComandaHeaderNombre, nombre);
   await repo.setSetting(kComandaHeaderRif, rif);
   await repo.setSetting(kComandaHeaderDireccion, direccion);
   await repo.setSetting(kComandaHeaderTelefono, telefono);
   await setHeaderSize(repo, size);
+  await setPrecioSize(repo, precioSize);
+}
+
+Future<String> getPrecioSize(PosRepository repo) async {
+  return _precioSizeValido(await repo.getSetting(kComandaPrecioSize));
+}
+
+Future<void> setPrecioSize(PosRepository repo, String precioSize) async {
+  await repo.setSetting(kComandaPrecioSize, _precioSizeValido(precioSize));
 }
 
 Future<int> getCorrelativoActual(PosRepository repo) async {

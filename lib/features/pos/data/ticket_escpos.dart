@@ -16,6 +16,7 @@ class TicketHeader {
     this.direccion = '',
     this.telefono = '',
     this.size = 'large',
+    this.precioSize = 'doble_altura',
   });
 
   final String nombre;
@@ -26,12 +27,16 @@ class TicketHeader {
   /// 'small' | 'normal' | 'large' (pos_settings `comanda_header_size`).
   final String size;
 
+  /// 'normal' | 'doble_altura' | 'doble_ancho' | 'grande' (pos_settings `comanda_precio_size`).
+  final String precioSize;
+
   TicketHeader copyWith({
     String? nombre,
     String? rif,
     String? direccion,
     String? telefono,
     String? size,
+    String? precioSize,
   }) {
     return TicketHeader(
       nombre: nombre ?? this.nombre,
@@ -39,7 +44,29 @@ class TicketHeader {
       direccion: direccion ?? this.direccion,
       telefono: telefono ?? this.telefono,
       size: size ?? this.size,
+      precioSize: precioSize ?? this.precioSize,
     );
+  }
+}
+
+/// Devuelve el byte ESC/POS de tamaño de caractéres para el precio.
+///
+/// Valores ESC/POS `ESC ! n`:
+/// - 'normal'      = 0x00 (alto y ancho sencillo)
+/// - 'doble_altura'= 0x10 (doble alto)
+/// - 'doble_ancho' = 0x20 (doble ancho)
+/// - 'grande'      = 0x30 (doble alto + doble ancho)
+int _tamanioPrecio(String size) {
+  switch (size) {
+    case 'doble_altura':
+      return 0x10;
+    case 'doble_ancho':
+      return 0x20;
+    case 'grande':
+      return 0x30;
+    case 'normal':
+    default:
+      return 0x00;
   }
 }
 
@@ -213,8 +240,8 @@ List<int> construirTicketEscpos({
     add([0x1b, 0x45, 0x00]);
     text(nombre);
     add(List.filled(relleno > 0 ? relleno : 0, 0x20));
-    // Hacer el precio más visible (doble altura + doble ancho)
-    add([0x1b, 0x21, 0x30]);
+    // Tamaño del precio configurable desde la app
+    add([0x1b, 0x21, _tamanioPrecio(header.precioSize)]);
     add([0x1b, 0x45, 0x01]);
     text(precioStr);
     add([0x1b, 0x45, 0x00]);
