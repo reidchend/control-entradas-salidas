@@ -76,6 +76,24 @@ class _Snapshot {
   final List<_CatalogoEntry> catalogo;
 }
 
+/// Entrada para el menú de navegación rápida de categorías.
+class _CategoriaRapida {
+  const _CategoriaRapida({
+    required this.seccion,
+    required this.id,
+    required this.nombre,
+    required this.color,
+    required this.esPos,
+    required this.esPlatoCat,
+  });
+  final _Seccion seccion;
+  final int id;
+  final String nombre;
+  final String color;
+  final bool esPos;
+  final bool esPlatoCat;
+}
+
 class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   final _items = <ComandaItem>[];
   GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
@@ -105,6 +123,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   String _tituloColor = '#9E9E9E';
   List<_CatalogoEntry> _catalogo = [];
 
+  /// Categorías principales para navegación rápida (breadcrumb/directo).
+  List<_CategoriaRapida> _categoriasRapidas = [];
+  bool _cargandoRapidas = false;
+
   String get _ubicacion {
     final m = widget.mesa;
     final h = widget.habitacion;
@@ -132,6 +154,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       _tasaFecha = await repo.getTasaCambioFecha();
       await _cargarComandaExistente();
       await _cargarCategorias();
+      await _cargarCategoriasRapidas();
     } catch (e) {
       debugPrint('[comanda] _iniciar error: $e');
     } finally {
@@ -673,6 +696,137 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       _tituloColor = '#9E9E9E';
       _catalogo = entries;
     });
+  }
+
+  /// Carga las categorías principales para el menú de navegación rápida.
+  Future<void> _cargarCategoriasRapidas() async {
+    if (_cargandoRapidas) return;
+    setState(() => _cargandoRapidas = true);
+    try {
+      final repo = ref.read(posRepoProvider)!;
+      final cats = await repo.getCategoriasPos();
+      final posCats = await repo.getPosCategorias(soloActivas: true);
+      final platosCats = await repo.getPlatosCategorias(soloActivas: true);
+      final contornos = await repo.getContornosActivos();
+      final contornoCatIds = {for (final ct in contornos) ct.categoriaId};
+      final rootPlatosCats = platosCats
+          .where((c) =>
+              c.categoriaPadreId == null &&
+              c.posCategoriaPadreId == null &&
+              c.platoCategoriaPadreId == null &&
+              !contornoCatIds.contains(c.id))
+          .toList();
+
+      final resultado = <_CategoriaRapida>[];
+      for (final c in cats) {
+        resultado.add(_CategoriaRapida(
+          seccion: _Seccion.categorias,
+          id: c.id,
+          nombre: c.nombre,
+          color: c.color,
+          esPos: false,
+          esPlatoCat: false,
+        ));
+      }
+      for (final pc in posCats) {
+        resultado.add(_CategoriaRapida(
+          seccion: _Seccion.categorias,
+          id: pc.id,
+          nombre: pc.nombre,
+          color: pc.color,
+          esPos: true,
+          esPlatoCat: false,
+        ));
+      }
+      for (final c in rootPlatosCats) {
+        resultado.add(_CategoriaRapida(
+          seccion: _Seccion.platosDeCat,
+          id: c.id,
+          nombre: c.nombre,
+          color: c.color,
+          esPos: false,
+          esPlatoCat: true,
+        ));
+      }
+      if (contornos.isNotEmpty) {
+        resultado.add(_CategoriaRapida(
+          seccion: _Seccion.contornos,
+          id: -1,
+          nombre: 'CONTORNOS',
+          color: '#26A69A',
+          esPos: false,
+          esPlatoCat: false,
+        ));
+      }
+      if (!mounted) return;
+      setState(() {
+        _categoriasRapidas = resultado;
+      });
+    } catch (e) {
+      debugPrint('[comanda] _cargarCategoriasRapidas error: $e');
+    } finally {
+      if (mounted) setState(() => _cargandoRapidas = false);
+    }
+  }
+
+  /// Abre un diálogo con las categorías principales para navegar directamente
+  /// a cualquiera sin tener que volver al inicio.
+  Future<void> _mostrarNavegacionRapida() async {
+    if (_categoriasRapidas.isEmpty) {
+      await _cargarCategoriasRapidas();
+    }
+    if (!mounted || _categoriasRapidas.isEmpty) return;
+    final acento = _colorHex(_tituloColor);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ir a categoría', style: TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: _cargandoRapidas
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  itemCount: _categoriasRapidas.length,
+                  itemBuilder: (_, i) {
+                    final c = _categoriasRapidas[i];
+                    return ListTile(
+                      leading: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _colorHex(c.color),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      title: Text(c.nombre, style: const TextStyle(fontSize: 14)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _navegarARapida(c);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Navega a una categoría del menú rápido.
+  void _navegarARapida(_CategoriaRapida c) async {
+    if (c.esPlatoCat) {
+      await _clickPlatoCategoria(c.id, c.color, c.nombre);
+    } else if (c.seccion == _Seccion.contornos) {
+      await _cargarContornos();
+    } else {
+      await _clickCategoria(c.id, c.color, c.nombre, esPos: c.esPos);
+    }
   }
 
   Future<void> _clickCategoria(
@@ -1525,6 +1679,18 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                   tooltip: 'Volver',
                   onPressed: _volver,
                   icon: const Icon(Icons.arrow_back),
+                ),
+              if (!showBack || _categoriasRapidas.isNotEmpty)
+                IconButton(
+                  tooltip: 'Ir a categoría',
+                  onPressed: _cargandoRapidas ? null : _mostrarNavegacionRapida,
+                  icon: _cargandoRapidas
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.category, size: 20),
                 ),
               Container(
                 width: 4,
