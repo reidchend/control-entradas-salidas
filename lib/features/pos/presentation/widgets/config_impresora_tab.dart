@@ -28,7 +28,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
   final _deviceCtrl = TextEditingController();
 
   String _size = 'large';
-  String _precioSize = 'doble_altura';
+  String _precioSize = '2';
   int _correlativoActual = 0;
   bool _guardando = false;
   bool _nativo = false;
@@ -97,6 +97,15 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
     );
   }
 
+  TicketHeader _headerActual() => TicketHeader(
+        nombre: _nombreCtrl.text.trim(),
+        rif: _rifCtrl.text.trim(),
+        direccion: _direccionCtrl.text.trim(),
+        telefono: _telefonoCtrl.text.trim(),
+        size: _size,
+        precioSize: _precioSize,
+      );
+
   Future<void> _guardarMembrete() async {
     setState(() => _guardando = true);
     try {
@@ -115,6 +124,12 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  void _cambiarPrecioSize(int delta) {
+    final actual = int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2;
+    final nuevo = (actual + delta).clamp(1, 4);
+    setState(() => _precioSize = '$nuevo');
   }
 
   Future<void> _guardarCorrelativo() async {
@@ -177,6 +192,64 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
     await showTicketPreview(context, lineas: lineas, titulo: 'Prueba de impresión');
   }
 
+  Widget _buildPreviewTicket() {
+    final scheme = Theme.of(context).colorScheme;
+    final lineas = construirTicketPreview(
+      items: const [
+        (cantidad: 2, nombre: 'Hamburguesa especial', precio: 5.50, contornos: <String>['Papas']),
+        (cantidad: 1, nombre: 'Refresco', precio: 1.50, contornos: <String>[]),
+      ],
+      total: 12.50,
+      comandaId: 1,
+      correlativo: 1,
+      tasa: 36.50,
+      cajero: 'Cajero',
+      mesa: 'Mesa 5',
+      header: _headerActual(),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'VISTA PREVIA DEL TICKET',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: scheme.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'El tamaño del precio se aplica en la impresión ESC/POS. '
+          'Tamaño actual: ${etiquetaPrecioSize(_precioSize)}.',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Text(
+              lineas.join('\n'),
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                height: 1.25,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -208,6 +281,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _nombreCtrl,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Nombre de la empresa',
                     border: OutlineInputBorder(),
@@ -216,6 +290,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _rifCtrl,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'RIF',
                     border: OutlineInputBorder(),
@@ -224,6 +299,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _direccionCtrl,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Dirección',
                     border: OutlineInputBorder(),
@@ -232,6 +308,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _telefonoCtrl,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Teléfono',
                     border: OutlineInputBorder(),
@@ -239,7 +316,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: _size,
+                  value: _size,
                   decoration: const InputDecoration(
                     labelText: 'Tamaño del membrete',
                     border: OutlineInputBorder(),
@@ -257,34 +334,61 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                   },
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _precioSize,
+                InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Tamaño del precio en tickets',
                     border: OutlineInputBorder(),
                   ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'normal',
-                      child: Text('Normal'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'doble_altura',
-                      child: Text('Doble altura'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'doble_ancho',
-                      child: Text('Doble ancho'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'grande',
-                      child: Text('Grande (doble alto + ancho)'),
-                    ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _precioSize = v);
-                  },
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Reducir',
+                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2) <= 1
+                            ? null
+                            : () => _cambiarPrecioSize(-1),
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                      SizedBox(
+                        width: 56,
+                        child: TextFormField(
+                          key: ValueKey(_precioSize),
+                          initialValue: normalizarPrecioSize(_precioSize),
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (v) {
+                            final n = int.tryParse(v.trim());
+                            if (n != null && n >= 1 && n <= 4) {
+                              setState(() => _precioSize = '$n');
+                            }
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Aumentar',
+                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2) >= 4
+                            ? null
+                            : () => _cambiarPrecioSize(1),
+                        icon: const Icon(Icons.add_circle_outline),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          etiquetaPrecioSize(_precioSize),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 12),
+                _buildPreviewTicket(),
               ],
             ),
           ),

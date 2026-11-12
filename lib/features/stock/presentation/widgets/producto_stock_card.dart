@@ -27,9 +27,14 @@ class ProductoStockCard extends StatelessWidget {
   final String? almacen;
   final void Function(String action, Producto producto) onAction;
 
-  bool get _esPesable => producto.esPesable;
-
-  String _fmt(double v) => _esPesable ? v.toStringAsFixed(3) : v.round().toString();
+  String _fmt(double v) {
+    if (v == v.roundToDouble() && v.abs() < 1e12) {
+      return v.toInt().toString();
+    }
+    var s = v.toStringAsFixed(3);
+    s = s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return s.isEmpty ? '0' : s;
+  }
 
   Color _colorPara(BuildContext context, double total) {
     final scheme = Theme.of(context).colorScheme;

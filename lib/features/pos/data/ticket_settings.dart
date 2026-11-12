@@ -20,12 +20,8 @@ String _sizeValido(String? size) {
   return (size == 'small' || size == 'normal' || size == 'large') ? size! : 'large';
 }
 
-/// Valida el tamaño del precio ('normal'|'doble_altura'|'doble_ancho'|'grande').
-String _precioSizeValido(String? size) {
-  return (size == 'normal' || size == 'doble_altura' || size == 'doble_ancho' || size == 'grande')
-      ? size!
-      : 'doble_altura';
-}
+/// Valida/normaliza el tamaño del precio a '1'-'4'.
+String _precioSizeValido(String? size) => normalizarPrecioSize(size);
 
 Future<TicketHeader> cargarMembrete(PosRepository repo) async {
   return TicketHeader(
@@ -45,7 +41,7 @@ Future<void> guardarMembrete(
   String direccion = '',
   String telefono = '',
   String size = 'large',
-  String precioSize = 'doble_altura',
+  String precioSize = '2',
 }) async {
   await repo.setSetting(kComandaHeaderNombre, nombre);
   await repo.setSetting(kComandaHeaderRif, rif);

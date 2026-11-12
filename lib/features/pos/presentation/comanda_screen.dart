@@ -127,6 +127,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   List<_CategoriaRapida> _categoriasRapidas = [];
   bool _cargandoRapidas = false;
 
+  /// Catálogo raíz guardado para restaurar al usar navegación rápida.
+  List<_CatalogoEntry> _rootCatalogo = const [];
+
   String get _ubicacion {
     final m = widget.mesa;
     final h = widget.habitacion;
@@ -689,6 +692,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         ),
     ];
 
+    _rootCatalogo = List.of(entries);
     _historial.clear();
     setState(() {
       _seccion = _Seccion.categorias;
@@ -819,7 +823,22 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   /// Navega a una categoría del menú rápido.
+  ///
+  /// Reinicia el historial al catálogo raíz antes de entrar, de modo que al
+  /// pulsar "atrás" se regrese a la vista principal de categorías y no a la
+  /// rama visitada anteriormente.
   void _navegarARapida(_CategoriaRapida c) async {
+    _historial.clear();
+    if (mounted) {
+      setState(() {
+        _seccion = _Seccion.categorias;
+        _titulo = 'CATEGORÍAS';
+        _tituloColor = '#9E9E9E';
+        if (_rootCatalogo.isNotEmpty) {
+          _catalogo = List.of(_rootCatalogo);
+        }
+      });
+    }
     if (c.esPlatoCat) {
       await _clickPlatoCategoria(c.id, c.color, c.nombre);
     } else if (c.seccion == _Seccion.contornos) {

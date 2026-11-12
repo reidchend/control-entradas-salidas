@@ -16,7 +16,7 @@ class TicketHeader {
     this.direccion = '',
     this.telefono = '',
     this.size = 'large',
-    this.precioSize = 'doble_altura',
+    this.precioSize = '2',
   });
 
   final String nombre;
@@ -27,7 +27,9 @@ class TicketHeader {
   /// 'small' | 'normal' | 'large' (pos_settings `comanda_header_size`).
   final String size;
 
-  /// 'normal' | 'doble_altura' | 'doble_ancho' | 'grande' (pos_settings `comanda_precio_size`).
+  /// Tamaño del precio en el ticket.
+  /// '1'=Normal, '2'=Doble altura, '3'=Doble ancho, '4'=Grande.
+  /// También acepta valores legacy: normal/doble_altura/doble_ancho/grande.
   final String precioSize;
 
   TicketHeader copyWith({
@@ -51,22 +53,63 @@ class TicketHeader {
 
 /// Devuelve el byte ESC/POS de tamaño de caractéres para el precio.
 ///
-/// Valores ESC/POS `ESC ! n`:
-/// - 'normal'      = 0x00 (alto y ancho sencillo)
-/// - 'doble_altura'= 0x10 (doble alto)
-/// - 'doble_ancho' = 0x20 (doble ancho)
-/// - 'grande'      = 0x30 (doble alto + doble ancho)
+/// '1'/normal      = 0x00 (alto y ancho sencillo)
+/// '2'/doble_altura= 0x10 (doble alto)
+/// '3'/doble_ancho = 0x20 (doble ancho)
+/// '4'/grande      = 0x30 (doble alto + doble ancho)
 int _tamanioPrecio(String size) {
   switch (size) {
-    case 'doble_altura':
-      return 0x10;
+    case '1':
+    case 'normal':
+      return 0x00;
+    case '3':
     case 'doble_ancho':
       return 0x20;
+    case '4':
     case 'grande':
       return 0x30;
-    case 'normal':
+    case '2':
+    case 'doble_altura':
     default:
-      return 0x00;
+      return 0x10;
+  }
+}
+
+/// Etiqueta legible para el tamaño numérico del precio.
+String etiquetaPrecioSize(String size) {
+  switch (size) {
+    case '1':
+    case 'normal':
+      return '1 - Normal';
+    case '3':
+    case 'doble_ancho':
+      return '3 - Doble ancho';
+    case '4':
+    case 'grande':
+      return '4 - Grande (alto + ancho)';
+    case '2':
+    case 'doble_altura':
+    default:
+      return '2 - Doble altura';
+  }
+}
+
+/// Normaliza un tamaño de precio a '1'-'4'.
+String normalizarPrecioSize(String? size) {
+  switch (size) {
+    case '1':
+    case 'normal':
+      return '1';
+    case '3':
+    case 'doble_ancho':
+      return '3';
+    case '4':
+    case 'grande':
+      return '4';
+    case '2':
+    case 'doble_altura':
+    default:
+      return '2';
   }
 }
 
