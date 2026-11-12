@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'grafico_barras.dart';
 
 /// Gráfico de barras de ventas por hora del día (0-23 h) para ver los
-/// picos de venta. La hora con más facturación queda resaltada en verde.
+/// picos de venta. Muestra todas las horas y resalta la hora pico en verde.
 class VentasPorHoraChart extends StatelessWidget {
   const VentasPorHoraChart({super.key, required this.datos, this.vacioTexto});
 
@@ -52,8 +52,9 @@ class VentasPorHoraChart extends StatelessWidget {
             destacado: pico > 0 && porHora[h] == pico,
           ),
       ],
+      altura: 260,
       colorBase: scheme.tertiary,
-      etiquetasMaximas: 12,
+      etiquetasMaximas: 24,
       vacioTexto: _vacio,
     );
   }

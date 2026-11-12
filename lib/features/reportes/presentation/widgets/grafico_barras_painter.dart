@@ -66,10 +66,13 @@ class BarrasPainter extends CustomPainter {
     // Barras: separación, ancho y cada cuántas etiquetar en el eje X.
     final n = barras.length;
     final hueco = area.width / n;
-    final anchoBarra = math.min(math.max(hueco * 0.62, 3.0), 46.0);
+    final anchoBarra = math.min(math.max(hueco * 0.62, 2.0), 46.0);
     final montosHorizontales = hueco >= 52;
+    final minEspacioEtiqueta = n >= 20 ? 22.0 : 36.0;
+    final tamEtiqueta = n >= 20 ? 8.5 : 9.5;
     var cada = 1;
-    while ((hueco * cada < 44 || n / cada > etiquetasMaximas) && cada < n) {
+    while ((hueco * cada < minEspacioEtiqueta || n / cada > etiquetasMaximas) &&
+        cada < n) {
       cada++;
     }
 
@@ -95,14 +98,17 @@ class BarrasPainter extends CustomPainter {
         );
       }
 
-      _monto(canvas, barra, centroX, topeY, hueco, montosHorizontales, area);
+      final mostrarMonto = n < 20 || barra.destacado;
+      if (mostrarMonto) {
+        _monto(canvas, barra, centroX, topeY, hueco, montosHorizontales, area);
+      }
 
       if (i % cada == 0 || i == n - 1) {
         _texto(
           canvas,
           barra.etiqueta,
           Offset(centroX, area.bottom + 5),
-          estilo: TextStyle(fontSize: 9.5, color: colorTexto),
+          estilo: TextStyle(fontSize: tamEtiqueta, color: colorTexto),
           centrarHorizontal: true,
         );
       }
