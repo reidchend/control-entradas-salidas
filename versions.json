@@ -1,11 +1,11 @@
 {
   "inventario": {
-    "version": "2.1.38"
+    "version": "2.1.39"
   },
   "pos": {
     "version": "2.1.39"
   },
   "hosteleria": {
-    "version": "2.1.32"
+    "version": "2.1.39"
   }
 }
