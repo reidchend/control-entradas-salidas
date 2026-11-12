@@ -5,7 +5,7 @@ import '../../data/validacion_repository.dart';
 /// Card de una entrada pendiente (porta el tile de `validacion_view.py`):
 /// la tarjeta completa es clickeable para seleccionar/deseleccionar,
 /// con borde resaltado cuando está seleccionada + botón para anotar el
-/// motivo de no validación + botón eliminar.
+/// motivo de no validación + botón dividir + botón eliminar.
 class EntradaPendienteCard extends StatelessWidget {
   const EntradaPendienteCard({
     super.key,
@@ -14,6 +14,7 @@ class EntradaPendienteCard extends StatelessWidget {
     required this.onToggle,
     required this.onEliminar,
     required this.onNota,
+    required this.onDividir,
   });
 
   final EntradaPendiente entrada;
@@ -23,6 +24,9 @@ class EntradaPendienteCard extends StatelessWidget {
 
   /// Abre el diálogo para anotar/editar el motivo de no validación.
   final VoidCallback onNota;
+
+  /// Divide la entrada en partes para validarlas con facturas distintas.
+  final VoidCallback onDividir;
 
   String get _fecha {
     final f = entrada.fecha;
@@ -122,6 +126,11 @@ class EntradaPendienteCard extends StatelessWidget {
                   ? 'Ver o cambiar el motivo'
                   : 'Anotar por qué no se valida',
               onPressed: onNota,
+            ),
+            IconButton(
+              icon: Icon(Icons.call_split, color: scheme.primary),
+              tooltip: 'Dividir entrada',
+              onPressed: onDividir,
             ),
             IconButton(
               icon: Icon(Icons.delete_outline, color: scheme.error),

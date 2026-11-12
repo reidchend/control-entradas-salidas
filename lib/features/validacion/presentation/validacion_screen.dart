@@ -5,6 +5,7 @@ import '../../../core/auth/session_controller.dart';
 import '../data/temporales_repository.dart';
 import '../data/validacion_providers.dart';
 import '../data/validacion_repository.dart';
+import 'dialogs/dividir_entrada_dialog.dart';
 import 'dialogs/motivo_no_validacion_dialog.dart';
 import 'dialogs/precargar_imagen_dialog.dart';
 import 'dialogs/temporales_dialog.dart';
@@ -98,6 +99,28 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
     ref.invalidate(entradasPendientesProvider(_search));
   }
 
+  Future<void> _onDividir(
+      ValidacionRepository repo, EntradaPendiente entrada) async {
+    final dividido = await mostrarDividirEntradaDialog(
+      context,
+      repo: repo,
+      entrada: entrada,
+    );
+    if (dividido != true || !mounted) return;
+    // La entrada original sigue existiendo como primera parte (mismo id) y se
+    // crea una segunda parte con nuevo id: se refresca la lista y se limpia la
+    // selección para evitar validar partes con facturas equivocadas.
+    ref.invalidate(entradasPendientesProvider(_search));
+    setState(() => _selected.clear());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Entrada dividida. Ahora puedes validar cada parte con una factura distinta.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _onEliminar(
       ValidacionRepository repo, EntradaPendiente entrada) async {
     final confirmar = await showDialog<bool>(
@@ -166,6 +189,7 @@ class _ValidacionScreenState extends ConsumerState<ValidacionScreen> {
                     }),
                     onEliminar: () => _onEliminar(repo, e),
                     onNota: () => _onMotivo(e),
+                    onDividir: () => _onDividir(repo, e),
                   );
                 },
               );

@@ -277,6 +277,158 @@ class ValidacionRepository {
     }
   }
 
+  /// Divide una entrada pendiente en dos movimientos independientes para poder
+  /// validarlos por separado (p. ej. con facturas distintas).
+  ///
+  /// [cantidadPrimeraParte] es la cantidad/unidades de la primera parte (o el
+  /// peso en kg si [usarPeso] es true para un producto pesable). La segunda
+  /// parte queda con el resto. No modifica existencias ni el total recibido:
+  /// solo reparte el movimiento y su cadena `cantidad_anterior -> cantidad_nueva`
+  /// en el mismo punto del historial.
+  ///
+  /// Lanza [StateError] si la entrada ya no es divisible (validada, no existe,
+  /// hay movimientos posteriores para el mismo producto/almacén, o la cantidad
+  /// indicada no es válida).
+  Future<void> dividirEntrada({
+    required int movimientoId,
+    required double cantidadPrimeraParte,
+    bool usarPeso = false,
+  }) async {
+    await _db.transaction((tx) async {
+      final rows = await tx.executeSql(
+        'SELECT * FROM movimientos WHERE id = \$1',
+        params: [movimientoId],
+      );
+      if (rows.isEmpty) {
+        throw StateError('La entrada ya no existe.');
+      }
+      final m = rows.first;
+      if ((m['tipo'] as String?) != 'entrada' || m['factura_id'] != null) {
+        throw StateError('Solo se pueden dividir entradas pendientes de validar.');
+      }
+
+      final productoId = m['producto_id'] as int;
+      final almacen = (m['almacen'] as String?) ?? 'principal';
+      final cantTotal = (m['cantidad'] as num?)?.toDouble() ?? 0;
+      final pesoTotal = (m['peso_total'] as num?)?.toDouble() ?? 0;
+      final cantAnterior = (m['cantidad_anterior'] as num?)?.toDouble() ?? 0;
+      final cantNueva = (m['cantidad_nueva'] as num?)?.toDouble() ?? 0;
+      final fechaMov = DateTime.tryParse(m['fecha_movimiento']?.toString() ?? '');
+
+      // Evitar romper la cadena cantidad_anterior/cantidad_nueva si hay
+      // movimientos posteriores del mismo producto en el mismo almacén.
+      final hermanos = await tx.executeSql(
+        'SELECT id, fecha_movimiento FROM movimientos WHERE producto_id = \$1 AND almacen = \$2 AND id <> \$3',
+        params: [productoId, almacen, movimientoId],
+      );
+      final hayPosteriores = hermanos.any((h) {
+        final idH = h['id'] as int;
+        final fH = DateTime.tryParse(h['fecha_movimiento']?.toString() ?? '');
+        if (fechaMov == null || fH == null) return idH > movimientoId;
+        if (fH.isAfter(fechaMov)) return true;
+        if (fH.isAtSameMomentAs(fechaMov) && idH > movimientoId) return true;
+        return false;
+      });
+      if (hayPosteriores) {
+        throw StateError(
+          'No se puede dividir esta entrada porque ya existen movimientos '
+          'posteriores del producto en este almacén.',
+        );
+      }
+
+      final dividirPorPeso = usarPeso && pesoTotal > 0;
+      final totalSplit = dividirPorPeso ? pesoTotal : cantTotal;
+      final parte1Base = _roundQty(cantidadPrimeraParte);
+      final parte2Base = _roundQty(totalSplit - parte1Base);
+      if (parte1Base <= 0 || parte2Base <= 0) {
+        throw StateError('La cantidad debe ser mayor a 0 y menor al total.');
+      }
+
+      double cant1;
+      double cant2;
+      double peso1 = 0;
+      double peso2 = 0;
+      if (dividirPorPeso) {
+        peso1 = parte1Base;
+        peso2 = parte2Base;
+        if (cantTotal > 0) {
+          cant1 = _roundQty(cantTotal * (peso1 / pesoTotal));
+          cant2 = _roundQty(cantTotal - cant1);
+        } else {
+          cant1 = peso1;
+          cant2 = peso2;
+        }
+      } else {
+        cant1 = parte1Base;
+        cant2 = parte2Base;
+        if (pesoTotal > 0 && cantTotal > 0) {
+          peso1 = _roundQty(pesoTotal * (cant1 / cantTotal));
+          peso2 = _roundQty(pesoTotal - peso1);
+        } else {
+          peso1 = 0;
+          peso2 = 0;
+        }
+      }
+
+      // Neto del movimiento: para pesables con peso se mueve el peso (kg),
+      // igual que en el registro de inventario (cantAMover = pesoTotal).
+      final netoTotal = cantNueva - cantAnterior;
+      final neto1 = dividirPorPeso ? peso1 : cant1;
+      final neto2 = _roundQty(netoTotal - neto1);
+      final cantNueva1 = _roundQty(cantAnterior + neto1);
+      final cantNueva2 = _roundQty(cantNueva1 + neto2);
+
+      // Ajuste final para que la última parte cierre exactamente igual.
+      final cantNueva2Final = (cantNueva2 - cantNueva).abs() < 1e-9
+          ? cantNueva
+          : cantNueva2;
+
+      // Actualizar movimiento original como primera parte.
+      await tx.executeSql(
+        '''UPDATE movimientos SET
+             cantidad = \$1,
+             peso_total = \$2,
+             cantidad_anterior = \$3,
+             cantidad_nueva = \$4
+           WHERE id = \$5''',
+        params: [
+          cant1,
+          dividirPorPeso ? peso1 : peso1,
+          cantAnterior,
+          cantNueva1,
+          movimientoId,
+        ],
+      );
+
+      // Insertar segunda parte encadenada después de la primera.
+      final nuevaParte = <String, dynamic>{
+        'producto_id': productoId,
+        'factura_id': null,
+        'requisicion_id': m['requisicion_id'],
+        'venta_id': m['venta_id'],
+        'venta_sync_uuid': m['venta_sync_uuid'],
+        'tipo': m['tipo'],
+        'cantidad': cant2,
+        'cantidad_anterior': cantNueva1,
+        'cantidad_nueva': cantNueva2Final,
+        'peso_total': dividirPorPeso ? peso2 : peso2,
+        'registrado_por': m['registrado_por'],
+        'observaciones': m['observaciones'],
+        'almacen': almacen,
+        'fecha_movimiento': m['fecha_movimiento'],
+        'created_at': m['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
+        'motivo_no_validacion': m['motivo_no_validacion'],
+      };
+      if (m.containsKey('fecha_traslado')) {
+        nuevaParte['fecha_traslado'] = m['fecha_traslado'];
+      }
+      await tx.insert('movimientos', nuevaParte);
+    });
+  }
+
+  double _roundQty(double v) =>
+      double.parse(v.toStringAsFixed(6));
+
   /// Elimina una entrada pendiente (movimiento 'entrada' sin validar) y
   /// revierte el stock que esa entrada sumó a la existencia del producto en
   /// su almacén. Se resta la cantidad neta (`cantidadNueva - cantidadAnterior`)
