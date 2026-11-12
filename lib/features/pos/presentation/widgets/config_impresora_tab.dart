@@ -28,7 +28,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
   final _deviceCtrl = TextEditingController();
 
   String _size = 'large';
-  String _precioSize = '2';
+  String _precioSize = '3';
   int _correlativoActual = 0;
   bool _guardando = false;
   bool _nativo = false;
@@ -127,8 +127,8 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
   }
 
   void _cambiarPrecioSize(int delta) {
-    final actual = int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2;
-    final nuevo = (actual + delta).clamp(1, 4);
+    final actual = int.tryParse(normalizarPrecioSize(_precioSize)) ?? 3;
+    final nuevo = (actual + delta).clamp(1, 5);
     setState(() => _precioSize = '$nuevo');
   }
 
@@ -220,7 +220,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
         ),
         const SizedBox(height: 4),
         Text(
-          'El tamaño del precio se aplica en la impresión ESC/POS. '
+          'El tamaño se aplica a precios por línea y totales en la impresión ESC/POS. '
           'Tamaño actual: ${etiquetaPrecioSize(_precioSize)}.',
           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
         ),
@@ -336,14 +336,14 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                 const SizedBox(height: 12),
                 InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Tamaño del precio en tickets',
+                    labelText: 'Tamaño de precio y totales en tickets',
                     border: OutlineInputBorder(),
                   ),
                   child: Row(
                     children: [
                       IconButton(
                         tooltip: 'Reducir',
-                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2) <= 1
+                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 3) <= 1
                             ? null
                             : () => _cambiarPrecioSize(-1),
                         icon: const Icon(Icons.remove_circle_outline),
@@ -361,7 +361,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                           ),
                           onChanged: (v) {
                             final n = int.tryParse(v.trim());
-                            if (n != null && n >= 1 && n <= 4) {
+                            if (n != null && n >= 1 && n <= 5) {
                               setState(() => _precioSize = '$n');
                             }
                           },
@@ -369,7 +369,7 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
                       ),
                       IconButton(
                         tooltip: 'Aumentar',
-                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 2) >= 4
+                        onPressed: (int.tryParse(normalizarPrecioSize(_precioSize)) ?? 3) >= 5
                             ? null
                             : () => _cambiarPrecioSize(1),
                         icon: const Icon(Icons.add_circle_outline),

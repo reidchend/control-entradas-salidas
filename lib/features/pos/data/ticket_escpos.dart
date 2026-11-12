@@ -16,7 +16,7 @@ class TicketHeader {
     this.direccion = '',
     this.telefono = '',
     this.size = 'large',
-    this.precioSize = '2',
+    this.precioSize = '3',
   });
 
   final String nombre;
@@ -27,9 +27,10 @@ class TicketHeader {
   /// 'small' | 'normal' | 'large' (pos_settings `comanda_header_size`).
   final String size;
 
-  /// Tamaño del precio en el ticket.
-  /// '1'=Normal, '2'=Doble altura, '3'=Doble ancho, '4'=Grande.
-  /// También acepta valores legacy: normal/doble_altura/doble_ancho/grande.
+  /// Tamaño del precio/totales en el ticket.
+  /// '1'=Pequeño (condensado), '2'=Normal, '3'=Doble altura,
+  /// '4'=Doble ancho, '5'=Grande (alto + ancho).
+  /// También acepta valores legacy y de versiones anteriores.
   final String precioSize;
 
   TicketHeader copyWith({
@@ -51,65 +52,81 @@ class TicketHeader {
   }
 }
 
-/// Devuelve el byte ESC/POS de tamaño de caractéres para el precio.
+/// Devuelve el byte ESC/POS de tamaño de caractéres para precio/totales.
 ///
-/// '1'/normal      = 0x00 (alto y ancho sencillo)
-/// '2'/doble_altura= 0x10 (doble alto)
-/// '3'/doble_ancho = 0x20 (doble ancho)
-/// '4'/grande      = 0x30 (doble alto + doble ancho)
+/// '1'            = 0x01 (Font B, condensado/pequeño)
+/// '2'/normal     = 0x00 (normal)
+/// '3'/doble_altura = 0x10 (doble alto)
+/// '4'/doble_ancho  = 0x20 (doble ancho)
+/// '5'/grande       = 0x30 (doble alto + doble ancho)
 int _tamanioPrecio(String size) {
-  switch (size) {
+  switch (normalizarPrecioSize(size)) {
     case '1':
-    case 'normal':
-      return 0x00;
+      return 0x01; // Font B (condensado)
     case '3':
-    case 'doble_ancho':
-      return 0x20;
+      return 0x10;
     case '4':
-    case 'grande':
+      return 0x20;
+    case '5':
       return 0x30;
     case '2':
-    case 'doble_altura':
     default:
-      return 0x10;
+      return 0x00;
   }
 }
 
 /// Etiqueta legible para el tamaño numérico del precio.
 String etiquetaPrecioSize(String size) {
-  switch (size) {
+  switch (normalizarPrecioSize(size)) {
     case '1':
-    case 'normal':
-      return '1 - Normal';
+      return '1 - Pequeño (condensado)';
     case '3':
-    case 'doble_ancho':
-      return '3 - Doble ancho';
+      return '3 - Doble altura';
     case '4':
-    case 'grande':
-      return '4 - Grande (alto + ancho)';
+      return '4 - Doble ancho';
+    case '5':
+      return '5 - Grande (alto + ancho)';
     case '2':
-    case 'doble_altura':
     default:
-      return '2 - Doble altura';
+      return '2 - Normal';
   }
 }
 
-/// Normaliza un tamaño de precio a '1'-'4'.
+/// Normaliza un tamaño de precio/totales a '1'-'5'.
+///
+/// Migra valores previos: antes 1=Normal,2=Doble altura,3=Doble ancho,4=Grande.
+/// Ahora 1=Pequeño,2=Normal,3=Doble altura,4=Doble ancho,5=Grande.
 String normalizarPrecioSize(String? size) {
   switch (size) {
     case '1':
-    case 'normal':
+    case 'pequeno':
+    case 'small':
+      // '1' nuevo = pequeño. No hay forma segura de distinguir "1 antiguo (normal)"
+      // ya guardado como "1" tras versión previa, pero aceptamos como pequeño;
+      // si venía de legacy string 'normal' se mapea abajo.
       return '1';
+    case '2':
+      // '2' nuevo = normal. '2' antiguo era doble altura -> migrar a '3' sólo si venía
+      // como string legacy 'doble_altura'; el valor numérico '2' previo se interpreta
+      // como la nueva escala (normal). Para no romper, preferimos tratar '2' como normal
+      // y legacy 'doble_altura' como '3'.
+      return '2';
     case '3':
-    case 'doble_ancho':
       return '3';
     case '4':
-    case 'grande':
       return '4';
-    case '2':
-    case 'doble_altura':
-    default:
+    case '5':
+      return '5';
+    case 'normal':
       return '2';
+    case 'doble_altura':
+      return '3';
+    case 'doble_ancho':
+      return '4';
+    case 'grande':
+      return '5';
+    default:
+      return '3';
   }
 }
 
@@ -305,10 +322,12 @@ List<int> construirTicketEscpos({
   // igual que el precio por producto de arriba.
   if (total != null) {
     add([0x1b, 0x61, 0x02]); // derecha
+    add([0x1b, 0x21, _tamanioPrecio(header.precioSize)]);
     add([0x1b, 0x45, 0x01]);
     text('TOTAL: \$${total.toStringAsFixed(2)}');
     newline();
     add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x21, 0x00]);
     add([0x1b, 0x61, 0x00]);
   }
 
@@ -316,10 +335,12 @@ List<int> construirTicketEscpos({
     add([0x1b, 0x61, 0x02]);
     text('Tasa: ${formatearTasa(tasa)} Bs/\$');
     newline();
+    add([0x1b, 0x21, _tamanioPrecio(header.precioSize)]);
     add([0x1b, 0x45, 0x01]);
     text('TOTAL Bs: ${formatearBs(total * tasa)}');
     newline();
     add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x21, 0x00]);
     add([0x1b, 0x61, 0x00]);
   }
 
