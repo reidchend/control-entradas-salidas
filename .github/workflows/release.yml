@@ -349,7 +349,13 @@ jobs:
           path: app-hosteleria-linux.tar.gz
 
   # ---------------------------------------------------------------------------
-  # Android — inventario (APK)
+  # Android — inventario y POS (APK)
+  #
+  # Cada app tiene su flavor (`inventario` / `pos`) y su applicationId, así que
+  # las dos APK se instalan y actualizan por separado en el mismo teléfono.
+  # El versionCode usa `github.run_number`: siempre sube, así el updater puede
+  # reinstalar una APK nueva aunque la versión visible (APP_VERSION) cambie
+  # solo en el tercer componente.
   # ---------------------------------------------------------------------------
   android:
     name: Android Inventario (APK)
@@ -367,7 +373,7 @@ jobs:
           channel: stable
       - name: Actualizar version en pubspec.yaml
         run: |
-          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.inv_version }}+1/" pubspec.yaml
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.inv_version }}+${{ github.run_number }}/" pubspec.yaml
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > android/release.p12
       - name: Create key.properties
@@ -381,25 +387,68 @@ jobs:
       - name: Build APK
         run: |
           flutter pub get
-          flutter build apk --release \
+          flutter build apk --release --flavor inventario -t lib/main.dart \
             --dart-define=APP_ID=inventario \
             --dart-define=APP_LABEL="Control de Entradas y Salidas" \
             --dart-define=APP_VERSION=${{ needs.prepare.outputs.inv_version }} \
             --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
       - name: Copiar con nombre estable
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk app-inventario-android.apk
+          cp build/app/outputs/flutter-apk/app-inventario-release.apk app-inventario-android.apk
       - uses: actions/upload-artifact@v4
         with:
           name: app-inventario-android
           path: app-inventario-android.apk
+
+  android-pos:
+    name: Android POS (APK)
+    needs: prepare
+    if: needs.prepare.outputs.pos_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Actualizar version en pubspec.yaml
+        run: |
+          sed -i "s/^version: .*/version: ${{ needs.prepare.outputs.pos_version }}+${{ github.run_number }}/" pubspec.yaml
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > android/release.p12
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=../release.p12
+          EOF
+      - name: Build APK POS
+        run: |
+          flutter pub get
+          flutter build apk --release --flavor pos -t lib/main_pos.dart \
+            --dart-define=APP_ID=pos \
+            --dart-define=APP_LABEL="Lycoris POS" \
+            --dart-define=APP_VERSION=${{ needs.prepare.outputs.pos_version }} \
+            --dart-define=WHATSAPP_BOT_TOKEN=${{ secrets.WHATSAPP_BOT_TOKEN }}
+      - name: Copiar con nombre estable
+        run: |
+          cp build/app/outputs/flutter-apk/app-pos-release.apk app-pos-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-pos-android
+          path: app-pos-android.apk
 
   # ---------------------------------------------------------------------------
   # release — publica una release por app seleccionada y actualiza versions.json
   # ---------------------------------------------------------------------------
   release:
     name: Publicar releases por app
-    needs: [prepare, windows-pos, windows-inventario, windows-hosteleria, linux, android]
+    needs: [prepare, windows-pos, windows-inventario, windows-hosteleria, linux, android, android-pos]
     if: >-
       always() && needs.prepare.outputs.any == 'true' &&
       !contains(needs.*.result, 'failure') &&
@@ -448,7 +497,7 @@ jobs:
 
           if [ "${{ needs.prepare.outputs.pos_changed }}" = "true" ]; then
             files=()
-            for f in app-pos-windows.zip app-pos-linux.tar.gz; do
+            for f in app-pos-windows.zip app-pos-linux.tar.gz app-pos-android.apk; do
               if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
             done
             create_release "pos-v${{ needs.prepare.outputs.pos_version }}" \
@@ -478,7 +527,8 @@ jobs:
           if [ "${{ needs.prepare.outputs.bridge }}" = "true" ]; then
             files=()
             for f in app-pos-windows.zip app-inventario-windows.zip \
-                     app-hosteleria-windows.zip app-inventario-android.apk; do
+                     app-hosteleria-windows.zip app-inventario-android.apk \
+                     app-pos-android.apk; do
               if [ -f "artifacts/$f" ]; then files+=("artifacts/$f"); fi
             done
             create_release "v${{ needs.prepare.outputs.bridge_version }}" \

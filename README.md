@@ -9,7 +9,7 @@ Sistema de gestion de inventario con modulo **POS**, desarrollado en **Flutter**
 | App | Entry point | Descripcion | Binarios nativos |
 |---|---|---|---|
 | **Inventario** | `lib/main.dart` | Inventario, stock, producciones, requisiciones, validacion de facturas, historial, reportes, WhatsApp, configuracion | Windows (`LycorisControl.exe`) + Android (APK) |
-| **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, cierres, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) |
+| **POS** | `lib/main_pos.dart` | Mesas, habitaciones, comandas, ventas, turnos/cajas, cierres, tasa BCV, impresion ESC/POS | Windows (`LycorisPOS.exe`) + Android (APK) |
 | **Hosteleria** | `lib/main_hosteleria.dart` | Huespedes, reservas/estancias, check-in/out, estados de habitacion (aseo/mantenimiento), modalidad por horas (OP) y vistas actual/semana/mes | Windows (`LycorisHostel.exe`) + web |
 
 **Arquitectura**: 3 plataformas desde un solo codigo base — **web** (desarrollo/uso en navegador) y **nativos** (Windows/Android) con actualizacion remota via GitHub Releases.
@@ -471,8 +471,22 @@ Cada build se sella con `--dart-define=APP_VERSION=<version>` y cada app publica
 | `windows-inventario` | `LycorisControl.exe`, si se elige `inventario` | `app-inventario-windows.zip` |
 | `windows-hosteleria` | `LycorisHostel.exe`, si se elige `hosteleria` | `app-hosteleria-windows.zip` |
 | `linux` | `LycorisPOS` + `LycorisControl` + `LycorisHostel` (Linux) | `app-pos-linux.tar.gz`, `app-inventario-linux.tar.gz`, `app-hosteleria-linux.tar.gz` |
-| `android` | APK inventario | `app-inventario-android.apk` |
+| `android` | APK inventario (`--flavor inventario`) | `app-inventario-android.apk` |
+| `android-pos` | APK POS (`--flavor pos`) | `app-pos-android.apk` |
 | `release` | Publica `<appId>-vX.Y.Z` y actualiza `versions.json` | — |
+
+> **Android con dos apps:** el proyecto define los flavors `inventario`
+> (`com.lycoris.control_entradas_salidas`) y `pos` (`com.lycoris.pos`). Las dos
+> APK comparten firma pero se instalan y actualizan por separado en el mismo
+> telefono. Para compilar localmente hay que indicar el flavor:
+> `flutter build apk --release --flavor pos -t lib/main_pos.dart`.
+
+**Instalar el POS en Android:**
+1. Ejecutar el workflow con `apps=pos` (o `all`).
+2. Descargar el artefacto `app-pos-android` desde la corrida de Actions.
+3. Pasar `app-pos-android.apk` al telefono y permitir "Instalar apps desconocidas".
+4. Abrir **Lycoris POS**, configurar la base de datos (directa por TCP o proxy
+   HTTP) y, si se usa proxy, el token correspondiente.
 
 **Como generar una release**:
 1. Agregar los secrets en *Settings → Secrets and variables → Actions*:

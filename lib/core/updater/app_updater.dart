@@ -31,9 +31,9 @@ class AppUpdater {
   final GitHubReleasesSource _source;
 
   /// Nombre del asset según app + plataforma.
-  /// inventario: Windows (`app-inventario-windows.zip`) y Android
-  /// (`app-inventario-android.apk`); pos y hosteleria: Windows. Existen builds
-  /// Linux (`app-<appId>-linux.tar.gz`) pero el updater solo auto-aplica
+  /// inventario y pos: Windows (`app-<appId>-windows.zip`) y Android
+  /// (`app-<appId>-android.apk`); hosteleria: Windows. Existen builds Linux
+  /// (`app-<appId>-linux.tar.gz`) pero el updater solo auto-aplica
   /// Windows/Android; en Linux la distribución es manual.
   static String _assetName(String appId, String platform) {
     if (platform == 'android') return 'app-$appId-android.apk';

@@ -24,11 +24,28 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.lycoris.control_entradas_salidas"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    // Un flavor por app. Cada una tiene su propio applicationId para que
+    // inventario y POS puedan instalarse en el mismo telefono (y actualizarse
+    // por separado). El namespace/paquete Kotlin no cambia: solo el id publico.
+    flavorDimensions += "app"
+
+    productFlavors {
+        create("inventario") {
+            dimension = "app"
+            applicationId = "com.lycoris.control_entradas_salidas"
+            manifestPlaceholders["appLabel"] = "Lycoris Control"
+        }
+        create("pos") {
+            dimension = "app"
+            applicationId = "com.lycoris.pos"
+            manifestPlaceholders["appLabel"] = "Lycoris POS"
+        }
     }
 
     signingConfigs {
