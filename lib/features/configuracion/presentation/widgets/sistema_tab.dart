@@ -50,39 +50,38 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
           icon: Icons.storage,
           iconBg: scheme.primaryContainer,
           children: [
-            const Text('Si experimenta errores tras actualizaciones, use "Probar Conexión" para verificar la base de datos local.',
-                style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              icon: _testing
-                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.storage),
-              label: const Text('Probar Conexión Local'),
-              onPressed: _testing ? null : _probarConexionLocal,
-            ),
-            const SizedBox(height: 5),
             const Text(
-              'Use "Verificar Supabase" para comprobar la conexión real con la base de datos remota (nube).',
+              'Compruebe la conexión con la base de datos configurada para este equipo.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 8),
             FilledButton.icon(
               icon: _testing
-                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_done),
-              label: const Text('Verificar Supabase'),
-              style: FilledButton.styleFrom(backgroundColor: scheme.secondary),
-              onPressed: _testing ? null : _verificarSupabase,
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.storage),
+              label: const Text('Probar conexión'),
+              onPressed: _testing ? null : _probarConexion,
             ),
             if (_testResult.isNotEmpty) ...[
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (_testResultColor ?? scheme.surfaceContainerHighest).withValues(alpha: 0.2),
+                  color: (_testResultColor ?? scheme.surfaceContainerHighest)
+                      .withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(_testResult, style: TextStyle(color: _testResultColor ?? scheme.onSurface, fontSize: 13)),
+                child: Text(
+                  _testResult,
+                  style: TextStyle(
+                    color: _testResultColor ?? scheme.onSurface,
+                    fontSize: 13,
+                  ),
+                ),
               ),
             ],
           ],
@@ -105,21 +104,6 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
         ),
         _sectionCard(
           scheme,
-          title: 'Configuración de Alertas',
-          subtitle: 'Habilite las notificaciones para recibir alertas de stock bajo y validaciones en tiempo real.',
-          icon: Icons.notifications_active,
-          iconBg: scheme.tertiaryContainer,
-          children: [
-            FilledButton.icon(
-              icon: const Icon(Icons.notifications_active),
-              label: const Text('Habilitar Notificaciones'),
-              style: FilledButton.styleFrom(backgroundColor: scheme.tertiary),
-              onPressed: _solicitarNotificaciones,
-            ),
-          ],
-        ),
-        _sectionCard(
-          scheme,
           title: 'Apariencia',
           subtitle: 'Cambie entre el tema claro y oscuro de la aplicación.',
           icon: Icons.brightness_6,
@@ -127,26 +111,17 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
           children: [
             Row(
               children: [
-                Text('Tema:', style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant)),
+                Text(
+                  'Tema:',
+                  style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+                ),
                 const SizedBox(width: 12),
                 Switch(
                   value: isDark,
-                  onChanged: (v) => ref.read(themeControllerProvider.notifier).toggle(),
+                  onChanged: (v) =>
+                      ref.read(themeControllerProvider.notifier).toggle(),
                 ),
               ],
-            ),
-          ],
-        ),
-        _sectionCard(
-          scheme,
-          title: 'Modo Offline',
-          subtitle: 'Active el modo offline para usar la aplicación sin conexión a internet.',
-          icon: Icons.wifi_off,
-          iconBg: scheme.errorContainer,
-          children: [
-            const Text(
-              'La aplicación funciona directamente con Supabase. Sin conexión no habrá acceso a datos.',
-              style: TextStyle(fontSize: 13),
             ),
           ],
         ),
@@ -289,13 +264,15 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
     await showDbConfigDialog(context);
   }
 
-  Future<void> _probarConexionLocal() async {
+  Future<void> _probarConexion() async {
     setState(() => _testing = true);
     try {
       final repo = ref.read(configuracionRepoProvider)!;
       final ok = await repo.testLocalConnection();
       setState(() {
-        _testResult = ok ? 'Conexión exitosa - Base de datos operativa' : 'Error de conexión';
+        _testResult = ok
+            ? 'Conexión exitosa: base de datos operativa'
+            : 'Error de conexión con la base de datos';
         _testResultColor = ok ? Colors.green : Colors.red;
       });
     } catch (e) {
@@ -306,38 +283,6 @@ class _SistemaTabState extends ConsumerState<SistemaTab> {
     } finally {
       setState(() => _testing = false);
     }
-  }
-
-  Future<void> _verificarSupabase() async {
-    setState(() {
-      _testing = true;
-      _testResult = 'Verificando conexión con Supabase...';
-      _testResultColor = Colors.orange;
-    });
-    try {
-      final repo = ref.read(configuracionRepoProvider)!;
-      final ok = await repo.testLocalConnection();
-      setState(() {
-        _testResult = ok ? 'Conexión exitosa - Supabase verificado' : 'Error de conexión con Supabase';
-        _testResultColor = ok ? Colors.green : Colors.red;
-      });
-    } catch (e) {
-      setState(() {
-        _testResult = 'Error Supabase: $e';
-        _testResultColor = Colors.red;
-      });
-    } finally {
-      setState(() => _testing = false);
-    }
-  }
-
-  Future<void> _solicitarNotificaciones() async {
-    // En web, se puede solicitar permiso via Notification.requestPermission()
-    // En Flutter web, se puede usar Notification.requestPermission() del paquete web
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Solicitando permiso de notificaciones...')),
-    );
-    // TODO: Implementar requestPermission para FCM/web push
   }
 
   Future<void> _setPermitirStockNegativo(bool v) async {
