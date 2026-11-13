@@ -67,6 +67,7 @@ class _PersonalPanelState extends ConsumerState<PersonalPanel> {
           'No hay turno abierto. Debe abrirse desde la PC principal.',
           error: true,
         );
+        break;
       case SesionLoginResult.pinIncorrecto:
       case SesionLoginResult.nueva:
       case SesionLoginResult.retomada:

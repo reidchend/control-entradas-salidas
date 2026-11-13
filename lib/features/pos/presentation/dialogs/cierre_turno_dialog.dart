@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/pos_cierre_models.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/theme/app_theme.dart';
 enum CierreTurnoResultado {
   /// El usuario confirmó el cierre (guarda, cierra sesión; el WhatsApp se
   /// envía después de la persistencia desde el flujo llamador).
@@ -86,19 +87,25 @@ class _CierreTurnoDialogState extends State<_CierreTurnoDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  border: Border.all(color: Colors.orange.shade300),
+                  color: scheme.surfaceContainerHighest,
+                  border: Border.all(color: scheme.outlineVariant),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: appColor(context, 'warning'),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Turno corto: ${_duracionTexto()} (< 8h). '
                         'Verifica que el corte sea correcto antes de confirmar.',
-                        style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
