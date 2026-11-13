@@ -7,6 +7,7 @@
 - [ ] **Aplicar migración de turnos compartidos del POS**  
   Archivo: `supabase/migrations/20261113000000_pos_turnos_compartidos.sql`  
   **Qué hace:** agrega `pos_turno_participantes`, `pos_comandas.usuario_id`, `pos_cierres.cerrado_por_usuario_id` y el índice único que permite **un solo turno abierto** a la vez.  
+  **⚠️ BACKUP OBLIGATORIO:** Antes de ejecutar, hacer un backup completo de la base maestra (`pg_dump -U postgres -d <base_maestra> > backup_antes_de_migracion.sql` o equivalente). Si algo falla durante la migración (DDL + UPDATE de comandas), se puede restaurar.  
   **Instrucciones:** Ejecutar con usuario propietario (`postgres`) contra la base maestra. Antes, verificar que no haya más de un turno abierto:  
   ```sql
   SELECT id, usuario_id, abierta_en FROM pos_sesiones WHERE cerrada_en IS NULL;
