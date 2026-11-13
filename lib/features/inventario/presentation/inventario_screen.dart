@@ -50,22 +50,32 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
     final repo = ref.watch(inventarioRepoProvider)!;
     final colors = Theme.of(context).colorScheme;
 
+    final bool buscandoProductosGlobal =
+        !_vistaListaCompra && !_vistaDescargo && _categoria == null && _search.trim().isNotEmpty;
+
     final Widget cuerpo = _vistaListaCompra
         ? ListaCompraPanel(
             repo: repo,
             onClose: () => setState(() => _vistaListaCompra = false),
           )
-            : _vistaDescargo
-                ? DescargoConsumiblesPanel(
-                    repo: repo,
-                    onClose: () => setState(() => _vistaDescargo = false),
-                    onRegistrado: _recargarStockVisible,
-                  )
-                : _categoria != null
-                    ? _buildProductosDeCategoria(repo, colors)
+        : _vistaDescargo
+            ? DescargoConsumiblesPanel(
+                repo: repo,
+                onClose: () => setState(() => _vistaDescargo = false),
+                onRegistrado: _recargarStockVisible,
+              )
+            : _categoria != null
+                ? _buildProductosDeCategoria(repo, colors)
+                : buscandoProductosGlobal
+                    ? ProductosPanel(
+                        key: _productosKey,
+                        repo: repo,
+                        categoriaId: null,
+                        searchTerm: _search,
+                      )
                     : CategoriasGrid(
                         repo: repo,
-                        searchTerm: _search,
+                        searchTerm: '',
                         onSelect: (c) => setState(() {
                           _categoria = c;
                           _search = '';
@@ -189,8 +199,20 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                 controller: _searchCtrl,
                 focusNode: _searchFocus,
                 decoration: InputDecoration(
-                  hintText: _categoria != null ? 'Buscar en ${_categoria!.nombre}...' : 'Buscar categoría...',
+                  hintText: _categoria != null
+                      ? 'Buscar en ${_categoria!.nombre}...'
+                      : 'Buscar producto...',
                   prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _search.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          tooltip: 'Limpiar búsqueda',
+                          onPressed: () => setState(() {
+                            _search = '';
+                            _searchCtrl.clear();
+                          }),
+                        )
+                      : null,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   border: OutlineInputBorder(
