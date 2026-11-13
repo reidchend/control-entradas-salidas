@@ -8,6 +8,7 @@ import 'pos_comanda_models.dart';
 import 'pos_comanda_transfer_repository.dart';
 import 'pos_repository.dart';
 import 'pos_session.dart';
+import 'pos_turno_models.dart';
 import 'pos_ventas_repository.dart';
 
 /// Repositorio de catálogos/settings/sesiones del POS.
@@ -53,10 +54,23 @@ final usuariosProvider = FutureProvider<List<PosUsuario>>((ref) {
   return ref.watch(posRepoProvider)!.getUsuarios();
 });
 
-/// IDs de los cajeros con turno abierto (para marcarlos en el login).
-/// Soporta varios turnos activos simultáneos (uno por cajero).
-final turnosActivosProvider = FutureProvider<Set<int>>((ref) {
-  return ref.watch(posRepoProvider)!.getUsuariosConTurnoActivo();
+/// Turno abierto actual con aperturista, participantes y totales.
+/// `null` = no hay turno abierto.
+final turnoAbiertoProvider = FutureProvider<TurnoAbierto?>((ref) {
+  return ref.watch(posRepoProvider)!.getTurnoAbiertoDetalle();
+});
+
+/// IDs de los usuarios que están dentro del turno abierto (para marcarlos en
+/// el login). Se refresca con el polling de `pos_sesiones`.
+final usuariosEnTurnoProvider = FutureProvider<Set<int>>((ref) async {
+  final turno = await ref.watch(turnoAbiertoProvider.future);
+  return turno?.usuariosEnTurno ?? <int>{};
+});
+
+/// Participantes de un turno concreto (abierto o cerrado), con sus ventas.
+final participantesTurnoProvider =
+    FutureProvider.family<List<ParticipanteTurno>, int>((ref, sesionId) {
+  return ref.watch(posRepoProvider)!.getParticipantes(sesionId);
 });
 
 final platosProvider = FutureProvider<List<PosPlato>>((ref) {

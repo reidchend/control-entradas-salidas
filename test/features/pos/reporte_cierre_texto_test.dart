@@ -25,6 +25,17 @@ CierreCaja _cierre() => CierreCaja(
         contornos: const [ResumenContorno(nombre: 'Ensalada', cantidad: 1.5)],
         ventasFueraTurno: 3,
         montoFueraTurno: 15.5,
+        porUsuario: const [
+          ResumenUsuario(
+            usuarioId: 5,
+            nombre: 'EMILIO',
+            esAperturista: true,
+            esCerrador: true,
+            ventas: 2,
+            total: 427.5,
+          ),
+          ResumenUsuario(usuarioId: 7, nombre: 'ANA', ventas: 1, total: 50),
+        ],
       ),
       reporteDetallado: ReporteDetallado(
         desgloses: [
@@ -37,6 +48,8 @@ CierreCaja _cierre() => CierreCaja(
         ],
       ),
       syncUuid: 'uuid-test',
+      cerradoPorId: 5,
+      cerradoPorNombre: 'EMILIO',
     );
 
 void main() {
@@ -60,12 +73,21 @@ void main() {
   });
 
   group('reporteSimpleTexto', () {
-    test('contiene cajero, caja y total general', () {
+    test('contiene aperturista, cierre, caja y total general', () {
       final t = reporteSimpleTexto(_cierre());
       expect(t, contains('CIERRE DE TURNO'));
-      expect(t, contains('Cajero: EMILIO'));
+      expect(t, contains('Aperturó: EMILIO'));
+      expect(t, contains('Cerró: EMILIO'));
       expect(t, contains('Final:   \$527.5'));
       expect(t, contains('TOTAL GENERAL: \$20'));
+    });
+
+    test('incluye el desglose por usuario del turno compartido', () {
+      final t = reporteSimpleTexto(_cierre());
+      expect(t, contains('POR USUARIO'));
+      expect(t, contains('EMILIO (aperturó)'));
+      expect(t, contains('ANA'));
+      expect(t, contains('1 ventas · \$50'));
     });
 
     test('agrupa por categoría', () {
@@ -81,6 +103,26 @@ void main() {
       expect(t, contains('Ensalada: 1.5'));
       expect(t, contains('VENTAS FUERA DE TURNO'));
       expect(t, contains('3 por \$15.5'));
+    });
+  });
+
+  group('ResumenUsuario', () {
+    test('serializa y restaura los campos del desglose', () {
+      const u = ResumenUsuario(
+        usuarioId: 7,
+        nombre: 'ANA',
+        esAperturista: true,
+        esCerrador: false,
+        ventas: 3,
+        total: 125.5,
+      );
+      final back = ResumenUsuario.fromJson(u.toJson());
+      expect(back.usuarioId, 7);
+      expect(back.nombre, 'ANA');
+      expect(back.esAperturista, isTrue);
+      expect(back.esCerrador, isFalse);
+      expect(back.ventas, 3);
+      expect(back.total, 125.5);
     });
   });
 

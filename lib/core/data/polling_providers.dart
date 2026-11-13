@@ -40,11 +40,13 @@ List<void Function()> initPollingSubscriptions(
       table: 'pos_sesiones',
       interval: const Duration(seconds: 10),
       invalidate: (r) {
-        r.invalidate(turnosActivosProvider);
+        r.invalidate(turnoAbiertoProvider);
+        r.invalidate(usuariosEnTurnoProvider);
         // Revalida que la sesión local siga viva: si OTRO dispositivo cerró
         // este turno, la terminal vuelve al login en vez de seguir cobrando
         // con un turno cerrado (ventas huérfanas a nombre de otro cajero que
-        // no entran en ningún cierre).
+        // no entran en ningún cierre). También manda el heartbeat del
+        // participante (máx. 1/minuto).
         unawaited(r.read(posSessionProvider.notifier).revalidarSesion());
       },
     ),

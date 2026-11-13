@@ -248,6 +248,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             total,
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
+            usuarioId: widget.sesion.usuario.id,
           );
       _comandaId = comandaId;
       ref.invalidate(mesasOcupadasProvider);
@@ -309,6 +310,13 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   }
 
   Future<void> _cobrar() async {
+    if (!widget.sesion.puedeCobrar) {
+      _snack(
+        'Cobrar solo está disponible en la PC principal (con impresora).',
+        color: Theme.of(context).colorScheme.error,
+      );
+      return;
+    }
     final conItems = _clientesConItems;
     if (conItems.length <= 1) {
       showDialog<bool>(
@@ -377,6 +385,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         esParcial ? totalRestantes : total,
         mesaId: mesaI,
         habitacionId: habId,
+        usuarioId: widget.sesion.usuario.id,
       );
       final anulada = await repo.getVentaAnuladaPorComanda(comandaId);
       final ventaAnulaId = anulada?.id;
@@ -1307,6 +1316,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             _total,
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
+            usuarioId: widget.sesion.usuario.id,
           );
       _comandaId = id;
       ref.invalidate(comandasActivasProvider);
@@ -1821,20 +1831,28 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             label: const Text('Guardar'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+          Tooltip(
+            message: widget.sesion.puedeCobrar
+                ? 'Cobrar comanda'
+                : 'Cobrar solo desde la PC principal (con impresora)',
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+              ),
+              onPressed:
+                  (widget.sesion.puedeCobrar && tieneItems && !ocupado)
+                      ? _cobrar
+                      : null,
+              icon: _cobrando
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.payments_outlined),
+              label: const Text('Cobrar'),
             ),
-            onPressed: (tieneItems && !ocupado) ? _cobrar : null,
-            icon: _cobrando
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.payments_outlined),
-            label: const Text('Cobrar'),
           ),
         ],
       ),

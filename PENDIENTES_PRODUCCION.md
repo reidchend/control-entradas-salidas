@@ -4,6 +4,23 @@
 
 ## Pendientes sin completar
 
+- [ ] **Aplicar migración de turnos compartidos del POS**  
+  Archivo: `supabase/migrations/20261113000000_pos_turnos_compartidos.sql`  
+  **Qué hace:** agrega `pos_turno_participantes`, `pos_comandas.usuario_id`, `pos_cierres.cerrado_por_usuario_id` y el índice único que permite **un solo turno abierto** a la vez.  
+  **Instrucciones:** Ejecutar con usuario propietario (`postgres`) contra la base maestra. Antes, verificar que no haya más de un turno abierto:  
+  ```sql
+  SELECT id, usuario_id, abierta_en FROM pos_sesiones WHERE cerrada_en IS NULL;
+  ```  
+  Si hay más de uno, cerrarlos manualmente: la migración aborta a propósito para no generar cierres falsos.  
+  **Verificación:**  
+  ```sql
+  SELECT indexname FROM pg_indexes WHERE tablename='pos_sesiones' AND indexname='uq_pos_sesiones_turno_unico_abierto';
+  SELECT column_name FROM information_schema.columns WHERE table_name='pos_comandas' AND column_name='usuario_id';
+  SELECT column_name FROM information_schema.columns WHERE table_name='pos_cierres' AND column_name='cerrado_por_usuario_id';
+  SELECT to_regclass('public.pos_turno_participantes');
+  ```  
+  Deben devolver el índice, las 2 columnas y la tabla.
+
 - [ ] **Aplicar migración precios a activos_tipos**  
   Archivo: `supabase/migrations/20251028_activos_tipos_precio_referencia.sql`  
   SQL:

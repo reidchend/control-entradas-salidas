@@ -363,6 +363,7 @@ CREATE TABLE IF NOT EXISTS pos_settings (
 CREATE TABLE IF NOT EXISTS pos_comandas (
     id           SERIAL PRIMARY KEY,
     sesion_id    INTEGER,
+    usuario_id   INTEGER REFERENCES usuarios(id),
     mesa_id      INTEGER,
     habitacion_id INTEGER,
     estado       TEXT DEFAULT 'abierta',

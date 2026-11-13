@@ -8,6 +8,8 @@ import '../../../core/models/categoria.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
+import 'pos_comanda_models.dart';
+import 'pos_turno_models.dart';
 import 'pos_ventas_repository.dart';
 
 class PosRepository {
@@ -39,82 +41,241 @@ class PosRepository {
     );
   }
 
-  // Sesiones / turnos / caja
+  // Sesiones / turnos compartidos / caja
+  //
+  // Un turno puede tener VARIOS usuarios. `pos_sesiones.usuario_id` es quien
+  // lo abrió (aperturista) y `pos_turno_participantes` guarda quiénes entraron.
+  // Solo puede existir un turno abierto a la vez (índice único en BD).
 
-  Future<int> abrirSesion(int usuarioId) async {
-    final now = DateTime.now().toIso8601String();
-    final syncUuid = _uuid.v4();
-    return await _db.insert('pos_sesiones', {
-      'usuario_id': usuarioId,
-      'abierta_en': now,
-      'caja_inicial': 0,
-      'sync_uuid': syncUuid,
-      'created_at': now,
-      'updated_at': now,
-    });
+  /// Turno abierto actual (o `null` si no hay ninguno).
+  Future<PosSesion?> getTurnoAbierto() async {
+    final rows = await _db.client
+        .from('pos_sesiones')
+        .select()
+        .isFilter('cerrada_en', null)
+        .order('abierta_en', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return PosSesion.fromMap(rows.first);
   }
 
-  Future<void> cerrarSesion(int sesionId) async {
+  /// Turno por id, esté abierto o cerrado (para pantallas de cierre/detalle).
+  Future<PosSesion?> getSesionPorId(int sesionId) async {
     final rows = await _db.client
         .from('pos_sesiones')
         .select()
         .eq('id', sesionId)
         .limit(1);
-    if (rows.isEmpty) return;
-    final s = rows.first;
-    final now = DateTime.now().toIso8601String();
-    final caja = await _totalVigenteDeSesion(sesionId);
-    await _db.updateById('pos_sesiones', sesionId, {
-      'cerrada_en': now,
-      'caja_final': (s['caja_inicial'] as num? ?? 0).toDouble() + caja,
-      'updated_at': now,
-    });
+    if (rows.isEmpty) return null;
+    return PosSesion.fromMap(rows.first);
   }
 
-  Future<void> forzarCerrarSesion(int sesionId) async {
-    final rows = await _db.client
-        .from('pos_sesiones')
-        .select()
-        .eq('id', sesionId)
-        .limit(1);
-    if (rows.isEmpty) return;
-    final s = rows.first;
-    if (s['cerrada_en'] != null) return;
-    final now = DateTime.now().toIso8601String();
-    final caja = await _totalVigenteDeSesion(sesionId);
-    await _db.updateById('pos_sesiones', sesionId, {
-      'cerrada_en': now,
-      'caja_final': (s['caja_inicial'] as num? ?? 0).toDouble() + caja,
-      'updated_at': now,
-    });
-  }
-
-  /// Cierra en BD todas las sesiones abiertas de [usuarioId] excepto
-  /// [exceptoId]: limpia turnos duplicados (doble login concurrente o sesiones
-  /// huérfanas de un mismo cajero) para que nunca queden dos turnos abiertos a
-  /// la vez del mismo usuario.
-  Future<void> cerrarSesionesAbiertasDe(
-    int usuarioId, {
-    required int exceptoId,
-  }) async {
-    await _cerrarAbiertosDeUsuario(_db, usuarioId, exceptoId: exceptoId);
-  }
-
-  Future<void> _cerrarAbiertosDeUsuario(
-    PostgresService db,
-    int usuarioId, {
-    required int exceptoId,
-  }) async {
-    final now = DateTime.now().toIso8601String();
-    await db.executeCommand(
-      'UPDATE pos_sesiones SET cerrada_en = \$1, '
-      'caja_final = caja_inicial + COALESCE((SELECT SUM(total) '
-      'FROM pos_ventas v WHERE v.sesion_id = pos_sesiones.id '
-      "AND v.estado = 'vigente'), 0), "
-      'updated_at = \$2 '
-      'WHERE usuario_id = \$3 AND id <> \$4 AND cerrada_en IS NULL',
-      params: [now, now, usuarioId, exceptoId],
+  /// Turno abierto con aperturista, participantes y totales del turno.
+  Future<TurnoAbierto?> getTurnoAbiertoDetalle() async {
+    final sesion = await getTurnoAbierto();
+    if (sesion == null) return null;
+    final participantes = await getParticipantes(sesion.id);
+    final resumen = await _db.executeSql(
+      'SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total '
+      'FROM pos_ventas WHERE sesion_id = \$1 AND estado = \$2',
+      params: [sesion.id, 'vigente'],
     );
+    final ventas = resumen.isEmpty
+        ? 0
+        : ((resumen.first['ventas'] as num?) ?? 0).toInt();
+    final total = resumen.isEmpty
+        ? 0.0
+        : ((resumen.first['total'] as num?) ?? 0).toDouble();
+    return TurnoAbierto(
+      sesion: sesion,
+      aperturistaNombre:
+          await getUsuarioNombre(sesion.usuarioId) ?? 'Desconocido',
+      participantes: participantes,
+      ventas: ventas,
+      totalVentas: total,
+    );
+  }
+
+  /// Abre un turno nuevo con [usuarioId] como aperturista y participante.
+  ///
+  /// Falla si ya hay un turno abierto (la BD también lo impide con un índice
+  /// único parcial).
+  Future<int> abrirTurno(
+    int usuarioId, {
+    String origen = 'pc',
+    double cajaInicial = 0,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    return _db.transaction<int>((tx) async {
+      final abiertos = await tx.client
+          .from('pos_sesiones')
+          .select('id')
+          .isFilter('cerrada_en', null)
+          .limit(1);
+      if (abiertos.isNotEmpty) {
+        throw Exception(
+            'Ya hay un turno abierto. Únase a él en vez de abrir uno nuevo.');
+      }
+      final sesionId = await tx.insert('pos_sesiones', {
+        'usuario_id': usuarioId,
+        'abierta_en': now,
+        'caja_inicial': cajaInicial,
+        'origen_apertura': origen,
+        'sync_uuid': _uuid.v4(),
+        'created_at': now,
+        'updated_at': now,
+      });
+      await tx.insert('pos_turno_participantes', {
+        'sesion_id': sesionId,
+        'usuario_id': usuarioId,
+        'unido_en': now,
+        'ultima_actividad_en': now,
+        'created_at': now,
+        'updated_at': now,
+      });
+      return sesionId;
+    });
+  }
+
+  /// Incorpora (o reincorpora) a [usuarioId] al turno [sesionId]. Idempotente:
+  /// si ya era participante, limpia `salio_en` y actualiza la actividad.
+  Future<void> unirseATurno(int sesionId, int usuarioId) async {
+    final now = DateTime.now().toIso8601String();
+    await _db.transaction((tx) async {
+      final rows = await tx.client
+          .from('pos_sesiones')
+          .select('id')
+          .eq('id', sesionId)
+          .isFilter('cerrada_en', null)
+          .limit(1);
+      if (rows.isEmpty) {
+        throw Exception('El turno ya fue cerrado. Vuelva a iniciar sesión.');
+      }
+      await tx.executeCommand(
+        'INSERT INTO pos_turno_participantes '
+        '(sesion_id, usuario_id, unido_en, ultima_actividad_en, salio_en, '
+        'created_at, updated_at) '
+        'VALUES (\$1, \$2, \$3, \$3, NULL, \$3, \$3) '
+        'ON CONFLICT (sesion_id, usuario_id) DO UPDATE SET '
+        'salio_en = NULL, '
+        'ultima_actividad_en = EXCLUDED.ultima_actividad_en, '
+        'updated_at = EXCLUDED.updated_at',
+        params: [sesionId, usuarioId, now],
+      );
+    });
+  }
+
+  /// Marca que [usuarioId] salió del turno sin cerrarlo (Cambiar usuario).
+  Future<void> salirTurno(int sesionId, int usuarioId) async {
+    final now = DateTime.now().toIso8601String();
+    await _db.executeCommand(
+      'UPDATE pos_turno_participantes SET salio_en = \$1, updated_at = \$1 '
+      'WHERE sesion_id = \$2 AND usuario_id = \$3',
+      params: [now, sesionId, usuarioId],
+    );
+  }
+
+  /// Heartbeat liviano del participante (se llama desde el polling).
+  Future<void> tocarParticipante(int sesionId, int usuarioId) async {
+    final now = DateTime.now().toIso8601String();
+    await _db.executeCommand(
+      'UPDATE pos_turno_participantes '
+      'SET ultima_actividad_en = \$1, updated_at = \$1 '
+      'WHERE sesion_id = \$2 AND usuario_id = \$3 AND salio_en IS NULL',
+      params: [now, sesionId, usuarioId],
+    );
+  }
+
+  Future<String?> getUsuarioNombre(int usuarioId) async {
+    final rows = await _db.client
+        .from('usuarios')
+        .select('nombre')
+        .eq('id', usuarioId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return rows.first['nombre'] as String?;
+  }
+
+  /// Participantes del turno con sus ventas vigentes y comandas creadas.
+  Future<List<ParticipanteTurno>> getParticipantes(int sesionId) async {
+    final sesion = await getSesionPorId(sesionId);
+    if (sesion == null) return const [];
+    return _participantesConVentas(_db, sesionId, sesion.usuarioId);
+  }
+
+  Future<List<ParticipanteTurno>> _participantesConVentas(
+    PostgresService db,
+    int sesionId,
+    int aperturistaId,
+  ) async {
+    final rows = await db.client
+        .from('pos_turno_participantes')
+        .select()
+        .eq('sesion_id', sesionId);
+    if (rows.isEmpty) return const [];
+
+    final uids = <int>{
+      for (final r in rows) r['usuario_id'] as int,
+    }.toList();
+    final nombrePorId = <int, String>{};
+    final usuarios = await db.client
+        .from('usuarios')
+        .select('id, nombre')
+        .inFilter('id', uids);
+    for (final u in usuarios) {
+      nombrePorId[u['id'] as int] = u['nombre'] as String? ?? 'Usuario';
+    }
+
+    final ventasPorId = <int, ({int ventas, double total})>{};
+    final ventas = await db.executeSql(
+      'SELECT usuario_id, COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total '
+      'FROM pos_ventas WHERE sesion_id = \$1 AND estado = \$2 '
+      'GROUP BY usuario_id',
+      params: [sesionId, 'vigente'],
+    );
+    for (final v in ventas) {
+      final uid = (v['usuario_id'] as num?)?.toInt();
+      if (uid == null) continue;
+      ventasPorId[uid] = (
+        ventas: ((v['ventas'] as num?) ?? 0).toInt(),
+        total: ((v['total'] as num?) ?? 0).toDouble(),
+      );
+    }
+
+    final comandasPorId = <int, int>{};
+    final comandas = await db.executeSql(
+      'SELECT usuario_id, COUNT(*) AS comandas FROM pos_comandas '
+      'WHERE sesion_id = \$1 AND usuario_id IS NOT NULL '
+      'GROUP BY usuario_id',
+      params: [sesionId],
+    );
+    for (final c in comandas) {
+      final uid = (c['usuario_id'] as num?)?.toInt();
+      if (uid == null) continue;
+      comandasPorId[uid] = ((c['comandas'] as num?) ?? 0).toInt();
+    }
+
+    final result = <ParticipanteTurno>[];
+    for (final r in rows) {
+      final uid = r['usuario_id'] as int;
+      final v = ventasPorId[uid];
+      result.add(ParticipanteTurno(
+        usuarioId: uid,
+        nombre: nombrePorId[uid] ?? 'Usuario $uid',
+        esAperturista: uid == aperturistaId,
+        unidoEn: r['unido_en'] as String?,
+        ultimaActividadEn: r['ultima_actividad_en'] as String?,
+        salioEn: r['salio_en'] as String?,
+        ventas: v?.ventas ?? 0,
+        total: v?.total ?? 0,
+        comandas: comandasPorId[uid] ?? 0,
+      ));
+    }
+    result.sort((a, b) {
+      if (a.esAperturista != b.esAperturista) return a.esAperturista ? -1 : 1;
+      return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+    });
+    return result;
   }
 
   Future<double> _totalVigenteDeSesion(int sesionId) async {
@@ -127,68 +288,8 @@ class PosRepository {
         0, (sum, r) => sum + (r['total'] as num? ?? 0).toDouble());
   }
 
-  Future<List<int>> cerrarSesionesStale({int horas = 8}) async {
-    final limite =
-        DateTime.now().subtract(Duration(hours: horas)).toIso8601String();
-    final rows = await _db.client
-        .from('pos_sesiones')
-        .select()
-        .filter('cerrada_en', 'is', null)
-        .lt('abierta_en', limite);
-    if (rows.isEmpty) return [];
-    final now = DateTime.now().toIso8601String();
-    final ids = <int>[];
-    for (final s in rows) {
-      final id = s['id'] as int;
-      final caja = await _totalVigenteDeSesion(id);
-      await _db.updateById('pos_sesiones', id, {
-        'cerrada_en': now,
-        'caja_final': (s['caja_inicial'] as num? ?? 0).toDouble() + caja,
-        'updated_at': now,
-      });
-      ids.add(id);
-    }
-    return ids;
-  }
-
-  /// Devuelve el turno de caja ACTIVO de un cajero concreto (si lo tiene).
-  ///
-  /// Soporta múltiples turnos abiertos simultáneos (uno por cajero) en el
-  /// mismo dispositivo: cada cajero retoma o abre SU propio turno sin cerrar
-  /// el de los demás.
-  Future<({PosSesion sesion, String? usuarioNombre})?> getSesionActivaDeUsuario(
-      int usuarioId) async {
-    final rows = await _db.client
-        .from('pos_sesiones')
-        .select()
-        .eq('usuario_id', usuarioId)
-        .filter('cerrada_en', 'is', null)
-        .order('abierta_en', ascending: false)
-        .limit(1);
-    if (rows.isEmpty) return null;
-    final s = rows.first;
-    final u = await _db.client
-        .from('usuarios')
-        .select('nombre')
-        .eq('id', s['usuario_id'] as int)
-        .limit(1);
-    return (
-      sesion: PosSesion.fromMap(s),
-      usuarioNombre: u.isNotEmpty ? u.first['nombre'] as String? : null,
-    );
-  }
-
-  /// IDs de los cajeros que tienen un turno abierto en este momento (para
-  /// marcarlos en la pantalla de login).
-  Future<Set<int>> getUsuariosConTurnoActivo() async {
-    final rows = await _db.client
-        .from('pos_sesiones')
-        .select('usuario_id')
-        .filter('cerrada_en', 'is', null) as List<Map<String, dynamic>>;
-    return rows.map((r) => r['usuario_id'] as int).toSet();
-  }
-
-Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>>
+  /// Turnos cerrados paginados con el resumen de ventas de cada uno.
+Future<List<TurnoCerradoResumen>>
     getSesiones({int limit = 50, int? beforeId}) async {
     var query = _db.client.from('pos_sesiones').select();
     if (beforeId != null) query = query.lt('id', beforeId);
@@ -228,7 +329,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
       }
     }
 
-    final result = <({PosSesion sesion, String? usuarioNombre, int ventas, double totalVentas})>[];
+    final result = <TurnoCerradoResumen>[];
     for (final s in sesiones) {
       final r = resumenMap[s['id'] as int] ?? (ventas: 0, total: 0.0);
       result.add((
@@ -830,6 +931,22 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
         .eq('id', s['usuario_id'] as int)
         .limit(1);
     final usuarioNombre = uRows.isNotEmpty ? uRows.first['nombre'] as String : 'Desconocido';
+    final aperturistaId = s['usuario_id'] as int;
+
+    // 1.b Participantes del turno compartido con sus ventas por usuario.
+    final participantes =
+        await _participantesConVentas(_db, sesionId, aperturistaId);
+    final porUsuario = [
+      for (final p in participantes)
+        ResumenUsuario(
+          usuarioId: p.usuarioId,
+          nombre: p.nombre,
+          esAperturista: p.esAperturista,
+          esCerrador: p.esAperturista,
+          ventas: p.ventas,
+          total: p.total,
+        ),
+    ];
 
     // 2. Totales de caja
     final cajaInicial = (s['caja_inicial'] as num? ?? 0).toDouble();
@@ -880,6 +997,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
       totalGeneral: lineas.fold(0.0, (s, l) => s + l.total),
       ventasFueraTurno: fueraTurno.cantidad,
       montoFueraTurno: fueraTurno.total,
+      porUsuario: porUsuario,
     );
 
     // 4. Reporte detallado: desglose por ingrediente
@@ -900,7 +1018,7 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
     // 5. Construir CierreCaja
     return CierreCaja(
       sesionId: sesionId,
-      usuarioId: s['usuario_id'] as int,
+      usuarioId: aperturistaId,
       usuarioNombre: usuarioNombre,
       abiertaEn: s['abierta_en'] as String,
       cerradaEn: DateTime.now().toIso8601String(),
@@ -910,18 +1028,37 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
       reporteSimple: reporteSimple,
       reporteDetallado: reporteDetallado,
       syncUuid: _uuid.v4(),
+      cerradoPorId: aperturistaId,
+      cerradoPorNombre: usuarioNombre,
     );
   }
 
   /// Persiste el cierre y cierra el turno de caja de forma atómica
   /// (transacción). Si algo falla, se revierte todo y el turno queda abierto,
   /// de modo que nunca se envían reportes sin haber guardado el cierre.
+  ///
+  /// Solo el usuario que abrió el turno puede cerrarlo. La fila se bloquea con
+  /// `FOR UPDATE` para que dos terminales no puedan cerrar el mismo turno.
   Future<void> finalizarCierreYTurno(CierreCaja cierre) async {
     await _db.transaction((tx) async {
       final now = DateTime.now().toIso8601String();
+      final rows = await tx.executeSql(
+        'SELECT usuario_id, cerrada_en FROM pos_sesiones WHERE id = \$1 FOR UPDATE',
+        params: [cierre.sesionId],
+      );
+      if (rows.isEmpty) throw Exception('Turno no encontrado.');
+      final aperturistaId = rows.first['usuario_id'] as int;
+      if (rows.first['cerrada_en'] != null) {
+        throw Exception('El turno ya fue cerrado.');
+      }
+      if (aperturistaId != cierre.usuarioId) {
+        throw Exception('Solo el usuario que abrió el turno puede cerrarlo.');
+      }
+
       await tx.insert('pos_cierres', {
         'sesion_id': cierre.sesionId,
         'usuario_id': cierre.usuarioId,
+        'cerrado_por_usuario_id': cierre.cerradoPorId ?? cierre.usuarioId,
         'abierta_en': cierre.abiertaEn,
         'cerrada_en': cierre.cerradaEn,
         'caja_inicial': cierre.cajaInicial,
@@ -936,14 +1073,17 @@ Future<List<({PosSesion sesion, String? usuarioNombre, int ventas, double totalV
       await tx.updateById('pos_sesiones', cierre.sesionId, {
         'cerrada_en': cierre.cerradaEn,
         'caja_final': cierre.cajaFinal,
+        'cerrada_por_usuario_id': cierre.cerradoPorId ?? cierre.usuarioId,
         'updated_at': now,
       });
-      // Cerrar atómicamente cualquier OTRA sesión abierta del mismo cajero
-      // (duplicados por doble login o turnos huérfanos): al cerrar el turno
-      // no deben quedar abiertas para que el login no siga marcando 'Turno
-      // abierto'.
-      await _cerrarAbiertosDeUsuario(tx, cierre.usuarioId,
-          exceptoId: cierre.sesionId);
+      // Todos los participantes quedan fuera del turno; las demás terminales
+      // se expulsan solas en su siguiente revalidación.
+      await tx.executeCommand(
+        'UPDATE pos_turno_participantes '
+        'SET salio_en = \$1, updated_at = \$1 '
+        'WHERE sesion_id = \$2 AND salio_en IS NULL',
+        params: [cierre.cerradaEn, cierre.sesionId],
+      );
     });
   }
 }

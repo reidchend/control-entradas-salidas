@@ -101,7 +101,7 @@ class UsuarioCard extends StatelessWidget {
                           size: 14, color: scheme.onSecondaryContainer),
                       const SizedBox(width: 4),
                       Text(
-                        'Turno abierto',
+                        'En turno',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,

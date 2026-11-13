@@ -7,6 +7,7 @@ import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/producto.dart';
 import 'pos_comanda_models.dart';
+import 'pos_dispositivo.dart';
 import 'sesion_cerrada_error.dart';
 
 class PosVentasRepository {
@@ -44,6 +45,7 @@ class PosVentasRepository {
     double total, {
     int? mesaId,
     int? habitacionId,
+    int? usuarioId,
   }) async {
     // Modo desarrollador: sin escritura en BD
     if (sesionId == 0) return -1;
@@ -101,6 +103,7 @@ class PosVentasRepository {
         await tx.updateById('pos_comandas', id, {
           'items_json': itemsJson,
           'total': total,
+          'usuario_id': usuarioId,
           'updated_at': now,
         });
         return id;
@@ -109,6 +112,7 @@ class PosVentasRepository {
       final syncUuid = _uuid.v4();
       return tx.insert('pos_comandas', {
         'sesion_id': sesionId,
+        'usuario_id': usuarioId,
         'mesa_id': mesaId,
         'habitacion_id': habitacionId,
         'estado': 'abierta',
@@ -299,6 +303,12 @@ class PosVentasRepository {
   }) async {
     // Modo desarrollador: sin escritura en BD
     if (sesionId != null && sesionId == 0) return -2;
+    // Cobrar/emitir ticket solo se permite en la PC principal (con impresora).
+    // Defensa en profundidad: la UI ya oculta el cobro en Android.
+    if (!puedeCobrar) {
+      throw Exception(
+          'Cobrar solo está disponible en la PC principal (con impresora).');
+    }
     // El turno debe seguir vivo en BD (otra terminal pudo haberlo cerrado):
     // si no, la venta quedaría huérfana en un turno ya cerrado.
     await _asegurarSesionAbierta(sesionId ?? 0);

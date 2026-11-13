@@ -7,19 +7,26 @@ import '../../data/pos_session.dart';
 
 /// Diálogo de PIN (4 dígitos) para cajeros protegidos. Port de
 /// `POSLoginView._show_pin_dialog` / `_verify_pin_and_login` (login.py).
-/// Devuelve el resultado de `iniciarSesion` o `null` si se canceló.
+///
+/// Si se indica [sesionId], el usuario se une a ese turno; si no, se une al
+/// turno abierto (o lo abre si es la PC principal). Devuelve el resultado de
+/// `iniciarSesion` o `null` si se canceló.
 Future<SesionLoginResult?> showPinDialog(
-    BuildContext context, PosUsuario usuario) async {
+  BuildContext context,
+  PosUsuario usuario, {
+  int? sesionId,
+}) async {
   return await showDialog<SesionLoginResult>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => _PinDialog(usuario: usuario),
+        builder: (_) => _PinDialog(usuario: usuario, sesionId: sesionId),
       );
 }
 
 class _PinDialog extends ConsumerStatefulWidget {
-  const _PinDialog({required this.usuario});
+  const _PinDialog({required this.usuario, this.sesionId});
   final PosUsuario usuario;
+  final int? sesionId;
 
   @override
   ConsumerState<_PinDialog> createState() => _PinDialogState();
@@ -50,7 +57,7 @@ class _PinDialogState extends ConsumerState<_PinDialog> {
     try {
       result = await ref
           .read(posSessionProvider.notifier)
-          .iniciarSesion(widget.usuario, pin: pin);
+          .iniciarSesion(widget.usuario, pin: pin, sesionId: widget.sesionId);
     } catch (e) {
       // Un fallo de conexión/consulta no debe dejar el diálogo mudo.
       if (!mounted) return;
@@ -62,6 +69,11 @@ class _PinDialogState extends ConsumerState<_PinDialog> {
       setState(() {
         _error = 'PIN incorrecto';
         _ctrl.clear();
+      });
+    } else if (result == SesionLoginResult.soloPcPrincipal ||
+        result == SesionLoginResult.sinTurno) {
+      setState(() {
+        _error = 'No hay turno abierto. Debe abrirse desde la PC principal.';
       });
     } else {
       Navigator.pop(context, result);

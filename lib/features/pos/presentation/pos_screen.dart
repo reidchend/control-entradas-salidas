@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/postgres_guard.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
-import '../../../core/updater/auto_update_checker.dart';
-import '../../../features/configuracion/presentation/dialogs/db_config_dialog.dart';
-import '../../../features/configuracion/presentation/widgets/bd_no_disponible.dart';
 import '../../../features/whatsapp/data/whatsapp_providers.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
@@ -14,13 +10,12 @@ import '../data/reporte_cierre_texto.dart';
 import 'comanda_screen.dart';
 import 'config_screen.dart';
 import 'dialogs/cierre_turno_dialog.dart';
-import 'dialogs/nuevo_cajero_dialog.dart';
-import 'dialogs/pin_dialog.dart';
+import 'dialogs/opciones_sesion_dialog.dart';
 import 'habitaciones_screen.dart';
+import 'login/login_screen.dart';
 import 'mesas_screen.dart';
 import 'pos_home_screen.dart';
 import 'ventas_screen.dart';
-import 'widgets/usuario_card.dart';
 
 /// Diálogo de carga mostrado mientras se genera el cierre de turno.
 class _CerrandoSesionDialog extends StatelessWidget {
@@ -59,7 +54,7 @@ class PosScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sesion = ref.watch(posSessionProvider);
-    if (sesion == null) return const _LoginView();
+    if (sesion == null) return const LoginScreen();
     return _PosRouter(key: ValueKey(sesion.sesionId), sesion: sesion);
   }
 }
@@ -144,40 +139,31 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  /// Muestra diálogo para elegir: cerrar turno completo, cambiar cajero, o cancelar.
+  /// Muestra diálogo para elegir: cambiar usuario o cerrar el turno completo.
+  /// Cerrar solo se habilita para el aperturista en la PC principal.
   Future<void> _mostrarOpcionesCierre() async {
     final sesionActiva = ref.read(posSessionProvider);
-    if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
+    if (sesionActiva == null) return;
 
-    final opcion = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Opciones de sesión'),
-        content: const Text('¿Qué deseas hacer?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'cancelar'),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'cambiar_cajero'),
-            child: const Text('Cambiar cajero\n(turno queda abierto)'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'cerrar_turno'),
-            child: const Text('Cerrar turno\n(corte + WhatsApp)'),
-          ),
-        ],
-      ),
+    // Sesión de desarrollador (sin turno): solo puede salir.
+    if (sesionActiva.sesionId <= 0) {
+      await ref.read(posSessionProvider.notifier).salirDelTurno();
+      return;
+    }
+
+    final opcion = await showOpcionesSesionDialog(
+      context,
+      esAperturista: sesionActiva.esAperturista,
+      aperturistaNombre: sesionActiva.aperturistaNombre,
     );
 
-    if (!mounted) return;
+    if (!mounted || opcion == null) return;
 
-    if (opcion == 'cambiar_cajero') {
-      // Sale sin cerrar: turno queda abierto en BD para retomar luego
-      ref.read(posSessionProvider.notifier).salirSinCerrar();
-    } else if (opcion == 'cerrar_turno') {
-      // Flujo completo: cierre + WhatsApp + cerrar sesión
+    if (opcion == OpcionSesion.cambiarUsuario) {
+      // Sale sin cerrar: el turno queda abierto para los demás.
+      await ref.read(posSessionProvider.notifier).salirDelTurno();
+    } else if (opcion == OpcionSesion.cerrarTurno) {
+      if (!sesionActiva.puedeCerrarTurno) return;
       await _cerrarSesionCompleto();
     }
   }
@@ -185,6 +171,22 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
   Future<void> _cerrarSesionCompleto() async {
     final sesionActiva = ref.read(posSessionProvider);
     if (sesionActiva == null || sesionActiva.sesionId <= 0) return;
+
+    // Defensa en profundidad: solo el aperturista desde la PC principal.
+    if (!sesionActiva.puedeCerrarTurno) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            sesionActiva.aperturistaNombre == null
+                ? 'Solo el usuario que abrió el turno puede cerrarlo desde la '
+                    'PC principal.'
+                : 'Solo ${sesionActiva.aperturistaNombre} puede cerrar el turno '
+                    'desde la PC principal.',
+          ),
+        ),
+      );
+      return;
+    }
 
     // Mostrar diálogo de carga inmediatamente
     showDialog(
@@ -210,13 +212,14 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     }
 
     // 2. Obtener la sesión para mostrar detalles
-    final sesionData = await repo.getSesionActivaDeUsuario(sesionActiva.usuario.id);
+    final sesionData = await repo.getSesionPorId(sesionId);
     if (!mounted) return;
     Navigator.pop(context); // cerrar loading
     if (sesionData == null) return;
 
     // 3. Mostrar diálogo de cierre
-    final resultado = await showCierreTurnoDialog(context, cierre, sesionData.sesion);
+    final resultado =
+        await showCierreTurnoDialog(context, cierre, sesionData);
     if (!mounted) return;
 
     if (resultado == null || resultado == CierreTurnoResultado.cancelar) {
@@ -252,7 +255,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     if (!mounted) return;
 
     // 5. Cerrar la sesión local (turno ya cerrado en BD). Al ponerse en null,
-    //    PosScreen reconstruye a _LoginView y ESTA pantalla se desmonta, pero
+    //    PosScreen reconstruye el LoginScreen y ESTA pantalla se desmonta, pero
     //    el diálogo de carga vive en el navigator raíz y no se puede cerrar
     //    con `context` desmontado. Se capturan navigator y messenger mientras
     //    viven para cerrar el diálogo y avisar aunque esta pantalla ya no exista.
@@ -424,195 +427,3 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       reporteDetalladoTexto(c);
 }
 
-// ===========================================================================
-// Login PIN
-// ===========================================================================
-
-class _LoginView extends ConsumerStatefulWidget {
-  const _LoginView();
-
-  @override
-  ConsumerState<_LoginView> createState() => _LoginViewState();
-}
-
-class _LoginViewState extends ConsumerState<_LoginView> {
-  int? _selectedId;
-
-  Future<void> _login(PosUsuario u) async {
-    try {
-      if (u.pinHash != null && u.pinHash!.isNotEmpty) {
-        final result = await showPinDialog(context, u);
-        // El diálogo ya inicia la sesión internamente con el PIN. Solo
-        // invalidamos la lista si se canceló o el PIN fue incorrecto.
-        if (result == null || result == SesionLoginResult.pinIncorrecto) {
-          if (mounted) ref.invalidate(usuariosProvider);
-        }
-        return;
-      }
-      await ref.read(posSessionProvider.notifier).iniciarSesion(u);
-    } catch (e) {
-      // Sin esto, cualquier fallo al abrir/retomar el turno (p. ej. una query
-      // rechazada por la base) se perdía y el botón parecía "no hacer nada".
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo iniciar sesión: $e'),
-          duration: const Duration(seconds: 8),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final usuarios = ref.watch(usuariosProvider);
-    final estadoBd = ref.watch(estadoBdProvider);
-    final turnosActivos =
-        ref.watch(turnosActivosProvider).valueOrNull ?? <int>{};
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lycoris POS'),
-        leading: Image.asset(
-          'assets/icono_azul.png',
-          width: 30,
-          height: 30,
-          fit: BoxFit.cover,
-        ),
-        actions: [
-          // Siempre disponible: con la base caída o sin configurar es la
-          // única forma de llegar al panel de conexión sin pasar por el login.
-          IconButton(
-            tooltip: 'Configurar conexión',
-            onPressed: () => showDbConfigDialog(context),
-            icon: const Icon(Icons.settings_ethernet),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.storefront, size: 40, color: scheme.primary),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Lycoris POS',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  'Seleccione el cajero',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ),
-              const SizedBox(height: 24),
-              usuarios.when(
-                loading: () => estadoBd == EstadoBd.conectando
-                    ? const Center(child: CircularProgressIndicator())
-                    : const Center(child: BdNoDisponible()),
-                error: (e, _) => const Center(child: BdNoDisponible()),
-                data: (lista) => lista.isEmpty
-                    ? _sinCajeros()
-                    : Column(
-                        children: [
-                          for (final u in lista) ...[
-                            UsuarioCard(
-                              usuario: u,
-                              selected: u.id == _selectedId,
-                              turnoAbierto: turnosActivos.contains(u.id),
-                              onTap: () {
-                                setState(() => _selectedId = u.id);
-                                _login(u);
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          const SizedBox(height: 8),
-                          _loginButton(lista),
-                        ],
-                      ),
-            ),
-          ],
-          ),
-        ),
-          ),
-          // Verificar actualizaciones antes del login (Windows/Android).
-          const Align(
-            alignment: Alignment.topRight,
-            child: AutoUpdateChecker(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sinCajeros() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.person_off_outlined, size: 48),
-            const SizedBox(height: 8),
-            const Text('No hay cajeros registrados',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('Agregue uno con el botón de abajo',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                )),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => showNuevoCajeroDialog(context),
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('Nuevo cajero'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _loginButton(List<PosUsuario> lista) {
-    final selected = lista.where((u) => u.id == _selectedId).firstOrNull;
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: selected == null
-                ? null
-                : () {
-                    setState(() => _selectedId = selected.id);
-                    _login(selected);
-                  },
-            icon: const Icon(Icons.login),
-            label: Text(selected == null
-                ? 'Iniciar sesión'
-                : 'Iniciar sesión como ${selected.nombre}'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          tooltip: 'Nuevo cajero',
-          onPressed: () => showNuevoCajeroDialog(context),
-          icon: const Icon(Icons.person_add_alt_1),
-        ),
-      ],
-    );
-  }
-}

@@ -27,8 +27,10 @@ class CierresRepository {
   /// la fachada `PgClient` no lo traduce y lo manda literal al SQL
   /// (`SELECT *, usuarios(nombre) ...`), que Postgres rechaza con error 500.
   static const _fromJoin =
-      'SELECT c.*, u.nombre AS usuario_nombre FROM pos_cierres c '
-      'LEFT JOIN usuarios u ON u.id = c.usuario_id';
+      'SELECT c.*, u.nombre AS usuario_nombre, '
+      'cu.nombre AS cerrado_por_nombre FROM pos_cierres c '
+      'LEFT JOIN usuarios u ON u.id = c.usuario_id '
+      'LEFT JOIN usuarios cu ON cu.id = c.cerrado_por_usuario_id';
 
   /// Fila de `pos_cierres` con el nombre del cajero (columna
   /// `usuario_nombre` del JOIN; vacío si el usuario ya no existe).
@@ -49,6 +51,8 @@ class CierresRepository {
           ? jsonDecode(r['reporte_detallado_json'])
           : r['reporte_detallado_json'],
       'sync_uuid': r['sync_uuid'],
+      'cerrado_por_usuario_id': r['cerrado_por_usuario_id'],
+      'cerrado_por_nombre': r['cerrado_por_nombre'] as String? ?? '',
     });
   }
 

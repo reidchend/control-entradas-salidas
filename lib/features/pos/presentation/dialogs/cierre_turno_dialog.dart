@@ -121,10 +121,27 @@ class _CierreTurnoDialogState extends State<_CierreTurnoDialog> {
             ),
             const SizedBox(height: 16),
 
+            // Desglose por usuario del turno compartido
+            if (c.reporteSimple.porUsuario.isNotEmpty) ...[
+              Text('Usuarios del turno',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final u in c.reporteSimple.porUsuario)
+                _ResumenRow(
+                  label:
+                      '${u.nombre}${u.esAperturista ? ' (aperturó)' : ''}',
+                  valor:
+                      '${u.ventas} ventas · \$${_fmtNum(u.total)}',
+                ),
+              const SizedBox(height: 16),
+            ],
+
             // Detalles de sesión
             Text('Detalles de la sesión', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            _ResumenRow(label: 'Cajero', valor: c.usuarioNombre),
+            _ResumenRow(label: 'Aperturó', valor: c.usuarioNombre),
+            if (c.cerradoPorNombre.isNotEmpty)
+              _ResumenRow(label: 'Cerró', valor: c.cerradoPorNombre),
             _ResumenRow(label: 'Apertura', valor: _fmtFecha(c.abiertaEn)),
             _ResumenRow(label: 'Cierre', valor: _fmtFecha(c.cerradaEn)),
             _ResumenRow(label: 'Duración', valor: _duracionTexto()),
