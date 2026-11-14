@@ -20,6 +20,10 @@
   ```
   **Estado:** Completado. Las 3 columnas (`precio_referencia`, `precio_origen`, `precio_actualizado_at`) ya existen en `activos_tipos`.
 
+- [x] **Aplicar migración eliminar pos_categorias**  
+  Archivo: `supabase/migrations/20261114000002_eliminar_pos_categorias.sql`  
+  **Estado:** Completado. Tabla `pos_categorias` eliminada; categorías del POS ahora usan `categorias` de inventario con `visible_en_pos`.
+
 - [ ] **Asignar precios de referencia desde MercadoLibre Venezuela (Ciudad Guayana)**  
   **Script:** `update_prices_direct.py` (en raíz del proyecto)  
   **Requisitos:** Acceso directo a PostgreSQL con `psycopg` instalado. Conexión: `postgresql://control_app:Reidchendk.11@localhost:5432/control_entradas?sslmode=disable` (ajustar si es otra BD).  
