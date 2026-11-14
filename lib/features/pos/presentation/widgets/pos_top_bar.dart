@@ -13,6 +13,7 @@ class PosTopBar extends StatelessWidget {
     this.onBack,
     this.onLogout,
     this.actions = const [],
+    this.mostrarPerfil = true,
   });
 
   final PosUsuario usuario;
@@ -20,6 +21,9 @@ class PosTopBar extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onLogout;
   final List<Widget> actions;
+  /// Oculta el avatar, nombre y rol del cajero (útil en pantallas pequeñas
+  /// como la de comandas en tablets).
+  final bool mostrarPerfil;
 
   @override
   Widget build(BuildContext context) {
@@ -61,45 +65,47 @@ class PosTopBar extends StatelessWidget {
           const Spacer(),
           ...actions,
           const SizedBox(width: 4),
-          CircleAvatar(
-            radius: 18,
-            backgroundColor:
-                esAdmin ? const Color(0xFFF57C00) : scheme.primaryContainer,
-            child: Text(
-              iniciales,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: esAdmin ? Colors.white : scheme.onPrimaryContainer,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                usuario.nombre,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                esAdmin ? 'Administrador' : 'Cajero #${usuario.id}',
+          if (mostrarPerfil) ...[
+            CircleAvatar(
+              radius: 18,
+              backgroundColor:
+                  esAdmin ? const Color(0xFFF57C00) : scheme.primaryContainer,
+              child: Text(
+                iniciales,
                 style: TextStyle(
-                  fontSize: 11,
-                  color: esAdmin
-                      ? const Color(0xFFF57C00)
-                      : scheme.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: esAdmin ? Colors.white : scheme.onPrimaryContainer,
                 ),
               ),
-            ],
-          ),
-          if (onLogout != null)
-            IconButton(
-              tooltip: 'Cerrar sesión',
-              onPressed: onLogout,
-              icon: const Icon(Icons.logout, color: Color(0xFFEF5350)),
             ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  usuario.nombre,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  esAdmin ? 'Administrador' : 'Cajero #${usuario.id}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: esAdmin
+                        ? const Color(0xFFF57C00)
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            if (onLogout != null)
+              IconButton(
+                tooltip: 'Cerrar sesión',
+                onPressed: onLogout,
+                icon: const Icon(Icons.logout, color: Color(0xFFEF5350)),
+              ),
+          ],
         ],
       ),
     );

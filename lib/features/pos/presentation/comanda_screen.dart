@@ -1419,8 +1419,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           PosTopBar(
             usuario: widget.sesion.usuario,
             titulo: _ubicacion,
-            onBack: widget.onBack,
-            onLogout: widget.onLogout,
+            mostrarPerfil: false,
             actions: [
               PopupMenuButton<String>(
                 tooltip: 'Acciones de comanda',
@@ -1812,6 +1811,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ),
       child: Row(
         children: [
+          const Spacer(),
           SizedBox(
             height: PosResponsive.botonAltura(context),
             child: OutlinedButton.icon(
@@ -1834,7 +1834,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
               label: const Text('Anular'),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           SizedBox(
             height: PosResponsive.botonAltura(context),
             child: OutlinedButton.icon(
