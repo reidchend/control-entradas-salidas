@@ -96,7 +96,7 @@ class _PersonalPanelState extends ConsumerState<PersonalPanel> {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+        constraints: const BoxConstraints(maxWidth: 1000),
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
@@ -138,22 +138,44 @@ class _PersonalPanelState extends ConsumerState<PersonalPanel> {
                   ? _sinCajeros()
                   : Column(
                       children: [
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            for (final u in lista)
-                              UsuarioCard(
-                                usuario: u,
-                                selected: u.id == _selectedId,
-                                turnoAbierto: enTurno.contains(u.id),
-                                onTap: _entrando ? null : () => _login(u),
-                              ),
-                          ],
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            const spacing = 12.0;
+                            // Tarjetas de ~300 dp: 2 columnas en tablets y
+                            // 3-4 en la PC principal, siempre centradas.
+                            final columnas = (constraints.maxWidth / 300)
+                                .floor()
+                                .clamp(1, 4)
+                                .toInt();
+                            final ancho =
+                                (constraints.maxWidth - spacing * (columnas - 1)) /
+                                    columnas;
+                            return Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: spacing,
+                              runSpacing: spacing,
+                              children: [
+                                for (final u in lista)
+                                  SizedBox(
+                                    width: ancho,
+                                    child: UsuarioCard(
+                                      usuario: u,
+                                      selected: u.id == _selectedId,
+                                      turnoAbierto: enTurno.contains(u.id),
+                                      onTap: _entrando ? null : () => _login(u),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 24),
-                        _loginButton(lista),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 560),
+                            child: _loginButton(lista),
+                          ),
+                        ),
                       ],
                     ),
             ),

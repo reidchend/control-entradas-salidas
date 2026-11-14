@@ -70,6 +70,8 @@ class UsuarioCard extends StatelessWidget {
                   children: [
                     Text(
                       usuario.nombre,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -78,6 +80,8 @@ class UsuarioCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       badges.join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         color: scheme.onSurfaceVariant,
