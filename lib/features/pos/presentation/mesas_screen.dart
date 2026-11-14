@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
+import '../dialogs/seleccionar_tipo_cliente_dialog.dart';
 import 'widgets/mesa_card.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -19,7 +20,11 @@ class MesasScreen extends ConsumerWidget {
   });
 
   final PosSesionActiva sesion;
-  final ValueChanged<PosMesa> onOpenMesa;
+  /// Callback al tocar una mesa: recibe la mesa, el tipo de cliente
+  /// ('particular' | 'huesped') y el texto de habitaciones ('Particular' |
+  /// '101, 103' | null).
+  final void Function(PosMesa mesa, String? tipoCliente, String? habitaciones)
+      onOpenMesa;
   final VoidCallback onBack;
   final VoidCallback onLogout;
 
@@ -58,7 +63,26 @@ class MesasScreen extends ConsumerWidget {
                         child: MesaCard(
                           mesa: lista[i],
                           ocupada: ocup.contains(lista[i].id),
-                          onTap: () => onOpenMesa(lista[i]),
+                          onTap: () async {
+                            final resultado =
+                                await showSeleccionarTipoClienteDialog(
+                              context: context,
+                              mesaId: lista[i].id,
+                              mesaNumero: lista[i].numero,
+                            );
+                            if (!mounted) return;
+                            if (resultado != null) {
+                              final habitacionesTexto =
+                                  resultado.esParticular
+                                      ? 'Particular'
+                                      : resultado.habitaciones;
+                              onOpenMesa(
+                                lista[i],
+                                resultado.tipo,
+                                habitacionesTexto,
+                              );
+                            }
+                          },
                         ),
                       ),
                   ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/habitacion_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
@@ -20,6 +21,7 @@ import 'dialogs/renombre_cliente_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
 import 'widgets/clientes_bar.dart';
+import 'widgets/comanda_encabezado.dart';
 import 'widgets/comanda_item_tile.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -41,6 +43,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
   final PosSesionActiva sesion;
   final PosMesa? mesa;
   final Habitacion? habitacion;
+  final String? habitacionesTexto; // 'Particular' | '101, 103' | null
   final VoidCallback onBack;
   final VoidCallback onLogout;
 
@@ -249,6 +252,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
+            habitaciones: widget.habitacionesTexto,
           );
       _comandaId = comandaId;
       ref.invalidate(mesasOcupadasProvider);
@@ -386,6 +390,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         mesaId: mesaI,
         habitacionId: habId,
         usuarioId: widget.sesion.usuario.id,
+        habitaciones: widget.habitacionesTexto,
       );
       final anulada = await repo.getVentaAnuladaPorComanda(comandaId);
       final ventaAnulaId = anulada?.id;
@@ -1317,6 +1322,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
+            habitaciones: widget.habitacionesTexto,
           );
       _comandaId = id;
       ref.invalidate(comandasActivasProvider);
@@ -1448,6 +1454,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                 ],
               ),
             ],
+          ),
+          ComandaEncabezado(
+            mesaNumero: widget.mesa?.numero ?? '—',
+            habitaciones: widget.habitacionesTexto,
           ),
           const Divider(height: 1),
           Expanded(

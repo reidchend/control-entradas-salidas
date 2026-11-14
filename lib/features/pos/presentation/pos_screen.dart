@@ -79,6 +79,8 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
   _PosStage _stage = _PosStage.home;
   PosMesa? _mesa;
   Habitacion? _habitacion;
+  String? _tipoCliente; // 'particular' | 'huesped'
+  String? _habitacionesTexto; // 'Particular' | '101, 103' | null
   List<void Function()> _pollingCancels = [];
 
   /// Polling de comandas/sesiones para el POS: detecta cuando otro
@@ -139,7 +141,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  void _abrirMesa(PosMesa m) {
+  void _abrirMesa(PosMesa m, [String? tipoCliente, String? habitacionesTexto]) {
     if (!_tieneTurno) {
       _bloquearSinTurno();
       return;
@@ -147,6 +149,8 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     setState(() {
       _mesa = m;
       _habitacion = null;
+      _tipoCliente = tipoCliente;
+      _habitacionesTexto = habitacionesTexto;
       _stage = _PosStage.comanda;
     });
   }
@@ -406,6 +410,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           sesion: s,
           mesa: _mesa,
           habitacion: _habitacion,
+          habitacionesTexto: _habitacionesTexto,
           onBack: () => _go(_PosStage.home),
           onLogout: _mostrarOpcionesCierre,
           onComandaMovida: _abrirComandaActiva,
