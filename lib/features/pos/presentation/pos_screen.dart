@@ -134,6 +134,13 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       _bloquearSinTurno();
       return;
     }
+    // Refrescar las casillas al navegar: no esperar los 5 s del polling. Si
+    // otro dispositivo abrió/cerró una comanda, la mesa debe verse ocupada o
+    // libre apenas se entra a la vista.
+    ref.invalidate(mesasOcupadasProvider);
+    ref.invalidate(habitacionesOcupadasProvider);
+    ref.invalidate(comandasActivasProvider);
+    ref.invalidate(comandasAbiertasProvider);
     setState(() {
       _stage = stage;
       _mesa = null;

@@ -94,32 +94,49 @@ List<void Function()> initPollingSubscriptions(
   ];
 
   final timers = <Timer>[];
-  // Checkpoint por tabla: la última marca de tiempo en que se invalidó.
-  // Detectar cambios con `col >= checkpoint` evita invalidaciones continuas
-  // con actividad permanente (una ventana fija de interval*2 siempre disparaba
-  // aunque no hubiera cambios nuevos, recargando providers cada pocos segundos).
-  final ultimoVisto = <String, String>{};
+  // Firma por tabla: cantidad de filas + marca de tiempo más reciente. Se
+  // compara contra la firma anterior y, si cambió (alta, baja o modificación),
+  // se invalidan los providers para que la UI se refresque.
+  //
+  // Antes se hacía `col >= ahora` usando la hora LOCAL del cliente como
+  // checkpoint inicial. Ese checkpoint nacía en el mismo instante del primer
+  // tick, así que la ventana de detección era de ancho cero y el polling
+  // prácticamente nunca disparaba; además mezclaba zonas horarias (las
+  // columnas TEXT de comandas/ventas guardan hora local, y el chequeo usaba
+  // UTC). Con la firma calculada por PostgreSQL no intervienen relojes ni
+  // zonas horarias.
+  final firmaAnterior = <String, String>{};
+
   for (final b in bindings) {
+    // `GREATEST` ignora NULLs, así que sirve aunque `updated_at` esté vacío
+    // (p. ej. una comanda recién insertada: solo tiene `created_at`).
+    final marca = b.timestampCols.length == 1
+        ? b.timestampCols.first
+        : 'GREATEST(${b.timestampCols.join(', ')})';
+    final sql = 'SELECT COUNT(*)::text || \':\' || '
+        'COALESCE($marca::text, \'\') AS firma FROM ${b.table}';
+    // Evita que dos consultas del mismo timer se solapen si la red/DB tarda
+    // más que el intervalo.
+    var consultando = false;
+
     final timer = Timer.periodic(b.interval, (_) async {
+      if (consultando) return;
+      consultando = true;
       try {
-        final ahora = DateTime.now().toUtc().toIso8601String();
-        final since = ultimoVisto[b.table] ?? ahora;
-        // Cada condición usa un placeholder distinto (`$1`, `$2`, ...) porque
-        // el proxy web (psycopg) no permite reutilizar `$1` en dos lugares.
-        final cond = [
-          for (var i = 0; i < b.timestampCols.length; i++)
-            '${b.timestampCols[i]} >= \$${i + 1}',
-        ].join(' OR ');
-        final result = await db.executeSql(
-          'SELECT 1 FROM ${b.table} WHERE $cond LIMIT 1',
-          params: [for (final _ in b.timestampCols) since],
-        );
-        if (result.isNotEmpty) {
-          ultimoVisto[b.table] = ahora;
+        final rows = await db.executeSql(sql);
+        if (rows.isEmpty) return;
+        final firma = rows.first['firma']?.toString() ?? '';
+        final previa = firmaAnterior[b.table];
+        firmaAnterior[b.table] = firma;
+        // En el primer tick también se refresca: puede haber cambios hechos
+        // entre que se abrió la app y arrancó el polling.
+        if (previa == null || previa != firma) {
           b.invalidate(ref);
         }
       } catch (_) {
         // Silenciar errores de polling (tabla sin las columnas, etc.)
+      } finally {
+        consultando = false;
       }
     });
     timers.add(timer);
