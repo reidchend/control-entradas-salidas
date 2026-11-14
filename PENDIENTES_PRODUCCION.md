@@ -24,6 +24,16 @@
   Archivo: `supabase/migrations/20261114000002_eliminar_pos_categorias.sql`  
   **Estado:** Completado. Tabla `pos_categorias` eliminada; categorías del POS ahora usan `categorias` de inventario con `visible_en_pos`.
 
+- [ ] **Aplicar migración etiqueta de habitación en pos_comandas**  
+  Archivo: `supabase/migrations/20261114000000_pos_comandas_habitaciones.txt`  
+  SQL:
+  ```sql
+  ALTER TABLE pos_comandas
+      ADD COLUMN IF NOT EXISTS habitaciones TEXT;
+  ```
+  **Estado:** Pendiente. Sin esta columna la comanda se guarda pero **pierde la etiqueta de cliente** (Particular / habitaciones); el POS reintenta el guardado sin la columna y muestra un aviso copiable. Requiere rol `postgres`.
+  **Verificación:** `SELECT column_name FROM information_schema.columns WHERE table_name = 'pos_comandas' AND column_name = 'habitaciones';`
+
 - [ ] **Asignar precios de referencia desde MercadoLibre Venezuela (Ciudad Guayana)**  
   **Script:** `update_prices_direct.py` (en raíz del proyecto)  
   **Requisitos:** Acceso directo a PostgreSQL con `psycopg` instalado. Conexión: `postgresql://control_app:Reidchendk.11@localhost:5432/control_entradas?sslmode=disable` (ajustar si es otra BD).  
@@ -34,4 +44,3 @@
   4. El script busca cada `activos_tipos` activo en `https://api.mercadolibre.com/sites/MLV/search` usando nombre/grupo/modelo, toma el precio más bajo como referencia, guarda `precio_referencia`, `precio_origen='mercadolibre_ve'` y `precio_actualizado_at`.  
   5. **Verificación:** `SELECT id, nombre, precio_referencia, precio_origen, precio_actualizado_at FROM activos_tipos WHERE precio_referencia IS NOT NULL ORDER BY id;`  
   **Nota:** Usa rate limiting (2s entre búsquedas). Prioriza resultados de Venezuela. Puede tomar varios minutos dependiendo de la cantidad de tipos.
-```

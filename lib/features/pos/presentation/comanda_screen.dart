@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/habitacion_models.dart';
 import '../../../core/models/pos_models.dart';
+import '../../../core/utils/snack_copiable.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_responsive.dart';
@@ -214,9 +215,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo consultar la tasa: $e')),
-      );
+      mostrarSnackCopiable(context, 'No se pudo consultar la tasa: $e',
+          error: true);
     } finally {
       if (mounted) setState(() => _consultandoTasa = false);
     }
@@ -248,12 +248,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   /// con un turno cerrado.
   void _salirPorSesionCerrada() {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text(
-          'El turno fue cerrado desde otra terminal. Inicie sesión nuevamente.'),
-      backgroundColor: Color(0xFFEF5350),
-      duration: Duration(seconds: 6),
-    ));
+    mostrarSnackCopiable(
+      context,
+      'El turno fue cerrado desde otra terminal. Inicie sesión nuevamente.',
+      error: true,
+      duration: const Duration(seconds: 6),
+    );
     ref.read(posSessionProvider.notifier).cerrarSesion();
   }
 
@@ -262,6 +262,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     setState(() => _guardando = true);
     try {
       final total = _total;
+      String? aviso;
       final comandaId = await ref.read(posVentasRepoProvider)!.guardarComanda(
             widget.sesion.sesionId,
             [for (final i in _items) i.toJson()],
@@ -270,21 +271,27 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
             habitaciones: widget.habitacionesTexto,
+            onAviso: (msg) => aviso = msg,
           );
       _comandaId = comandaId;
       ref.invalidate(mesasOcupadasProvider);
       ref.invalidate(habitacionesOcupadasProvider);
       ref.invalidate(comandasActivasProvider);
       if (!mounted) return;
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
+      if (aviso != null) {
+        // Se guardó, pero sin la etiqueta de cliente: mostrar el aviso
+        // copiable en vez del "Comanda guardada" genérico.
+        mostrarSnackCopiable(context, aviso!, error: true);
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Comanda guardada')));
+      }
       widget.onBack();
     } on SesionCerradaError {
       _salirPorSesionCerrada();
     } catch (e) {
       if (!mounted) return;
-      _snack('Error al guardar la comanda: $e', color: const Color(0xFFEF5350));
+      _snack('Error al guardar la comanda: $e', error: true);
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
@@ -324,7 +331,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       widget.onBack();
     } catch (e) {
       if (!mounted) return;
-      _snack('Error al anular la comanda: $e', color: const Color(0xFFEF5350));
+      _snack('Error al anular la comanda: $e', error: true);
     } finally {
       if (mounted) setState(() => _eliminando = false);
     }
@@ -334,7 +341,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     if (!widget.sesion.puedeCobrar) {
       _snack(
         'Cobrar solo está disponible en la PC principal (con impresora).',
-        color: Theme.of(context).colorScheme.error,
+        error: true,
       );
       return;
     }
@@ -506,19 +513,19 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         } catch (rollbackErr) {
           debugPrint('[comanda] rollback failed for venta $ventaId: $rollbackErr');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: const Text(
-                  'La venta quedó registrada pero no se pudo revertir. Anúlala manualmente.'),
-              backgroundColor: Colors.orange[800],
+            mostrarSnackCopiable(
+              context,
+              'La venta quedó registrada pero no se pudo revertir: $rollbackErr\n'
+              'Anúlala manualmente.',
+              error: true,
               duration: const Duration(seconds: 8),
-            ));
+            );
           }
         }
       }
       if (!mounted) return;
       final msg = ex is Exception ? (ex.toString().replaceFirst('Exception: ', '')) : '$ex';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error al cobrar: $msg')));
+      mostrarSnackCopiable(context, 'Error al cobrar: $msg', error: true);
     } finally {
       if (mounted) setState(() => _cobrando = false);
     }
@@ -540,11 +547,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     );
   }
 
-  void _snack(String msg, {Color color = const Color(0xFF4CAF50)}) {
+  /// Notificación breve. Con [error] se pinta como error y el texto se puede
+  /// seleccionar/copiar (útil para reportar fallos de BD).
+  void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
-    );
+    if (error) {
+      mostrarSnackCopiable(context, msg, error: true);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   /// Port de `_mesa_ticket_label` (comanda_view.py:959).
@@ -635,7 +646,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         await imprimirTicketNativo(dispositivo ?? '', bytes);
         _snack('Ticket enviado a la impresora');
       } catch (e) {
-        _snack('Error de impresión:\n$e', color: const Color(0xFFEF5350));
+        _snack('Error de impresión:\n$e', error: true);
       }
       return;
     }
@@ -1339,7 +1350,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       _salirPorSesionCerrada();
       return null;
     } catch (e) {
-      if (mounted) _snack('Error al guardar: $e', color: const Color(0xFFEF5350));
+      if (mounted) _snack('Error al guardar: $e', error: true);
       return null;
     }
   }

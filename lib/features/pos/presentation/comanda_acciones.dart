@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/pos_models.dart';
+import '../../../core/utils/snack_copiable.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_comanda_transfer_repository.dart';
 import '../data/pos_providers.dart';
@@ -52,7 +53,7 @@ Future<void> moverComandaFlow(
       _snack(context, _mensaje(res));
     }
   } catch (e) {
-    if (context.mounted) _snack(context, 'Error al mover: $e');
+    if (context.mounted) _snack(context, 'Error al mover: $e', error: true);
   }
 }
 
@@ -110,7 +111,7 @@ Future<void> fusionarComandaFlow(
       _snack(context, _mensaje(res));
     }
   } catch (e) {
-    if (context.mounted) _snack(context, 'Error al fusionar: $e');
+    if (context.mounted) _snack(context, 'Error al fusionar: $e', error: true);
   }
 }
 
@@ -191,7 +192,7 @@ Future<List<ComandaItem>?> separarComandaFlow(
     _snack(context, _mensaje(res));
     return null;
   } catch (e) {
-    if (context.mounted) _snack(context, 'Error al separar: $e');
+    if (context.mounted) _snack(context, 'Error al separar: $e', error: true);
     return null;
   }
 }
@@ -234,8 +235,13 @@ String _mensaje(ResultadoTransferencia res) => switch (res) {
       ResultadoTransferencia.ok => 'Listo',
     };
 
-void _snack(BuildContext context, String texto, {bool ok = false}) {
+void _snack(BuildContext context, String texto,
+    {bool ok = false, bool error = false}) {
   if (!context.mounted) return;
+  if (error) {
+    mostrarSnackCopiable(context, texto, error: true);
+    return;
+  }
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(texto),

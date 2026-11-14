@@ -39,7 +39,67 @@ class PosVentasRepository {
 
   // Comandas
 
+  /// Guarda (crea o actualiza) la comanda abierta de una mesa/habitación.
+  ///
+  /// Si la base de datos todavía no tiene la columna `pos_comandas.habitaciones`
+  /// (migración pendiente), la comanda **igual se guarda**: se reintenta la
+  /// transacción sin esa columna y se avisa por [onAviso] para que la UI lo
+  /// muestre. Un error de columna inexistente aborta la transacción completa,
+  /// por eso el reintento abre una transacción nueva.
   Future<int> guardarComanda(
+    int sesionId,
+    List<Map<String, dynamic>> items,
+    double total, {
+    int? mesaId,
+    int? habitacionId,
+    int? usuarioId,
+    String? habitaciones, // 'Particular' | '101, 103' | null
+    void Function(String aviso)? onAviso,
+  }) async {
+    try {
+      return await _guardarComandaTx(
+        sesionId,
+        items,
+        total,
+        mesaId: mesaId,
+        habitacionId: habitacionId,
+        usuarioId: usuarioId,
+        habitaciones: habitaciones,
+      );
+    } catch (e) {
+      // Sin etiqueta no hay nada que perder: se propaga el error original.
+      if (habitaciones == null || !_faltaColumnaHabitaciones(e)) rethrow;
+
+      final id = await _guardarComandaTx(
+        sesionId,
+        items,
+        total,
+        mesaId: mesaId,
+        habitacionId: habitacionId,
+        usuarioId: usuarioId,
+      );
+      onAviso?.call(
+        'Comanda guardada sin la etiqueta de cliente ("$habitaciones"): '
+        'falta la columna pos_comandas.habitaciones en la base de datos. '
+        'Aplique la migración 20261114000000_pos_comandas_habitaciones.sql '
+        'para recuperarla.',
+      );
+      return id;
+    }
+  }
+
+  /// `true` si [e] es el error de PostgreSQL por columna inexistente
+  /// `pos_comandas.habitaciones` (código `42703` / `undefined_column`).
+  static bool _faltaColumnaHabitaciones(Object e) {
+    final txt = e.toString().toLowerCase();
+    if (!txt.contains('habitaciones')) return false;
+    return txt.contains('42703') ||
+        txt.contains('undefined_column') ||
+        txt.contains('does not exist') ||
+        txt.contains('no existe');
+  }
+
+  Future<int> _guardarComandaTx(
     int sesionId,
     List<Map<String, dynamic>> items,
     double total, {
