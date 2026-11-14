@@ -4,13 +4,10 @@ import '../data/pos_responsive.dart';
 
 /// Barra de sub-cuentas ("clientes") dentro de una comanda.
 ///
-/// Muestra cada cliente con su nombre y subtotal. Toque un chip para
-/// **filtrar** la lista y ver solo esos productos; el chip "Todos" muestra
-/// la comanda completa.
-///
-/// Optimizado para tablets pequeñas en horizontal: los chips se acomodan
-/// en filas (Wrap) en lugar de una sola línea con scroll, y los botones de
-/// acción se agrupan en un menú compacto para ahorrar ancho.
+/// Muestra cada cliente con su nombre y subtotal en una fila horizontal
+/// (scroll si no caben), manteniendo la altura mínima. Diseñado para
+/// tablets pequeñas en horizontal: chips reducidos, encabezado bajo y
+/// acciones como íconos compactos.
 class ClientesBar extends StatelessWidget {
   const ClientesBar({
     super.key,
@@ -43,7 +40,6 @@ class ClientesBar extends StatelessWidget {
   String etiqueta(int c) => nombres[c] ?? 'Cliente $c';
 
   bool get _gestionable => filtro != null && filtro != 1;
-  bool get _esPequeno => clientes.isNotEmpty && clientes.length > 4;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +47,47 @@ class ClientesBar extends StatelessWidget {
     final esPequena = MediaQuery.sizeOf(context).width <= 720;
 
     if (clientes.isEmpty) return const SizedBox.shrink();
+
+    final chips = <Widget>[
+      // Chip "Todos"
+      ChoiceChip(
+        visualDensity: VisualDensity.compact,
+        showCheckmark: false,
+        label: const Text('Todos', style: TextStyle(fontSize: 9)),
+        selected: filtro == null,
+        onSelected: (_) => onVerTodos(),
+        labelStyle: TextStyle(
+          color: filtro == null ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+          fontSize: 9,
+        ),
+        side: BorderSide(
+          color: filtro == null ? scheme.primary : scheme.outlineVariant,
+        ),
+      ),
+      const SizedBox(width: 4),
+      // Chips de clientes
+      for (final c in clientes)
+        _ChipCliente(
+          clave: c,
+          etiqueta: etiqueta(c),
+          subtotal: subtotales[c] ?? 0,
+          seleccionado: c == filtro,
+          scheme: scheme,
+          esActivo: c == activo,
+          onTap: () {
+            if (c == filtro) {
+              if (c == 1) {
+                onVerTodos();
+              } else {
+                onRenombrar(c);
+              }
+            } else {
+              onSelect(c);
+            }
+          },
+          onLongPress: c != 1 ? () => onRenombrar(c) : null,
+        ),
+    ];
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -63,137 +100,85 @@ class ClientesBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Encabezado compacto: título + chips + acciones agrupadas.
+          // Encabezado + chips en una sola fila horizontal (scroll si es necesario)
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(Icons.groups_outlined,
-                  size: 14, color: scheme.onSurfaceVariant),
+              Icon(Icons.groups_outlined, size: 14, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Título + chips en una línea
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Clientes',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Chip "Todos"
-                        ChoiceChip(
-                          visualDensity: VisualDensity.compact,
-                          showCheckmark: false,
-                          label: const Text(
-                            'Todos',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          selected: filtro == null,
-                          onSelected: (_) => onVerTodos(),
-                          labelStyle: TextStyle(
-                            color: filtro == null
-                                ? scheme.onPrimaryContainer
-                                : scheme.onSurfaceVariant,
-                            fontSize: 11,
-                          ),
-                          side: BorderSide(
-                            color: filtro == null
-                                ? scheme.primary
-                                : scheme.outlineVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Chips de clientes: se envuelven en filas si no caben
-                        Expanded(
-                          child: Wrap(
-                            spacing: 5,
-                            runSpacing: 5,
-                            children: [
-                              for (final c in clientes)
-                                _ChipCliente(
-                                  clave: c,
-                                  etiqueta: etiqueta(c),
-                                  subtotal: subtotales[c] ?? 0,
-                                  seleccionado: c == filtro,
-                                  scheme: scheme,
-                                  esActivo: c == activo,
-                                  onTap: () {
-                                    if (c == filtro) {
-                                      if (c == 1) {
-                                        onVerTodos();
-                                      } else {
-                                        onRenombrar(c);
-                                      }
-                                    } else {
-                                      onSelect(c);
-                                    }
-                                  },
-                                  onLongPress: c != 1
-                                      ? () => onRenombrar(c)
-                                      : null,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    // Título
+                    Text(
+                      'Clientes',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                    // Línea de destino y acciones compactas
-                    if (filtro == null && clientes.length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
+                    const SizedBox(height: 4),
+                    // Chips en fila horizontal con scroll
+                    SizedBox(
+                      height: 28,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_right_alt,
-                                size: 12, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Nuevo → ${etiqueta(activo)}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (_gestionable) ...[
-                              _BotonAccion(
-                                tooltip: 'Renombrar ${etiqueta(filtro!)}',
-                                icon: Icons.edit_outlined,
-                                onPressed: () => onRenombrar(filtro!),
-                                esPequena: esPequena,
-                              ),
-                              _BotonAccion(
-                                tooltip: 'Eliminar ${etiqueta(filtro!)}',
-                                icon: Icons.delete_outline,
-                                color: scheme.error,
-                                onPressed: () => onEliminar(filtro!),
-                                esPequena: esPequena,
-                              ),
-                            ],
-                            _BotonAccion(
-                              tooltip: clientes.length == 1
-                                  ? 'Nueva cuenta separada'
-                                  : 'Añadir otra cuenta',
-                              icon: Icons.person_add_alt,
-                              onPressed: onNuevo,
-                              esPequena: esPequena,
-                            ),
-                          ],
+                          children: chips,
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
+              // Acciones agrupadas a la derecha (solo íconos)
+              if (_gestionable) ...[
+                _BotonAccion(
+                  tooltip: 'Renombrar ${etiqueta(filtro!)}',
+                  icon: Icons.edit_outlined,
+                  onPressed: () => onRenombrar(filtro!),
+                  esPequena: esPequena,
+                ),
+                const SizedBox(width: 4),
+                _BotonAccion(
+                  tooltip: 'Eliminar ${etiqueta(filtro!)}',
+                  icon: Icons.delete_outline,
+                  color: scheme.error,
+                  onPressed: () => onEliminar(filtro!),
+                  esPequena: esPequena,
+                ),
+                const SizedBox(width: 4),
+              ],
+              _BotonAccion(
+                tooltip: clientes.length == 1
+                    ? 'Nueva cuenta separada'
+                    : 'Añadir otra cuenta',
+                icon: Icons.person_add_alt,
+                onPressed: onNuevo,
+                esPequena: esPequena,
+              ),
             ],
           ),
+          // Mensaje de destino (una línea mínima, solo cuando hay varios clientes y filtro null)
+          if (filtro == null && clientes.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 3, left: 21),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.arrow_right_alt, size: 12, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Nuevo → ${etiqueta(activo)}',
+                    style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -235,7 +220,7 @@ class _ChipCliente extends StatelessWidget {
           children: [
             Text(
               etiqueta,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
               overflow: TextOverflow.ellipsis,
             ),
             if (tieneSaldo) ...[
@@ -243,7 +228,7 @@ class _ChipCliente extends StatelessWidget {
               Text(
                 '\$${subtotal.toStringAsFixed(0)}',
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 8,
                   fontWeight: FontWeight.bold,
                   color: scheme.primary,
                 ),
@@ -256,15 +241,11 @@ class _ChipCliente extends StatelessWidget {
         selected: seleccionado,
         onSelected: (_) => onTap(),
         labelStyle: TextStyle(
-          color: seleccionado
-              ? scheme.onPrimaryContainer
-              : scheme.onSurfaceVariant,
-          fontSize: 10,
+          color: seleccionado ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+          fontSize: 9,
         ),
         side: BorderSide(
-          color: seleccionado
-              ? scheme.primary
-              : scheme.outlineVariant,
+          color: seleccionado ? scheme.primary : scheme.outlineVariant,
         ),
       ),
     );
