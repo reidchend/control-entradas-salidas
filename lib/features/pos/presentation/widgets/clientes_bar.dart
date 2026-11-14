@@ -162,6 +162,7 @@ class _ChipTodos extends StatelessWidget {
         'Todos',
         style: TextStyle(
           fontSize: 13,
+          height: 1.4,
           fontWeight: FontWeight.w600,
           color: frente,
         ),
@@ -212,6 +213,7 @@ class _ChipCliente extends StatelessWidget {
             maxLines: 1,
             style: TextStyle(
               fontSize: 13,
+              height: 1.4,
               fontWeight: FontWeight.w600,
               color: frente,
             ),
@@ -219,11 +221,13 @@ class _ChipCliente extends StatelessWidget {
           if (puedeGestionar)
             PopupMenuButton<String>(
               tooltip: 'Opciones de $etiqueta',
-              icon: Icon(Icons.more_vert, size: 18, color: frente),
-              iconSize: 18,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              splashRadius: 18,
+              // `child` en vez de `icon`: así el botón mide lo que el ícono
+              // (18 dp) y no los 48 dp por defecto de IconButton, que hacían
+              // el chip más alto que el del cliente 1.
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(Icons.more_vert, size: 18, color: frente),
+              ),
               onSelected: (v) {
                 if (v == 'renombrar') onRenombrar();
                 if (v == 'eliminar') onEliminar();
