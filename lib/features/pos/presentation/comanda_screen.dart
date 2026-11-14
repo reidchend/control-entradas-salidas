@@ -5,6 +5,7 @@ import '../../../core/models/habitacion_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
+import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import '../data/sesion_cerrada_error.dart';
 import '../data/printer_service.dart';
@@ -1473,7 +1474,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(
-                        width: 380,
+                        width: PosResponsive.panelComandaAncho(context),
                         child: _panelComanda(),
                       ),
                       const VerticalDivider(width: 1),
@@ -1811,63 +1812,78 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ),
       child: Row(
         children: [
-          OutlinedButton.icon(
-            onPressed: ocupado ? null : widget.onBack,
-            icon: const Icon(Icons.cancel, color: Color(0xFFEF5350)),
-            label: const Text('Cancelar'),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: ocupado ? null : widget.onBack,
+              icon: const Icon(Icons.cancel, color: Color(0xFFEF5350)),
+              label: const Text('Cancelar'),
+            ),
           ),
           const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: (_comandaId == null || ocupado) ? null : _eliminarComanda,
-            icon: _eliminando
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
-            label: const Text('Anular'),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: (_comandaId == null || ocupado) ? null : _eliminarComanda,
+              icon: _eliminando
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
+              label: const Text('Anular'),
+            ),
           ),
           const Spacer(),
-          OutlinedButton.icon(
-            onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
-            icon: const Icon(Icons.print_outlined),
-            label: const Text('Imprimir comanda'),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Imprimir comanda'),
+            ),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: (tieneItems && !ocupado) ? _guardar : null,
-            icon: _guardando
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: const Text('Guardar'),
-          ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: widget.sesion.puedeCobrar
-                ? 'Cobrar comanda'
-                : 'Cobrar solo desde la PC principal (con impresora)',
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
             child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-              ),
-              onPressed:
-                  (widget.sesion.puedeCobrar && tieneItems && !ocupado)
-                      ? _cobrar
-                      : null,
-              icon: _cobrando
+              onPressed: (tieneItems && !ocupado) ? _guardar : null,
+              icon: _guardando
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.payments_outlined),
-              label: const Text('Cobrar'),
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Guardar'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: widget.sesion.puedeCobrar
+                ? 'Cobrar comanda'
+                : 'Cobrar solo desde la PC principal (con impresora)',
+            child: SizedBox(
+              height: PosResponsive.botonAltura(context),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF4CAF50),
+                ),
+                onPressed:
+                    (widget.sesion.puedeCobrar && tieneItems && !ocupado)
+                        ? _cobrar
+                        : null,
+                icon: _cobrando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.payments_outlined),
+                label: const Text('Cobrar'),
+              ),
             ),
           ),
         ],

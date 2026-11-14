@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/pos_models.dart';
 import '../data/pos_providers.dart';
+import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import '../dialogs/seleccionar_tipo_cliente_dialog.dart';
 import 'widgets/mesa_card.dart';
@@ -51,11 +52,11 @@ class MesasScreen extends ConsumerWidget {
                 if (lista.isEmpty) return _vacio(context);
                 final ocup = ocupadas.value ?? const <int>{};
                 return GridView.extent(
-                  padding: const EdgeInsets.all(20),
-                  maxCrossAxisExtent: 130,
-                  childAspectRatio: 0.8,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+                  padding: EdgeInsets.all(PosResponsive.padding(context)),
+                  maxCrossAxisExtent: PosResponsive.maxCrossAxisExtent(context),
+                  childAspectRatio: 0.85,
+                  crossAxisSpacing: PosResponsive.gridSpacing(context),
+                  mainAxisSpacing: PosResponsive.gridSpacing(context),
                   children: [
                     for (var i = 0; i < lista.length; i++)
                       PopIn(
