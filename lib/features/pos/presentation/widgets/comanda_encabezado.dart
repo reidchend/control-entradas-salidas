@@ -12,7 +12,7 @@ class ComandaEncabezado extends StatelessWidget {
     this.habitaciones, // null | 'Particular' | '101, 103'
   });
 
-  final int mesaNumero;
+  final String mesaNumero;
   final String? habitaciones;
 
   bool get _esParticular => habitaciones == 'Particular';

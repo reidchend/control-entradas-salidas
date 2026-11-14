@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../data/pos_responsive.dart';
-
+import '../../data/pos_responsive.dart';
 /// Barra de sub-cuentas ("clientes") dentro de una comanda.
 ///
 /// Muestra cada cliente con su nombre y subtotal en una fila horizontal

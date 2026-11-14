@@ -5,13 +5,13 @@ import '../../../core/models/pos_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
-import '../dialogs/seleccionar_tipo_cliente_dialog.dart';
+import 'dialogs/seleccionar_tipo_cliente_dialog.dart';
 import 'widgets/mesa_card.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
 
 /// Grid de mesas con estado Ocupada/Libre (port de `MesasView`).
-class MesasScreen extends ConsumerWidget {
+class MesasScreen extends ConsumerStatefulWidget {
   const MesasScreen({
     super.key,
     required this.sesion,
@@ -30,7 +30,12 @@ class MesasScreen extends ConsumerWidget {
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MesasScreen> createState() => _MesasScreenState();
+}
+
+class _MesasScreenState extends ConsumerState<MesasScreen> {
+  @override
+  Widget build(BuildContext context) {
     final mesas = ref.watch(mesasProvider);
     final ocupadas = ref.watch(mesasOcupadasProvider);
 
@@ -38,10 +43,10 @@ class MesasScreen extends ConsumerWidget {
       body: Column(
         children: [
           PosTopBar(
-            usuario: sesion.usuario,
+            usuario: widget.sesion.usuario,
             titulo: 'Mesas',
-            onBack: onBack,
-            onLogout: onLogout,
+            onBack: widget.onBack,
+            onLogout: widget.onLogout,
           ),
           Expanded(
             child: mesas.when(
@@ -77,7 +82,7 @@ class MesasScreen extends ConsumerWidget {
                                   resultado.esParticular
                                       ? 'Particular'
                                       : resultado.habitaciones;
-                              onOpenMesa(
+                              widget.onOpenMesa(
                                 lista[i],
                                 resultado.tipo,
                                 habitacionesTexto,
@@ -109,8 +114,9 @@ class MesasScreen extends ConsumerWidget {
           Text(
             'Vaya a Configuración > Mesas para agregar',
             style: TextStyle(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

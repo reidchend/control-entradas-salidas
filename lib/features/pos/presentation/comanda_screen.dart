@@ -36,6 +36,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
     required this.sesion,
     this.mesa,
     this.habitacion,
+    this.habitacionesTexto,
     required this.onBack,
     required this.onLogout,
     this.onComandaMovida,
@@ -742,16 +743,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           nombre: c.nombre,
           color: c.color,
           esPos: false,
-          esPlatoCat: false,
-        ));
-      }
-      for (final pc in posCats) {
-        resultado.add(_CategoriaRapida(
-          seccion: _Seccion.categorias,
-          id: pc.id,
-          nombre: pc.nombre,
-          color: pc.color,
-          esPos: true,
           esPlatoCat: false,
         ));
       }
