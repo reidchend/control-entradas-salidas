@@ -235,49 +235,6 @@ class PosVenta {
       };
 }
 
-class PosCategoria {
-  const PosCategoria({
-    required this.id,
-    required this.nombre,
-    this.color = '#FF6F00',
-    this.icono,
-    this.activo = true,
-    this.syncUuid,
-    this.createdAt,
-    this.updatedAt,
-  });
-
-  final int id;
-  final String nombre;
-  final String color;
-  final String? icono;
-  final bool activo;
-  final String? syncUuid;
-  final String? createdAt;
-  final String? updatedAt;
-
-  factory PosCategoria.fromMap(Map<String, dynamic> m) => PosCategoria(
-        id: m['id'] as int,
-        nombre: m['nombre'] as String,
-        color: (m['color'] as String?) ?? '#FF6F00',
-        icono: m['icono'] as String?,
-        activo: (m['activo'] as int?) == 1,
-        syncUuid: m['sync_uuid'] as String?,
-        createdAt: m['created_at'] as String?,
-        updatedAt: m['updated_at'] as String?,
-      );
-
-  Map<String, dynamic> toMap() => {
-        if (id > 0) 'id': id,
-        'nombre': nombre,
-        'color': color,
-        'icono': icono,
-        'activo': activo ? 1 : 0,
-        'sync_uuid': syncUuid,
-        'created_at': createdAt,
-      };
-}
-
 class PosPlato {
   const PosPlato({
     required this.id,

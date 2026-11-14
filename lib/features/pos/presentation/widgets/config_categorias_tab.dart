@@ -4,13 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/pos_models.dart';
 import '../../../../features/inventario/data/inventario_providers.dart';
 import '../../data/pos_providers.dart';
-import '../dialogs/pos_categoria_dialog.dart';
 import '../dialogs/subcategoria_dialog.dart';
 import 'categorias_rows.dart';
 
-/// Pestaña de categorías POS + sub-categorías (port de `ConfigPOSView` sección
-/// CATEGORÍAS POS): CRUD de pos_categorias y platos_categorias con toggle
-/// de activo, todo sincronizado por outbox.
+/// Pestaña de categorías de platos (port de `ConfigPOSView` sección
+/// CATEGORÍAS PLATOS): CRUD de platos_categorias con toggle de activo, todo
+/// sincronizado por outbox.
 class ConfigCategoriasTab extends ConsumerStatefulWidget {
   const ConfigCategoriasTab({super.key});
 
@@ -20,7 +19,6 @@ class ConfigCategoriasTab extends ConsumerStatefulWidget {
 }
 
 class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
-  List<PosCategoria> _posCats = [];
   List<PosPlatoCategoria> _subCats = [];
   Map<int, String> _invMap = {};
   bool _cargando = true;
@@ -34,12 +32,10 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
   Future<void> _cargar() async {
     final repo = ref.read(posRepoProvider)!;
     final invRepo = ref.read(inventarioRepoProvider)!;
-    final pos = await repo.getPosCategorias();
     final subs = await repo.getPlatosCategorias();
     final inv = await invRepo.getAllCategorias();
     if (!mounted) return;
     setState(() {
-      _posCats = pos;
       _subCats = subs;
       _invMap = {for (final c in inv) c.id: c.nombre};
       _cargando = false;
@@ -57,12 +53,6 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
     if (sc.categoriaPadreId != null) {
       return '${sc.nombre}  (en ${_invMap[sc.categoriaPadreId] ?? '?'})';
     }
-    if (sc.posCategoriaPadreId != null) {
-      final pos = _posCats
-          .where((c) => c.id == sc.posCategoriaPadreId)
-          .firstOrNull;
-      return '${sc.nombre}  (en POS: ${pos?.nombre ?? '?'})';
-    }
     if (sc.platoCategoriaPadreId != null) {
       final padre = _subCats
           .where((c) => c.id == sc.platoCategoriaPadreId)
@@ -72,36 +62,8 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
     return sc.nombre;
   }
 
-  Future<void> _nuevaPosCategoria() async {
-    if (await showPosCategoriaDialog(context)) await _cargar();
-  }
-
-  Future<void> _editarPosCategoria(PosCategoria cat) async {
-    if (await showPosCategoriaDialog(context, categoria: cat)) await _cargar();
-  }
-
-  Future<void> _eliminarPosCategoria(PosCategoria cat) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar categoría POS'),
-        content: Text("¿Eliminar '${cat.nombre}'?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF5350)),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    await ref.read(posRepoProvider)!.eliminarPosCategoria(cat.id);
-    await _cargar();
+  Future<void> _nuevaSubcategoria() async {
+    if (await showSubcategoriaDialog(context)) await _cargar();
   }
 
   Future<void> _toggleSubcat(PosPlatoCategoria sc, bool activo) async {
@@ -121,7 +83,7 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar sub-categoría'),
+        title: const Text('Eliminar categoría de platos'),
         content: Text("¿Eliminar '${sc.nombre}'?"),
         actions: [
           TextButton(
@@ -169,17 +131,10 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
           child: Row(
             children: [
-              FilledButton.icon(
-                onPressed: _nuevaPosCategoria,
-                icon: const Icon(Icons.add),
-                label: const Text('Nueva categoría POS'),
-              ),
               const Spacer(),
               OutlinedButton.icon(
-                onPressed: () async {
-                  if (await showSubcategoriaDialog(context)) await _cargar();
-                },
-                icon: const Icon(Icons.subdirectory_arrow_right),
+                onPressed: _nuevaSubcategoria,
+                icon: const Icon(Icons.add),
                 label: const Text('Nueva categoría de platos'),
               ),
             ],
@@ -188,25 +143,15 @@ class _ConfigCategoriasTabState extends ConsumerState<ConfigCategoriasTab> {
         Expanded(
           child: _cargando
               ? const Center(child: CircularProgressIndicator())
-              : _posCats.isEmpty && _subCats.isEmpty
+              : _subCats.isEmpty
                   ? Center(
-                      child: Text('Sin categorías POS',
+                      child: Text('Sin categorías de platos',
                           style: TextStyle(color: scheme.outline)),
                     )
                   : ListView(
                       children: [
-                        if (_posCats.isNotEmpty) ...[
-                          const CatSectionLabel('Categorías POS'),
-                          for (final c in _posCats)
-                            PosCatRow(
-                              color: hexColor(c.color),
-                              nombre: c.nombre,
-                              onEdit: () => _editarPosCategoria(c),
-                              onDelete: () => _eliminarPosCategoria(c),
-                            ),
-                        ],
                         if (_catPlatos.isNotEmpty) ...[
-                          const CatSectionLabel('Categorías de platos'),
+                          const CatSectionLabel('Categorías raíz de platos'),
                           for (final sc in _catPlatos) _subcatRow(sc),
                         ],
                         if (_subcats.isNotEmpty) ...[

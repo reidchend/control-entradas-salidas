@@ -659,7 +659,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   Future<void> _cargarCategorias() async {
     final repo = ref.read(posRepoProvider)!;
     final cats = await repo.getCategoriasPos();
-    final posCats = await repo.getPosCategorias(soloActivas: true);
     final platosCats = await repo.getPlatosCategorias(soloActivas: true);
     final contornos = await repo.getContornosActivos();
 
@@ -678,12 +677,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           nombre: c.nombre,
           color: c.color,
           onTap: () => _clickCategoria(c.id, c.color, c.nombre, esPos: false),
-        ),
-      for (final pc in posCats)
-        _CatalogoEntry(
-          nombre: pc.nombre,
-          color: pc.color,
-          onTap: () => _clickCategoria(pc.id, pc.color, pc.nombre, esPos: true),
         ),
       // Las categorías de platos raíz (DESAYUNOS, PIZZAS, ...) van directo a
       // la raíz; ya no hay una entrada "PLATOS" que las agrupe.
@@ -718,7 +711,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     try {
       final repo = ref.read(posRepoProvider)!;
       final cats = await repo.getCategoriasPos();
-      final posCats = await repo.getPosCategorias(soloActivas: true);
       final platosCats = await repo.getPlatosCategorias(soloActivas: true);
       final contornos = await repo.getContornosActivos();
       final contornoCatIds = {for (final ct in contornos) ct.categoriaId};

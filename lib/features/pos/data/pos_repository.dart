@@ -571,49 +571,6 @@ Future<List<TurnoCerradoResumen>>
     await _db.deleteById('tipos_habitacion', id);
   }
 
-  // Categorias POS
-
-  Future<List<PosCategoria>> getPosCategorias({bool soloActivas = false}) async {
-    var query = _db.client.from('pos_categorias').select();
-    if (soloActivas) query = query.eq('activo', 1);
-    final rows = await query.order('nombre') as List<Map<String, dynamic>>;
-    return rows.map(PosCategoria.fromMap).toList();
-  }
-
-  Future<int> crearPosCategoria(String nombre,
-      {String color = '#FF6F00', String? icono}) async {
-    return await _db.insert('pos_categorias', {
-      'nombre': nombre.trim(),
-      'color': color,
-      'icono': icono,
-      'activo': 1,
-      'created_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    });
-  }
-
-  Future<void> actualizarPosCategoria(int catId, String nombre,
-      {String? color, String? icono, bool? activo}) async {
-    final rows = await _db.client
-        .from('pos_categorias')
-        .select()
-        .eq('id', catId)
-        .limit(1);
-    if (rows.isEmpty) return;
-    final actual = rows.first;
-    await _db.updateById('pos_categorias', catId, {
-      'nombre': nombre.trim(),
-      'color': color ?? actual['color'],
-      'icono': icono ?? actual['icono'],
-      if (activo != null) 'activo': activo,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
-  }
-
-  Future<void> eliminarPosCategoria(int catId) async {
-    await _db.deleteById('pos_categorias', catId);
-  }
-
   // Sub-categorias (platos_categorias)
 
   Future<List<PosPlatoCategoria>> getPlatosCategorias(
@@ -681,8 +638,8 @@ Future<List<TurnoCerradoResumen>>
   /// Categorías de inventario habilitadas para el POS.
   ///
   /// `categorias.activo` y `categorias.visible_en_pos` son **boolean** en
-  /// PostgreSQL, a diferencia de `pos_categorias.activo` / `platos.activo`, que
-  /// son `integer`. Filtrarlos con `.eq(campo, 1)` hace que PostgreSQL rechace
+  /// PostgreSQL, a diferencia de `platos.activo`, que es `integer`.
+  /// Filtrarlos con `.eq(campo, 1)` hace que PostgreSQL rechace
   /// la consulta con `el operador no existe: boolean = smallint`, y como acá no
   /// hay try/catch, el error sube hasta `_cargarCategorias` y deja el catálogo
   /// entero vacío. Por eso van `true`/`false` y no `1`/`0`.

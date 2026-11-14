@@ -7,9 +7,8 @@ import '../../../../core/utils/modal_sizing.dart';
 import '../../data/pos_providers.dart';
 
 /// Alta/edición de categoría de platos (tabla `platos_categorias`) con padre
-/// opcional: categoría de inventario (INV_), categoría POS (POS_) o otra
-/// categoría de platos (PLATO_). Sin padre queda como categoría raíz y se
-/// muestra directamente en la raíz del POS.
+/// opcional: categoría de inventario (INV_) o otra categoría de platos (PLATO_).
+/// Sin padre queda como categoría raíz y se muestra directamente en la raíz del POS.
 /// Port de `ConfigPOSView._show_subcategoria_dialog` / `_show_subcat_edit_dialog`.
 /// Retorna `true` si se guardó.
 Future<bool> showSubcategoriaDialog(BuildContext context,
@@ -43,12 +42,11 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
 
   final _nombreCtrl = TextEditingController();
   late String _color;
-  String? _padre; // '' = sin padre, 'INV_x' | 'POS_x' | 'SUB_x'
+  String? _padre; // '' = sin padre, 'INV_x' | 'SUB_x'
   bool _cargando = true;
   bool _guardando = false;
 
   List<Categoria> _catsInv = [];
-  List<PosCategoria> _posCats = [];
   List<PosPlatoCategoria> _platosCats = [];
 
   /// Ids que no pueden ser padre de esta categoría: ella misma y sus
@@ -83,8 +81,6 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
     if (sc != null) {
       if (sc.categoriaPadreId != null) {
         _padre = 'INV_${sc.categoriaPadreId}';
-      } else if (sc.posCategoriaPadreId != null) {
-        _padre = 'POS_${sc.posCategoriaPadreId}';
       } else if (sc.platoCategoriaPadreId != null) {
         _padre = 'SUB_${sc.platoCategoriaPadreId}';
       } else {
@@ -99,12 +95,10 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
   Future<void> _cargarPadres() async {
     final repo = ref.read(posRepoProvider)!;
     final inv = await repo.getCategoriasPos();
-    final pos = await repo.getPosCategorias();
     final platosCats = await repo.getPlatosCategorias();
     if (!mounted) return;
     setState(() {
       _catsInv = inv;
-      _posCats = pos;
       _platosCats = platosCats;
       _cargando = false;
     });
@@ -125,13 +119,10 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
       return;
     }
     int? catPadreId;
-    int? posPadreId;
     int? platoPadreId;
     final padre = _padre ?? '';
     if (padre.startsWith('INV_')) {
       catPadreId = int.tryParse(padre.substring(4));
-    } else if (padre.startsWith('POS_')) {
-      posPadreId = int.tryParse(padre.substring(4));
     } else if (padre.startsWith('SUB_')) {
       platoPadreId = int.tryParse(padre.substring(4));
     }
@@ -144,7 +135,6 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
         color: _color,
         activo: widget.subcategoria?.activo ?? true,
         categoriaPadreId: catPadreId,
-        posCategoriaPadreId: posPadreId,
         platoCategoriaPadreId: platoPadreId,
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -227,11 +217,6 @@ class _SubcategoriaDialogState extends ConsumerState<_SubcategoriaDialog> {
                         DropdownMenuItem(
                           value: 'INV_${c.id}',
                           child: Text('INV: ${c.nombre}'),
-                        ),
-                      for (final c in _posCats)
-                        DropdownMenuItem(
-                          value: 'POS_${c.id}',
-                          child: Text('POS: ${c.nombre}'),
                         ),
                       for (final c in _platosCats)
                         if (!_prohibidos.contains(c.id))
