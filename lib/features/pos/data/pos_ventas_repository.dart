@@ -46,6 +46,7 @@ class PosVentasRepository {
     int? mesaId,
     int? habitacionId,
     int? usuarioId,
+    String? habitaciones, // 'Particular' | '101, 103' | null
   }) async {
     // Modo desarrollador: sin escritura en BD
     if (sesionId == 0) return -1;
@@ -104,6 +105,7 @@ class PosVentasRepository {
           'items_json': itemsJson,
           'total': total,
           'usuario_id': usuarioId,
+          if (habitaciones != null) 'habitaciones': habitaciones,
           'updated_at': now,
         });
         return id;
@@ -115,6 +117,7 @@ class PosVentasRepository {
         'usuario_id': usuarioId,
         'mesa_id': mesaId,
         'habitacion_id': habitacionId,
+        if (habitaciones != null) 'habitaciones': habitaciones,
         'estado': 'abierta',
         'total': total,
         'items_json': itemsJson,
