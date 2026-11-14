@@ -1527,7 +1527,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             clientes: _clientesList,
             activo: _clienteActivo,
             filtro: _filtroCliente,
-            subtotales: _subtotalesClientes,
             nombres: {
               for (final c in _clientesList)
                 if (_nombreCliente(c) != null) c: _nombreCliente(c)!,

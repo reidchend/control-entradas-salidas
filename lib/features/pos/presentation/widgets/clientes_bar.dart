@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../data/pos_responsive.dart';
+
 /// Barra de sub-cuentas ("clientes") dentro de una comanda.
 ///
-/// Muestra cada cliente con su nombre y subtotal en una fila horizontal
-/// (scroll si no caben), manteniendo la altura mínima. Diseñado para
-/// tablets pequeñas en horizontal: chips reducidos, encabezado bajo y
-/// acciones como íconos compactos.
+/// Fila horizontal con scroll: chip "Todos" + un chip por cliente con su
+/// menú de opciones (⋮). Sin subtotales en los chips para que se lean bien en
+/// tablets; el total se muestra en el panel de la comanda.
 class ClientesBar extends StatelessWidget {
   const ClientesBar({
     super.key,
     required this.clientes,
     required this.activo,
     required this.filtro,
-    required this.subtotales,
     required this.nombres,
     required this.onSelect,
     required this.onVerTodos,
@@ -27,7 +26,6 @@ class ClientesBar extends StatelessWidget {
 
   /// Cliente cuyos productos se están viendo; `null` = ver todos.
   final int? filtro;
-  final Map<int, double> subtotales;
   final Map<int, String> nombres;
 
   final ValueChanged<int> onSelect;
@@ -38,142 +36,98 @@ class ClientesBar extends StatelessWidget {
 
   String etiqueta(int c) => nombres[c] ?? 'Cliente $c';
 
-  bool get _gestionable => filtro != null && filtro != 1;
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final esPequena = MediaQuery.sizeOf(context).width <= 720;
-
     if (clientes.isEmpty) return const SizedBox.shrink();
-
-    final chips = <Widget>[
-      // Chip "Todos"
-      ChoiceChip(
-        visualDensity: VisualDensity.compact,
-        showCheckmark: false,
-        label: const Text('Todos', style: TextStyle(fontSize: 9)),
-        selected: filtro == null,
-        onSelected: (_) => onVerTodos(),
-        labelStyle: TextStyle(
-          color: filtro == null ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-          fontSize: 9,
-        ),
-        side: BorderSide(
-          color: filtro == null ? scheme.primary : scheme.outlineVariant,
-        ),
-      ),
-      const SizedBox(width: 4),
-      // Chips de clientes
-      for (final c in clientes)
-        _ChipCliente(
-          clave: c,
-          etiqueta: etiqueta(c),
-          subtotal: subtotales[c] ?? 0,
-          seleccionado: c == filtro,
-          scheme: scheme,
-          esActivo: c == activo,
-          onTap: () {
-            if (c == filtro) {
-              if (c == 1) {
-                onVerTodos();
-              } else {
-                onRenombrar(c);
-              }
-            } else {
-              onSelect(c);
-            }
-          },
-          onLongPress: c != 1 ? () => onRenombrar(c) : null,
-        ),
-    ];
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
         PosResponsive.padding(context),
         0,
         PosResponsive.padding(context),
-        6,
+        8,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Encabezado + chips en una sola fila horizontal (scroll si es necesario)
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(Icons.groups_outlined, size: 14, color: scheme.onSurfaceVariant),
+              Icon(Icons.groups_outlined,
+                  size: 18, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Título
-                    Text(
-                      'Clientes',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Chips en fila horizontal con scroll
-                    SizedBox(
-                      height: 28,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: chips,
-                        ),
-                      ),
-                    ),
-                  ],
+              Text(
+                'Clientes',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
-              // Acciones agrupadas a la derecha (solo íconos)
-              if (_gestionable) ...[
-                _BotonAccion(
-                  tooltip: 'Renombrar ${etiqueta(filtro!)}',
-                  icon: Icons.edit_outlined,
-                  onPressed: () => onRenombrar(filtro!),
-                  esPequena: esPequena,
-                ),
-                const SizedBox(width: 4),
-                _BotonAccion(
-                  tooltip: 'Eliminar ${etiqueta(filtro!)}',
-                  icon: Icons.delete_outline,
-                  color: scheme.error,
-                  onPressed: () => onEliminar(filtro!),
-                  esPequena: esPequena,
-                ),
-                const SizedBox(width: 4),
-              ],
-              _BotonAccion(
+              const Spacer(),
+              IconButton(
                 tooltip: clientes.length == 1
                     ? 'Nueva cuenta separada'
                     : 'Añadir otra cuenta',
-                icon: Icons.person_add_alt,
                 onPressed: onNuevo,
-                esPequena: esPequena,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.person_add_alt, size: 20),
               ),
             ],
           ),
-          // Mensaje de destino (una línea mínima, solo cuando hay varios clientes y filtro null)
+          const SizedBox(height: 4),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                _ChipTodos(
+                  seleccionado: filtro == null,
+                  scheme: scheme,
+                  onTap: onVerTodos,
+                ),
+                const SizedBox(width: 8),
+                for (final c in clientes) ...[
+                  _ChipCliente(
+                    etiqueta: etiqueta(c),
+                    seleccionado: c == filtro,
+                    esActivo: c == activo,
+                    scheme: scheme,
+                    // El cliente 1 es la cuenta base de la comanda: no se
+                    // renombra ni se elimina.
+                    puedeGestionar: c != 1,
+                    onTap: () {
+                      if (c == filtro) {
+                        if (c == 1) onVerTodos();
+                      } else {
+                        onSelect(c);
+                      }
+                    },
+                    onRenombrar: () => onRenombrar(c),
+                    onEliminar: () => onEliminar(c),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+          // Destino de los próximos productos (solo con varios clientes).
           if (filtro == null && clientes.length > 1)
             Padding(
-              padding: const EdgeInsets.only(top: 3, left: 21),
+              padding: const EdgeInsets.only(top: 4, left: 24),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_right_alt, size: 12, color: scheme.onSurfaceVariant),
+                  Icon(Icons.arrow_right_alt,
+                      size: 14, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Text(
                     'Nuevo → ${etiqueta(activo)}',
-                    style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -184,102 +138,159 @@ class ClientesBar extends StatelessWidget {
   }
 }
 
-/// Chip individual de cliente con subtotal.
-class _ChipCliente extends StatelessWidget {
-  const _ChipCliente({
-    required this.clave,
-    required this.etiqueta,
-    required this.subtotal,
+/// Chip "Todos": muestra la comanda completa sin filtrar por cliente.
+class _ChipTodos extends StatelessWidget {
+  const _ChipTodos({
     required this.seleccionado,
-    required this.esActivo,
     required this.scheme,
     required this.onTap,
-    this.onLongPress,
   });
 
-  final int clave;
-  final String etiqueta;
-  final double subtotal;
   final bool seleccionado;
-  final bool esActivo;
   final ColorScheme scheme;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final tieneSaldo = subtotal > 0;
-    return GestureDetector(
-      onLongPress: onLongPress,
-      child: ChoiceChip(
-        visualDensity: VisualDensity.compact,
-        showCheckmark: false,
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              etiqueta,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (tieneSaldo) ...[
-              const SizedBox(width: 3),
-              Text(
-                '\$${subtotal.toStringAsFixed(0)}',
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: scheme.primary,
-                ),
-              ),
-            ],
-            if (esActivo && seleccionado)
-              const Icon(Icons.check_circle, size: 10, color: Colors.white),
-          ],
-        ),
-        selected: seleccionado,
-        onSelected: (_) => onTap(),
-        labelStyle: TextStyle(
-          color: seleccionado ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-          fontSize: 9,
-        ),
-        side: BorderSide(
-          color: seleccionado ? scheme.primary : scheme.outlineVariant,
+    final frente =
+        seleccionado ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    return _ChipBase(
+      seleccionado: seleccionado,
+      scheme: scheme,
+      onTap: onTap,
+      child: Text(
+        'Todos',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: frente,
         ),
       ),
     );
   }
 }
 
-/// Botón de acción compacto (solo ícono, sin texto visible).
-class _BotonAccion extends StatelessWidget {
-  const _BotonAccion({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.color,
-    this.esPequena = false,
+/// Chip individual de cliente con menú de opciones (⋮).
+class _ChipCliente extends StatelessWidget {
+  const _ChipCliente({
+    required this.etiqueta,
+    required this.seleccionado,
+    required this.esActivo,
+    required this.scheme,
+    required this.puedeGestionar,
+    required this.onTap,
+    required this.onRenombrar,
+    required this.onEliminar,
   });
 
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? color;
-  final bool esPequena;
+  final String etiqueta;
+  final bool seleccionado;
+  final bool esActivo;
+  final ColorScheme scheme;
+  final bool puedeGestionar;
+  final VoidCallback onTap;
+  final VoidCallback onRenombrar;
+  final VoidCallback onEliminar;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton(
-        visualDensity: VisualDensity.compact,
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(icon, size: esPequena ? 14 : 16, color: color),
-        padding: EdgeInsets.all(esPequena ? 4 : 6),
-        constraints: BoxConstraints(
-          minWidth: esPequena ? 28 : 32,
-          minHeight: esPequena ? 28 : 32,
+    final frente =
+        seleccionado ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    return _ChipBase(
+      seleccionado: seleccionado,
+      scheme: scheme,
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (esActivo && seleccionado) ...[
+            Icon(Icons.check_circle, size: 14, color: frente),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            etiqueta,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: frente,
+            ),
+          ),
+          if (puedeGestionar)
+            PopupMenuButton<String>(
+              tooltip: 'Opciones de $etiqueta',
+              icon: Icon(Icons.more_vert, size: 18, color: frente),
+              iconSize: 18,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 18,
+              onSelected: (v) {
+                if (v == 'renombrar') onRenombrar();
+                if (v == 'eliminar') onEliminar();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'renombrar',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Renombrar'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'eliminar',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.delete_outline, color: scheme.error),
+                    title: Text(
+                      'Eliminar',
+                      style: TextStyle(color: scheme.error),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            const SizedBox(width: 6),
+        ],
+      ),
+    );
+  }
+}
+
+/// Contenedor tipo chip con color, borde y área táctil del tema.
+class _ChipBase extends StatelessWidget {
+  const _ChipBase({
+    required this.seleccionado,
+    required this.scheme,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool seleccionado;
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: seleccionado
+          ? scheme.primaryContainer
+          : scheme.surfaceContainerHighest,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: seleccionado ? scheme.primary : scheme.outlineVariant,
+        ),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: child,
         ),
       ),
     );
