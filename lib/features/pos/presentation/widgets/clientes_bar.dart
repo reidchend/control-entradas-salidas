@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../data/pos_responsive.dart';
+
 /// Barra de sub-cuentas ("clientes") dentro de una comanda.
 ///
-/// Muestra cada cliente con su nombre personalizado (o "Cliente N") y el
-/// subtotal que lleva. Toque un chip para **filtrar** la lista y ver solo
-/// esos productos (y que los nuevos entren ahí); el chip "Todos" muestra la
-/// comanda completa. Toque el chip ya filtrado (o manténgalo presionado)
-/// para renombrarlo. Los botones ✏️/🗑️ gestionan el cliente filtrado
-/// (nunca el base).
+/// Muestra cada cliente con su nombre y subtotal. Toque un chip para
+/// **filtrar** la lista y ver solo esos productos; el chip "Todos" muestra
+/// la comanda completa.
+///
+/// Optimizado para tablets pequeñas en horizontal: los chips se acomodan
+/// en filas (Wrap) en lugar de una sola línea con scroll, y los botones de
+/// acción se agrupan en un menú compacto para ahorrar ancho.
 class ClientesBar extends StatelessWidget {
   const ClientesBar({
     super.key,
@@ -31,10 +34,7 @@ class ClientesBar extends StatelessWidget {
   final Map<int, double> subtotales;
   final Map<int, String> nombres;
 
-  /// Tocar un chip de cliente: filtra y lo hace activo.
   final ValueChanged<int> onSelect;
-
-  /// Chip "Todos": quita el filtro (el cliente activo no cambia).
   final VoidCallback onVerTodos;
   final VoidCallback onNuevo;
   final ValueChanged<int> onRenombrar;
@@ -42,135 +42,265 @@ class ClientesBar extends StatelessWidget {
 
   String etiqueta(int c) => nombres[c] ?? 'Cliente $c';
 
+  bool get _gestionable => filtro != null && filtro != 1;
+  bool get _esPequeno => clientes.isNotEmpty && clientes.length > 4;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final gestionable = filtro != null && filtro != 1;
+    final esPequena = MediaQuery.sizeOf(context).width <= 720;
+
+    if (clientes.isEmpty) return const SizedBox.shrink();
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: EdgeInsets.fromLTRB(
+        PosResponsive.padding(context),
+        0,
+        PosResponsive.padding(context),
+        6,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Encabezado compacto: título + chips + acciones agrupadas.
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(Icons.groups_outlined,
-                  size: 15, color: scheme.onSurfaceVariant),
+                  size: 14, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
-              Tooltip(
-                message: clientes.length == 1
-                    ? 'Cuentas separadas: toque + para abrir otra cuenta'
-                    : 'Toque un cliente para ver solo sus productos; toque su '
-                        'chip otra vez para renombrarlo. Toque "Todos" para '
-                        'ver la comanda completa.',
-                child: Text('Clientes',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurfaceVariant)),
-              ),
-              const SizedBox(width: 8),
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      ChoiceChip(
-                        visualDensity: VisualDensity.compact,
-                        avatar: Icon(
-                          Icons.filter_alt_off_outlined,
-                          size: 14,
-                          color: filtro == null
-                              ? scheme.onPrimaryContainer
-                              : scheme.onSurfaceVariant,
-                        ),
-                        label: const Text('Todos'),
-                        selected: filtro == null,
-                        onSelected: (_) => onVerTodos(),
-                      ),
-                      const SizedBox(width: 6),
-                      for (final c in clientes) ...[
-                        GestureDetector(
-                          onLongPress: () {
-                            if (c != 1) onRenombrar(c);
-                          },
-                          child: ChoiceChip(
-                            visualDensity: VisualDensity.compact,
-                            label: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(etiqueta(c)),
-                                if ((subtotales[c] ?? 0) > 0) ...[
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '\$${(subtotales[c] ?? 0).toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: scheme.primary),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            selected: c == filtro,
-                            onSelected: (_) {
-                              if (c == filtro) {
-                                // Ya se ve este cliente: tocarlo de nuevo
-                                // vuelve a "Todos" (o renombra si no es 1).
-                                if (c == 1) {
-                                  onVerTodos();
-                                } else {
-                                  onRenombrar(c);
-                                }
-                              } else {
-                                onSelect(c);
-                              }
-                            },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Título + chips en una línea
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Clientes',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(width: 6),
+                        // Chip "Todos"
+                        ChoiceChip(
+                          visualDensity: VisualDensity.compact,
+                          showCheckmark: false,
+                          label: const Text(
+                            'Todos',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          selected: filtro == null,
+                          onSelected: (_) => onVerTodos(),
+                          labelStyle: TextStyle(
+                            color: filtro == null
+                                ? scheme.onPrimaryContainer
+                                : scheme.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                          side: BorderSide(
+                            color: filtro == null
+                                ? scheme.primary
+                                : scheme.outlineVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Chips de clientes: se envuelven en filas si no caben
+                        Expanded(
+                          child: Wrap(
+                            spacing: 5,
+                            runSpacing: 5,
+                            children: [
+                              for (final c in clientes)
+                                _ChipCliente(
+                                  clave: c,
+                                  etiqueta: etiqueta(c),
+                                  subtotal: subtotales[c] ?? 0,
+                                  seleccionado: c == filtro,
+                                  scheme: scheme,
+                                  esActivo: c == activo,
+                                  onTap: () {
+                                    if (c == filtro) {
+                                      if (c == 1) {
+                                        onVerTodos();
+                                      } else {
+                                        onRenombrar(c);
+                                      }
+                                    } else {
+                                      onSelect(c);
+                                    }
+                                  },
+                                  onLongPress: c != 1
+                                      ? () => onRenombrar(c)
+                                      : null,
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
-                    ],
-                  ),
+                    ),
+                    // Línea de destino y acciones compactas
+                    if (filtro == null && clientes.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_right_alt,
+                                size: 12, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Nuevo → ${etiqueta(activo)}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (_gestionable) ...[
+                              _BotonAccion(
+                                tooltip: 'Renombrar ${etiqueta(filtro!)}',
+                                icon: Icons.edit_outlined,
+                                onPressed: () => onRenombrar(filtro!),
+                                esPequena: esPequena,
+                              ),
+                              _BotonAccion(
+                                tooltip: 'Eliminar ${etiqueta(filtro!)}',
+                                icon: Icons.delete_outline,
+                                color: scheme.error,
+                                onPressed: () => onEliminar(filtro!),
+                                esPequena: esPequena,
+                              ),
+                            ],
+                            _BotonAccion(
+                              tooltip: clientes.length == 1
+                                  ? 'Nueva cuenta separada'
+                                  : 'Añadir otra cuenta',
+                              icon: Icons.person_add_alt,
+                              onPressed: onNuevo,
+                              esPequena: esPequena,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 4),
-              if (gestionable) ...[
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Renombrar "${etiqueta(filtro!)}"',
-                  onPressed: () => onRenombrar(filtro!),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Eliminar "${etiqueta(filtro!)}"',
-                  onPressed: () => onEliminar(filtro!),
-                  icon: Icon(Icons.delete_outline,
-                      size: 16, color: scheme.error),
-                ),
-              ],
-              IconButton.filledTonal(
-                visualDensity: VisualDensity.compact,
-                tooltip: clientes.length == 1
-                    ? 'Nueva cuenta separada'
-                    : 'Añadir otra cuenta',
-                onPressed: onNuevo,
-                icon: const Icon(Icons.person_add_alt, size: 16),
               ),
             ],
           ),
-          // Destino de los productos nuevos cuando se ve la comanda
-          // completa (con filtro activo el destino es el propio chip).
-          if (filtro == null && clientes.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(left: 21, top: 2),
-              child: Text(
-                'Nuevo producto → ${etiqueta(activo)}',
-                style: TextStyle(
-                    fontSize: 10, color: scheme.onSurfaceVariant),
-              ),
-            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Chip individual de cliente con subtotal.
+class _ChipCliente extends StatelessWidget {
+  const _ChipCliente({
+    required this.clave,
+    required this.etiqueta,
+    required this.subtotal,
+    required this.seleccionado,
+    required this.esActivo,
+    required this.scheme,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  final int clave;
+  final String etiqueta;
+  final double subtotal;
+  final bool seleccionado;
+  final bool esActivo;
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final tieneSaldo = subtotal > 0;
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: ChoiceChip(
+        visualDensity: VisualDensity.compact,
+        showCheckmark: false,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              etiqueta,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (tieneSaldo) ...[
+              const SizedBox(width: 3),
+              Text(
+                '\$${subtotal.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+            if (esActivo && seleccionado)
+              const Icon(Icons.check_circle, size: 10, color: Colors.white),
+          ],
+        ),
+        selected: seleccionado,
+        onSelected: (_) => onTap(),
+        labelStyle: TextStyle(
+          color: seleccionado
+              ? scheme.onPrimaryContainer
+              : scheme.onSurfaceVariant,
+          fontSize: 10,
+        ),
+        side: BorderSide(
+          color: seleccionado
+              ? scheme.primary
+              : scheme.outlineVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón de acción compacto (solo ícono, sin texto visible).
+class _BotonAccion extends StatelessWidget {
+  const _BotonAccion({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.color,
+    this.esPequena = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? color;
+  final bool esPequena;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        visualDensity: VisualDensity.compact,
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: esPequena ? 14 : 16, color: color),
+        padding: EdgeInsets.all(esPequena ? 4 : 6),
+        constraints: BoxConstraints(
+          minWidth: esPequena ? 28 : 32,
+          minHeight: esPequena ? 28 : 32,
+        ),
       ),
     );
   }
