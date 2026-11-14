@@ -24,15 +24,14 @@
   Archivo: `supabase/migrations/20261114000002_eliminar_pos_categorias.sql`  
   **Estado:** Completado. Tabla `pos_categorias` eliminada; categorías del POS ahora usan `categorias` de inventario con `visible_en_pos`.
 
-- [ ] **Aplicar migración etiqueta de habitación en pos_comandas**  
+- [x] **Aplicar migración etiqueta de habitación en pos_comandas**  
   Archivo: `supabase/migrations/20261114000000_pos_comandas_habitaciones.txt`  
   SQL:
   ```sql
   ALTER TABLE pos_comandas
       ADD COLUMN IF NOT EXISTS habitaciones TEXT;
   ```
-  **Estado:** Pendiente. Sin esta columna la comanda se guarda pero **pierde la etiqueta de cliente** (Particular / habitaciones); el POS reintenta el guardado sin la columna y muestra un aviso copiable. Requiere rol `postgres`.
-  **Verificación:** `SELECT column_name FROM information_schema.columns WHERE table_name = 'pos_comandas' AND column_name = 'habitaciones';`
+  **Estado:** Completado. Columna `habitaciones` agregada a `pos_comandas`.
 
 - [ ] **Asignar precios de referencia desde MercadoLibre Venezuela (Ciudad Guayana)**  
   **Script:** `update_prices_direct.py` (en raíz del proyecto)  
