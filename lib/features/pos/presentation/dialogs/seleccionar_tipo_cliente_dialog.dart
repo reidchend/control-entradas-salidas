@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/habitacion_models.dart';
-import '../../../data/pos_providers.dart';
+import '../../../../core/models/habitacion_models.dart';
+import '../../../../data/pos_providers.dart';
 
 /// Resultado del diálogo de selección de tipo de cliente y habitación.
 class TipoClienteSeleccion {
@@ -80,7 +80,7 @@ class _SeleccionarTipoClienteDialogState
     return false;
   }
 
-  String? _resultado() {
+  TipoClienteSeleccion? _resultado() {
     if (_tipo == 'particular') {
       return TipoClienteSeleccion(tipo: 'particular', habitaciones: null);
     }
@@ -152,7 +152,7 @@ class _SeleccionarTipoClienteDialogState
               ),
             ),
           ],
-        ],
+        ),
       ],
     );
   }
@@ -223,9 +223,9 @@ class _BotonTipo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return FilledButton.tonal(
+    return FilledButton(
       onPressed: onTap,
-      style: FilledButton.tonal.styleFrom(
+      style: FilledButton.styleFrom(
         backgroundColor: seleccionado ? scheme.primary : null,
         foregroundColor: seleccionado ? scheme.onPrimary : null,
         padding: const EdgeInsets.symmetric(vertical: 16),
