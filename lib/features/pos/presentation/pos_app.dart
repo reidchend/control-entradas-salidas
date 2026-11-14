@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -38,6 +39,7 @@ class _PosAppState extends ConsumerState<PosApp> {
       // ancho con tope de 1000); en móvil conservan el comportamiento por
       // defecto de Material (igual que app_shell.dart).
       builder: (context, child) {
+        final theme = Theme.of(context);
         final ancho = MediaQuery.sizeOf(context).width;
         final esEscritorio = ancho >= 600;
         final constraints = esEscritorio
@@ -47,8 +49,30 @@ class _PosAppState extends ConsumerState<PosApp> {
               )
             : const BoxConstraints(minWidth: 280);
         return DialogTheme(
-          data: Theme.of(context).dialogTheme.copyWith(constraints: constraints),
-          child: child ?? const SizedBox.shrink(),
+          data: theme.dialogTheme.copyWith(constraints: constraints),
+          // Android 15+ dibuja la app de borde a borde (edge-to-edge): la
+          // barra de estado queda superpuesta a la UI. SafeArea reserva esa
+          // franja (arriba, abajo y laterales con notch) para que la barra
+          // superior del POS no quede debajo de la barra de notificaciones.
+          // El ColoredBox pinta el fondo del tema en la franja del sistema
+          // para que no se vea el color crudo de la ventana.
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            // El POS es siempre oscuro: iconos claros para que se lean sobre
+            // el fondo. En Android <15 también pinta la barra del mismo tono.
+            value: SystemUiOverlayStyle(
+              statusBarColor: theme.scaffoldBackgroundColor,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+              systemNavigationBarColor: theme.scaffoldBackgroundColor,
+              systemNavigationBarIconBrightness: Brightness.light,
+            ),
+            child: ColoredBox(
+              color: theme.scaffoldBackgroundColor,
+              child: SafeArea(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
+          ),
         );
       },
       home: const PosScreen(),
