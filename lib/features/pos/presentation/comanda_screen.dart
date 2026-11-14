@@ -22,7 +22,7 @@ import 'dialogs/renombre_cliente_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
 import 'widgets/clientes_bar.dart';
-import 'widgets/comanda_encabezado.dart';
+import 'widgets/comanda_etiqueta_cliente.dart';
 import 'widgets/comanda_item_tile.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -139,12 +139,27 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final m = widget.mesa;
     final h = widget.habitacion;
     if (m != null) {
-      final extra = [m.nombre, m.zona].whereType<String>().where((s) => s.isNotEmpty).join(' - ');
-      return 'Mesa ${m.numero}${extra.isNotEmpty ? ' - $extra' : ''}';
+      final numero = m.numero.trim();
+      final extras = <String>[];
+      final nombre = m.nombre?.trim() ?? '';
+      // Muchas mesas se llaman igual que su número ("Mesa 04" con número
+      // "04"): no repetirlo en el título.
+      final nombreRedundante = nombre.isEmpty ||
+          nombre.toLowerCase() == numero.toLowerCase() ||
+          nombre.toLowerCase() == 'mesa ${numero.toLowerCase()}';
+      if (!nombreRedundante) extras.add(nombre);
+      final zona = m.zona?.trim() ?? '';
+      if (zona.isNotEmpty) extras.add(zona);
+      return 'Mesa $numero${extras.isEmpty ? '' : ' - ${extras.join(' - ')}'}';
     }
     if (h != null) {
-      final extra = [h.piso, h.tipo].whereType<String>().where((s) => s.isNotEmpty).join(' - ');
-      return 'Habitación ${h.numero}${extra.isNotEmpty ? ' - $extra' : ''}';
+      final extras = <String>[];
+      final piso = h.piso?.trim() ?? '';
+      if (piso.isNotEmpty) extras.add(piso);
+      final tipo = h.tipo?.trim() ?? '';
+      if (tipo.isNotEmpty) extras.add(tipo);
+      return 'Habitación ${h.numero}'
+          '${extras.isEmpty ? '' : ' - ${extras.join(' - ')}'}';
     }
     return 'Comanda';
   }
@@ -536,10 +551,13 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   String get _mesaTicketLabel {
     final m = widget.mesa;
     if (m == null) return '';
-    final numero = m.numero.toString();
-    final nombre = m.nombre;
-    if (nombre != null && nombre.isNotEmpty && nombre != numero) {
-      return numero.isNotEmpty ? '$numero - $nombre' : nombre;
+    final numero = m.numero.trim();
+    final nombre = m.nombre?.trim() ?? '';
+    final redundante = nombre.isEmpty ||
+        nombre.toLowerCase() == numero.toLowerCase() ||
+        nombre.toLowerCase() == 'mesa ${numero.toLowerCase()}';
+    if (!redundante) {
+      return numero.isEmpty ? nombre : '$numero - $nombre';
     }
     return numero;
   }
@@ -1404,6 +1422,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             titulo: _ubicacion,
             mostrarPerfil: false,
             actions: [
+              ComandaEtiquetaCliente(
+                habitaciones: widget.habitacionesTexto,
+              ),
               PopupMenuButton<String>(
                 tooltip: 'Acciones de comanda',
                 icon: const Icon(Icons.more_vert),
@@ -1444,11 +1465,6 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
               ),
             ],
           ),
-          ComandaEncabezado(
-            mesaNumero: widget.mesa?.numero ?? '—',
-            habitaciones: widget.habitacionesTexto,
-          ),
-          const Divider(height: 1),
           Expanded(
             child: _iniciando
                 ? const Center(child: CircularProgressIndicator())
