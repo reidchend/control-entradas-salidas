@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/habitacion_models.dart';
-import '../../../../data/pos_providers.dart';
+import '../../data/pos_providers.dart';
 
 /// Resultado del diálogo de selección de tipo de cliente y habitación.
 class TipoClienteSeleccion {
@@ -74,11 +74,14 @@ class _SeleccionarTipoClienteDialogState
     });
   }
 
-  bool get _puedeContinuar {
-    if (_tipo == 'particular') return true;
-    if (_tipo == 'huesped') return _habitacionesSeleccionadas.isNotEmpty;
-    return false;
-  }
+  bool get _puedeContinuar =>
+      _tipo == 'huesped' && _habitacionesSeleccionadas.isNotEmpty;
+
+  /// Números de las habitaciones seleccionadas, en orden (ej. `101, 103`).
+  String get _seleccionTexto => _habitaciones
+      .where((h) => _habitacionesSeleccionadas.contains(h.id))
+      .map((h) => h.numero)
+      .join(', ');
 
   TipoClienteSeleccion? _resultado() {
     if (_tipo == 'particular') {
@@ -87,7 +90,7 @@ class _SeleccionarTipoClienteDialogState
     if (_tipo == 'huesped' && _habitacionesSeleccionadas.isNotEmpty) {
       return TipoClienteSeleccion(
         tipo: 'huesped',
-        habitaciones: _habitacionesSeleccionadas.join(', '),
+        habitaciones: _seleccionTexto,
       );
     }
     return null;
@@ -97,27 +100,35 @@ class _SeleccionarTipoClienteDialogState
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    final esHuesped = _tipo == 'huesped';
+
     return AlertDialog(
+      scrollable: true,
       title: Text('Mesa ${widget.mesaNumero}'),
-      content: SizedBox(
-        width: 460,
-        child: _tipo == null ? _PasoTipo() : _PasoHabitaciones(scheme),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: esHuesped ? _PasoHabitaciones(scheme) : _PasoTipo(),
       ),
-      actions: [
-        if (_tipo != null) ...[
-          TextButton(
-            onPressed: () => setState(() => _tipo = null),
-            child: const Text('Volver'),
-          ),
-          const Spacer(),
-          FilledButton(
-            onPressed: _puedeContinuar
-                ? () => Navigator.pop(context, _resultado())
-                : null,
-            child: const Text('Continuar'),
-          ),
-        ],
-      ],
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: esHuesped
+          ? [
+              TextButton(
+                onPressed: () => setState(() => _tipo = null),
+                child: const Text('Volver'),
+              ),
+              FilledButton(
+                onPressed: _puedeContinuar
+                    ? () => Navigator.pop(context, _resultado())
+                    : null,
+                child: const Text('Continuar'),
+              ),
+            ]
+          : [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+            ],
     );
   }
 
@@ -139,7 +150,10 @@ class _SeleccionarTipoClienteDialogState
                 label: 'Particular',
                 icon: Icons.person_outline,
                 seleccionado: _tipo == 'particular',
-                onTap: () => setState(() => _tipo = 'particular'),
+                onTap: () => Navigator.pop(
+                  context,
+                  const TipoClienteSeleccion(tipo: 'particular'),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -178,7 +192,7 @@ class _SeleccionarTipoClienteDialogState
           children: [
             for (final h in _habitaciones)
               ChoiceChip(
-                label: Text('${h.numero ?? h.id}'),
+                label: Text(h.numero),
                 selected: _habitacionesSeleccionadas.contains(h.id),
                 onSelected: (sel) {
                   setState(() {
@@ -195,7 +209,7 @@ class _SeleccionarTipoClienteDialogState
         const SizedBox(height: 12),
         if (_habitacionesSeleccionadas.isNotEmpty)
           Text(
-            'Seleccionadas: ${_habitacionesSeleccionadas.join(', ')}',
+            'Seleccionadas: $_seleccionTexto',
             style: TextStyle(
               fontSize: 12,
               color: scheme.onSurfaceVariant,
@@ -223,7 +237,7 @@ class _BotonTipo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return FilledButton(
+    return FilledButton.icon(
       onPressed: onTap,
       style: FilledButton.styleFrom(
         backgroundColor: seleccionado ? scheme.primary : null,
