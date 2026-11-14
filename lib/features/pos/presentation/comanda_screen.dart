@@ -544,6 +544,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
 
   /// Port de `_habitacion_ticket_label` (comanda_view.py:968).
   String get _habitacionTicketLabel {
+    // Si se seleccionó una etiqueta de cliente en el diálogo (Particular o
+    // lista de habitaciones), tiene prioridad sobre el objeto Habitacion
+    // individual.
+    final txt = widget.habitacionesTexto;
+    if (txt != null && txt.isNotEmpty) return txt;
+
     final h = widget.habitacion;
     if (h == null) return '';
     var etiqueta = h.numero.toString();
