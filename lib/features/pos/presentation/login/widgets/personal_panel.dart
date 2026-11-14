@@ -138,16 +138,21 @@ class _PersonalPanelState extends ConsumerState<PersonalPanel> {
                   ? _sinCajeros()
                   : Column(
                       children: [
-                        for (final u in lista) ...[
-                          UsuarioCard(
-                            usuario: u,
-                            selected: u.id == _selectedId,
-                            turnoAbierto: enTurno.contains(u.id),
-                            onTap: _entrando ? null : () => _login(u),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                        const SizedBox(height: 8),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            for (final u in lista)
+                              UsuarioCard(
+                                usuario: u,
+                                selected: u.id == _selectedId,
+                                turnoAbierto: enTurno.contains(u.id),
+                                onTap: _entrando ? null : () => _login(u),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
                         _loginButton(lista),
                       ],
                     ),

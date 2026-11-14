@@ -1,0 +1,10 @@
+-- Migración opcional: etiqueta de habitación en comandas del POS
+-- No es una relación estricta: solo guarda texto como 'Particular' o '101, 103'
+-- para mostrar en el encabezado de la comanda activa.
+ALTER TABLE pos_comandas
+    ADD COLUMN IF NOT EXISTS habitaciones TEXT;
+
+-- Ejemplos de valores:
+--   NULL        -> sin etiqueta (comanda antigua)
+--   'Particular'-> cliente de afuera
+--   '101, 103'  -> clientes de las habitaciones 101 y 103 en la misma mesa

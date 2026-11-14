@@ -39,13 +39,21 @@ class _EntryCardState extends State<EntryCard> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final c = widget.color;
+    final esPequena = MediaQuery.sizeOf(context).width <= 720;
+
+    final anchoTarjeta = esPequena ? 230.0 : 280.0;
+    final tamanoIcono = esPequena ? 56.0 : 74.0;
+    final tamanoIconoInterno = esPequena ? 30.0 : 38.0;
+    final tamanoTitulo = esPequena ? 18.0 : 22.0;
+    final paddingInterno = esPequena ? 16.0 : 22.0;
+    final espaciadoTitulo = esPequena ? 14.0 : 18.0;
 
     return AnimatedScale(
       scale: _presionada ? 0.96 : 1,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
       child: Container(
-        width: 280,
+        width: anchoTarjeta,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -73,15 +81,15 @@ class _EntryCardState extends State<EntryCard> {
             onTap: widget.onTap,
             onHighlightChanged: (v) => setState(() => _presionada = v),
             child: Padding(
-              padding: const EdgeInsets.all(22),
+              padding: EdgeInsets.all(paddingInterno),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     children: [
                       Container(
-                        width: 74,
-                        height: 74,
+                        width: tamanoIcono,
+                        height: tamanoIcono,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: c.withValues(alpha: 0.16),
@@ -93,7 +101,7 @@ class _EntryCardState extends State<EntryCard> {
                             ),
                           ],
                         ),
-                        child: Icon(widget.icon, size: 38, color: c),
+                        child: Icon(widget.icon, size: tamanoIconoInterno, color: c),
                       ),
                       const Spacer(),
                       if (widget.badge != null)
@@ -126,11 +134,11 @@ class _EntryCardState extends State<EntryCard> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: espaciadoTitulo),
                   Text(
                     widget.titulo,
-                    style: const TextStyle(
-                      fontSize: 22,
+                    style: TextStyle(
+                      fontSize: tamanoTitulo,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -140,7 +148,7 @@ class _EntryCardState extends State<EntryCard> {
                     widget.subtitulo,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: esPequena ? 11 : 13,
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -163,7 +171,7 @@ class _EntryCardState extends State<EntryCard> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  SizedBox(height: espaciadoTitulo),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 11),

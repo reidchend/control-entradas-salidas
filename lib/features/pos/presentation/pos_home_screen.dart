@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
+import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import 'comanda_acciones.dart';
 import 'widgets/comandas_activas_panel.dart';
@@ -142,8 +143,8 @@ class PosHomeScreen extends ConsumerWidget {
                       ],
                       Wrap(
                         alignment: WrapAlignment.center,
-                        spacing: 30,
-                        runSpacing: 30,
+                        spacing: PosResponsive.padding(context) * 1.2,
+                        runSpacing: PosResponsive.padding(context) * 1.2,
                         children: [
                           PopIn(
                             delay: const Duration(milliseconds: 180),

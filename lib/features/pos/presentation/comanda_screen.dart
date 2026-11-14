@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/habitacion_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/pos_comanda_models.dart';
 import '../data/pos_providers.dart';
+import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import '../data/sesion_cerrada_error.dart';
 import '../data/printer_service.dart';
@@ -20,6 +22,7 @@ import 'dialogs/renombre_cliente_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
 import 'widgets/clientes_bar.dart';
+import 'widgets/comanda_encabezado.dart';
 import 'widgets/comanda_item_tile.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -41,6 +44,7 @@ class ComandaScreen extends ConsumerStatefulWidget {
   final PosSesionActiva sesion;
   final PosMesa? mesa;
   final Habitacion? habitacion;
+  final String? habitacionesTexto; // 'Particular' | '101, 103' | null
   final VoidCallback onBack;
   final VoidCallback onLogout;
 
@@ -249,6 +253,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
+            habitaciones: widget.habitacionesTexto,
           );
       _comandaId = comandaId;
       ref.invalidate(mesasOcupadasProvider);
@@ -386,6 +391,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         mesaId: mesaI,
         habitacionId: habId,
         usuarioId: widget.sesion.usuario.id,
+        habitaciones: widget.habitacionesTexto,
       );
       final anulada = await repo.getVentaAnuladaPorComanda(comandaId);
       final ventaAnulaId = anulada?.id;
@@ -539,6 +545,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
 
   /// Port de `_habitacion_ticket_label` (comanda_view.py:968).
   String get _habitacionTicketLabel {
+    // Si se seleccionó una etiqueta de cliente en el diálogo (Particular o
+    // lista de habitaciones), tiene prioridad sobre el objeto Habitacion
+    // individual.
+    final txt = widget.habitacionesTexto;
+    if (txt != null && txt.isNotEmpty) return txt;
+
     final h = widget.habitacion;
     if (h == null) return '';
     var etiqueta = h.numero.toString();
@@ -1309,6 +1321,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
+            habitaciones: widget.habitacionesTexto,
           );
       _comandaId = id;
       ref.invalidate(comandasActivasProvider);
@@ -1398,8 +1411,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
           PosTopBar(
             usuario: widget.sesion.usuario,
             titulo: _ubicacion,
-            onBack: widget.onBack,
-            onLogout: widget.onLogout,
+            mostrarPerfil: false,
             actions: [
               PopupMenuButton<String>(
                 tooltip: 'Acciones de comanda',
@@ -1441,6 +1453,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
               ),
             ],
           ),
+          ComandaEncabezado(
+            mesaNumero: widget.mesa?.numero ?? '—',
+            habitaciones: widget.habitacionesTexto,
+          ),
           const Divider(height: 1),
           Expanded(
             child: _iniciando
@@ -1449,7 +1465,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(
-                        width: 380,
+                        width: PosResponsive.panelComandaAncho(context),
                         child: _panelComanda(),
                       ),
                       const VerticalDivider(width: 1),
@@ -1787,63 +1803,79 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       ),
       child: Row(
         children: [
-          OutlinedButton.icon(
-            onPressed: ocupado ? null : widget.onBack,
-            icon: const Icon(Icons.cancel, color: Color(0xFFEF5350)),
-            label: const Text('Cancelar'),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: (_comandaId == null || ocupado) ? null : _eliminarComanda,
-            icon: _eliminando
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
-            label: const Text('Anular'),
-          ),
           const Spacer(),
-          OutlinedButton.icon(
-            onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
-            icon: const Icon(Icons.print_outlined),
-            label: const Text('Imprimir comanda'),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: ocupado ? null : widget.onBack,
+              icon: const Icon(Icons.cancel, color: Color(0xFFEF5350)),
+              label: const Text('Cancelar'),
+            ),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: (tieneItems && !ocupado) ? _guardar : null,
-            icon: _guardando
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: const Text('Guardar'),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: (_comandaId == null || ocupado) ? null : _eliminarComanda,
+              icon: _eliminando
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.delete_outline, color: Color(0xFFEF5350)),
+              label: const Text('Anular'),
+            ),
           ),
           const SizedBox(width: 8),
-          Tooltip(
-            message: widget.sesion.puedeCobrar
-                ? 'Cobrar comanda'
-                : 'Cobrar solo desde la PC principal (con impresora)',
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
+            child: OutlinedButton.icon(
+              onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Imprimir comanda'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: PosResponsive.botonAltura(context),
             child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-              ),
-              onPressed:
-                  (widget.sesion.puedeCobrar && tieneItems && !ocupado)
-                      ? _cobrar
-                      : null,
-              icon: _cobrando
+              onPressed: (tieneItems && !ocupado) ? _guardar : null,
+              icon: _guardando
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.payments_outlined),
-              label: const Text('Cobrar'),
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Guardar'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: widget.sesion.puedeCobrar
+                ? 'Cobrar comanda'
+                : 'Cobrar solo desde la PC principal (con impresora)',
+            child: SizedBox(
+              height: PosResponsive.botonAltura(context),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF4CAF50),
+                ),
+                onPressed:
+                    (widget.sesion.puedeCobrar && tieneItems && !ocupado)
+                        ? _cobrar
+                        : null,
+                icon: _cobrando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.payments_outlined),
+                label: const Text('Cobrar'),
+              ),
             ),
           ),
         ],

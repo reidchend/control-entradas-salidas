@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/polling_providers.dart';
+import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/pos_cierre_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../features/whatsapp/data/whatsapp_providers.dart';
@@ -77,8 +79,32 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
   _PosStage _stage = _PosStage.home;
   PosMesa? _mesa;
   Habitacion? _habitacion;
+  String? _tipoCliente; // 'particular' | 'huesped'
+  String? _habitacionesTexto; // 'Particular' | '101, 103' | null
+  List<void Function()> _pollingCancels = [];
 
-  /// true si la sesión tiene turno de caja abierto o es usuario
+  /// Polling de comandas/sesiones para el POS: detecta cuando otro
+  /// dispositivo abre/cierra una comanda y refresca `mesasOcupadasProvider`,
+  /// `comandasAbiertasProvider`, etc. para que la mesa aparezca como ocupada
+  /// en todos los terminales sin necesidad de recargar la pantalla.
+  @override
+  void initState() {
+    super.initState();
+    Future(() {
+      final db = ref.read(postgresServiceProvider);
+      if (db != null && mounted) {
+        _pollingCancels = initPollingSubscriptions(ref, db: db);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final cancel in _pollingCancels) {
+      cancel();
+    }
+    super.dispose();
+  }
   /// desarrollador (sesionId == 0, pruebas sin turno).
   bool get _tieneTurno =>
       widget.sesion.sesionId > 0 || widget.sesion.usuario.esDesarrollador;
@@ -115,7 +141,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     });
   }
 
-  void _abrirMesa(PosMesa m) {
+  void _abrirMesa(PosMesa m, [String? tipoCliente, String? habitacionesTexto]) {
     if (!_tieneTurno) {
       _bloquearSinTurno();
       return;
@@ -123,6 +149,8 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     setState(() {
       _mesa = m;
       _habitacion = null;
+      _tipoCliente = tipoCliente;
+      _habitacionesTexto = habitacionesTexto;
       _stage = _PosStage.comanda;
     });
   }
@@ -382,6 +410,7 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
           sesion: s,
           mesa: _mesa,
           habitacion: _habitacion,
+          habitacionesTexto: _habitacionesTexto,
           onBack: () => _go(_PosStage.home),
           onLogout: _mostrarOpcionesCierre,
           onComandaMovida: _abrirComandaActiva,
