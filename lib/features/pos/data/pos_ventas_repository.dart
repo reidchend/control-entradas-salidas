@@ -58,7 +58,7 @@ class PosVentasRepository {
     String? habitaciones, // 'Particular' | '101, 103' | null
     void Function(String aviso)? onAviso,
   }) async {
-    final int id;
+    int id;
     try {
       id = await _guardarComandaTx(
         sesionId,
