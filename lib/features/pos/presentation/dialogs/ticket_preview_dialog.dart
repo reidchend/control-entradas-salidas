@@ -6,15 +6,19 @@ import '../../../../core/utils/web_utils.dart';
 /// Vista previa del ticket de comanda (port de la impresión de `printer.py`
 /// adaptada a web): muestra el ticket en monospace de 32 columnas y permite
 /// imprimirlo con el diálogo del navegador (única vía de impresión en web).
-Future<void> showTicketPreview(
+///
+/// Devuelve `true` si el usuario pulsó **Imprimir** (para poder marcar la
+/// comanda como "En cocina") y `false` si solo cerró la vista previa.
+Future<bool> showTicketPreview(
   BuildContext context, {
   required List<String> lineas,
   String titulo = 'Ticket de comanda',
-}) {
-  return showDialog<void>(
+}) async {
+  final resultado = await showDialog<bool>(
     context: context,
     builder: (_) => TicketPreviewDialog(lineas: lineas, titulo: titulo),
   );
+  return resultado ?? false;
 }
 
 class TicketPreviewDialog extends StatelessWidget {
@@ -74,7 +78,11 @@ class TicketPreviewDialog extends StatelessWidget {
           child: const Text('Cerrar'),
         ),
         FilledButton.icon(
-          onPressed: _imprimirWeb,
+          onPressed: () {
+            _imprimirWeb();
+            // Cierra la vista previa confirmando que se mandó a imprimir.
+            Navigator.of(context).pop(true);
+          },
           icon: const Icon(Icons.print),
           label: const Text('Imprimir'),
         ),

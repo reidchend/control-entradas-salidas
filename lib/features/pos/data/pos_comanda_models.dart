@@ -9,6 +9,10 @@ typedef ComandaActiva = ({
   int items,
   int? mesaId,
   int? habitacionId,
+
+  /// Momento en que se imprimió la comanda para cocina. `null` = todavía no
+  /// se imprimió, así el home la resalta como "Nueva" (prioridad).
+  DateTime? impresaEn,
 });
 
 /// Modelo de item de comanda (port del formato de `ComandaPedidoView._build_items_data`).

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/data/postgres_service.dart';
@@ -56,8 +58,9 @@ class PosVentasRepository {
     String? habitaciones, // 'Particular' | '101, 103' | null
     void Function(String aviso)? onAviso,
   }) async {
+    final int id;
     try {
-      return await _guardarComandaTx(
+      id = await _guardarComandaTx(
         sesionId,
         items,
         total,
@@ -70,7 +73,7 @@ class PosVentasRepository {
       // Sin etiqueta no hay nada que perder: se propaga el error original.
       if (habitaciones == null || !_faltaColumnaHabitaciones(e)) rethrow;
 
-      final id = await _guardarComandaTx(
+      id = await _guardarComandaTx(
         sesionId,
         items,
         total,
@@ -84,7 +87,61 @@ class PosVentasRepository {
         'Aplique la migración 20261114000000_pos_comandas_habitaciones.sql '
         'para recuperarla.',
       );
-      return id;
+    }
+    // Si la comanda ya se había impreso y este guardado cambió el contenido,
+    // vuelve a quedar pendiente de imprimir. Fuera de la transacción, best-effort
+    // y sin bloquear el guardado (la comanda ya quedó persistida): si falta la
+    // columna o la red tarda, la marca solo se corrige en el siguiente guardado.
+    unawaited(_limpiarImpresaSiCambio(id, items, total));
+    return id;
+  }
+
+  /// Deja `impresa_en = NULL` si la comanda ya estaba marcada como impresa
+  /// para cocina y este guardado cambió los productos o el total, para que el
+  /// home la resalte otra vez y se reimprima.
+  ///
+  /// Best-effort: si la columna `impresa_en` todavía no existe en la base, se
+  /// ignora (el guardado ya se hizo y no debe fallar por una marca visual).
+  Future<void> _limpiarImpresaSiCambio(
+    int comandaId,
+    List<Map<String, dynamic>> items,
+    double total,
+  ) async {
+    if (comandaId <= 0) return;
+    try {
+      await _db.executeSql(
+        'UPDATE pos_comandas SET impresa_en = NULL '
+        'WHERE id = \$1 AND impresa_en IS NOT NULL '
+        'AND (items_json IS DISTINCT FROM \$2 OR total IS DISTINCT FROM \$3)',
+        params: [comandaId, jsonEncode(items), total],
+      );
+    } catch (e) {
+      debugPrint('[pos] no se pudo reiniciar la marca de cocina: $e');
+    }
+  }
+
+  /// Marca la comanda como impresa para cocina (el home deja de resaltarla
+  /// como "Nueva" y la muestra "En cocina" en todas las terminales).
+  ///
+  /// También actualiza `updated_at`: el polling de `pos_comandas` detecta
+  /// cambios por la firma `COUNT(*) + MAX(GREATEST(updated_at, created_at))`,
+  /// así que sin ese toque las demás terminales no verían la marca hasta el
+  /// próximo cambio de la comanda.
+  ///
+  /// Devuelve `false` si la base todavía no tiene la columna `impresa_en`;
+  /// en ese caso la impresión ya se hizo y solo se pierde la marca visual.
+  Future<bool> marcarComandaImpresa(int comandaId) async {
+    if (comandaId <= 0) return false;
+    try {
+      final ahora = DateTime.now().toIso8601String();
+      await _db.updateById('pos_comandas', comandaId, {
+        'impresa_en': ahora,
+        'updated_at': ahora,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[pos] no se pudo marcar la comanda como impresa: $e');
+      return false;
     }
   }
 
@@ -293,6 +350,17 @@ class PosVentasRepository {
           items = (jsonDecode(cItemsJson) as List).length;
         } catch (_) {}
       }
+      // La migración define la columna como TEXT, pero si en producción se
+      // creó como timestamp el driver devuelve DateTime: se aceptan ambos.
+      final impresaRaw = c['impresa_en'];
+      final DateTime? impresaEn;
+      if (impresaRaw is DateTime) {
+        impresaEn = impresaRaw;
+      } else if (impresaRaw is String && impresaRaw.isNotEmpty) {
+        impresaEn = DateTime.tryParse(impresaRaw);
+      } else {
+        impresaEn = null;
+      }
       result.add((
         comandaId: cId,
         etiqueta: etiqueta,
@@ -300,9 +368,18 @@ class PosVentasRepository {
         items: items,
         mesaId: mesaId,
         habitacionId: habId,
+        impresaEn: impresaEn,
       ));
     }
-    return result;
+    // Las comandas sin imprimir van primero: son las que cocina todavía no
+    // recibió, así el home las muestra arriba y resaltadas. Dentro de cada
+    // grupo se conserva el orden por `updated_at` de la consulta.
+    final pendientes = <ComandaActiva>[];
+    final impresas = <ComandaActiva>[];
+    for (final c in result) {
+      (c.impresaEn == null ? pendientes : impresas).add(c);
+    }
+    return [...pendientes, ...impresas];
   }
 
   Future<Set<int>> getMesasOcupadas() async {

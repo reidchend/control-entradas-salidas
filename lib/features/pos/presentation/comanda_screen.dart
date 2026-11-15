@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -599,7 +600,10 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   /// Muestra/imprime el ticket de la venta registrada (Fase 6.6 + fix
   /// plataforma): en Windows envía los bytes ESC/POS a la impresora
   /// configurada; en web muestra la vista previa con diálogo del navegador.
-  Future<void> _mostrarTicket({
+  ///
+  /// Devuelve `true` solo si el ticket realmente se mandó a imprimir. Se usa
+  /// para marcar la comanda como "En cocina".
+  Future<bool> _mostrarTicket({
     required List<TicketItem> items,
     required double total,
     required int comandaId,
@@ -625,7 +629,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       esCopiaCliente: esCopiaCliente,
       esComandaCocina: esComandaCocina,
     );
-    if (!mounted) return;
+    if (!mounted) return false;
 
     if (puedeImprimirNativo) {
       // Windows: enviar bytes ESC/POS raw a la impresora configurada.
@@ -648,14 +652,17 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
       try {
         await imprimirTicketNativo(dispositivo ?? '', bytes);
         _snack('Ticket enviado a la impresora');
+        return true;
       } catch (e) {
         _snack('Error de impresión:\n$e', error: true);
+        return false;
       }
-      return;
     }
 
-    // Web: vista previa + diálogo del navegador.
-    await showTicketPreview(context, lineas: lineas);
+    // Web: vista previa + diálogo del navegador. En Android nativo no hay
+    // impresión real (printHtml es no-op), así que no se marca "En cocina".
+    final impreso = await showTicketPreview(context, lineas: lineas);
+    return kIsWeb && impreso;
   }
 
   /// Imprime una copia de la comanda actual con el rótulo PARA COCINA, en
@@ -667,13 +674,30 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     final repo = ref.read(posVentasRepoProvider)!;
     final correlativo = await repo.siguienteCorrelativo();
     final comandaId = _comandaId ?? 0;
-    await _mostrarTicket(
+    final impreso = await _mostrarTicket(
       items: ticketItems,
       total: _total,
       comandaId: comandaId,
       correlativo: correlativo,
       esComandaCocina: true,
     );
+    if (!impreso || comandaId <= 0) return;
+
+    // Marca "En cocina" para todas las terminales (el home deja de
+    // resaltarla como nueva). Si la migración no está aplicada, la comanda
+    // igual se imprimió: solo se pierde la marca visual.
+    final marcada = await repo.marcarComandaImpresa(comandaId);
+    ref.invalidate(comandasActivasProvider);
+    if (!marcada && mounted) {
+      mostrarSnackCopiable(
+        context,
+        'La comanda se imprimió, pero no se pudo marcar "En cocina": falta '
+        'la columna pos_comandas.impresa_en. Aplique la migración '
+        '20261115000000_pos_comandas_impresa_en.sql.',
+        error: true,
+        duration: const Duration(seconds: 8),
+      );
+    }
   }
 
   // =========================================================================

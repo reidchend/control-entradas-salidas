@@ -2,8 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../data/pos_comanda_models.dart';
 
+/// Color de una comanda que todavía no se imprimió para cocina (prioridad).
+const _kPendiente = Color(0xFFFFB300);
+
+/// Color de una comanda ya impresa para cocina.
+const _kEnCocina = Color(0xFF66BB6A);
+
 /// Panel "Comandas activas" del home: listado de mesas/habitaciones con
 /// comanda abierta para retomarlas de un toque. Solo se muestra si hay.
+///
+/// Ayuda visual de cocina: las comandas que todavía **no** se imprimieron para
+/// cocina (las que otro usuario acaba de cargar) se listan primero y se
+/// resaltan en ámbar con el chip "Por imprimir"; al imprimir la comanda para
+/// cocina pasan a verde con el chip "En cocina" (marca persistida en
+/// `pos_comandas.impresa_en`).
 class ComandasActivasPanel extends StatelessWidget {
   const ComandasActivasPanel({
     super.key,
@@ -24,6 +36,11 @@ class ComandasActivasPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (comandas.isEmpty) return const SizedBox.shrink();
 
+    // Prioridad visual: las comandas sin imprimir se cuentan y se avisan en
+    // el encabezado; además se listan primero (ver getComandasActivas).
+    final nuevas = comandas.where((c) => c.impresaEn == null).length;
+    final headerColor = nuevas > 0 ? _kPendiente : _kEnCocina;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -31,32 +48,50 @@ class ComandasActivasPanel extends StatelessWidget {
           children: [
             const Icon(Icons.playlist_play, size: 20, color: Colors.white),
             const SizedBox(width: 8),
-            Text(
-              'Comandas activas (${comandas.length})',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+            Expanded(
+              child: Text(
+                'Comandas activas (${comandas.length})',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF66BB6A).withValues(alpha: 0.18),
+                color: headerColor.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF66BB6A).withValues(alpha: 0.3),
+                  color: headerColor.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Text(
-                'En curso',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF81C784),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    nuevas > 0
+                        ? Icons.priority_high_rounded
+                        : Icons.soup_kitchen_outlined,
+                    size: 13,
+                    color: headerColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    nuevas > 0
+                        ? '$nuevas por imprimir'
+                        : 'En cocina',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: headerColor,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -103,6 +138,10 @@ class _ComandaActivaTile extends StatelessWidget {
     final esMesa = comanda.mesaId != null;
     final color = esMesa ? const Color(0xFFEF5350) : const Color(0xFF4FC3F7);
     final icono = esMesa ? Icons.restaurant : Icons.hotel;
+    // Sin imprimir = comanda nueva (prioridad visual); impresa = ya está en
+    // cocina, así que se atenúa el resaltado.
+    final pendiente = comanda.impresaEn == null;
+    final acento = pendiente ? _kPendiente : color;
 
     return Material(
       color: Colors.transparent,
@@ -114,14 +153,17 @@ class _ComandaActivaTile extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                color.withValues(alpha: 0.14),
+                acento.withValues(alpha: pendiente ? 0.20 : 0.14),
                 scheme.surfaceContainerHigh.withValues(alpha: 0.5),
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.25)),
+            border: Border.all(
+              color: acento.withValues(alpha: pendiente ? 0.75 : 0.25),
+              width: pendiente ? 1.6 : 1,
+            ),
           ),
           child: Row(
             children: [
@@ -130,9 +172,9 @@ class _ComandaActivaTile extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: color.withValues(alpha: 0.2),
+                  color: acento.withValues(alpha: 0.2),
                 ),
-                child: Icon(icono, size: 22, color: color),
+                child: Icon(icono, size: 22, color: acento),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -147,13 +189,21 @@ class _ComandaActivaTile extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${comanda.items} item${comanda.items == 1 ? '' : 's'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '${comanda.items} item${comanda.items == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        _EstadoCocinaChip(pendiente: pendiente),
+                      ],
                     ),
                   ],
                 ),
@@ -220,6 +270,46 @@ class _ComandaActivaTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Chip de estado de cocina de una comanda activa: ámbar "Por imprimir"
+/// mientras no se imprimió, verde "En cocina" una vez impresa.
+class _EstadoCocinaChip extends StatelessWidget {
+  const _EstadoCocinaChip({required this.pendiente});
+
+  final bool pendiente;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = pendiente ? _kPendiente : _kEnCocina;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            pendiente ? Icons.print_outlined : Icons.soup_kitchen_outlined,
+            size: 12,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            pendiente ? 'Por imprimir' : 'En cocina',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
