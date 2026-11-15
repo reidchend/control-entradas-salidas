@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/pos_models.dart';
@@ -51,6 +52,11 @@ enum SesionLoginResult {
   /// No hay turno abierto y el dispositivo no es la PC principal.
   soloPcPrincipal,
 }
+
+/// Aviso transitorio que el login muestra una sola vez (p. ej. "el turno se
+/// cerró en otra terminal"). Lo deja la revalidación de sesión antes de
+/// expulsar al usuario; `LoginScreen` lo lee, lo muestra y lo limpia.
+final avisoSesionProvider = StateProvider<String?>((ref) => null);
 
 /// Estado de la sesión del POS (turnos compartidos):
 /// - Existe UN solo turno abierto a la vez, con un aperturista y varios
@@ -212,8 +218,19 @@ class PosSessionNotifier extends Notifier<PosSesionActiva?> {
     if (s == null || s.sesionId <= 0) return true;
     final repo = ref.read(posRepoProvider);
     if (repo == null) return true;
-    final abierta = await repo.sesionAbierta(s.sesionId);
+    final bool abierta;
+    try {
+      abierta = await repo.sesionAbierta(s.sesionId);
+    } catch (e) {
+      // Error de red/BD: no expulsar al cajero por un fallo transitorio. Se
+      // reintenta en el próximo tick del polling.
+      debugPrint('[pos] no se pudo revalidar el turno: $e');
+      return true;
+    }
     if (!abierta) {
+      // Avisar al usuario por qué vuelve al login (lo muestra LoginScreen).
+      ref.read(avisoSesionProvider.notifier).state =
+          'El turno se cerró en otra terminal. Vuelve a iniciar sesión.';
       await cerrarSesion();
       return false;
     }
