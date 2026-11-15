@@ -5,17 +5,19 @@ import '../../data/pos_comanda_models.dart';
 /// Color de una comanda que todavía no se imprimió para cocina (prioridad).
 const _kPendiente = Color(0xFFFFB300);
 
-/// Color de una comanda ya impresa para cocina.
+/// Color de una comanda ya impresa para cocina y sin cambios después.
 const _kEnCocina = Color(0xFF66BB6A);
 
 /// Panel "Comandas activas" del home: listado de mesas/habitaciones con
 /// comanda abierta para retomarlas de un toque. Solo se muestra si hay.
 ///
-/// Ayuda visual de cocina: las comandas que todavía **no** se imprimieron para
-/// cocina (las que otro usuario acaba de cargar) se listan primero y se
-/// resaltan en ámbar con el chip "Por imprimir"; al imprimir la comanda para
-/// cocina pasan a verde con el chip "En cocina" (marca persistida en
-/// `pos_comandas.impresa_en`).
+/// Ayuda visual de cocina con tres estados:
+///
+/// - **Por imprimir** (ámbar): nunca se imprimió para cocina. Es la que otro
+///   usuario acaba de cargar y tiene prioridad visual.
+/// - **Modificada** (ámbar): ya se imprimió pero se editó después (agregó/
+///   quitó productos o cambió el total), así que hay que reimprimirla.
+/// - **En cocina** (verde): ya se imprimió y no se tocó después.
 class ComandasActivasPanel extends StatelessWidget {
   const ComandasActivasPanel({
     super.key,
@@ -36,10 +38,12 @@ class ComandasActivasPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (comandas.isEmpty) return const SizedBox.shrink();
 
-    // Prioridad visual: las comandas sin imprimir se cuentan y se avisan en
-    // el encabezado; además se listan primero (ver getComandasActivas).
-    final nuevas = comandas.where((c) => c.impresaEn == null).length;
-    final headerColor = nuevas > 0 ? _kPendiente : _kEnCocina;
+    // Estados de cocina calculados por comanda (el orden de la lista ya los
+    // deja agrupados: por imprimir, modificadas, en cocina).
+    final porImprimir = comandas.where(_esPorImprimir).length;
+    final modificadas = comandas.where(_esModificada).length;
+    final pendientes = porImprimir + modificadas;
+    final headerColor = pendientes > 0 ? _kPendiente : _kEnCocina;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,7 +78,7 @@ class ComandasActivasPanel extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    nuevas > 0
+                    pendientes > 0
                         ? Icons.priority_high_rounded
                         : Icons.soup_kitchen_outlined,
                     size: 13,
@@ -82,8 +86,8 @@ class ComandasActivasPanel extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    nuevas > 0
-                        ? '$nuevas por imprimir'
+                    pendientes > 0
+                        ? _textoResumen(porImprimir, modificadas)
                         : 'En cocina',
                     style: TextStyle(
                       fontSize: 11,
@@ -117,6 +121,20 @@ class ComandasActivasPanel extends StatelessWidget {
       ],
     );
   }
+
+  String _textoResumen(int porImprimir, int modificadas) {
+    final partes = <String>[];
+    if (porImprimir > 0) partes.add('$porImprimir por imprimir');
+    if (modificadas > 0) partes.add('$modificadas modificada${modificadas == 1 ? '' : 's'}');
+    return partes.join(' · ');
+  }
+
+  static bool _esPorImprimir(ComandaActiva c) => c.impresaEn == null;
+
+  static bool _esModificada(ComandaActiva c) {
+    if (c.impresaEn == null || c.updatedAt == null) return false;
+    return c.updatedAt!.isAfter(c.impresaEn!);
+  }
 }
 
 class _ComandaActivaTile extends StatelessWidget {
@@ -132,16 +150,30 @@ class _ComandaActivaTile extends StatelessWidget {
   final VoidCallback? onMover;
   final VoidCallback? onFusionar;
 
+  /// Estado de cocina de esta comanda.
+  _EstadoCocina get _estado {
+    if (comanda.impresaEn == null) return _EstadoCocina.porImprimir;
+    if (_esModificada) return _EstadoCocina.modificada;
+    return _EstadoCocina.enCocina;
+  }
+
+  bool get _esModificada {
+    if (comanda.impresaEn == null || comanda.updatedAt == null) return false;
+    return comanda.updatedAt!.isAfter(comanda.impresaEn!);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final esMesa = comanda.mesaId != null;
-    final color = esMesa ? const Color(0xFFEF5350) : const Color(0xFF4FC3F7);
+    final colorBase = esMesa ? const Color(0xFFEF5350) : const Color(0xFF4FC3F7);
     final icono = esMesa ? Icons.restaurant : Icons.hotel;
-    // Sin imprimir = comanda nueva (prioridad visual); impresa = ya está en
-    // cocina, así que se atenúa el resaltado.
-    final pendiente = comanda.impresaEn == null;
-    final acento = pendiente ? _kPendiente : color;
+
+    // Sin imprimir o modificada = necesita atención visual (ámbar). Impresa
+    // y sin cambios = se atenúa el resaltado (color de la casilla).
+    final necesitaAtencion = _estado == _EstadoCocina.porImprimir ||
+        _estado == _EstadoCocina.modificada;
+    final acento = _estado == _EstadoCocina.enCocina ? colorBase : _kPendiente;
 
     return Material(
       color: Colors.transparent,
@@ -153,7 +185,7 @@ class _ComandaActivaTile extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                acento.withValues(alpha: pendiente ? 0.20 : 0.14),
+                acento.withValues(alpha: necesitaAtencion ? 0.20 : 0.14),
                 scheme.surfaceContainerHigh.withValues(alpha: 0.5),
               ],
               begin: Alignment.centerLeft,
@@ -161,8 +193,8 @@ class _ComandaActivaTile extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: acento.withValues(alpha: pendiente ? 0.75 : 0.25),
-              width: pendiente ? 1.6 : 1,
+              color: acento.withValues(alpha: necesitaAtencion ? 0.75 : 0.25),
+              width: necesitaAtencion ? 1.6 : 1,
             ),
           ),
           child: Row(
@@ -202,7 +234,7 @@ class _ComandaActivaTile extends StatelessWidget {
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
-                        _EstadoCocinaChip(pendiente: pendiente),
+                        _EstadoCocinaChip(estado: _estado),
                       ],
                     ),
                   ],
@@ -228,10 +260,10 @@ class _ComandaActivaTile extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: color,
+                          color: colorBase,
                         ),
                       ),
-                      Icon(Icons.chevron_right, size: 16, color: color),
+                      Icon(Icons.chevron_right, size: 16, color: colorBase),
                     ],
                   ),
                 ],
@@ -275,16 +307,30 @@ class _ComandaActivaTile extends StatelessWidget {
   }
 }
 
-/// Chip de estado de cocina de una comanda activa: ámbar "Por imprimir"
-/// mientras no se imprimió, verde "En cocina" una vez impresa.
-class _EstadoCocinaChip extends StatelessWidget {
-  const _EstadoCocinaChip({required this.pendiente});
+/// Estado de cocina de una comanda activa.
+enum _EstadoCocina {
+  /// Nunca se imprimió para cocina.
+  porImprimir,
+  /// Ya se imprimió pero se editó después: hay que reimprimir.
+  modificada,
+  /// Ya se imprimió y no se tocó después.
+  enCocina,
+}
 
-  final bool pendiente;
+/// Chip de estado de cocina de una comanda activa.
+class _EstadoCocinaChip extends StatelessWidget {
+  const _EstadoCocinaChip({required this.estado});
+
+  final _EstadoCocina estado;
 
   @override
   Widget build(BuildContext context) {
-    final color = pendiente ? _kPendiente : _kEnCocina;
+    final color = estado == _EstadoCocina.enCocina ? _kEnCocina : _kPendiente;
+    final (IconData icono, String texto) = switch (estado) {
+      _EstadoCocina.porImprimir => (Icons.print_outlined, 'Por imprimir'),
+      _EstadoCocina.modificada => (Icons.edit_outlined, 'Modificada'),
+      _EstadoCocina.enCocina => (Icons.soup_kitchen_outlined, 'En cocina'),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -295,14 +341,10 @@ class _EstadoCocinaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            pendiente ? Icons.print_outlined : Icons.soup_kitchen_outlined,
-            size: 12,
-            color: color,
-          ),
+          Icon(icono, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
-            pendiente ? 'Por imprimir' : 'En cocina',
+            texto,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,

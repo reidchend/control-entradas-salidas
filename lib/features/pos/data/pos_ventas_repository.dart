@@ -352,6 +352,17 @@ class PosVentasRepository {
       } else {
         impresaEn = null;
       }
+      // La migración define updated_at como timestamp; el driver puede
+      // devolver DateTime o String.
+      final updatedRaw = c['updated_at'];
+      final DateTime? updatedAt;
+      if (updatedRaw is DateTime) {
+        updatedAt = updatedRaw;
+      } else if (updatedRaw is String && updatedRaw.isNotEmpty) {
+        updatedAt = DateTime.tryParse(updatedRaw);
+      } else {
+        updatedAt = null;
+      }
       result.add((
         comandaId: cId,
         etiqueta: etiqueta,
@@ -360,17 +371,25 @@ class PosVentasRepository {
         mesaId: mesaId,
         habitacionId: habId,
         impresaEn: impresaEn,
+        updatedAt: updatedAt,
       ));
     }
-    // Las comandas sin imprimir van primero: son las que cocina todavía no
-    // recibió, así el home las muestra arriba y resaltadas. Dentro de cada
-    // grupo se conserva el orden por `updated_at` de la consulta.
-    final pendientes = <ComandaActiva>[];
-    final impresas = <ComandaActiva>[];
+    // Orden de prioridad visual: primero las que nunca se imprimieron, luego
+    // las que se imprimieron pero se editaron después (modificada), y al final
+    // las que están "En cocina" sin cambios pendientes.
+    final porImprimir = <ComandaActiva>[];
+    final modificadas = <ComandaActiva>[];
+    final enCocina = <ComandaActiva>[];
     for (final c in result) {
-      (c.impresaEn == null ? pendientes : impresas).add(c);
+      if (c.impresaEn == null) {
+        porImprimir.add(c);
+      } else if (c.updatedAt != null && c.updatedAt!.isAfter(c.impresaEn!)) {
+        modificadas.add(c);
+      } else {
+        enCocina.add(c);
+      }
     }
-    return [...pendientes, ...impresas];
+    return [...porImprimir, ...modificadas, ...enCocina];
   }
 
   Future<Set<int>> getMesasOcupadas() async {
