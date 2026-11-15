@@ -6,6 +6,7 @@ import '../data/pos_providers.dart';
 import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import 'comanda_acciones.dart';
+import 'widgets/boton_actualizar_pos.dart';
 import 'widgets/comandas_activas_panel.dart';
 import 'widgets/entry_card.dart';
 import 'widgets/pop_in.dart';
@@ -69,6 +70,7 @@ class PosHomeScreen extends ConsumerWidget {
               titulo: 'Lycoris POS',
               onLogout: onLogout,
               actions: [
+                const BotonActualizarPos(),
                 if (esAdmin)
                   IconButton(
                     tooltip: 'Configuración',

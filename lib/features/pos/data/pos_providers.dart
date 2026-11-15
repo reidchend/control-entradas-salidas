@@ -98,6 +98,17 @@ final habitacionesOcupadasProvider = FutureProvider<Set<int>>((ref) {
   return ref.watch(posVentasRepoProvider)!.getHabitacionesOcupadas();
 });
 
+/// Fuerza un refresco inmediato de la ocupación (mesas/habitaciones) y de las
+/// comandas abiertas. Se usa al navegar entre vistas y en el botón
+/// "Actualizar", por si el polling todavía no reflejó un cambio hecho en otra
+/// terminal (tablet, otra PC, red lenta, etc.).
+void refrescarOcupacionPos(WidgetRef ref) {
+  ref.invalidate(mesasOcupadasProvider);
+  ref.invalidate(habitacionesOcupadasProvider);
+  ref.invalidate(comandasAbiertasProvider);
+  ref.invalidate(comandasActivasProvider);
+}
+
 /// Historial de ventas (más recientes primero), se invalida al cobrar/anular.
 final ventasProvider = FutureProvider<List<PosVenta>>((ref) {
   return ref.watch(posVentasRepoProvider)!.getVentas(limit: 200);

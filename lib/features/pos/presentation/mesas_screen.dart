@@ -6,6 +6,7 @@ import '../data/pos_providers.dart';
 import '../data/pos_responsive.dart';
 import '../data/pos_session.dart';
 import 'dialogs/seleccionar_tipo_cliente_dialog.dart';
+import 'widgets/boton_actualizar_pos.dart';
 import 'widgets/mesa_card.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -47,6 +48,7 @@ class _MesasScreenState extends ConsumerState<MesasScreen> {
             titulo: 'Mesas',
             onBack: widget.onBack,
             onLogout: widget.onLogout,
+            actions: const [BotonActualizarPos()],
           ),
           Expanded(
             child: mesas.when(

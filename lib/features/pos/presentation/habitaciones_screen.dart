@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/pos_providers.dart';
 import '../data/pos_session.dart';
+import 'widgets/boton_actualizar_pos.dart';
 import 'widgets/habitacion_card.dart';
 import 'widgets/pop_in.dart';
 import 'widgets/pos_top_bar.dart';
@@ -37,6 +38,7 @@ class HabitacionesScreen extends ConsumerWidget {
             titulo: 'Habitaciones',
             onBack: onBack,
             onLogout: onLogout,
+            actions: const [BotonActualizarPos()],
           ),
           Expanded(
             child: habs.when(
