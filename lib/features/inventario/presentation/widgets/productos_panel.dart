@@ -164,6 +164,7 @@ class ProductosPanelState extends ConsumerState<ProductosPanel> {
       ref,
       p,
       produccionIdInicial: produccionIdInicial,
+      recetaIdInicial: recetaId,
     );
   }
 

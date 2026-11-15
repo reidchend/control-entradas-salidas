@@ -15,12 +15,13 @@ import 'package:control_entradas_salidas/features/producciones/data/producciones
 
 /// Diálogo para registrar movimiento (entrada/salida/ajuste) con soporte pesable.
 Future<void> showMovimientoDialog(BuildContext context, WidgetRef ref, Producto p,
-    {int? produccionIdInicial}) {
+    {int? produccionIdInicial, int? recetaIdInicial}) {
   return showDialog<void>(
     context: context,
     builder: (_) => _MovimientoDialog(
       producto: p,
       produccionIdInicial: produccionIdInicial,
+      recetaIdInicial: recetaIdInicial,
     ),
   );
 }
@@ -29,6 +30,7 @@ class _MovimientoDialog extends ConsumerStatefulWidget {
   const _MovimientoDialog({
     required this.producto,
     this.produccionIdInicial,
+    this.recetaIdInicial,
   });
 
   final Producto producto;
@@ -36,6 +38,10 @@ class _MovimientoDialog extends ConsumerStatefulWidget {
   /// Producción destino preseleccionada (lote existente). Si es null, se
   /// creará un lote nuevo al registrar.
   final int? produccionIdInicial;
+
+  /// Receta preseleccionada (id). Si se pasa, el usuario no tiene que volver a
+  /// elegirla dentro del diálogo.
+  final int? recetaIdInicial;
 
   @override
   ConsumerState<_MovimientoDialog> createState() => _MovimientoDialogState();
@@ -79,6 +85,7 @@ class _MovimientoDialogState extends ConsumerState<_MovimientoDialog> {
   void initState() {
     super.initState();
     _produccionId = widget.produccionIdInicial;
+    _recetaId = widget.recetaIdInicial;
     _esProductoProduccion = RolesTipoProducto.rolDe(_producto.tipo) ==
         RolesTipoProducto.produccion;
     WidgetsBinding.instance.addPostFrameCallback((_) {
