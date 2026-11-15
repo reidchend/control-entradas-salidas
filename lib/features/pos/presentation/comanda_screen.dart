@@ -110,6 +110,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   final Set<int> _clientes = {1};
   int _clienteActivo = 1;
 
+  /// Rol de cliente de la comanda: `'Particular'` | `'101, 103'` | `null`
+  /// (habitación). Arranca con lo que trae la pantalla, pero al retomar una
+  /// comanda guardada manda lo que está en BD (ver [_cargarComandaExistente]):
+  /// el usuario ya asignó el rol y no debe volver a elegirlo.
+  String? _habitacionesTexto;
+
   /// Cliente cuyos productos se están viendo en la lista; `null` = todos.
   /// Al filtrar, ese cliente pasa a ser el activo (destino de los nuevos).
   int? _filtroCliente;
@@ -169,6 +175,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   @override
   void initState() {
     super.initState();
+    _habitacionesTexto = widget.habitacionesTexto;
     _iniciar();
   }
 
@@ -235,6 +242,15 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     );
     if (existente == null) return;
     _comandaId = existente.id;
+    // La etiqueta de cliente guardada es la fuente de verdad al retomar la
+    // comanda: si se abrió desde el grid de mesas (que ya no pregunta
+    // Particular/Huésped cuando la mesa está ocupada) o desde la lista de
+    // comandas activas, el rol asignado se recupera de la base y se mantiene
+    // en el chip, en los guardados y en el ticket.
+    final etiquetaGuardada = existente.habitaciones?.trim();
+    if (etiquetaGuardada != null && etiquetaGuardada.isNotEmpty) {
+      _habitacionesTexto = etiquetaGuardada;
+    }
     _items
       ..clear()
       ..addAll(ComandaItem.listFromJson(existente.itemsJson));
@@ -271,7 +287,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
-            habitaciones: widget.habitacionesTexto,
+            habitaciones: _habitacionesTexto,
             onAviso: (msg) => aviso = msg,
           );
       _comandaId = comandaId;
@@ -415,7 +431,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         mesaId: mesaI,
         habitacionId: habId,
         usuarioId: widget.sesion.usuario.id,
-        habitaciones: widget.habitacionesTexto,
+        habitaciones: _habitacionesTexto,
       );
       final anulada = await repo.getVentaAnuladaPorComanda(comandaId);
       final ventaAnulaId = anulada?.id;
@@ -582,7 +598,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     // habitaciones seleccionadas. 'Particular' NO es una habitación: antes se
     // imprimía "Hab.: Particular" en todos los tickets. Solo se usa la lista
     // cuando trae habitaciones reales.
-    final txt = widget.habitacionesTexto?.trim() ?? '';
+    final txt = _habitacionesTexto?.trim() ?? '';
     if (txt.isNotEmpty && txt.toLowerCase() != 'particular') return txt;
 
     final h = widget.habitacion;
@@ -1368,7 +1384,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mesaId: widget.mesa?.id,
             habitacionId: widget.habitacion?.id,
             usuarioId: widget.sesion.usuario.id,
-            habitaciones: widget.habitacionesTexto,
+            habitaciones: _habitacionesTexto,
           );
       _comandaId = id;
       ref.invalidate(comandasActivasProvider);
@@ -1461,7 +1477,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             mostrarPerfil: false,
             actions: [
               ComandaEtiquetaCliente(
-                habitaciones: widget.habitacionesTexto,
+                habitaciones: _habitacionesTexto,
               ),
               PopupMenuButton<String>(
                 tooltip: 'Acciones de comanda',

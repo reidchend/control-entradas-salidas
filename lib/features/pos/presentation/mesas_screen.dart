@@ -72,24 +72,49 @@ class _MesasScreenState extends ConsumerState<MesasScreen> {
                           mesa: lista[i],
                           ocupada: ocup.contains(lista[i].id),
                           onTap: () async {
-                            final resultado =
-                                await showSeleccionarTipoClienteDialog(
-                              context: context,
+                            // Si la mesa ya tiene una comanda abierta con
+                            // etiqueta de cliente (Particular / habitaciones),
+                            // no volver a preguntar: el usuario ya le asignó el
+                            // rol al crear la comanda.
+                            final repo =
+                                ref.read(posVentasRepoProvider)!;
+                            final existente = await repo.getComandaAbierta(
                               mesaId: lista[i].id,
-                              mesaNumero: lista[i].numero,
                             );
-                            if (!mounted) return;
-                            if (resultado != null) {
-                              final habitacionesTexto =
+                            String? tipoCliente;
+                            String? habitacionesTexto;
+                            if (existente != null) {
+                              final txt = existente.habitaciones?.trim();
+                              if (txt != null && txt.isNotEmpty) {
+                                tipoCliente =
+                                    txt == 'Particular'
+                                        ? 'particular'
+                                        : 'huesped';
+                                habitacionesTexto = txt;
+                              }
+                            }
+                            if (tipoCliente == null) {
+                              // Mesa nueva o comanda sin etiqueta: preguntar
+                              // Particular / Huésped.
+                              final resultado =
+                                  await showSeleccionarTipoClienteDialog(
+                                context: context,
+                                mesaId: lista[i].id,
+                                mesaNumero: lista[i].numero,
+                              );
+                              if (!mounted) return;
+                              if (resultado == null) return;
+                              tipoCliente = resultado.tipo;
+                              habitacionesTexto =
                                   resultado.esParticular
                                       ? 'Particular'
                                       : resultado.habitaciones;
-                              widget.onOpenMesa(
-                                lista[i],
-                                resultado.tipo,
-                                habitacionesTexto,
-                              );
                             }
+                            widget.onOpenMesa(
+                              lista[i],
+                              tipoCliente,
+                              habitacionesTexto,
+                            );
                           },
                         ),
                       ),
