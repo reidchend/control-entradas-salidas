@@ -50,17 +50,6 @@ String reporteSimpleTexto(CierreCaja c) {
   sb.writeln('Ventas:  \$${fmtNumCierre(c.totalVentas)}');
   sb.writeln('──────────────');
   sb.writeln('Final:   \$${fmtNumCierre(c.cajaFinal)}');
-  if (c.reporteSimple.porUsuario.isNotEmpty) {
-    sb.writeln('');
-    sb.writeln('👥 *PARTICIPANTES*');
-    for (final u in c.reporteSimple.porUsuario) {
-      if (u.ventas > 0) {
-        sb.writeln('  ${u.nombre}: ${u.ventas} ventas · \$${fmtNumCierre(u.total)}');
-      } else {
-        sb.writeln('  ${u.nombre}');
-      }
-    }
-  }
   if (c.reporteSimple.ventasFueraTurno > 0) {
     sb.writeln('');
     sb.writeln('⚠️ *VENTAS FUERA DE TURNO*');
@@ -124,18 +113,6 @@ String reporteDetalladoTexto(CierreCaja c) {
   sb.writeln('Inicial: ${fmtNumCierre(c.cajaInicial)}');
   sb.writeln('Ventas:  ${fmtNumCierre(c.totalVentas)}');
   sb.writeln('Final:   ${fmtNumCierre(c.cajaFinal)}');
-  if (c.reporteSimple.porUsuario.isNotEmpty) {
-    sb.writeln('');
-    sb.writeln('PARTICIPANTES');
-    sb.writeln('-----------');
-    for (final u in c.reporteSimple.porUsuario) {
-      if (u.ventas > 0) {
-        sb.writeln('${u.nombre}: ${u.ventas} ventas, \$${fmtNumCierre(u.total)}');
-      } else {
-        sb.writeln(u.nombre);
-      }
-    }
-  }
   if (c.reporteSimple.ventasFueraTurno > 0) {
     sb.writeln('');
     sb.writeln('!! VENTAS FUERA DE TURNO !!');

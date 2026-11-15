@@ -82,12 +82,12 @@ void main() {
       expect(t, contains('TOTAL GENERAL: \$20'));
     });
 
-    test('incluye el desglose de participantes del turno compartido', () {
+    test('incluye el desglose de ventas del turno (total general)', () {
       final t = reporteSimpleTexto(_cierre());
-      expect(t, contains('PARTICIPANTES'));
+      expect(t, isNot(contains('PARTICIPANTES')));
       expect(t, isNot(contains('POR USUARIO')));
-      expect(t, contains('EMILIO: 2 ventas · \$427.5'));
-      expect(t, contains('ANA: 1 ventas · \$50'));
+      expect(t, contains('EMILIO: 2 ventas · \$427.5'), isFalse);
+      expect(t, contains('TOTAL GENERAL: \$20'));
     });
 
     test('agrupa por categoría', () {
