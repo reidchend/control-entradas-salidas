@@ -41,10 +41,6 @@ String fmtFechaCierre(String? iso) {
 String reporteSimpleTexto(CierreCaja c) {
   final sb = StringBuffer();
   sb.writeln('📊 *CIERRE DE TURNO*');
-  sb.writeln('Aperturó: ${c.usuarioNombre}');
-  if (c.cerradoPorNombre.isNotEmpty) {
-    sb.writeln('Cerró: ${c.cerradoPorNombre}');
-  }
   sb.writeln('Apertura: ${fmtFechaCierre(c.abiertaEn)}');
   sb.writeln('Cierre: ${fmtFechaCierre(c.cerradaEn)}');
   sb.writeln('Duración: ${duracionCierreTexto(c)}');
@@ -56,12 +52,13 @@ String reporteSimpleTexto(CierreCaja c) {
   sb.writeln('Final:   \$${fmtNumCierre(c.cajaFinal)}');
   if (c.reporteSimple.porUsuario.isNotEmpty) {
     sb.writeln('');
-    sb.writeln('👥 *POR USUARIO*');
+    sb.writeln('👥 *PARTICIPANTES*');
     for (final u in c.reporteSimple.porUsuario) {
-      final marca = u.esAperturista ? ' (aperturó)' : '';
-      sb.writeln('  ${u.nombre}$marca');
-      sb.writeln(
-          '    ${u.ventas} ventas · \$${fmtNumCierre(u.total)}');
+      if (u.ventas > 0) {
+        sb.writeln('  ${u.nombre}: ${u.ventas} ventas · \$${fmtNumCierre(u.total)}');
+      } else {
+        sb.writeln('  ${u.nombre}');
+      }
     }
   }
   if (c.reporteSimple.ventasFueraTurno > 0) {
@@ -118,10 +115,6 @@ String reporteDetalladoTexto(CierreCaja c) {
   sb.writeln('CIERRE DE TURNO - DETALLADO');
   sb.writeln('============================');
   sb.writeln('');
-  sb.writeln('Aperturó: ${c.usuarioNombre}');
-  if (c.cerradoPorNombre.isNotEmpty && c.cerradoPorNombre != c.usuarioNombre) {
-    sb.writeln('Cerró:  ${c.cerradoPorNombre}');
-  }
   sb.writeln('Apertura: ${fmtFechaCierre(c.abiertaEn)}');
   sb.writeln('Cierre: ${fmtFechaCierre(c.cerradaEn)}');
   sb.writeln('Duración: ${duracionCierreTexto(c)}');
@@ -133,12 +126,14 @@ String reporteDetalladoTexto(CierreCaja c) {
   sb.writeln('Final:   ${fmtNumCierre(c.cajaFinal)}');
   if (c.reporteSimple.porUsuario.isNotEmpty) {
     sb.writeln('');
-    sb.writeln('POR USUARIO');
+    sb.writeln('PARTICIPANTES');
     sb.writeln('-----------');
     for (final u in c.reporteSimple.porUsuario) {
-      final marca = u.esAperturista ? ' (aperturó)' : '';
-      sb.writeln('${u.nombre}$marca: ${u.ventas} ventas, '
-          '\$${fmtNumCierre(u.total)}');
+      if (u.ventas > 0) {
+        sb.writeln('${u.nombre}: ${u.ventas} ventas, \$${fmtNumCierre(u.total)}');
+      } else {
+        sb.writeln(u.nombre);
+      }
     }
   }
   if (c.reporteSimple.ventasFueraTurno > 0) {

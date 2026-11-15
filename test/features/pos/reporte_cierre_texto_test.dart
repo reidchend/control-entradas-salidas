@@ -73,21 +73,21 @@ void main() {
   });
 
   group('reporteSimpleTexto', () {
-    test('contiene aperturista, cierre, caja y total general', () {
+    test('contiene apertura, cierre, caja y total general', () {
       final t = reporteSimpleTexto(_cierre());
       expect(t, contains('CIERRE DE TURNO'));
-      expect(t, contains('Aperturó: EMILIO'));
-      expect(t, contains('Cerró: EMILIO'));
+      expect(t, isNot(contains('Aperturó: EMILIO')));
+      expect(t, isNot(contains('Cerró: EMILIO')));
       expect(t, contains('Final:   \$527.5'));
       expect(t, contains('TOTAL GENERAL: \$20'));
     });
 
-    test('incluye el desglose por usuario del turno compartido', () {
+    test('incluye el desglose de participantes del turno compartido', () {
       final t = reporteSimpleTexto(_cierre());
-      expect(t, contains('POR USUARIO'));
-      expect(t, contains('EMILIO (aperturó)'));
-      expect(t, contains('ANA'));
-      expect(t, contains('1 ventas · \$50'));
+      expect(t, contains('PARTICIPANTES'));
+      expect(t, isNot(contains('POR USUARIO')));
+      expect(t, contains('EMILIO: 2 ventas · \$427.5'));
+      expect(t, contains('ANA: 1 ventas · \$50'));
     });
 
     test('agrupa por categoría', () {
