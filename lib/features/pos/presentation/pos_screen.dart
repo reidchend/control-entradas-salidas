@@ -145,6 +145,11 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       _stage = stage;
       _mesa = null;
       _habitacion = null;
+      // Limpiar la etiqueta de cliente: si no, un 'Particular' (o una lista
+      // de habitaciones) de la comanda anterior se filtra a la siguiente y
+      // el ticket imprime "Hab.: Particular" aunque sea otra mesa/habitación.
+      _tipoCliente = null;
+      _habitacionesTexto = null;
     });
   }
 
@@ -170,6 +175,10 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     setState(() {
       _habitacion = h;
       _mesa = null;
+      // En una comanda de habitación la ubicación sale del objeto Habitacion:
+      // no arrastrar la etiqueta de la mesa anterior.
+      _tipoCliente = null;
+      _habitacionesTexto = null;
       _stage = _PosStage.comanda;
     });
   }
@@ -327,6 +336,24 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     }
   }
 
+  /// Etiqueta de cliente guardada en la comanda abierta de una mesa
+  /// (`'Particular'` o `'101, 103'`). Se restaura al retomar/corregir una
+  /// comanda para que el chip y el ticket sigan mostrando el mismo cliente.
+  Future<String?> _etiquetaGuardada(int mesaId) async {
+    final repo = ref.read(posVentasRepoProvider);
+    if (repo == null) return null;
+    try {
+      final comanda = await repo.getComandaAbierta(mesaId: mesaId);
+      final txt = comanda?.habitaciones?.trim();
+      return (txt == null || txt.isEmpty) ? null : txt;
+    } catch (e) {
+      // La etiqueta es informativa: si falla la consulta, la comanda igual se
+      // abre (no bloquear el flujo por el chip del cliente).
+      debugPrint('[pos] no se pudo leer la etiqueta de la comanda: $e');
+      return null;
+    }
+  }
+
   /// Retoma una comanda activa desde el home (resuelve mesa/habitación por id
   /// y abre la etapa de comanda directamente).
   Future<void> _abrirComandaActiva(int? mesaId, int? habitacionId) async {
@@ -338,10 +365,15 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
     if (mesaId != null) {
       final m = await repo.getMesaById(mesaId);
       if (m == null) return;
+      final etiqueta = await _etiquetaGuardada(mesaId);
       if (!mounted) return;
       setState(() {
         _mesa = m;
         _habitacion = null;
+        _tipoCliente = etiqueta == null
+            ? null
+            : (etiqueta == 'Particular' ? 'particular' : 'huesped');
+        _habitacionesTexto = etiqueta;
         _stage = _PosStage.comanda;
       });
     } else if (habitacionId != null) {
@@ -351,6 +383,9 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       setState(() {
         _habitacion = h;
         _mesa = null;
+        // El ticket de habitación usa el objeto Habitacion, no la etiqueta.
+        _tipoCliente = null;
+        _habitacionesTexto = null;
         _stage = _PosStage.comanda;
       });
     }
@@ -370,10 +405,15 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
         _go(_PosStage.ventas);
         return;
       }
+      final etiqueta = await _etiquetaGuardada(mesaId);
       if (!mounted) return;
       setState(() {
         _mesa = m;
         _habitacion = null;
+        _tipoCliente = etiqueta == null
+            ? null
+            : (etiqueta == 'Particular' ? 'particular' : 'huesped');
+        _habitacionesTexto = etiqueta;
         _stage = _PosStage.comanda;
       });
     } else if (habitacionId != null) {
@@ -386,6 +426,8 @@ class _PosRouterState extends ConsumerState<_PosRouter> {
       setState(() {
         _habitacion = h;
         _mesa = null;
+        _tipoCliente = null;
+        _habitacionesTexto = null;
         _stage = _PosStage.comanda;
       });
     } else {

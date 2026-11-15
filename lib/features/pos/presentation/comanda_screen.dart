@@ -558,7 +558,9 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  /// Port de `_mesa_ticket_label` (comanda_view.py:959).
+  /// Port de `_mesa_ticket_label` (comanda_view.py:959). Nunca vacío cuando
+  /// hay mesa: si no hay número ni nombre se usa el id, para que el ticket
+  /// siempre identifique la ubicación.
   String get _mesaTicketLabel {
     final m = widget.mesa;
     if (m == null) return '';
@@ -570,16 +572,17 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     if (!redundante) {
       return numero.isEmpty ? nombre : '$numero - $nombre';
     }
-    return numero;
+    return numero.isEmpty ? '#${m.id}' : numero;
   }
 
   /// Port de `_habitacion_ticket_label` (comanda_view.py:968).
   String get _habitacionTicketLabel {
-    // Si se seleccionó una etiqueta de cliente en el diálogo (Particular o
-    // lista de habitaciones), tiene prioridad sobre el objeto Habitacion
-    // individual.
-    final txt = widget.habitacionesTexto;
-    if (txt != null && txt.isNotEmpty) return txt;
+    // En comandas de mesa el diálogo guarda 'Particular' o la lista de
+    // habitaciones seleccionadas. 'Particular' NO es una habitación: antes se
+    // imprimía "Hab.: Particular" en todos los tickets. Solo se usa la lista
+    // cuando trae habitaciones reales.
+    final txt = widget.habitacionesTexto?.trim() ?? '';
+    if (txt.isNotEmpty && txt.toLowerCase() != 'particular') return txt;
 
     final h = widget.habitacion;
     if (h == null) return '';

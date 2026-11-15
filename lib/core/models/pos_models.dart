@@ -99,6 +99,7 @@ class PosComanda {
     this.sesionId,
     this.mesaId,
     this.habitacionId,
+    this.habitaciones,
     this.estado = 'abierta',
     this.total = 0,
     this.itemsJson,
@@ -111,6 +112,10 @@ class PosComanda {
   final int? sesionId;
   final int? mesaId;
   final int? habitacionId;
+
+  /// Etiqueta de cliente de la comanda de mesa: `'Particular'` o la lista de
+  /// habitaciones (`'101, 103'`). `null` en comandas de habitación.
+  final String? habitaciones;
   final String estado;
   final double total;
   final String? itemsJson;
@@ -123,6 +128,7 @@ class PosComanda {
         sesionId: m['sesion_id'] as int?,
         mesaId: m['mesa_id'] as int?,
         habitacionId: m['habitacion_id'] as int?,
+        habitaciones: m['habitaciones'] as String?,
         estado: (m['estado'] as String?) ?? 'abierta',
         total: (m['total'] as num?)?.toDouble() ?? 0,
         itemsJson: m['items_json'] as String?,
@@ -136,6 +142,7 @@ class PosComanda {
         'sesion_id': sesionId,
         'mesa_id': mesaId,
         'habitacion_id': habitacionId,
+        if (habitaciones != null) 'habitaciones': habitaciones,
         'estado': estado,
         'total': total,
         'items_json': itemsJson,
