@@ -129,6 +129,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   bool _guardando = false;
   bool _eliminando = false;
   bool _cobrando = false;
+  bool _imprimiendo = false;
 
   _Seccion _seccion = _Seccion.categorias;
   final _historial = <_Snapshot>[];
@@ -684,35 +685,43 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
   /// Imprime una copia de la comanda actual con el rótulo PARA COCINA, en
   /// cualquier momento sin tener que cobrar. Mismo contenido que el ticket de
   /// cobro: precios por producto, total en $ y total en Bs.
+  ///
+  /// Se bloquea mientras dura la impresión para evitar doble toque y tickets
+  /// duplicados.
   Future<void> _imprimirComanda() async {
-    if (_items.isEmpty || !mounted) return;
-    final ticketItems = [for (final i in _items) _aTicketItem(i)];
-    final repo = ref.read(posVentasRepoProvider)!;
-    final correlativo = await repo.siguienteCorrelativo();
-    final comandaId = _comandaId ?? 0;
-    final impreso = await _mostrarTicket(
-      items: ticketItems,
-      total: _total,
-      comandaId: comandaId,
-      correlativo: correlativo,
-      esComandaCocina: true,
-    );
-    if (!impreso || comandaId <= 0) return;
-
-    // Marca "En cocina" para todas las terminales (el home deja de
-    // resaltarla como nueva). Si la migración no está aplicada, la comanda
-    // igual se imprimió: solo se pierde la marca visual.
-    final marcada = await repo.marcarComandaImpresa(comandaId);
-    ref.invalidate(comandasActivasProvider);
-    if (!marcada && mounted) {
-      mostrarSnackCopiable(
-        context,
-        'La comanda se imprimió, pero no se pudo marcar "En cocina": falta '
-        'la columna pos_comandas.impresa_en. Aplique la migración '
-        '20261115000000_pos_comandas_impresa_en.sql.',
-        error: true,
-        duration: const Duration(seconds: 8),
+    if (_imprimiendo || _items.isEmpty || !mounted) return;
+    setState(() => _imprimiendo = true);
+    try {
+      final ticketItems = [for (final i in _items) _aTicketItem(i)];
+      final repo = ref.read(posVentasRepoProvider)!;
+      final correlativo = await repo.siguienteCorrelativo();
+      final comandaId = _comandaId ?? 0;
+      final impreso = await _mostrarTicket(
+        items: ticketItems,
+        total: _total,
+        comandaId: comandaId,
+        correlativo: correlativo,
+        esComandaCocina: true,
       );
+      if (!impreso || comandaId <= 0) return;
+
+      // Marca "En cocina" para todas las terminales (el home deja de
+      // resaltarla como nueva). Si la migración no está aplicada, la comanda
+      // igual se imprimió: solo se pierde la marca visual.
+      final marcada = await repo.marcarComandaImpresa(comandaId);
+      ref.invalidate(comandasActivasProvider);
+      if (!marcada && mounted) {
+        mostrarSnackCopiable(
+          context,
+          'La comanda se imprimió, pero no se pudo marcar "En cocina": falta '
+          'la columna pos_comandas.impresa_en. Aplique la migración '
+          '20261115000000_pos_comandas_impresa_en.sql.',
+          error: true,
+          duration: const Duration(seconds: 8),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _imprimiendo = false);
     }
   }
 
@@ -1852,7 +1861,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
 
   Widget _franjaBotones() {
     final tieneItems = _items.isNotEmpty;
-    final ocupado = _guardando || _eliminando || _cobrando;
+    final ocupado = _guardando || _eliminando || _cobrando || _imprimiendo;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
@@ -1891,7 +1900,12 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
             height: PosResponsive.botonAltura(context),
             child: OutlinedButton.icon(
               onPressed: (_comandaId != null && !ocupado) ? _imprimirComanda : null,
-              icon: const Icon(Icons.print_outlined),
+              icon: _imprimiendo
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.print_outlined),
               label: const Text('Imprimir comanda'),
             ),
           ),
