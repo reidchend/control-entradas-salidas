@@ -251,6 +251,7 @@ class PosPlato {
     this.activo = true,
     this.esContorno = false,
     this.llevaContornos = false,
+    this.tipo = 'plato', // 'plato' | 'servicio'
     this.createdAt,
     this.updatedAt,
   });
@@ -262,8 +263,13 @@ class PosPlato {
   final bool activo;
   final bool esContorno;
   final bool llevaContornos;
+  /// Tipo de elemento: `'plato'` (precio fijo del catalogo) o `'servicio'`
+  /// (precio editable al agregarlo a la comanda, ej. delivery).
+  final String tipo;
   final String? createdAt;
   final String? updatedAt;
+
+  bool get esServicio => tipo == 'servicio';
 
   factory PosPlato.fromMap(Map<String, dynamic> m) => PosPlato(
         id: m['id'] as int,
@@ -273,6 +279,7 @@ class PosPlato {
         activo: (m['activo'] as int?) == 1,
         esContorno: (m['es_contorno'] as int?) == 1,
         llevaContornos: (m['lleva_contornos'] as int?) == 1,
+        tipo: (m['tipo'] as String?) ?? 'plato',
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
       );
@@ -285,6 +292,7 @@ class PosPlato {
         'activo': activo ? 1 : 0,
         'es_contorno': esContorno ? 1 : 0,
         'lleva_contornos': llevaContornos ? 1 : 0,
+        'tipo': tipo,
         'created_at': createdAt,
       };
 }

@@ -728,6 +728,7 @@ Future<List<TurnoCerradoResumen>>
     double precioVenta = 0,
     bool esContorno = false,
     bool llevaContornos = false,
+    String tipo = 'plato', // 'plato' | 'servicio'
     List<({int productoId, double cantidad, String unidad})>? ingredientes,
     List<({int contornoId, int maxSeleccionar})>? contornos,
   }) async {
@@ -739,6 +740,7 @@ Future<List<TurnoCerradoResumen>>
       'activo': 1,
       'es_contorno': esContorno,
       'lleva_contornos': llevaContornos,
+      'tipo': tipo,
       'created_at': now,
       'updated_at': now,
     });
@@ -755,6 +757,7 @@ Future<List<TurnoCerradoResumen>>
     bool? activo,
     bool? esContorno,
     bool? llevaContornos,
+    String? tipo, // 'plato' | 'servicio'
     List<({int productoId, double cantidad, String unidad})>? ingredientes,
     List<({int contornoId, int maxSeleccionar})>? contornos,
   }) async {
@@ -772,6 +775,7 @@ Future<List<TurnoCerradoResumen>>
       if (activo != null) 'activo': activo,
       if (esContorno != null) 'es_contorno': esContorno,
       if (llevaContornos != null) 'lleva_contornos': llevaContornos,
+      if (tipo != null) 'tipo': tipo,
       'updated_at': DateTime.now().toIso8601String(),
     });
     if (ingredientes != null || contornos != null) {

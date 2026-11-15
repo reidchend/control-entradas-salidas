@@ -63,6 +63,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
   int? _categoriaId;
   bool _esContorno = false;
   bool _llevaContornos = false;
+  String _tipo = 'plato'; // 'plato' | 'servicio'
   bool _cargando = true;
   bool _guardando = false;
 
@@ -80,6 +81,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
     _categoriaId = p?.categoriaId;
     _esContorno = p?.esContorno ?? false;
     _llevaContornos = p?.llevaContornos ?? false;
+    _tipo = p?.tipo ?? 'plato';
     _cargarDatos();
   }
 
@@ -199,6 +201,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
           precioVenta: double.tryParse(_precioCtrl.text.trim()) ?? 0,
           esContorno: _esContorno,
           llevaContornos: _llevaContornos,
+          tipo: _tipo,
           ingredientes: ingredientes,
         );
       } else {
@@ -208,6 +211,7 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
           precioVenta: double.tryParse(_precioCtrl.text.trim()) ?? 0,
           esContorno: _esContorno,
           llevaContornos: _llevaContornos,
+          tipo: _tipo,
           ingredientes: ingredientes,
         );
       }
@@ -363,6 +367,25 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
                           ),
                       ],
                       onChanged: (v) => setState(() => _categoriaId = v),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _tipo,
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'plato',
+                          child: Text('Plato (precio fijo)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'servicio',
+                          child: Text('Servicio (precio editable)'),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _tipo = v ?? 'plato'),
                     ),
                     const SizedBox(height: 12),
                     TextField(

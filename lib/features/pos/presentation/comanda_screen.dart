@@ -20,6 +20,7 @@ import 'dialogs/cobro_por_cliente_dialog.dart';
 import 'dialogs/contornos_dialog.dart';
 import 'dialogs/cuenta_item_dialog.dart';
 import 'dialogs/eliminar_cliente_dialog.dart';
+import 'dialogs/precio_servicio_dialog.dart';
 import 'dialogs/renombre_cliente_dialog.dart';
 import 'dialogs/ticket_preview_dialog.dart';
 import 'widgets/catalogo_card.dart';
@@ -1043,7 +1044,7 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
               id: p.id,
               nombre: p.nombre,
               precio: p.precioVenta,
-              tipo: 'plato',
+              tipo: p.tipo,
               llevaContornos: p.llevaContornos),
         ),
     ];
@@ -1087,6 +1088,18 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
     required String tipo,
     bool llevaContornos = false,
   }) async {
+    double precioFinal = precio;
+    // Servicio: el usuario debe introducir el monto manualmente (ej. delivery).
+    if (tipo == 'servicio') {
+      if (!mounted) return;
+      final monto = await showPrecioServicioDialog(
+        context,
+        nombreServicio: nombre,
+        precioSugerido: precio,
+      );
+      if (!mounted || monto == null) return;
+      precioFinal = monto;
+    }
     if (llevaContornos) {
       final contornos = await ref.read(posRepoProvider)!.getContornosActivos();
       if (contornos.isNotEmpty) {
