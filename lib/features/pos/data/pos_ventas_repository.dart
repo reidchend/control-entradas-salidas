@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -88,36 +87,7 @@ class PosVentasRepository {
         'para recuperarla.',
       );
     }
-    // Si la comanda ya se había impreso y este guardado cambió el contenido,
-    // vuelve a quedar pendiente de imprimir. Fuera de la transacción, best-effort
-    // y sin bloquear el guardado (la comanda ya quedó persistida): si falta la
-    // columna o la red tarda, la marca solo se corrige en el siguiente guardado.
-    unawaited(_limpiarImpresaSiCambio(id, items, total));
     return id;
-  }
-
-  /// Deja `impresa_en = NULL` si la comanda ya estaba marcada como impresa
-  /// para cocina y este guardado cambió los productos o el total, para que el
-  /// home la resalte otra vez y se reimprima.
-  ///
-  /// Best-effort: si la columna `impresa_en` todavía no existe en la base, se
-  /// ignora (el guardado ya se hizo y no debe fallar por una marca visual).
-  Future<void> _limpiarImpresaSiCambio(
-    int comandaId,
-    List<Map<String, dynamic>> items,
-    double total,
-  ) async {
-    if (comandaId <= 0) return;
-    try {
-      await _db.executeSql(
-        'UPDATE pos_comandas SET impresa_en = NULL '
-        'WHERE id = \$1 AND impresa_en IS NOT NULL '
-        'AND (items_json IS DISTINCT FROM \$2 OR total IS DISTINCT FROM \$3)',
-        params: [comandaId, jsonEncode(items), total],
-      );
-    } catch (e) {
-      debugPrint('[pos] no se pudo reiniciar la marca de cocina: $e');
-    }
   }
 
   /// Marca la comanda como impresa para cocina (el home deja de resaltarla
@@ -218,6 +188,27 @@ class PosVentasRepository {
 
       if (existente != null) {
         final id = existente['id'] as int;
+        // Valores antes de sobrescribir: si el contenido cambió y la comanda
+        // ya estaba marcada como impresa para cocina, volvemos a dejarla
+        // pendiente para que se reimprima con la nueva versión.
+        final itemsJsonViejo = existente['items_json'] as String?;
+        final totalViejo = (existente['total'] as num?)?.toDouble();
+        final contenidoCambio =
+            itemsJsonViejo != itemsJson || totalViejo != total;
+        if (contenidoCambio) {
+          try {
+            await tx.executeSql(
+              'UPDATE pos_comandas SET impresa_en = NULL '
+              'WHERE id = \$1 AND impresa_en IS NOT NULL',
+              params: [id],
+            );
+          } catch (e) {
+            // Falta la columna impresa_en u otro error: no abortar el
+            // guardado, la comanda se guarda igual y solo se pierde la marca.
+            debugPrint(
+                '[pos] no se pudo reiniciar la marca de cocina: $e');
+          }
+        }
         await tx.updateById('pos_comandas', id, {
           'items_json': itemsJson,
           'total': total,
