@@ -79,6 +79,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
   bool _cargado = false;
   bool _guardando = false;
   String _error = '';
+  String _documentoBusqueda = '';
+  bool _buscandoDocumento = false;
 
   bool get _ocupaAhora => widget.modo != CheckinModo.reserva;
 
@@ -86,12 +88,26 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
   int get _personas => 1 + _acompanantes.length;
   bool get _puedeAgregar => _personas < _capacidad;
 
+  /// Focus para el campo de documento en check-in directo.
+  final FocusNode _docFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
     _ingreso = DateTime.now();
     _salida = DateTime.now().add(const Duration(days: 1));
     _init();
+    // Si es check-in directo y no hay titular existente, dar foco al documento.
+    if (widget.modo == CheckinModo.checkinDirecto &&
+        widget.titularExistente == null) {
+      Future.delayed(Duration.zero, () => _docFocus.requestFocus());
+    }
+  }
+
+  @override
+  void dispose() {
+    _docFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -127,6 +143,44 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
     }
     if (!mounted) return;
     setState(() => _cargado = true);
+  }
+
+  /// Busca un huésped por número de documento en la base de datos.
+  Future<void> _buscarHuespedPorDocumento() async {
+    final doc = _documentoBusqueda.trim();
+    if (doc.isEmpty) return;
+    setState(() {
+      _buscandoDocumento = true;
+      _error = '';
+    });
+    try {
+      final huesped = await widget.repo.buscarHuespedPorDocumento(doc);
+      if (!mounted) return;
+      if (huesped != null) {
+        // Encontrado: cargar en el titular y mostrar formulario completo.
+        setState(() {
+          _titular = HuespedDraft.desde(huesped);
+          _documentoBusqueda = '';
+          _buscandoDocumento = false;
+        });
+      } else {
+        // No encontrado: crear draft vacío con el documento ya escrito para
+        // que el usuario solo tenga que completar nombre y apellido.
+        setState(() {
+          _titular = HuespedDraft()
+            ..numeroDocumento = doc
+            ..tipoDocumento = DocumentoTipo.cedula;
+          _documentoBusqueda = '';
+          _buscandoDocumento = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _buscandoDocumento = false;
+        _error = 'Error al buscar: $e';
+      });
+    }
   }
 
   Future<void> _agregarAcompanante() async {
@@ -285,6 +339,60 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // En check-in directo sin titular cargado: mostrar campo
+                    // de documento con foco para buscar o crear cliente.
+                    if (widget.modo == CheckinModo.checkinDirecto &&
+                        _titular.nombre.trim().isEmpty &&
+                        _titular.apellido.trim().isEmpty &&
+                        !_buscandoDocumento) ...[
+                      const _Seccion(titulo: 'Cliente'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              focusNode: _docFocus,
+                              autofocus: true,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: const InputDecoration(
+                                labelText: 'N° documento (cédula/pasaporte)',
+                                border: OutlineInputBorder(),
+                                hintText: 'Ej: V-12345678',
+                              ),
+                              onChanged: (v) =>
+                                  _documentoBusqueda = v,
+                              onSubmitted: (_) => _buscarHuespedPorDocumento(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: FilledButton.icon(
+                              onPressed: _buscandoDocumento
+                                  ? null
+                                  : _buscarHuespedPorDocumento,
+                              icon: _buscandoDocumento
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.search),
+                              label: const Text('Buscar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_error.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(_error,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                      ],
+                      const SizedBox(height: 16),
+                    ],
                     _habitacionSelector(),
                     const SizedBox(height: 12),
                     _modalidadSelector(),

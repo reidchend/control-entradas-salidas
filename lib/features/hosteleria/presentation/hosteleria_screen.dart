@@ -8,6 +8,7 @@ import '../data/hostel_db_notifier.dart';
 import '../data/hostel_timeline_providers.dart';
 import '../data/hosteleria_providers.dart';
 import 'dialogs/habitacion_detalle_dialog.dart';
+import 'dialogs/checkin_reserva_dialog.dart';
 import 'dialogs/nueva_reserva_dialog.dart';
 import 'hosteleria_config_screen.dart';
 import 'widgets/habitacion_grid.dart';
@@ -33,6 +34,27 @@ class HosteleriaScreen extends ConsumerWidget {
       );
       return;
     }
+    // Si la habitación está vacía (sin reserva), ir directo al check-in
+    // con foco en el campo de documento del cliente.
+    if (reserva == null) {
+      final ok = await showCheckinReservaDialog(
+        context,
+        repo: repo,
+        habitaciones:
+            ref.read(hostelEstadoProvider).valueOrNull?.habitaciones ?? const
+                <Habitacion>[],
+        modo: CheckinModo.checkinDirecto,
+        habitacionFija: hab,
+      );
+      if (!mounted) return;
+      if (ok) {
+        ref.invalidate(hostelReservasActivasProvider);
+        ref.invalidate(hostelEstadoProvider);
+        ref.invalidate(hostelReservasRangoProvider);
+      }
+      return;
+    }
+    // Si ya hay reserva, mostrar el detalle para check-in/check-out/etc.
     final nueva = await showDialog<bool>(
       context: context,
       builder: (_) => HabitacionDetalleDialog(
@@ -180,6 +202,7 @@ class HosteleriaScreen extends ConsumerWidget {
             reservasPorHabitacion: reservaDe,
             onTap: (hab) =>
                 _abrirHabitacion(context, ref, hab, reserva: reservaDe[hab.id]),
+            onCambiarEstado: (c) => _cambiarEstadoHabitacion(context, ref, c),
           ),
         ),
         ReservasPanel(
@@ -236,6 +259,35 @@ class HosteleriaScreen extends ConsumerWidget {
     if (ok) {
       ref.invalidate(hostelReservasActivasProvider);
       ref.invalidate(hostelEstadoProvider);
+    }
+  }
+
+  /// Cambia el estado operativo de una habitación (libre / aseo / mantenimiento).
+  Future<void> _cambiarEstadoHabitacion(
+      BuildContext context, WidgetRef ref,
+      ({Habitacion habitacion, String estado}) c) async {
+    final repo = ref.read(hosteleriaRepoProvider);
+    if (repo == null) return;
+    try {
+      switch (c.estado) {
+        case 'libre':
+          await repo.marcarLimpia(c.habitacion.id);
+        case 'aseo':
+          await repo.enviarAAseo(c.habitacion.id);
+        case 'mantenimiento':
+          await repo.ponerEnMantenimiento(c.habitacion.id);
+      }
+      if (!mounted) return;
+      ref.invalidate(hostelEstadoProvider);
+      ref.invalidate(hostelReservasActivasProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cambiar estado: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 

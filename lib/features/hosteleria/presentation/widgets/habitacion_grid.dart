@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../data/hosteleria_repository.dart';
 
 /// Grid de habitaciones con estado ocupada/reservada/aseo/mantenimiento.
 class HabitacionGrid extends StatefulWidget {
@@ -13,11 +14,13 @@ class HabitacionGrid extends StatefulWidget {
     required this.habitaciones,
     required this.reservasPorHabitacion,
     required this.onTap,
+    required this.onCambiarEstado,
   });
 
   final List<Habitacion> habitaciones;
   final Map<int, HostelReserva> reservasPorHabitacion;
   final ValueChanged<Habitacion> onTap;
+  final ValueChanged<({Habitacion habitacion, String estado})> onCambiarEstado;
 
   @override
   State<HabitacionGrid> createState() => _HabitacionGridState();
@@ -55,6 +58,7 @@ class _HabitacionGridState extends State<HabitacionGrid> {
             habitacion: hab,
             reserva: widget.reservasPorHabitacion[hab.id],
             onTap: () => widget.onTap(hab),
+            onCambiarEstado: widget.onCambiarEstado,
           ),
       ],
     );
@@ -66,11 +70,13 @@ class _HabitacionTile extends StatelessWidget {
     required this.habitacion,
     required this.reserva,
     required this.onTap,
+    required this.onCambiarEstado,
   });
 
   final Habitacion habitacion;
   final HostelReserva? reserva;
   final VoidCallback onTap;
+  final ValueChanged<({Habitacion habitacion, String estado})> onCambiarEstado;
 
   @override
   Widget build(BuildContext context) {
@@ -102,73 +108,113 @@ class _HabitacionTile extends StatelessWidget {
         side: BorderSide(color: scheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 9,
-                    height: 9,
-                    decoration:
-                        BoxDecoration(color: color, shape: BoxShape.circle),
+                  Row(
+                    children: [
+                      Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                            color: color, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'HAB ${habitacion.numero}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                     child: Text(
-                      'HAB ${habitacion.numero}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
                     ),
                   ),
+                  if (restantes != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      restantes < 0 ? 'OP vencida' : 'OP · $restantes min',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: restantes < 0
+                            ? scheme.error
+                            : appColor(context, 'warning'),
+                      ),
+                    ),
+                  ],
+                  if (info.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      info.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                ),
-              ),
-              if (restantes != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  restantes < 0 ? 'OP vencida' : 'OP · $restantes min',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: restantes < 0
-                        ? scheme.error
-                        : appColor(context, 'warning'),
-                  ),
-                ),
-              ],
-              if (info.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  info.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+          // Menú de tres puntos para cambiar estado de la habitación.
+          Positioned(
+            top: 6,
+            right: 6,
+            child: PopupMenuButton<String>(
+              tooltip: 'Cambiar estado',
+              icon: const Icon(Icons.more_vert, size: 20),
+              onSelected: (estado) {
+                onCambiarEstado((habitacion: habitacion, estado: estado));
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'libre',
+                  child: ListTile(
+                    leading: Icon(Icons.check_circle_outline, size: 18),
+                    title: Text('Disponible'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'aseo',
+                  child: ListTile(
+                    leading: Icon(Icons.cleaning_services_outlined, size: 18),
+                    title: Text('A envasar / Aseo'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'mantenimiento',
+                  child: ListTile(
+                    leading: Icon(Icons.build_outlined, size: 18),
+                    title: Text('Mantenimiento'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

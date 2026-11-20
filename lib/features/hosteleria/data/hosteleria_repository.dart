@@ -133,6 +133,20 @@ class HosteleriaRepository {
     return rows.map(HostelHuesped.fromMap).toList();
   }
 
+  /// Busca un huésped por número de documento (cedula o numero_documento).
+  Future<HostelHuesped?> buscarHuespedPorDocumento(String documento) async {
+    final doc = documento.trim();
+    if (doc.isEmpty) return null;
+    final rows = await _db.executeSql(
+      'SELECT * FROM hosteleria_huespedes '
+      'WHERE numero_documento = \$1 OR cedula = \$1 '
+      'LIMIT 1',
+      params: [doc],
+    );
+    if (rows.isEmpty) return null;
+    return HostelHuesped.fromMap(rows.first);
+  }
+
   // -------------------------------------------------------------------
   // Reservas / estancias
   // -------------------------------------------------------------------
