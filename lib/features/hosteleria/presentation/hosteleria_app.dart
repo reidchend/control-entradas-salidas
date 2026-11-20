@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/state/theme_controller.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/hostel_session.dart';
@@ -26,6 +27,9 @@ class HosteleriaApp extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Lycoris Hosteleria',
+      locale: AppLocalizations.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.delegates,
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
       themeMode: themeMode,

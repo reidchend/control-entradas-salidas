@@ -20,6 +20,7 @@ import '../../features/validacion/presentation/validacion_screen.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
 import '../../features/configuracion/data/configuracion_providers.dart';
 import '../../features/whatsapp/presentation/bandeja_screen.dart';
+import '../localization/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 /// Shell principal — replica `usr/app_controller.py`:
@@ -62,6 +63,9 @@ class AppShell extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Control Entradas y Salidas',
+      locale: AppLocalizations.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.delegates,
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
       themeMode: themeMode,

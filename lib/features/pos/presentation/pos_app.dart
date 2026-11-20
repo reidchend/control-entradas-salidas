@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 import 'pos_screen.dart';
 
@@ -32,6 +33,9 @@ class _PosAppState extends ConsumerState<PosApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Lycoris POS',
+      locale: AppLocalizations.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.delegates,
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
       themeMode: ThemeMode.dark,
