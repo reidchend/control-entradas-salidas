@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
+import '../../../../core/models/pos_models.dart';
 import '../../data/hosteleria_repository.dart';
 import '../widgets/habitacion_detalle_cards.dart';
 import 'checkin_reserva_dialog.dart';
