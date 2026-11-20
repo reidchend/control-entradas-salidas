@@ -46,7 +46,6 @@ class HosteleriaScreen extends ConsumerWidget {
         modo: CheckinModo.checkinDirecto,
         habitacionFija: hab,
       );
-      if (!mounted) return;
       if (ok) {
         ref.invalidate(hostelReservasActivasProvider);
         ref.invalidate(hostelEstadoProvider);
@@ -277,11 +276,9 @@ class HosteleriaScreen extends ConsumerWidget {
         case 'mantenimiento':
           await repo.ponerEnMantenimiento(c.habitacion.id);
       }
-      if (!mounted) return;
       ref.invalidate(hostelEstadoProvider);
       ref.invalidate(hostelReservasActivasProvider);
     } catch (e) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al cambiar estado: $e'),
