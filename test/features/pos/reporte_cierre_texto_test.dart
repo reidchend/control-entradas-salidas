@@ -82,10 +82,13 @@ void main() {
       expect(t, contains('TOTAL GENERAL: \$20'));
     });
 
-    test('incluye el desglose de ventas del turno (total general)', () {
+    test('incluye la lista de participantes del turno', () {
       final t = reporteSimpleTexto(_cierre());
-      expect(t, isNot(contains('PARTICIPANTES')));
+      expect(t, contains('PARTICIPANTES'));
       expect(t, isNot(contains('POR USUARIO')));
+      expect(t, contains('EMILIO'));
+      expect(t, contains('ANA'));
+      // Sin desglose individual de ventas (solo la PC cobra).
       expect(t, contains('EMILIO: 2 ventas · \$427.5'), isFalse);
       expect(t, contains('TOTAL GENERAL: \$20'));
     });
