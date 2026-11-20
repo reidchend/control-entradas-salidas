@@ -17,19 +17,32 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'hostel_db_backend.dart';
 import 'hostel_sqlite_schema.dart';
 
-/// Traduce placeholders de PostgreSQL (`$1`, `$2`, …) a `?` (SQLite).
-List<dynamic> _translateParams(String sql, List<dynamic> params) {
-  // Sustituye $1, $2, … por ? en orden.
-  int i = 0;
-  final translated = sql.replaceAllMapped(
-    RegExp(r'\$(\d+)'),
-    (m) {
-      i++;
-      return '?';
-    },
+/// Traduce placeholders de PostgreSQL (`$1`, `$2`, …) a `?` de SQLite.
+///
+/// SQLite numera los parámetros por posición, así que se reconstruye la lista
+/// en el orden en que aparecen los placeholders. Esto permite reutilizar el
+/// mismo `$1` varias veces (p. ej. `col = $1 OR otra = $1`), algo que en
+/// PostgreSQL es válido pero en SQLite requeriría dos parámetros.
+({String sql, List<dynamic> params}) _translatePlaceholders(
+  String sql,
+  List<dynamic> params,
+) {
+  final bound = <dynamic>[];
+  final translated = sql.replaceAllMapped(RegExp(r'\$(\d+)'), (m) {
+    final index = int.parse(m.group(1)!) - 1;
+    if (index < 0 || index >= params.length) {
+      throw ArgumentError(
+        'Placeholder ${m.group(0)} sin parámetro '
+        '(${params.length} recibidos).',
+      );
+    }
+    bound.add(params[index]);
+    return '?';
+  });
+  return (
+    sql: translated,
+    params: bound.isEmpty ? params : bound,
   );
-  // Los parámetros ya vienen en orden, así que solo devolvemos la lista.
-  return params;
 }
 
 class SqliteDbBackend implements HostelDbBackend {
@@ -79,9 +92,8 @@ class SqliteDbBackend implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql);
-    final rows = await db.rawQuery(nSql, params);
-    return rows;
+    final q = _translatePlaceholders(sql, params);
+    return await db.rawQuery(q.sql, q.params);
   }
 
   @override
@@ -89,17 +101,18 @@ class SqliteDbBackend implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql.trim());
+    final q = _translatePlaceholders(sql.trim(), params);
+    final nSql = q.sql;
     final upper = nSql.toUpperCase();
     if (upper.startsWith('INSERT')) {
-      return await db.rawInsert(nSql, params);
+      return await db.rawInsert(nSql, q.params);
     } else if (upper.startsWith('UPDATE')) {
-      return await db.rawUpdate(nSql, params);
+      return await db.rawUpdate(nSql, q.params);
     } else if (upper.startsWith('DELETE')) {
-      return await db.rawDelete(nSql, params);
+      return await db.rawDelete(nSql, q.params);
     }
     // Para cualquier otro comando (CREATE, etc.) no hay filas afectadas útiles.
-    await db.execute(nSql, params);
+    await db.execute(nSql, q.params);
     return 0;
   }
 
@@ -175,15 +188,6 @@ class SqliteDbBackend implements HostelDbBackend {
       return await action(sqliteTx);
     });
   }
-
-  /// Convierte placeholders `$1`, `$2` … en `?`.
-  String _normalize(String sql) {
-    var i = 0;
-    return sql.replaceAllMapped(RegExp(r'\$(\d+)'), (_) {
-      i++;
-      return '?';
-    });
-  }
 }
 
 /// Wrapper de [Transaction] de sqflite que implementa [HostelDbBackend]
@@ -197,8 +201,8 @@ class _SqliteTx implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql);
-    return await _txn.rawQuery(nSql, params);
+    final q = _translatePlaceholders(sql, params);
+    return await _txn.rawQuery(q.sql, q.params);
   }
 
   @override
@@ -206,16 +210,17 @@ class _SqliteTx implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql.trim());
+    final q = _translatePlaceholders(sql.trim(), params);
+    final nSql = q.sql;
     final upper = nSql.toUpperCase();
     if (upper.startsWith('INSERT')) {
-      return await _txn.rawInsert(nSql, params);
+      return await _txn.rawInsert(nSql, q.params);
     } else if (upper.startsWith('UPDATE')) {
-      return await _txn.rawUpdate(nSql, params);
+      return await _txn.rawUpdate(nSql, q.params);
     } else if (upper.startsWith('DELETE')) {
-      return await _txn.rawDelete(nSql, params);
+      return await _txn.rawDelete(nSql, q.params);
     }
-    await _txn.execute(nSql, params);
+    await _txn.execute(nSql, q.params);
     return 0;
   }
 
@@ -286,13 +291,5 @@ class _SqliteTx implements HostelDbBackend {
   Future<T> transaction<T>(Future<T> Function(HostelDbBackend tx) action) {
     // Las transacciones anidadas en SQLite no son necesarias para este uso.
     return action(this);
-  }
-
-  String _normalize(String sql) {
-    var i = 0;
-    return sql.replaceAllMapped(RegExp(r'\$(\d+)'), (_) {
-      i++;
-      return '?';
-    });
   }
 }
