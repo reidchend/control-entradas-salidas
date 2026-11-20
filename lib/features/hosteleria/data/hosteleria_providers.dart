@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/usuarios_providers.dart';
+import '../../../core/auth/usuarios_repository.dart';
 import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
