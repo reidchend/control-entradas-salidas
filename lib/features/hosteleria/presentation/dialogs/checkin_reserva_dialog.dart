@@ -86,7 +86,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
   /// mostrarse junto a ese campo (en vez de junto al botón de confirmar).
   bool _errorCliente = false;
 
-  /// Campo de documento del buscador (solo check-in directo).
+  /// Campo de documento del buscador (reserva nueva y check-in directo).
   final TextEditingController _docCtrl = TextEditingController();
 
   /// Tipo de documento seleccionado en el buscador.
@@ -108,16 +108,21 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
   int get _personas => 1 + _acompanantes.length;
   bool get _puedeAgregar => _personas < _capacidad;
 
-  /// Focus para el campo de documento en check-in directo.
+  /// Focus para el campo de documento del buscador.
   final FocusNode _docFocus = FocusNode();
+
+  /// El buscador por documento se usa siempre que se crea una estancia nueva
+  /// (reserva o check-in directo). Al editar una reserva existente o recibir
+  /// un titular ya cargado, se mantiene el formulario completo como antes.
+  bool get _usarBuscadorDocumento =>
+      widget.reservaExistente == null && widget.titularExistente == null;
 
   @override
   void initState() {
     super.initState();
     _ingreso = DateTime.now();
     _salida = DateTime.now().add(const Duration(days: 1));
-    _clienteListo = widget.modo != CheckinModo.checkinDirecto ||
-        widget.titularExistente != null;
+    _clienteListo = !_usarBuscadorDocumento;
     _clienteExistente = widget.titularExistente != null;
     final t = widget.titularExistente;
     if (t != null) {
@@ -125,9 +130,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
       _tipoDoc = t.tipoDocumento ?? DocumentoTipo.cedula;
     }
     _init();
-    // Si es check-in directo y no hay titular existente, dar foco al documento.
-    if (widget.modo == CheckinModo.checkinDirecto &&
-        widget.titularExistente == null) {
+    // Dar foco al documento cuando el primer paso es identificar al cliente.
+    if (_usarBuscadorDocumento) {
       Future.delayed(Duration.zero, () => _docFocus.requestFocus());
     }
   }
@@ -305,14 +309,14 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
       _error = '';
       _errorCliente = false;
     });
-    if (widget.modo == CheckinModo.checkinDirecto && !_clienteListo) {
+    if (_usarBuscadorDocumento && !_clienteListo) {
       setState(
           () => _error = 'Busque o registre al cliente antes de continuar.');
       _docFocus.requestFocus();
       return;
     }
-    // El documento del check-in directo vive en el buscador: sincronizarlo.
-    if (widget.modo == CheckinModo.checkinDirecto) {
+    // El documento se captura en el buscador: sincronizarlo con el titular.
+    if (_usarBuscadorDocumento) {
       _titular.numeroDocumento = _docCtrl.text.trim();
       _titular.tipoDocumento = _tipoDoc;
     }
@@ -397,8 +401,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final esDirecto = widget.modo == CheckinModo.checkinDirecto;
-    final mostrarFormulario = !esDirecto || _clienteListo;
+    final usarBuscador = _usarBuscadorDocumento;
+    final mostrarFormulario = !usarBuscador || _clienteListo;
     return AlertDialog(
       title: Text(_titulo),
       content: SizedBox(
@@ -412,7 +416,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (esDirecto) ...[
+                    if (usarBuscador) ...[
                       _resumenHabitacion(),
                       const SizedBox(height: 12),
                       _seccionCliente(),
@@ -453,8 +457,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                       HuespedForm(
                         key: ValueKey(_formVersion),
                         draft: _titular,
-                        mostrarDocumento: !esDirecto,
-                        autofocus: esDirecto && !_clienteExistente,
+                        mostrarDocumento: !usarBuscador,
+                        autofocus: usarBuscador && !_clienteExistente,
                         onChanged: () => setState(() {}),
                       ),
                       const SizedBox(height: 16),
@@ -483,7 +487,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
         FilledButton(
           onPressed: _guardando ||
                   !_cargado ||
-                  (widget.modo == CheckinModo.checkinDirecto && !_clienteListo)
+                  (usarBuscador && !_clienteListo)
               ? null
               : _confirmar,
           child: Text(_guardando ? 'Guardando…' : _accion),
@@ -492,7 +496,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
     );
   }
 
-  /// Encabezado compacto con la habitación fija del check-in directo.
+  /// Encabezado compacto con la habitación fija (cuando viene de una tarjeta).
   Widget _resumenHabitacion() {
     final h = _habitacion;
     if (h == null) return const SizedBox.shrink();
@@ -516,7 +520,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
     );
   }
 
-  /// Paso 1 del check-in directo: identificación del cliente por documento.
+  /// Paso 1: identificación del cliente por documento (reserva o check-in).
   Widget _seccionCliente() {
     final scheme = Theme.of(context).colorScheme;
     return Container(
@@ -701,9 +705,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Busque al cliente por documento para continuar con el '
-              'check-in. Si no existe, se abrirá el formulario para '
-              'registrarlo.',
+              'Busque al cliente por documento para continuar. Si no '
+              'existe, se abrirá el formulario para registrarlo.',
               style: TextStyle(
                 fontSize: 12.5,
                 color: scheme.onSurfaceVariant,
