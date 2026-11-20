@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../data/hosteleria_repository.dart';
 import '../forms/huesped_draft.dart';
 import 'acompanante_dialog.dart';
@@ -79,8 +80,27 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
   bool _cargado = false;
   bool _guardando = false;
   String _error = '';
-  String _documentoBusqueda = '';
   bool _buscandoDocumento = false;
+
+  /// `true` si el error actual proviene del buscador de documento y debe
+  /// mostrarse junto a ese campo (en vez de junto al botón de confirmar).
+  bool _errorCliente = false;
+
+  /// Campo de documento del buscador (solo check-in directo).
+  final TextEditingController _docCtrl = TextEditingController();
+
+  /// Tipo de documento seleccionado en el buscador.
+  String _tipoDoc = DocumentoTipo.cedula;
+
+  /// `true` cuando ya se buscó el cliente y se puede mostrar el resto del
+  /// formulario. En modos con titular/reserva previa arranca en `true`.
+  bool _clienteListo = false;
+
+  /// `true` si el documento buscado pertenece a un cliente ya registrado.
+  bool _clienteExistente = false;
+
+  /// Fuerza la reconstrucción de `HuespedForm` al reemplazar el draft.
+  int _formVersion = 0;
 
   bool get _ocupaAhora => widget.modo != CheckinModo.reserva;
 
@@ -96,6 +116,14 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
     super.initState();
     _ingreso = DateTime.now();
     _salida = DateTime.now().add(const Duration(days: 1));
+    _clienteListo = widget.modo != CheckinModo.checkinDirecto ||
+        widget.titularExistente != null;
+    _clienteExistente = widget.titularExistente != null;
+    final t = widget.titularExistente;
+    if (t != null) {
+      _docCtrl.text = t.documento ?? '';
+      _tipoDoc = t.tipoDocumento ?? DocumentoTipo.cedula;
+    }
     _init();
     // Si es check-in directo y no hay titular existente, dar foco al documento.
     if (widget.modo == CheckinModo.checkinDirecto &&
@@ -106,6 +134,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
 
   @override
   void dispose() {
+    _docCtrl.dispose();
     _docFocus.dispose();
     super.dispose();
   }
@@ -127,7 +156,11 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
       try {
         var huesped = widget.titularExistente;
         huesped ??= await widget.repo.getHuespedById(r.huespedId);
-        if (huesped != null) _titular = HuespedDraft.desde(huesped);
+        if (huesped != null) {
+          _titular = HuespedDraft.desde(huesped);
+          _docCtrl.text = huesped.documento ?? '';
+          _tipoDoc = huesped.tipoDocumento ?? DocumentoTipo.cedula;
+        }
         final personas = await widget.repo.getPersonasDeReserva(r.id);
         for (final p in personas) {
           if (p.rol == 'titular') continue;
@@ -147,40 +180,64 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
 
   /// Busca un huésped por número de documento en la base de datos.
   Future<void> _buscarHuespedPorDocumento() async {
-    final doc = _documentoBusqueda.trim();
-    if (doc.isEmpty) return;
+    final doc = _docCtrl.text.trim();
+    if (doc.isEmpty) {
+      setState(() {
+        _errorCliente = true;
+        _error = 'Escriba el número de documento del cliente.';
+      });
+      _docFocus.requestFocus();
+      return;
+    }
     setState(() {
       _buscandoDocumento = true;
+      _errorCliente = false;
       _error = '';
     });
     try {
       final huesped = await widget.repo.buscarHuespedPorDocumento(doc);
       if (!mounted) return;
-      if (huesped != null) {
-        // Encontrado: cargar en el titular y mostrar formulario completo.
-        setState(() {
+      setState(() {
+        _buscandoDocumento = false;
+        _clienteListo = true;
+        _formVersion++;
+        if (huesped != null) {
+          // Encontrado: precargar todos sus datos.
           _titular = HuespedDraft.desde(huesped);
-          _documentoBusqueda = '';
-          _buscandoDocumento = false;
-        });
-      } else {
-        // No encontrado: crear draft vacío con el documento ya escrito para
-        // que el usuario solo tenga que completar nombre y apellido.
-        setState(() {
+          _tipoDoc = huesped.tipoDocumento ?? DocumentoTipo.cedula;
+          _clienteExistente = true;
+        } else {
+          // No encontrado: conservar el documento escrito y pedir el resto.
           _titular = HuespedDraft()
-            ..numeroDocumento = doc
-            ..tipoDocumento = DocumentoTipo.cedula;
-          _documentoBusqueda = '';
-          _buscandoDocumento = false;
-        });
-      }
+            ..tipoDocumento = _tipoDoc
+            ..numeroDocumento = doc;
+          _clienteExistente = false;
+        }
+        _docCtrl.text = _titular.numeroDocumento;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _buscandoDocumento = false;
+        _errorCliente = true;
         _error = 'Error al buscar: $e';
       });
     }
+  }
+
+  /// Limpia el cliente cargado y vuelve al paso de búsqueda por documento.
+  void _limpiarCliente() {
+    setState(() {
+      _clienteListo = false;
+      _clienteExistente = false;
+      _titular = HuespedDraft();
+      _tipoDoc = DocumentoTipo.cedula;
+      _docCtrl.clear();
+      _errorCliente = false;
+      _error = '';
+      _formVersion++;
+    });
+    _docFocus.requestFocus();
   }
 
   Future<void> _agregarAcompanante() async {
@@ -244,7 +301,21 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
       );
 
   Future<void> _confirmar() async {
-    setState(() => _error = '');
+    setState(() {
+      _error = '';
+      _errorCliente = false;
+    });
+    if (widget.modo == CheckinModo.checkinDirecto && !_clienteListo) {
+      setState(
+          () => _error = 'Busque o registre al cliente antes de continuar.');
+      _docFocus.requestFocus();
+      return;
+    }
+    // El documento del check-in directo vive en el buscador: sincronizarlo.
+    if (widget.modo == CheckinModo.checkinDirecto) {
+      _titular.numeroDocumento = _docCtrl.text.trim();
+      _titular.tipoDocumento = _tipoDoc;
+    }
     if (_habitacion == null) {
       setState(() => _error = 'Seleccione una habitación.');
       return;
@@ -326,6 +397,8 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final esDirecto = widget.modo == CheckinModo.checkinDirecto;
+    final mostrarFormulario = !esDirecto || _clienteListo;
     return AlertDialog(
       title: Text(_titulo),
       content: SizedBox(
@@ -339,102 +412,64 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // En check-in directo sin titular cargado: mostrar campo
-                    // de documento con foco para buscar o crear cliente.
-                    if (widget.modo == CheckinModo.checkinDirecto &&
-                        _titular.nombre.trim().isEmpty &&
-                        _titular.apellido.trim().isEmpty &&
-                        !_buscandoDocumento) ...[
-                      const _Seccion(titulo: 'Cliente'),
+                    if (esDirecto) ...[
+                      _resumenHabitacion(),
+                      const SizedBox(height: 12),
+                      _seccionCliente(),
+                    ],
+                    if (mostrarFormulario) ...[
+                      const SizedBox(height: 16),
+                      const _Seccion(titulo: 'Estadía'),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              focusNode: _docFocus,
-                              autofocus: true,
-                              textCapitalization: TextCapitalization.characters,
-                              decoration: const InputDecoration(
-                                labelText: 'N° documento (cédula/pasaporte)',
-                                border: OutlineInputBorder(),
-                                hintText: 'Ej: V-12345678',
-                              ),
-                              onChanged: (v) =>
-                                  _documentoBusqueda = v,
-                              onSubmitted: (_) => _buscarHuespedPorDocumento(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 1,
-                            child: FilledButton.icon(
-                              onPressed: _buscandoDocumento
-                                  ? null
-                                  : _buscarHuespedPorDocumento,
-                              icon: _buscandoDocumento
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.search),
-                              label: const Text('Buscar'),
-                            ),
-                          ),
-                        ],
+                      _habitacionSelector(),
+                      const SizedBox(height: 12),
+                      _modalidadSelector(),
+                      const SizedBox(height: 12),
+                      if (_modalidad == ModalidadEstancia.noche)
+                        Row(
+                          children: [
+                            Expanded(
+                                child: _fechaBoton(
+                                    'Entrada', _ingreso, () => _fecha(true))),
+                            const SizedBox(width: 8),
+                            Expanded(
+                                child: _fechaBoton(
+                                    'Salida', _salida, () => _fecha(false))),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                                child: _fechaBoton(
+                                    'Entrada', _ingreso, () => _fecha(true))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _bloqueSelector()),
+                          ],
+                        ),
+                      const SizedBox(height: 16),
+                      const _Seccion(titulo: 'Datos del titular'),
+                      const SizedBox(height: 8),
+                      HuespedForm(
+                        key: ValueKey(_formVersion),
+                        draft: _titular,
+                        mostrarDocumento: !esDirecto,
+                        autofocus: esDirecto && !_clienteExistente,
+                        onChanged: () => setState(() {}),
                       ),
-                      if (_error.isNotEmpty) ...[
-                        const SizedBox(height: 8),
+                      const SizedBox(height: 16),
+                      _seccionAcompanantes(),
+                      const SizedBox(height: 16),
+                      _seccionVehiculos(),
+                      if (_error.isNotEmpty && !_errorCliente) ...[
+                        const SizedBox(height: 12),
                         SelectableText(_error,
                             style: TextStyle(
                                 color: Theme.of(context).colorScheme.error)),
                       ],
+                    ] else ...[
                       const SizedBox(height: 16),
-                    ],
-                    _habitacionSelector(),
-                    const SizedBox(height: 12),
-                    _modalidadSelector(),
-                    const SizedBox(height: 12),
-                    if (_modalidad == ModalidadEstancia.noche)
-                      Row(
-                        children: [
-                          Expanded(
-                              child: _fechaBoton(
-                                  'Entrada', _ingreso, () => _fecha(true))),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _fechaBoton(
-                                  'Salida', _salida, () => _fecha(false))),
-                        ],
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(
-                              child: _fechaBoton(
-                                  'Entrada', _ingreso, () => _fecha(true))),
-                          const SizedBox(width: 8),
-                          Expanded(child: _bloqueSelector()),
-                        ],
-                      ),
-                    const SizedBox(height: 16),
-                    const _Seccion(titulo: 'Datos del titular'),
-                    const SizedBox(height: 8),
-                    HuespedForm(
-                      draft: _titular,
-                      onChanged: () => setState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    _seccionAcompanantes(),
-                    const SizedBox(height: 16),
-                    _seccionVehiculos(),
-                    if (_error.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SelectableText(_error,
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.error)),
+                      _pistaDocumento(),
                     ],
                   ],
                 ),
@@ -446,10 +481,237 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _guardando || !_cargado ? null : _confirmar,
+          onPressed: _guardando ||
+                  !_cargado ||
+                  (widget.modo == CheckinModo.checkinDirecto && !_clienteListo)
+              ? null
+              : _confirmar,
           child: Text(_guardando ? 'Guardando…' : _accion),
         ),
       ],
+    );
+  }
+
+  /// Encabezado compacto con la habitación fija del check-in directo.
+  Widget _resumenHabitacion() {
+    final h = _habitacion;
+    if (h == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.meeting_room_outlined, size: 18, color: scheme.primary),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            'Habitación ${h.numero}'
+            '${h.tipo != null ? ' · ${h.tipo}' : ''} '
+            '(cap. ${h.maxPersonas})',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Paso 1 del check-in directo: identificación del cliente por documento.
+  Widget _seccionCliente() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.badge_outlined, size: 18, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Identificación del cliente',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('tipo-doc-$_formVersion'),
+                  initialValue: DocumentoTipo.opciones.contains(_tipoDoc)
+                      ? _tipoDoc
+                      : DocumentoTipo.cedula,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo',
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                  items: [
+                    for (final t in DocumentoTipo.opciones)
+                      DropdownMenuItem(
+                        value: t,
+                        child: Text(
+                          DocumentoTipo.label(t),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: _guardando
+                      ? null
+                      : (v) => setState(() {
+                            _tipoDoc = v ?? DocumentoTipo.cedula;
+                            _titular.tipoDocumento = _tipoDoc;
+                          }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _docCtrl,
+                  focusNode: _docFocus,
+                  autofocus: !_clienteListo,
+                  enabled: !_guardando,
+                  textInputAction: TextInputAction.search,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(
+                    labelText: 'N° de documento',
+                    hintText: 'Ej: V-12345678',
+                    border: const OutlineInputBorder(),
+                    helperText: _clienteListo
+                        ? 'Edite el documento y busque para cambiar de cliente'
+                        : 'Escriba el documento y presione Enter',
+                    suffixIcon: _buscandoDocumento
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'Buscar cliente',
+                            icon: const Icon(Icons.search),
+                            onPressed:
+                                _guardando ? null : _buscarHuespedPorDocumento,
+                          ),
+                  ),
+                  onChanged: (v) {
+                    _titular.numeroDocumento = v;
+                    _titular.tipoDocumento = _tipoDoc;
+                  },
+                  onSubmitted: (_) => _buscarHuespedPorDocumento(),
+                ),
+              ),
+            ],
+          ),
+          if (_clienteExistente) ...[
+            const SizedBox(height: 10),
+            _bannerCliente(
+              color: appColor(context, 'success'),
+              icon: Icons.verified_user_outlined,
+              texto: 'Cliente registrado: ${_titular.etiqueta}. '
+                  'Revise o actualice sus datos.',
+              accion: TextButton(
+                onPressed: _guardando ? null : _limpiarCliente,
+                child: const Text('Cambiar'),
+              ),
+            ),
+          ] else if (_clienteListo) ...[
+            const SizedBox(height: 10),
+            _bannerCliente(
+              color: appColor(context, 'info'),
+              icon: Icons.person_add_alt_1_outlined,
+              texto: 'Cliente nuevo: complete los datos para registrarlo.',
+            ),
+          ],
+          if (_error.isNotEmpty && _errorCliente) ...[
+            const SizedBox(height: 10),
+            SelectableText(
+              _error,
+              style: TextStyle(color: scheme.error),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _bannerCliente({
+    required Color color,
+    required IconData icon,
+    required String texto,
+    Widget? accion,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+          if (accion != null) accion,
+        ],
+      ),
+    );
+  }
+
+  /// Ayuda mostrada mientras no se ha buscado el documento del cliente.
+  Widget _pistaDocumento() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Busque al cliente por documento para continuar con el '
+              'check-in. Si no existe, se abrirá el formulario para '
+              'registrarlo.',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

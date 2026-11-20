@@ -14,11 +14,16 @@ class HuespedForm extends StatefulWidget {
     required this.draft,
     this.onChanged,
     this.autofocus = false,
+    this.mostrarDocumento = true,
   });
 
   final HuespedDraft draft;
   final VoidCallback? onChanged;
   final bool autofocus;
+
+  /// Si es `false`, oculta los campos tipo/número de documento. Se usa cuando
+  /// el documento ya se captura en un buscador externo (check-in directo).
+  final bool mostrarDocumento;
 
   @override
   State<HuespedForm> createState() => _HuespedFormState();
@@ -114,45 +119,48 @@ class _HuespedFormState extends State<HuespedForm> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: DocumentoTipo.opciones.contains(d.tipoDocumento)
-                    ? d.tipoDocumento
-                    : DocumentoTipo.cedula,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo de documento',
-                  border: OutlineInputBorder(),
+        if (widget.mostrarDocumento) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue:
+                      DocumentoTipo.opciones.contains(d.tipoDocumento)
+                          ? d.tipoDocumento
+                          : DocumentoTipo.cedula,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de documento',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final t in DocumentoTipo.opciones)
+                      DropdownMenuItem(
+                          value: t, child: Text(DocumentoTipo.label(t))),
+                  ],
+                  onChanged: (v) {
+                    d.tipoDocumento = v ?? DocumentoTipo.cedula;
+                    _cambio();
+                  },
                 ),
-                items: [
-                  for (final t in DocumentoTipo.opciones)
-                    DropdownMenuItem(
-                        value: t, child: Text(DocumentoTipo.label(t))),
-                ],
-                onChanged: (v) {
-                  d.tipoDocumento = v ?? DocumentoTipo.cedula;
-                  _cambio();
-                },
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _documento,
-                decoration: const InputDecoration(
-                  labelText: 'N° documento',
-                  border: OutlineInputBorder(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _documento,
+                  decoration: const InputDecoration(
+                    labelText: 'N° documento',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    d.numeroDocumento = v;
+                    _cambio();
+                  },
                 ),
-                onChanged: (v) {
-                  d.numeroDocumento = v;
-                  _cambio();
-                },
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
         Row(
           children: [

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../data/hosteleria_repository.dart';
 
 /// Grid de habitaciones con estado ocupada/reservada/aseo/mantenimiento.
 class HabitacionGrid extends StatefulWidget {
@@ -184,36 +183,62 @@ class _HabitacionTile extends StatelessWidget {
             top: 6,
             right: 6,
             child: PopupMenuButton<String>(
-              tooltip: 'Cambiar estado',
+              tooltip: 'Cambiar estado de la habitación',
               icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (estado) {
+                if (estado == habitacion.estado) return;
                 onCambiarEstado((habitacion: habitacion, estado: estado));
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'libre',
-                  child: ListTile(
-                    leading: Icon(Icons.check_circle_outline, size: 18),
-                    title: Text('Disponible'),
+                const PopupMenuItem<String>(
+                  enabled: false,
+                  height: 34,
+                  child: Text(
+                    'ESTADO DE LA HABITACIÓN',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'aseo',
-                  child: ListTile(
-                    leading: Icon(Icons.cleaning_services_outlined, size: 18),
-                    title: Text('A envasar / Aseo'),
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'mantenimiento',
-                  child: ListTile(
-                    leading: Icon(Icons.build_outlined, size: 18),
-                    title: Text('Mantenimiento'),
-                  ),
-                ),
+                _itemEstado('libre', 'Disponible', Icons.check_circle_outline),
+                _itemEstado(
+                    'aseo', 'Aseo / limpieza', Icons.cleaning_services_outlined),
+                _itemEstado(
+                    'mantenimiento', 'Mantenimiento', Icons.build_outlined),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _itemEstado(
+      String value, String label, IconData icon) {
+    final activo = habitacion.estado == value;
+    final scheme = Theme.of(context).colorScheme;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: activo ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+                color: activo ? scheme.primary : scheme.onSurface,
+              ),
+            ),
+          ),
+          if (activo) Icon(Icons.check, size: 16, color: scheme.primary),
         ],
       ),
     );
