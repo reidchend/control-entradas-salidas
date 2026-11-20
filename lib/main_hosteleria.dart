@@ -5,15 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/errors/error_widget_app.dart';
 import 'core/logging/log_bridge.dart';
+import 'features/hosteleria/data/hostel_sqlite_backend.dart';
 import 'features/hosteleria/presentation/hosteleria_app.dart';
 
 /// Punto de entrada de Lycoris Hosteleria (independiente de inventario y POS).
 ///
-/// Comparte la base de datos remota (PostgreSQL) con el POS; reutiliza las
-/// habitaciones de `habitaciones` y agrega sus tablas propias
-/// (`hosteleria_huespedes`, `hosteleria_reservas`).
-/// Build: `flutter build web --release -t lib/main_hosteleria.dart`.
+/// Usa SQLite local por defecto (archivo `.db` junto al ejecutable) para
+/// pruebas sin tocar la base de datos real de PostgreSQL.
+///
+/// Build: `flutter build windows --release -t lib/main_hosteleria.dart`.
 void main() {
+  // Inicializar FFI de SQLite (requerido en desktop con sqflite_common_ffi).
+  SqliteDbBackend.initFFI();
+
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();

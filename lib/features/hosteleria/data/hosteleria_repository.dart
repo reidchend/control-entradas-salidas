@@ -1,16 +1,20 @@
 import '../../../core/data/postgres_service.dart';
 import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
+import 'hostel_db_backend.dart';
 
 /// Repositorio del módulo Hostelería.
 ///
 /// Lee habitaciones de `habitaciones` (las del POS) y gestiona las tablas
 /// propias: `hosteleria_huespedes`, `hosteleria_reservas`,
 /// `hosteleria_reserva_personas` y `hosteleria_vehiculos`.
+///
+/// Trabaja sobre un [HostelDbBackend] que puede ser PostgreSQL (producción)
+/// o SQLite (pruebas locales sin tocar la BD real).
 class HosteleriaRepository {
   HosteleriaRepository(this._db);
 
-  final PostgresService _db;
+  final HostelDbBackend _db;
 
   // -------------------------------------------------------------------
   // Habitaciones (habitaciones — compartidas con el POS)
