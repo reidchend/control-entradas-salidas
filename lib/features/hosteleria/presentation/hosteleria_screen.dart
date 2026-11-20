@@ -155,7 +155,7 @@ class HosteleriaScreen extends ConsumerWidget {
               ),
               data: (estado) {
                 final lista = estado.habitaciones;
-                if (lista.isEmpty) return _vacio(context);
+                if (lista.isEmpty) return _vacio(context, ref);
                 if (vista == HostelVista.actual) {
                   return _vistaActual(context, ref, estado);
                 }
@@ -238,7 +238,7 @@ class HosteleriaScreen extends ConsumerWidget {
     }
   }
 
-  Widget _vacio(BuildContext context) {
+  Widget _vacio(BuildContext context, WidgetRef ref) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
