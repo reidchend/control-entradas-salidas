@@ -9,6 +9,7 @@ import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/models/usuario.dart';
 import 'hostel_db_backend.dart';
+import 'hostel_db_notifier.dart';
 import 'hostel_postgres_backend.dart';
 import 'hostel_sqlite_init.dart';
 import 'hosteleria_repository.dart';
@@ -22,47 +23,28 @@ bool verificarPinLocal(String pin, String? pinHash) {
 
 /// Repositorio compartido del módulo Hostelería.
 ///
-/// Usa [hostelDbBackendProvider] que por defecto inicializa SQLite local
-/// (pruebas sin tocar Postgres). Si se necesita producción con Postgres,
-/// se puede sobrescribir el provider en `main_hosteleria.dart`.
-final hosteleriaRepoProvider =
-    FutureProvider.autoDispose<HosteleriaRepository?>((ref) async {
-  final backend = await ref.read(hostelDbBackendProvider.future);
+/// Expone el repositorio de forma síncrona gracias a [hostelDbBackendProvider]
+/// (StateNotifier). Si el backend aún no se inicializó o falló, devuelve null.
+final hosteleriaRepoProvider = Provider<HosteleriaRepository?>((ref) {
+  final backend = ref.watch(hostelDbBackendProvider);
+  if (backend == null) return null;
   return HosteleriaRepository(backend);
-});
-
-/// Backend de base de datos para Hostelería.
-///
-/// Por defecto inicializa SQLite local (archivo `.db` junto al ejecutable).
-/// Si se quiere usar PostgreSQL (producción), sobrescribir este provider en
-/// `main_hosteleria.dart` con `PostgresDbBackend(postgresService)`.
-final hostelDbBackendProvider = FutureProvider<HostelDbBackend>((ref) async {
-  // Intentar SQLite local primero (autónomo, no toca Postgres para escrituras)
-  try {
-    final pg = ref.watch(postgresServiceProvider);
-    return await initHosteleriaSqlite(origenPostgres: pg);
-  } catch (_) {
-    // Fallback a Postgres si SQLite no se puede crear
-    final pg = ref.watch(postgresServiceProvider);
-    if (pg != null) return PostgresDbBackend(pg);
-    rethrow;
-  }
 });
 
 /// Indica si el módulo está usando SQLite local (modo pruebas) en vez de
 /// PostgreSQL (producción). Útil para mostrar un indicador visual al usuario.
 final hostelModoPruebasProvider = Provider<bool>((ref) {
-  // Por defecto usamos SQLite (modo pruebas). Si se sobrescribe el provider
-  // en main_hosteleria.dart con PostgresDbBackend, este valor debería ser false.
-  return true;
+  final backend = ref.watch(hostelDbBackendProvider);
+  // Si el backend es PostgresDbBackend, no es modo pruebas. De lo contrario,
+  // asumimos SQLite (modo pruebas).
+  return backend is! PostgresDbBackend;
 });
 
 /// Usuarios de recepción leídos desde SQLite local (modo pruebas sin Postgres).
-///
-/// Lee la tabla `hosteleria_usuarios` creada por el esquema de hostelería.
 final hostelUsuariosSqliteProvider =
     FutureProvider.autoDispose<List<Usuario>>((ref) async {
-  final backend = await ref.read(hostelDbBackendProvider.future);
+  final backend = ref.watch(hostelDbBackendProvider);
+  if (backend == null) return const [];
   final filas = await backend.executeSql(
     'SELECT * FROM hosteleria_usuarios WHERE activo = 1 ORDER BY nombre',
   );
@@ -82,16 +64,12 @@ final hostelUsuariosSqliteProvider =
 });
 
 /// Recepcionistas con acceso al módulo Hostelería (login de la app).
-///
-/// En producción usa el directorio central de Postgres. En modo pruebas
-/// (SQLite local) hace fallback a [hostelUsuariosSqliteProvider].
 final hostelUsuariosProvider =
     FutureProvider.autoDispose<List<Usuario>>((ref) async {
   final repo = ref.watch(usuariosRepoProvider);
   if (repo != null) {
     return repo.listarPorModulo(UsuariosRepository.moduloHosteleria);
   }
-  // Modo pruebas sin Postgres: leer usuarios locales de SQLite.
   return await ref.read(hostelUsuariosSqliteProvider.future);
 });
 
@@ -113,7 +91,7 @@ class HostelEstado {
 
 /// Habitaciones POS (compartidas con el POS) + reservas activas.
 final hostelEstadoProvider = FutureProvider.autoDispose<HostelEstado>((ref) async {
-  final repo = await ref.read(hosteleriaRepoProvider.future);
+  final repo = ref.watch(hosteleriaRepoProvider);
   if (repo == null) return const HostelEstado(habitaciones: [], reservasActivas: []);
   final habs = await repo.getHabitaciones(soloActivas: true);
   final reservas = await repo.getReservas();
@@ -131,7 +109,7 @@ final hostelEstadoProvider = FutureProvider.autoDispose<HostelEstado>((ref) asyn
 /// Reservas activas (reservada/ocupada) con datos del huésped.
 final hostelReservasActivasProvider =
     FutureProvider.autoDispose<List<HostelReserva>>((ref) async {
-  final repo = await ref.read(hosteleriaRepoProvider.future);
+  final repo = ref.watch(hosteleriaRepoProvider);
   if (repo == null) return const [];
   final reservas = await repo.getReservas();
   return [

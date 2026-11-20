@@ -25,7 +25,7 @@ class HosteleriaScreen extends ConsumerWidget {
   Future<void> _abrirHabitacion(
       BuildContext context, WidgetRef ref, Habitacion hab,
       {HostelReserva? reserva}) async {
-    final repo = ref.read(hosteleriaRepoProvider).valueOrNull;
+    final repo = ref.read(hosteleriaRepoProvider);
     if (repo == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Base de datos no disponible')),
@@ -225,7 +225,7 @@ class HosteleriaScreen extends ConsumerWidget {
 
   Future<void> _nuevaReserva(BuildContext context, WidgetRef ref,
       List<Habitacion> habitaciones) async {
-    final repo = ref.read(hosteleriaRepoProvider).valueOrNull;
+    final repo = ref.read(hosteleriaRepoProvider);
     if (repo == null) return;
     final ok = await showNuevaReservaDialog(
       context,
