@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
 import '../data/hostel_session.dart';
+import '../data/hostel_db_notifier.dart';
 import '../data/hostel_timeline_providers.dart';
 import '../data/hosteleria_providers.dart';
 import 'dialogs/habitacion_detalle_dialog.dart';
