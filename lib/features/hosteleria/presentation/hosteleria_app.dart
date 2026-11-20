@@ -29,6 +29,7 @@ class HosteleriaApp extends ConsumerWidget {
       theme: appTheme.light(),
       darkTheme: appTheme.dark(),
       themeMode: themeMode,
+      icon: Image.asset('assets/icono_morado.png'),
       builder: (context, child) {
         final ancho = MediaQuery.sizeOf(context).width;
         final esEscritorio = ancho >= 600;

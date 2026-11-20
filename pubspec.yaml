@@ -52,3 +52,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icono_azul.png
+    - assets/icono_morado.png

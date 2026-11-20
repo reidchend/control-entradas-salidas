@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/data/postgres_guard.dart';
@@ -61,11 +61,11 @@ class _HostelLoginViewState extends ConsumerState<HostelLoginView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.hotel_outlined,
-                          size: 40, color: scheme.primary),
-                      const SizedBox(width: 10),
-                      Text('Lycoris Hosteleria',
-                          style: Theme.of(context).textTheme.headlineSmall),
+                      Image.asset(
+                            "assets/icono_morado.png",
+                            width: 40,
+                            height: 40,
+                          ),
                     ],
                   ),
                   const SizedBox(height: 4),
