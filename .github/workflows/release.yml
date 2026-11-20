@@ -241,9 +241,8 @@ jobs:
         env:
           LYCORIS_BINARY_NAME: LycorisHostel
         run: |
-          Copy-Item windows\runner\resources\app_icon_hosteleria.ico `
-            windows\runner\resources\app_icon.ico -Force
           flutter pub get
+          flutter pub run flutter_launcher_icons
           flutter build windows --release -t lib/main_hosteleria.dart `
             --dart-define=APP_ID=hosteleria `
             --dart-define=APP_LABEL="Lycoris Hostelería" `
