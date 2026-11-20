@@ -39,8 +39,8 @@ class HosteleriaScreen extends ConsumerWidget {
         reserva: reserva,
         repo: repo,
         habitaciones:
-            ref.read(hostelEstadoProvider).valueOrNull?.habitaciones ??
-                const <Habitacion>[],
+            ref.read(hostelEstadoProvider).valueOrNull?.habitaciones ?? const
+                <Habitacion>[],
       ),
     );
     if (nueva == true) {
@@ -50,12 +50,43 @@ class HosteleriaScreen extends ConsumerWidget {
     }
   }
 
+  /// Chip de indicador visual de modo pruebas (SQLite local).
+  Widget _indicadorModoPruebas(BuildContext context, WidgetRef ref) {
+    final modoPruebas = ref.watch(hostelModoPruebasProvider);
+    if (!modoPruebas) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB300).withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.local_pizza, size: 16, color: Color(0xFFFFB300)),
+          const SizedBox(width: 8),
+          const Text(
+            'MODO PRUEBAS · Base de datos SQLite local (no toca Postgres)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFFFB300),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sesion = ref.watch(hostelSessionProvider);
     final habs = ref.watch(hostelEstadoProvider);
     final vista = ref.watch(hostelVistaProvider);
     final ancla = ref.watch(hostelAnclaProvider);
+    final modoPruebas = ref.watch(hostelModoPruebasProvider);
 
     return Scaffold(
       body: Column(
@@ -97,10 +128,31 @@ class HosteleriaScreen extends ConsumerWidget {
               ],
             ),
           ),
+          if (modoPruebas) _indicadorModoPruebas(context, ref),
           Expanded(
             child: habs.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              error: (e, _) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 60, color: Color(0xFFEF5350)),
+                    const SizedBox(height: 12),
+                    Text('Error cargando habitaciones: $e',
+                        style: const TextStyle(fontSize: 14)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () {
+                        ref.invalidate(hostelDbBackendProvider);
+                        ref.invalidate(hosteleriaRepoProvider);
+                        ref.invalidate(hostelEstadoProvider);
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
+              ),
               data: (estado) {
                 final lista = estado.habitaciones;
                 if (lista.isEmpty) return _vacio(context);
@@ -149,7 +201,17 @@ class HosteleriaScreen extends ConsumerWidget {
     final reservas = ref.watch(hostelReservasRangoProvider(rango));
     return reservas.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Color(0xFFEF5350)),
+            const SizedBox(height: 12),
+            Text('Error cargando reservas: $e',
+                style: const TextStyle(fontSize: 14)),
+          ],
+        ),
+      ),
       data: (list) => HabitacionesTimeline(
         habitaciones: habitaciones,
         reservas: list,
@@ -187,10 +249,24 @@ class HosteleriaScreen extends ConsumerWidget {
               style: TextStyle(fontSize: 18)),
           const SizedBox(height: 8),
           Text(
-            'Registre habitaciones desde el módulo POS (Configuración)',
+            'Registre habitaciones desde el módulo POS (Configuración). '
+            'En modo pruebas (SQLite) las habitaciones se crean en la base de '
+            'datos local.',
             style: TextStyle(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () {
+              ref.invalidate(hostelDbBackendProvider);
+              ref.invalidate(hosteleriaRepoProvider);
+              ref.invalidate(hostelEstadoProvider);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
           ),
         ],
       ),

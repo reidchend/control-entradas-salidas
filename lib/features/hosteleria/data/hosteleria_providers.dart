@@ -48,6 +48,10 @@ final hostelDbBackendProvider = FutureProvider<HostelDbBackend>((ref) async {
   }
 });
 
+/// Indica si el módulo está usando SQLite local (modo pruebas) en vez de
+/// PostgreSQL (producción). Útil para mostrar un indicador visual al usuario.
+final hostelModoPruebasProvider = Provider<bool>((ref) => true);
+
 /// Usuarios de recepción leídos desde SQLite local (modo pruebas sin Postgres).
 ///
 /// Lee la tabla `hosteleria_usuarios` creada por el esquema de hostelería.
