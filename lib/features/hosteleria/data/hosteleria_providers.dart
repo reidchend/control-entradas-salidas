@@ -37,11 +37,12 @@ final hosteleriaRepoProvider =
 /// Si se quiere usar PostgreSQL (producción), sobrescribir este provider en
 /// `main_hosteleria.dart` con `PostgresDbBackend(postgresService)`.
 final hostelDbBackendProvider = FutureProvider<HostelDbBackend>((ref) async {
-  // Intentar SQLite local primero (autónomo, no toca Postgres)
+  // Intentar SQLite local primero (autónomo, no toca Postgres para escrituras)
   try {
-    return await initHosteleriaSqlite();
+    final pg = ref.watch(postgresServiceProvider);
+    return await initHosteleriaSqlite(origenPostgres: pg);
   } catch (_) {
-    // Fallback a Postgres si está disponible
+    // Fallback a Postgres si SQLite no se puede crear
     final pg = ref.watch(postgresServiceProvider);
     if (pg != null) return PostgresDbBackend(pg);
     rethrow;
@@ -50,7 +51,11 @@ final hostelDbBackendProvider = FutureProvider<HostelDbBackend>((ref) async {
 
 /// Indica si el módulo está usando SQLite local (modo pruebas) en vez de
 /// PostgreSQL (producción). Útil para mostrar un indicador visual al usuario.
-final hostelModoPruebasProvider = Provider<bool>((ref) => true);
+final hostelModoPruebasProvider = Provider<bool>((ref) {
+  // Por defecto usamos SQLite (modo pruebas). Si se sobrescribe el provider
+  // en main_hosteleria.dart con PostgresDbBackend, este valor debería ser false.
+  return true;
+});
 
 /// Usuarios de recepción leídos desde SQLite local (modo pruebas sin Postgres).
 ///
