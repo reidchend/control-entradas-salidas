@@ -387,7 +387,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                       ),
                       if (_error.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text(_error,
+                        SelectableText(_error,
                             style: TextStyle(
                                 color: Theme.of(context).colorScheme.error)),
                       ],
@@ -432,7 +432,7 @@ class _CheckinReservaDialogState extends State<_CheckinReservaDialog> {
                     _seccionVehiculos(),
                     if (_error.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text(_error,
+                      SelectableText(_error,
                           style: TextStyle(
                               color: Theme.of(context).colorScheme.error)),
                     ],
