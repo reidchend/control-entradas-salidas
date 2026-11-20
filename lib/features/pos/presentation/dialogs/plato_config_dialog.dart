@@ -95,14 +95,13 @@ class _PlatoConfigDialogState extends ConsumerState<_PlatoConfigDialog> {
       await ref.read(configuracionRepoProvider)?.getTiposProductoCatalogo();
     } catch (_) {}
     final allCats = await posRepo.getPlatosCategorias();
-    // Solo categorías raíz de platos (sin padre de inventario, POS o anidado).
-    // Las subcategorías de inventario y de POS no se ofrecen al crear un plato.
+    // Todas las categorías de platos (raíz y subcategorías). El etiquetado
+    // jerárquico ya se encarga de mostrar el camino completo
+    // ("PRINCIPALES > EMPANADAS") para distinguir subcategorías homónimas.
     final cats = allCats
-        .where((c) =>
-            c.categoriaPadreId == null &&
-            c.posCategoriaPadreId == null &&
-            c.platoCategoriaPadreId == null)
-        .toList();
+        .where((c) => c.activo)
+        .toList()
+      ..sort((a, b) => _etiquetaCategoria(a).compareTo(_etiquetaCategoria(b)));
     final productos = await invRepo.getAllProductos();
     // Ingredientes posibles: los productos cuyo tipo está marcado como
     // insumo en Configuración > Tipos (uso interno, producción, feria...).
