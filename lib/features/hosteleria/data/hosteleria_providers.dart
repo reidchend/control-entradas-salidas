@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/usuarios_providers.dart';
 import '../../../core/data/postgres_providers.dart';
 import '../../../core/models/hosteleria_models.dart';
 import '../../../core/models/pos_models.dart';
@@ -10,7 +11,6 @@ import 'hostel_db_backend.dart';
 import 'hostel_postgres_backend.dart';
 import 'hostel_sqlite_init.dart';
 import 'hosteleria_repository.dart';
-import 'hostel_vista.dart';
 
 /// Verifica un PIN contra un hash SHA-256 almacenado localmente.
 bool verificarPinLocal(String pin, String? pinHash) {
@@ -103,8 +103,7 @@ class HostelEstado {
 
 /// Habitaciones POS (compartidas con el POS) + reservas activas.
 final hostelEstadoProvider = FutureProvider.autoDispose<HostelEstado>((ref) async {
-  final repoAsync = ref.watch(hosteleriaRepoProvider);
-  final repo = await repoAsync;
+  final repo = await ref.read(hosteleriaRepoProvider.future);
   if (repo == null) return const HostelEstado(habitaciones: [], reservasActivas: []);
   final habs = await repo.getHabitaciones(soloActivas: true);
   final reservas = await repo.getReservas();
@@ -122,8 +121,7 @@ final hostelEstadoProvider = FutureProvider.autoDispose<HostelEstado>((ref) asyn
 /// Reservas activas (reservada/ocupada) con datos del huésped.
 final hostelReservasActivasProvider =
     FutureProvider.autoDispose<List<HostelReserva>>((ref) async {
-  final repoAsync = ref.watch(hosteleriaRepoProvider);
-  final repo = await repoAsync;
+  final repo = await ref.read(hosteleriaRepoProvider.future);
   if (repo == null) return const [];
   final reservas = await repo.getReservas();
   return [
@@ -132,13 +130,4 @@ final hostelReservasActivasProvider =
           r.estado == HostelReservaEstado.ocupada)
         r,
   ];
-});
-
-/// Reservas (incluye finalizadas) dentro de un rango, para la agenda.
-final hostelReservasRangoProvider = FutureProvider.autoDispose
-    .family<List<HostelReserva>, HostelRango>((ref, rango) async {
-  final repoAsync = ref.watch(hosteleriaRepoProvider);
-  final repo = await repoAsync;
-  if (repo == null) return const [];
-  return repo.getReservasEnRango(rango.desde, rango.hasta);
 });

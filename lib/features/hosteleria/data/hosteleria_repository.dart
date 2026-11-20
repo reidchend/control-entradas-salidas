@@ -364,7 +364,7 @@ class HosteleriaRepository {
   // -------------------------------------------------------------------
 
   Future<void> _insertPersonas(
-    PostgresService tx,
+    HostelDbBackend tx,
     int reservaId,
     HostelHuesped titular,
     List<HostelHuesped> acompanantes,
@@ -384,7 +384,7 @@ class HosteleriaRepository {
   }
 
   Future<void> _insertVehiculos(
-    PostgresService tx,
+    HostelDbBackend tx,
     int reservaId,
     List<HostelVehiculoInput> vehiculos,
   ) async {

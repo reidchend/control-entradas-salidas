@@ -18,7 +18,7 @@ final hostelAnclaProvider =
 /// Reservas (incluye finalizadas) dentro de un rango, para la agenda.
 final hostelReservasRangoProvider = FutureProvider.autoDispose
     .family<List<HostelReserva>, HostelRango>((ref, rango) async {
-  final repo = ref.watch(hosteleriaRepoProvider);
+  final repo = ref.watch(hosteleriaRepoProvider).valueOrNull;
   if (repo == null) return const [];
   return repo.getReservasEnRango(rango.desde, rango.hasta);
 });

@@ -89,9 +89,18 @@ class SqliteDbBackend implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql);
-    // db.execute maneja INSERT/UPDATE/DELETE y retorna filas afectadas.
-    return await db.execute(nSql, params);
+    final nSql = _normalize(sql.trim());
+    final upper = nSql.toUpperCase();
+    if (upper.startsWith('INSERT')) {
+      return await db.rawInsert(nSql, params);
+    } else if (upper.startsWith('UPDATE')) {
+      return await db.rawUpdate(nSql, params);
+    } else if (upper.startsWith('DELETE')) {
+      return await db.rawDelete(nSql, params);
+    }
+    // Para cualquier otro comando (CREATE, etc.) no hay filas afectadas útiles.
+    await db.execute(nSql, params);
+    return 0;
   }
 
   @override
@@ -197,8 +206,17 @@ class _SqliteTx implements HostelDbBackend {
     String sql, {
     List<dynamic> params = const [],
   }) async {
-    final nSql = _normalize(sql);
-    return await _txn.execute(nSql, params);
+    final nSql = _normalize(sql.trim());
+    final upper = nSql.toUpperCase();
+    if (upper.startsWith('INSERT')) {
+      return await _txn.rawInsert(nSql, params);
+    } else if (upper.startsWith('UPDATE')) {
+      return await _txn.rawUpdate(nSql, params);
+    } else if (upper.startsWith('DELETE')) {
+      return await _txn.rawDelete(nSql, params);
+    }
+    await _txn.execute(nSql, params);
+    return 0;
   }
 
   @override
