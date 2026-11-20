@@ -563,6 +563,8 @@ class _ComandaScreenState extends ConsumerState<ComandaScreen> {
         for (final c in item.contornos)
           c.cantidad > 1 ? '${c.cantidad}x ${c.nombre}' : c.nombre,
       ],
+      cuenta: item.cuenta,
+      cuentaNombre: item.cuentaNombre,
     );
   }
 

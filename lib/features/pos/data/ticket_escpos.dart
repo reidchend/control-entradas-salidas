@@ -136,6 +136,11 @@ typedef TicketItem = ({
   String nombre,
   double precio,
   List<String> contornos,
+  /// Número de sub-cuenta ("cliente") dentro de la comanda. `null` si no hay
+  /// división por cliente (solo un cliente o no aplica).
+  int? cuenta,
+  /// Nombre personalizado de la sub-cuenta, si lo hay.
+  String? cuentaNombre,
 });
 
 const int ticketCols = 32;
@@ -277,14 +282,24 @@ List<int> construirTicketEscpos({
   newline();
   newline();
 
-  // El precio por producto va en TODOS los tickets (también en el de cocina):
-  // los dos tickets de cobro deben ser idénticos y solo diferir en el rótulo
-  // (PARA COCINA / COPIA CLIENTE). Antes `esComandaCocina` lo ocultaba.
+  // Detectar si hay división por cliente (más de una cuenta distinta).
+  final cuentasEsc = <int, List<TicketItem>>{};
+  final sinCuentaEsc = <TicketItem>[];
   for (final item in items) {
+    final c = item.cuenta;
+    if (c != null && c > 0) {
+      cuentasEsc.putIfAbsent(c, () => []).add(item);
+    } else {
+      sinCuentaEsc.add(item);
+    }
+  }
+  final tieneDivisionEsc = cuentasEsc.length > 1 ||
+      (cuentasEsc.isNotEmpty && sinCuentaEsc.isNotEmpty);
+
+  void _imprimirItemEscpos(TicketItem item) {
     final cant = item.cantidad;
     final cantStr = '${_formatearCantidad(cant)}x ';
     final precioUnitario = item.precio;
-    // Asegurar que siempre se muestre el total por línea (cantidad * precio unitario)
     final subtotal = cant <= 0 ? precioUnitario : precioUnitario * cant;
     final precioStr = '\$${subtotal.toStringAsFixed(2)}';
     var nombre = item.nombre;
@@ -295,22 +310,67 @@ List<int> construirTicketEscpos({
     final izquierda = cantStr + nombre;
     final relleno = ticketCols - izquierda.length - precioStr.length;
 
-    add([0x1b, 0x45, 0x01]);
+    add([0x1b, 0x45, 0x01]); // negrita on
     text(cantStr);
-    add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x45, 0x00]); // negrita off
     text(nombre);
     add(List.filled(relleno > 0 ? relleno : 0, 0x20));
-    // Tamaño del precio configurable desde la app
     add([0x1b, 0x21, _tamanioPrecio(header.precioSize)]);
-    add([0x1b, 0x45, 0x01]);
+    add([0x1b, 0x45, 0x01]); // negrita on
     text(precioStr);
-    add([0x1b, 0x45, 0x00]);
+    add([0x1b, 0x45, 0x00]); // negrita off
     add([0x1b, 0x21, 0x00]); // reset
     newline();
 
     for (final c in item.contornos) {
       text('   + $c');
       newline();
+    }
+  }
+
+  if (tieneDivisionEsc) {
+    // Primero los items sin cuenta asignada (si los hay).
+    if (sinCuentaEsc.isNotEmpty) {
+      text('--- CLIENTE SIN ASIGNAR ---');
+      newline();
+      for (final item in sinCuentaEsc) {
+        _imprimirItemEscpos(item);
+      }
+      text('-' * ticketCols);
+      newline();
+    }
+    // Cada cuenta ordenada por número.
+    final cuentasOrdenadasEsc = cuentasEsc.keys.toList()..sort();
+    for (final cuentaId in cuentasOrdenadasEsc) {
+      final grupo = cuentasEsc[cuentaId]!;
+      final nombreCliente = grupo.first.cuentaNombre;
+      final etiqueta = nombreCliente != null && nombreCliente.isNotEmpty
+          ? 'CLIENTE $cuentaId - $nombreCliente'
+          : 'CLIENTE $cuentaId';
+      text(etiqueta);
+      newline();
+      double subtotalCuenta = 0;
+      for (final item in grupo) {
+        _imprimirItemEscpos(item);
+        subtotalCuenta += item.cantidad <= 0
+            ? item.precio
+            : item.precio * item.cantidad;
+      }
+      text('-' * ticketCols);
+      newline();
+      add([0x1b, 0x61, 0x02]); // derecha
+      add([0x1b, 0x45, 0x01]); // negrita
+      text('Subtotal: \$${subtotalCuenta.toStringAsFixed(2)}');
+      newline();
+      add([0x1b, 0x45, 0x00]);
+      add([0x1b, 0x61, 0x00]); // izquierda
+      text('-' * ticketCols);
+      newline();
+    }
+  } else {
+    // Sin división: imprimir todos los items seguido (comportamiento original).
+    for (final item in items) {
+      _imprimirItemEscpos(item);
     }
   }
 
@@ -375,6 +435,9 @@ String _derecha(String texto, int ancho) {
 
 /// Vista previa textual (32 columnas, monospace) del ticket, para la web.
 /// Port de la salida de `_escpos_ticket` a texto plano.
+///
+/// Si hay más de una sub-cuenta ("cliente") entre los items, imprime una
+/// sección por cliente con su nombre y subtotal, seguida del total general.
 List<String> construirTicketPreview({
   required List<TicketItem> items,
   double? total,
@@ -425,7 +488,20 @@ List<String> construirTicketPreview({
   if (cliente != null && cliente.isNotEmpty) lineas.add('Cliente: $cliente');
   lineas.add('-' * ticketCols);
 
+  // Detectar si hay división por cliente (más de una cuenta distinta).
+  final cuentas = <int, List<TicketItem>>{};
+  final sinCuenta = <TicketItem>[];
   for (final item in items) {
+    final c = item.cuenta;
+    if (c != null && c > 0) {
+      cuentas.putIfAbsent(c, () => []).add(item);
+    } else {
+      sinCuenta.add(item);
+    }
+  }
+  final tieneDivision = cuentas.length > 1 || (cuentas.isNotEmpty && sinCuenta.isNotEmpty);
+
+  void _imprimirItem(TicketItem item) {
     final cant = item.cantidad;
     final cantStr = '${_formatearCantidad(cant)}x ';
     final precioUnitario = item.precio;
@@ -433,12 +509,50 @@ List<String> construirTicketPreview({
     final precioStr = '\$${subtotal.toStringAsFixed(2)}';
     var nombre = item.nombre;
     final maxNombre = ticketCols - precioStr.length - 1 - cantStr.length;
-    if (nombre.length > maxNombre && maxNombre > 0) nombre = nombre.substring(0, maxNombre);
+    if (nombre.length > maxNombre && maxNombre > 0) {
+      nombre = nombre.substring(0, maxNombre);
+    }
     final izquierda = cantStr + nombre;
     final relleno = ticketCols - izquierda.length - precioStr.length;
     lineas.add('$izquierda${' ' * relleno}$precioStr');
     for (final c in item.contornos) {
       lineas.add('   + $c');
+    }
+  }
+
+  if (tieneDivision) {
+    // Primero los items sin cuenta asignada (si los hay).
+    if (sinCuenta.isNotEmpty) {
+      lineas.add('--- CLIENTE SIN ASIGNAR ---');
+      for (final item in sinCuenta) {
+        _imprimirItem(item);
+      }
+      lineas.add('-' * ticketCols);
+    }
+    // Cada cuenta ordenada por número.
+    final cuentasOrdenadas = cuentas.keys.toList()..sort();
+    for (final cuentaId in cuentasOrdenadas) {
+      final grupo = cuentas[cuentaId]!;
+      final nombreCliente = grupo.first.cuentaNombre;
+      final etiqueta = nombreCliente != null && nombreCliente.isNotEmpty
+          ? 'CLIENTE $cuentaId - $nombreCliente'
+          : 'CLIENTE $cuentaId';
+      lineas.add(etiqueta);
+      double subtotalCuenta = 0;
+      for (final item in grupo) {
+        _imprimirItem(item);
+        subtotalCuenta += item.cantidad <= 0
+            ? item.precio
+            : item.precio * item.cantidad;
+      }
+      lineas.add('-' * ticketCols);
+      lineas.add(_derecha('Subtotal: \$${subtotalCuenta.toStringAsFixed(2)}', ticketCols));
+      lineas.add('-' * ticketCols);
+    }
+  } else {
+    // Sin división: imprimir todos los items seguido (comportamiento original).
+    for (final item in items) {
+      _imprimirItem(item);
     }
   }
 
