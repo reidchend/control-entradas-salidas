@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/hosteleria_models.dart';
 import '../../../../core/models/pos_models.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'habitacion_estado.dart';
 
 /// Grid de habitaciones con estado ocupada/reservada/aseo/mantenimiento.
 class HabitacionGrid extends StatefulWidget {
@@ -79,32 +79,23 @@ class _HabitacionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reservada =
-        reserva != null && reserva!.estado == HostelReservaEstado.reservada;
-    final ocupada = reserva != null &&
-        reserva!.estado == HostelReservaEstado.ocupada;
     final scheme = Theme.of(context).colorScheme;
-    final (label, color) = ocupada
-        ? ('Ocupada', scheme.error)
-        : reservada
-            ? ('Reservada', scheme.tertiary)
-            : switch (habitacion.estado) {
-                EstadoHabitacion.aseo =>
-                  ('Aseo', appColor(context, 'warning')),
-                EstadoHabitacion.mantenimiento =>
-                  ('Mantenimiento', appColor(context, 'info')),
-                _ => ('Disponible', scheme.primary),
-              };
-    final restantes = ocupada ? reserva!.minutosRestantes() : null;
+    final visual = estadoVisualHabitacion(context, habitacion, reserva);
+    final label = visual.label;
+    final color = visual.color;
+    final restantes = visual.minutosRestantes;
     final info = [habitacion.piso, habitacion.tipo]
         .whereType<String>()
         .join(' · ');
 
     return Material(
-      color: scheme.surfaceContainer,
+      color: Color.alphaBlend(
+        color.withValues(alpha: 0.10),
+        scheme.surfaceContainer,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outlineVariant),
+        side: BorderSide(color: color.withValues(alpha: 0.60), width: 1.3),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -157,9 +148,7 @@ class _HabitacionTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: restantes < 0
-                            ? scheme.error
-                            : appColor(context, 'warning'),
+                        color: restantes < 0 ? scheme.error : color,
                       ),
                     ),
                   ],
@@ -202,12 +191,12 @@ class _HabitacionTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                _itemEstado(
-                    context, 'libre', 'Disponible', Icons.check_circle_outline),
-                _itemEstado(context, 'aseo', 'Aseo / limpieza',
+                _itemEstado(context, EstadoHabitacion.libre, 'Disponible',
+                    Icons.check_circle_outline),
+                _itemEstado(context, EstadoHabitacion.aseo, 'Aseo / limpieza',
                     Icons.cleaning_services_outlined),
-                _itemEstado(context, 'mantenimiento', 'Mantenimiento',
-                    Icons.build_outlined),
+                _itemEstado(context, EstadoHabitacion.mantenimiento,
+                    'Mantenimiento', Icons.build_outlined),
               ],
             ),
           ),

@@ -192,24 +192,30 @@ class HabitacionesTimeline extends StatelessWidget {
     );
   }
 
+  /// Mismos colores que el grid: ocupada verde, OP azul claro, reservada
+  /// naranja. Las estancias por horas se distinguen aunque estén ocupadas.
   Color _color(BuildContext context, HostelReserva r) {
     final scheme = Theme.of(context).colorScheme;
     return switch (r.estado) {
-      HostelReservaEstado.ocupada => scheme.error,
-      HostelReservaEstado.reservada => scheme.tertiary,
+      HostelReservaEstado.ocupada =>
+        appColor(context, r.esPorHoras ? 'light_blue' : 'success'),
+      HostelReservaEstado.reservada => appColor(context, 'warning'),
       HostelReservaEstado.finalizada => scheme.surfaceContainerHighest,
       HostelReservaEstado.cancelada => scheme.surfaceContainerHighest,
     };
   }
 
+  /// Texto legible sobre el color de la barra, según su luminancia.
   Color _onColor(BuildContext context, HostelReserva r) {
     final scheme = Theme.of(context).colorScheme;
-    return switch (r.estado) {
-      HostelReservaEstado.ocupada => scheme.onError,
-      HostelReservaEstado.reservada => scheme.onTertiary,
-      HostelReservaEstado.finalizada => scheme.onSurface,
-      HostelReservaEstado.cancelada => scheme.onSurface,
-    };
+    if (r.estado == HostelReservaEstado.finalizada ||
+        r.estado == HostelReservaEstado.cancelada) {
+      return scheme.onSurface;
+    }
+    final color = _color(context, r);
+    return ThemeData.estimateBrightnessForColor(color) == Brightness.light
+        ? scheme.surface
+        : scheme.onPrimary;
   }
 
   Widget _leyenda(BuildContext context) {
@@ -238,8 +244,9 @@ class HabitacionesTimeline extends StatelessWidget {
       ),
       child: Wrap(
         children: [
-          chip('Ocupada', scheme.error),
-          chip('Reservada', scheme.tertiary),
+          chip('Ocupada', appColor(context, 'success')),
+          chip('OP', appColor(context, 'light_blue')),
+          chip('Reservada', appColor(context, 'warning')),
           chip('Finalizada', scheme.surfaceContainerHighest),
         ],
       ),

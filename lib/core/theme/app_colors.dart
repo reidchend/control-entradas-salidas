@@ -31,6 +31,8 @@ class AppColors {
     'warning': '#FFB74D',
     'error': '#FF6B6B',
     'info': '#4DD0E1',
+    // Azul claro para estancias por horas (OP).
+    'light_blue': '#81D4FA',
     'white': '#FFFFFF',
     'black': '#000000',
     'header_bg': '#150D2B',
@@ -76,6 +78,9 @@ class AppColors {
     'warning': '#F57C00',
     'error': '#D32F2F',
     'info': '#0288D1',
+    // En tema claro se usa un azul más oscuro para mantener contraste sobre
+    // la tarjeta blanca.
+    'light_blue': '#0288D1',
     'white': '#FFFFFF',
     'black': '#000000',
     'header_bg': '#3B1E85',
