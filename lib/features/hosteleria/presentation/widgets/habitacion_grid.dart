@@ -202,11 +202,12 @@ class _HabitacionTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                _itemEstado('libre', 'Disponible', Icons.check_circle_outline),
                 _itemEstado(
-                    'aseo', 'Aseo / limpieza', Icons.cleaning_services_outlined),
-                _itemEstado(
-                    'mantenimiento', 'Mantenimiento', Icons.build_outlined),
+                    context, 'libre', 'Disponible', Icons.check_circle_outline),
+                _itemEstado(context, 'aseo', 'Aseo / limpieza',
+                    Icons.cleaning_services_outlined),
+                _itemEstado(context, 'mantenimiento', 'Mantenimiento',
+                    Icons.build_outlined),
               ],
             ),
           ),
@@ -216,7 +217,7 @@ class _HabitacionTile extends StatelessWidget {
   }
 
   PopupMenuItem<String> _itemEstado(
-      String value, String label, IconData icon) {
+      BuildContext context, String value, String label, IconData icon) {
     final activo = habitacion.estado == value;
     final scheme = Theme.of(context).colorScheme;
     return PopupMenuItem<String>(
