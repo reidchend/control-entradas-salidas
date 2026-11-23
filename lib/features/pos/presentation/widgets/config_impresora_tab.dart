@@ -163,7 +163,14 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
     final header = await cargarMembrete(repo);
     if (!mounted) return;
     final items = <TicketItem>[
-      const (cantidad: 1, nombre: 'PRUEBA DE IMPRESIÓN', precio: 0, contornos: <String>[]),
+      const (
+        cantidad: 1,
+        nombre: 'PRUEBA DE IMPRESIÓN',
+        precio: 0.0,
+        contornos: <String>[],
+        cuenta: null,
+        cuentaNombre: null,
+      ),
     ];
     if (puedeImprimirNativo) {
       final bytes = construirTicketEscpos(
@@ -196,8 +203,22 @@ class _ConfigImpresoraTabState extends ConsumerState<ConfigImpresoraTab> {
     final scheme = Theme.of(context).colorScheme;
     final lineas = construirTicketPreview(
       items: const [
-        (cantidad: 2, nombre: 'Hamburguesa especial', precio: 5.50, contornos: <String>['Papas']),
-        (cantidad: 1, nombre: 'Refresco', precio: 1.50, contornos: <String>[]),
+        (
+          cantidad: 2,
+          nombre: 'Hamburguesa especial',
+          precio: 5.50,
+          contornos: <String>['Papas'],
+          cuenta: null,
+          cuentaNombre: null,
+        ),
+        (
+          cantidad: 1,
+          nombre: 'Refresco',
+          precio: 1.50,
+          contornos: <String>[],
+          cuenta: null,
+          cuentaNombre: null,
+        ),
       ],
       total: 12.50,
       comandaId: 1,
