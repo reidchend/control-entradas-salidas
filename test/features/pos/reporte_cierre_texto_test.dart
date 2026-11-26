@@ -73,13 +73,16 @@ void main() {
   });
 
   group('reporteSimpleTexto', () {
-    test('contiene apertura, cierre, caja y total general', () {
+    test('incluye apertura, cierre y duración pero ningún monto', () {
       final t = reporteSimpleTexto(_cierre());
       expect(t, contains('CIERRE DE TURNO'));
-      expect(t, isNot(contains('Aperturó: EMILIO')));
-      expect(t, isNot(contains('Cerró: EMILIO')));
-      expect(t, contains('Final:   \$527.5'));
-      expect(t, contains('TOTAL GENERAL: \$20'));
+      expect(t, contains('Apertura:'));
+      expect(t, contains('Cierre:'));
+      expect(t, contains('Duración: 9h 21m'));
+      expect(t, isNot(contains('CAJA')));
+      expect(t, isNot(contains('Final:')));
+      expect(t, isNot(contains('TOTAL GENERAL')));
+      expect(t, isNot(contains(r'$')));
     });
 
     test('incluye la lista de participantes del turno', () {
@@ -88,24 +91,23 @@ void main() {
       expect(t, isNot(contains('POR USUARIO')));
       expect(t, contains('EMILIO'));
       expect(t, contains('ANA'));
-      // Sin desglose individual de ventas (solo la PC cobra).
-      expect(t, contains('EMILIO: 2 ventas · \$427.5'), isFalse);
-      expect(t, contains('TOTAL GENERAL: \$20'));
+      expect(t, isNot(contains(r'$')));
     });
 
-    test('agrupa por categoría', () {
+    test('agrupa por categoría mostrando solo cantidades', () {
       final t = reporteSimpleTexto(_cierre());
       expect(t, contains('PLATOS'));
-      expect(t, contains('Pasta'));
-      expect(t, contains('Subtotal: \$20'));
+      expect(t, contains('*Pasta*: 2'));
+      expect(t, isNot(contains('Subtotal')));
     });
 
-    test('incluye contornos y aviso de ventas fuera de turno', () {
+    test('incluye contornos y aviso de ventas fuera de turno sin montos', () {
       final t = reporteSimpleTexto(_cierre());
       expect(t, contains('CONTORNOS SERVIDOS'));
       expect(t, contains('Ensalada: 1.5'));
       expect(t, contains('VENTAS FUERA DE TURNO'));
-      expect(t, contains('3 por \$15.5'));
+      expect(t, contains('3 ventas cobradas'));
+      expect(t, isNot(contains('15.5')));
     });
   });
 
@@ -130,13 +132,15 @@ void main() {
   });
 
   group('reporteDetalladoTexto', () {
-    test('contiene desglose por ingrediente con stock y usos', () {
+    test('contiene desglose por ingrediente con stock y usos, sin montos', () {
       final t = reporteDetalladoTexto(_cierre());
       expect(t, contains('DESGLOSE POR INGREDIENTE'));
       expect(t, contains('Ingrediente: Harina'));
       expect(t, contains('Total consumido: 1.25'));
       expect(t, contains('Stock final:     9.75'));
       expect(t, contains('- Pasta: 1.25'));
+      expect(t, isNot(contains('CAJA')));
+      expect(t, isNot(contains(r'$')));
     });
   });
 }

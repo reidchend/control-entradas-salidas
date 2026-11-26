@@ -5,8 +5,11 @@ import '../../../core/models/pos_cierre_models.dart';
 /// Es EXACTAMENTE el mismo texto que se enviaba al cerrar el turno desde el
 /// POS; vive acá (y no en la pantalla) para poder regenerarlo y reenviarlo
 /// también desde el historial de cierres del módulo inventario.
+///
+/// IMPORTANTE: el reporte no incluye montos ni totales en dinero. Solo se
+/// informan cantidades vendidas/consumidas, participantes y tiempos.
 
-/// Formatea un número: entero sin decimales, o hasta 3 decimales sin ceros
+/// Formatea una cantidad: entero sin decimales, o hasta 3 decimales sin ceros
 /// finales (2 → "2", 2.5 → "2.5", 2.500 → "2.5").
 String fmtNumCierre(double v) {
   if (v == v.truncateToDouble()) return v.toInt().toString();
@@ -45,29 +48,24 @@ String reporteSimpleTexto(CierreCaja c) {
   sb.writeln('Cierre: ${fmtFechaCierre(c.cerradaEn)}');
   sb.writeln('Duración: ${duracionCierreTexto(c)}');
   sb.writeln('');
-  sb.writeln('💰 *CAJA*');
-  sb.writeln('Inicial: \$${fmtNumCierre(c.cajaInicial)}');
-  sb.writeln('Ventas:  \$${fmtNumCierre(c.totalVentas)}');
-  sb.writeln('──────────────');
-  sb.writeln('Final:   \$${fmtNumCierre(c.cajaFinal)}');
+
   if (c.reporteSimple.porUsuario.isNotEmpty) {
-    sb.writeln('');
     sb.writeln('👥 *PARTICIPANTES*');
     for (final u in c.reporteSimple.porUsuario) {
       sb.writeln('  ${u.nombre}');
     }
-  }
-  if (c.reporteSimple.ventasFueraTurno > 0) {
     sb.writeln('');
-    sb.writeln('⚠️ *VENTAS FUERA DE TURNO*');
-    sb.writeln(
-        '${c.reporteSimple.ventasFueraTurno} por \$${fmtNumCierre(c.reporteSimple.montoFueraTurno)} '
-        'cobradas con un turno ya cerrado');
-    sb.writeln('_No están incluidas en este cierre._');
   }
-  sb.writeln('');
 
-  // Agrupar por categoría
+  if (c.reporteSimple.ventasFueraTurno > 0) {
+    sb.writeln('⚠️ *VENTAS FUERA DE TURNO*');
+    sb.writeln('  ${fmtNumCierre(c.reporteSimple.ventasFueraTurno.toDouble())} '
+        'ventas cobradas con un turno ya cerrado');
+    sb.writeln('  _No están incluidas en este cierre._');
+    sb.writeln('');
+  }
+
+  // Agrupar por categoría; se muestra solo la cantidad de cada producto.
   final porCategoria = <String, List<LineaVenta>>{};
   for (final l in c.reporteSimple.lineas) {
     porCategoria.putIfAbsent(l.categoria, () => []).add(l);
@@ -75,21 +73,15 @@ String reporteSimpleTexto(CierreCaja c) {
 
   sb.writeln('📦 *VENTAS POR CATEGORÍA*');
   for (final entry in porCategoria.entries) {
-    final categoria = entry.key;
-    final items = entry.value;
-    final subtotal = items.fold<double>(0, (s, l) => s + l.total);
-
     sb.writeln('');
-    sb.writeln('*${categoria.toUpperCase()}*');
+    sb.writeln('*${entry.key.toUpperCase()}*');
     sb.writeln('━━━━━━━━━━━━━━━━━━');
-    for (final l in items) {
-      sb.writeln('**${l.nombre}**');
-      sb.writeln(
-          '  ${fmtNumCierre(l.cantidad)} x \$${fmtNumCierre(l.precioUnitario)} = *\$${fmtNumCierre(l.total)}*');
+    for (final l in entry.value) {
+      sb.writeln('  • *${l.nombre}*: ${fmtNumCierre(l.cantidad)}');
     }
-    sb.writeln('  *Subtotal: \$${fmtNumCierre(subtotal)}*');
   }
   sb.writeln('');
+
   final contornos = c.reporteSimple.contornos;
   if (contornos.isNotEmpty) {
     sb.writeln('🍽️ *CONTORNOS SERVIDOS*');
@@ -98,14 +90,12 @@ String reporteSimpleTexto(CierreCaja c) {
     }
     sb.writeln('');
   }
-  sb.writeln('💰 *TOTAL GENERAL: \$${fmtNumCierre(c.reporteSimple.totalGeneral)}*');
-  sb.writeln('');
   sb.writeln('_Lycoris POS_');
   return sb.toString();
 }
 
 /// Contenido del reporte detallado (.txt de WhatsApp, desglose por
-/// ingrediente con stock final y usos por plato).
+/// ingrediente con stock final y usos por plato). También sin montos.
 String reporteDetalladoTexto(CierreCaja c) {
   final sb = StringBuffer();
   sb.writeln('CIERRE DE TURNO - DETALLADO');
@@ -115,27 +105,21 @@ String reporteDetalladoTexto(CierreCaja c) {
   sb.writeln('Cierre: ${fmtFechaCierre(c.cerradaEn)}');
   sb.writeln('Duración: ${duracionCierreTexto(c)}');
   sb.writeln('');
-  sb.writeln('CAJA');
-  sb.writeln('----');
-  sb.writeln('Inicial: ${fmtNumCierre(c.cajaInicial)}');
-  sb.writeln('Ventas:  ${fmtNumCierre(c.totalVentas)}');
-  sb.writeln('Final:   ${fmtNumCierre(c.cajaFinal)}');
   if (c.reporteSimple.porUsuario.isNotEmpty) {
-    sb.writeln('');
     sb.writeln('PARTICIPANTES');
     sb.writeln('-----------');
     for (final u in c.reporteSimple.porUsuario) {
       sb.writeln(u.nombre);
     }
+    sb.writeln('');
   }
   if (c.reporteSimple.ventasFueraTurno > 0) {
+    sb.writeln('VENTAS FUERA DE TURNO');
+    sb.writeln('---------------------');
+    sb.writeln('${c.reporteSimple.ventasFueraTurno} ventas cobradas con un turno '
+        'ya cerrado; NO están incluidas en este cierre.');
     sb.writeln('');
-    sb.writeln('!! VENTAS FUERA DE TURNO !!');
-    sb.writeln('${c.reporteSimple.ventasFueraTurno} por '
-        '\$${fmtNumCierre(c.reporteSimple.montoFueraTurno)} cobradas con un turno');
-    sb.writeln('ya cerrado; NO están incluidas en este cierre.');
   }
-  sb.writeln('');
   sb.writeln('DESGLOSE POR INGREDIENTE');
   sb.writeln('------------------------');
   for (final d in c.reporteDetallado.desgloses) {
